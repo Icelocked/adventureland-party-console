@@ -11,6 +11,11 @@ from the commits merged into `main`.
 
 ### Fixed
 
+- Hunt returns now release a failed travel hold after fresh, matching reports
+  verify the whole party stopped at Daisy, allowing quest turn-in to continue.
+  Recovery also accepts holds reissued after restart and ignores released Escape
+  history, while preserving current navigation ownership and retry budgets.
+
 - Improved dashboard performance by memoizing character cards, inventory/equipment,
   bank and stand panels, monster controls, and upgrade-offering context, with
   stable data and action props to avoid unrelated renders.

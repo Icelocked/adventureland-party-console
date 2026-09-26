@@ -316,6 +316,47 @@ function client(name,p,options={}){
  return r;
 }
 
+function heldDaisyReturn() {
+ const {p,e,c}=arrivedReturn();p.monsterHunt.convoyId=c.id;c.recoveryAttempts=1;
+ e.hold(p,'L: Stalled walking movement (5 seconds without progress)','route-failed');
+ assert.equal(c.phase,'failed');
+ for(const name of c.participants){report(p,name,'failed',1000);p.statuses[name].convoyNavigation.routeVersion=0;}
+ return {p,e,c};
+}
+test('exhausted Daisy return completes from fresh stopped terminal-hold acknowledgements at destination',()=>{
+ const {p,e,c}=heldDaisyReturn();p.escape={stage:'released'};e.step(p,1000);assert.equal(p.activeConvoy,c);
+ const budget=c.recoveryAttempts;
+ for(const name of c.participants)report(p,name,'failed',4000);
+ e.step(p,4000);assert.equal(p.activeConvoy,null);assert.deepEqual(p.commands,{});
+ assert.equal(c.recoveryAttempts,budget);assert.equal(c.retryExhausted,true);
+ assert.match(p.combatLogs.L.at(-1).details.reason,/arrival at Daisy/);
+ assert.equal(p.monsterHunt.stage,'returning','Hunt tick owns reward turn-in');
+});
+for(const mismatch of ['position','map','instance','moving','transporting','stale','runtime','command','epoch','route','cancelled','revision','owner failure','hunt cycle','merchant'])
+test('failed Daisy arrival cannot bypass '+mismatch,()=>{
+ const {p,c}=heldDaisyReturn();
+ const {reconcileReturnArrival}=require('../../runtime/coordinator/navigation/return-arrival.ts');
+ reconcileReturnArrival(p,c,1000);
+ for(const name of c.participants)report(p,name,'failed',4000);
+ const s=p.statuses.L;
+ if(mismatch==='position')s.x=1000;
+ if(mismatch==='map')s.map='bank';
+ if(mismatch==='instance')s.in='other';
+ if(mismatch==='moving')s.moving=true;
+ if(mismatch==='transporting')s.transporting=true;
+ if(mismatch==='stale')s.seenAt=500;
+ if(mismatch==='runtime')s.convoyNavigation.runtimeId='old';
+ if(mismatch==='command')p.commands.L.id++;
+ if(mismatch==='epoch')s.convoyNavigation.epoch--;
+ if(mismatch==='route')p.commands.L.routeVersion--;
+ if(mismatch==='cancelled')p.navigationIntents={L:{revision:0,cancelled:true}};
+ if(mismatch==='revision')p.navigationIntents={L:{revision:1}};
+ if(mismatch==='owner failure')c.failureCode='owner-lost';
+ if(mismatch==='hunt cycle')p.monsterHunt.convoyId='new';
+ if(mismatch==='merchant')c.merchantInterruption={phase:'collecting'};
+ assert.equal(reconcileReturnArrival(p,c,4000),false);assert.equal(p.activeConvoy,c);
+});
+
 test('an authorized Town return completes under its cancelled intent and restores parent commands',()=>{
  const {p,c}=arrivedReturn();c.purpose='shared-walk-return';c.navigationExempt=true;
  p.navigationIntents={};c.walkingParents={};
@@ -616,3 +657,12 @@ for(const lostPhase of ['departure','completion'])test('native Town/transport su
  assert.ok(r.calls.some(c=>c[0]==='use'&&c[1]==='town'));assert.ok(r.calls.some(c=>c[0]==='transport'));
  assert.equal(r.context.character.map,'cave');assert.equal(r.context.character.x,120);assert.equal(r.searches,0);
 });
+
+ test('restored terminal hold uses its new command acknowledgement without an installed route',()=>{
+ const {p,e,c}=heldDaisyReturn();
+ for(const name of c.participants){c.expected[name].runtimeId=null;p.statuses[name].combatSelection.runtimeId='new-'+name;
+ p.statuses[name].convoyNavigation.runtimeId='new-'+name;}
+ e.step(p,1000);
+ for(const name of c.participants)p.statuses[name].seenAt=4000;
+ e.step(p,4000);assert.equal(p.activeConvoy,null);
+ });

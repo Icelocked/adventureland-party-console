@@ -1,5 +1,13 @@
 # Character coordinator
 
+A failed continuous Daisy return can finish after three seconds of fresh stopped
+terminal-hold acknowledgements at its destination. Command, runtime, route, realm,
+instance and navigation ownership must still match the current Hunt return.
+This completes observed travel without resetting the exhausted retry budget;
+normal Hunt policy owns reward claims. Manual navigation and other owners remain
+protected. Validate shared-convoy, continuous-hunt-return and Hunt composition;
+activate with the coordinator-only restart.
+
 ## Dashboard render and polling performance
 
 Dashboard `core` reads retain live Hunt, convoy, anniversary, slot, and client-update

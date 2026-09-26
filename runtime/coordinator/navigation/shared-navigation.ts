@@ -177,6 +177,7 @@ export function createSharedConvoyNavigation(legacy: ConvoyNavigationPlatform,
     const c = state.activeConvoy;
     if (c?.routeProtocol !== 4) return legacy.hold(state, reason, code);
     if (c.phase === "failed") return false;
+    delete c.arrivalReadySince;
     clearSharedRoute(c); c.phase = "failed"; c.failure = reason; c.failureCode = code; c.failedAt = Date.now(); c.departAt = null;
     if (code === 'geometry-mismatch') { c.retryExhausted=true; if(c.geometryRepair)c.geometryRepair.phase='failed'; }
     recordConvoyHistory(state, c, "failed", c.failedAt, { reason, code, commands: Object.fromEntries(members(c).map(name => [name, state.commands[name]?.type])) });
@@ -410,6 +411,7 @@ export function createSharedConvoyNavigation(legacy: ConvoyNavigationPlatform,
     return changed;
   }
   function failedStep(state: SharedState, c: SharedConvoy, now: number): boolean {
+    if (reconcileReturnArrival(state, c, now)) return true;
     if (recoverUnpreparedReturn(state, c, now)) return true;
     if (recoverReturnRuntime(state, c, now)) return true;
     if (eventEntry(c)) return releaseFailedEntry(state, c);
