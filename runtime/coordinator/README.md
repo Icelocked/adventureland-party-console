@@ -870,38 +870,19 @@ with the coordinator-only restart workflow.
 
 ## Bounded Hunt route recovery
 
-Rejected ALClient walking segments on the current map receive one native connector
-search, limited to three seconds. The connector runs from the character's actual
-position to the rejected segment endpoint, replaces that route prefix, and must
-pass full route validation, including every remaining door and transition. Failure
-falls back to one complete native search (30 seconds). Collision checks always use
-the live character base and processed game geometry; ALClient cheat edges stay off.
+ALClient route rejection can use the existing native connector or full native
+fallback. An ALClient execution failure receives one coordinator-owned native
+attempt. Native exhaustion excludes that destination for the current Hunt cycle
+and selects another catalogued spawn of the same monster. With no alternative,
+Hunt reports the exhausted route. Recovery never dispatches a guessed door or Town
+relocation. Old persisted relocation attempts are retired before further dispatch.
 
-Outbound Hunt missions persist recovery under the Hunt cycle and destination.
-An execution failure before native fallback gets one coordinator-owned native
-attempt. After native exhaustion, the party attempts one relocation: Town only
-when the failed journey permitted it, otherwise a catalogued ordinary door exit.
-Outbound Hunt walking currently forbids Town. Relocation has the same collision,
-formation, defense, ownership, and arrival barriers as other shared travel.
-Every member must report a fresh position at the relocation destination before
-one final ALClient attempt. That attempt cannot restart native fallback. An
-inaccessible origin remains held with its cause. A destination still unreachable
-after relocation is excluded for this cycle and the existing spawn ranking chooses
-another location for the same monster. No remaining spawn produces an explicit hold.
-
-The farming controller yields during Hunt mission travel and cannot adopt temporary
-recovery exits as monster spawns or grant fresh retries. Relocations preserve the
-public farming destination and the original mission destination.
-Replacement farming walks and event interruptions retain the destination budget;
-intentional stops and planning-origin drift do not consume route failures. Readiness
-has its own bounded hold, and movement evidence must match the current command. Recovery cannot supersede merchant,
-event, death, Escape, or newer navigation ownership. New cycles, explicit Hunt
-resume, and changed geometry grant fresh budgets. A coordinator restart preserves
-attempts and the first failure. Missing legacy relocation evidence is reported;
-no exit is invented. Terminal commands and heartbeat failures carry structured
-movement evidence, and cancellations identify owned command changes where known.
-Legacy unattributed stop calls remain explicitly labelled. Similar-message counts
-are scoped and are never presented as route-attempt counts.
+Explicit Hunt-off clears the Hunt cycle, commands, owned recovery convoy, failure
+counts, blacklist and farming/combat recovery holds. It does not finish old turn-in
+or loot stages in the background. Hunt-on creates a fresh cycle from current client
+quest observations; saved settings and preferred spawns remain. Unrelated merchant
+commands and event evacuation ownership are preserved. Validate hunt-mode-reset,
+hunt-route-recovery and Hunt action/event tests; use coordinator-only restart.
 
 Cruise speed is applied once per convoy/cap value and retained across phase/epoch
 changes. Releasing its current owner restores 500 once; stale cleanup cannot

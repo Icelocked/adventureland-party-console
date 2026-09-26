@@ -1,4 +1,3 @@
-import { beginTurnIn } from "../../hunt/policy.ts";
 import type { HuntCycle, HuntStatus } from "./contracts.ts";
 import type { ReturnLocation } from "../events/return-types.ts";
 
@@ -12,6 +11,11 @@ export interface HuntModeState {
   monsterFocus: string[];
   monsterFocusByCharacter: Record<string, string[] | undefined>;
   escape?: { stage: string } | null;
+  huntBlacklist?: import('./settings.ts').HuntFailureState['huntBlacklist'];
+  huntFailures?: import('./settings.ts').HuntFailureState['huntFailures'];
+  farmAreaState?: { pending?: unknown; failures?: Record<string, unknown>; paused?: boolean; message?: string | null } | null;
+  combatRecovery?: unknown;
+  combatHuntBoundary?: unknown;
 }
 export interface HuntModePorts {
   fighting?(): boolean;
@@ -27,19 +31,25 @@ export interface HuntModePorts {
   begin(policy: string, location: ReturnLocation | null, preserve: boolean): void;
 }
 
-/** Mode transitions retain completed turn-ins and explicitly authorize resumed Hunt travel. */
+/** Explicit mode changes discard Hunt execution state; live quest observations remain authoritative. */
 export function createHuntMode(state: HuntModeState, ports: HuntModePorts) {
-  function exit(mode: string): void {
-    const hunt = state.monsterHunt;
-    const completed = hunt?.participants.some(
-      (name) => state.statuses[name]?.monsterHunt?.count === 0,
-    );
-    if (hunt && (completed || hunt.loot && !hunt.loot.complete)) {
-      hunt.exitMode = mode;
-      hunt.message = "Turning in completed hunts before leaving Hunt mode";
-      ports.returnToDaisy(hunt);
-    } else {
-      ports.clear();
+  function reset(): void {
+    ports.clear();
+    state.monsterHunt = null;
+    state.huntBlacklist = {};
+    state.huntFailures = {};
+    state.combatRecovery = null;
+    state.combatHuntBoundary = null;
+    if (state.farmAreaState) {
+      state.farmAreaState.pending = null;
+      state.farmAreaState.failures = {};
+      state.farmAreaState.paused = false;
+      state.farmAreaState.message = null;
+    }
+  }
+  function exit(): void {
+      ports.release();
+      reset();
       const destination = ports.selectedDestination(state.leader);
       if (destination)
         ports.convoy(
@@ -47,7 +57,6 @@ export function createHuntMode(state: HuntModeState, ports: HuntModePorts) {
           "the leader's configured farming focus",
           ports.participants(),
         );
-    }
   }
   function authorize(location: ReturnLocation | null): void {
     const names = ports.participants();
@@ -81,16 +90,6 @@ export function createHuntMode(state: HuntModeState, ports: HuntModePorts) {
   function normalPolicy(previous: string): string {
     return previous === "hunt" ? state.monsterHunt?.returnPolicy || "auto" : previous;
   }
-  function retainTurnIn(mode: string): void {
-    const hunt = state.monsterHunt;
-    if (!hunt || mode === "hunt") return;
-    const completed = hunt.participants.some(name => state.statuses[name]?.monsterHunt?.count === 0);
-    if (!completed && (!hunt.loot || hunt.loot.complete)) return;
-    hunt.exitMode = mode;
-    beginTurnIn(hunt, state.leader!);
-    hunt.stage = "paused-event";
-    hunt.resumeStage = "returning";
-  }
   function postExitLocation(mode: string, location: ReturnLocation | null): ReturnLocation | null | undefined {
     return mode === "hunt" ? undefined : ports.selectedDestination(state.leader)?.location || location;
   }
@@ -99,9 +98,9 @@ export function createHuntMode(state: HuntModeState, ports: HuntModePorts) {
     if (!recovery) return false;
     if (mode === "hunt" && restart && resumeRequested()) authorize(null);
     state.farmingPolicy = mode;
-    retainTurnIn(mode);
+    if (previous === 'hunt' || restart) reset();
     recovery.postExitLocation = postExitLocation(mode, location);
-    if (mode === "hunt" && restart) ports.begin(policy, location, previous === "hunt" && !!state.monsterHunt);
+    if (mode === "hunt" && restart) ports.begin(policy, location, false);
     return true;
   }
   function select(
@@ -117,8 +116,8 @@ export function createHuntMode(state: HuntModeState, ports: HuntModePorts) {
     if (deferToExit(mode, policy, location, restart, previous)) return;
     if (restart && !ports.fighting?.()) authorize(location);
     state.farmingPolicy = mode;
-    if (previous === "hunt" && mode !== "hunt") exit(mode);
-    else if (restart) ports.begin(policy, location, previous === "hunt" && !!state.monsterHunt);
+    if (previous === "hunt" && mode !== "hunt") exit();
+    else if (restart) { reset(); ports.begin(policy, location, false); }
   }
   return { select };
 }

@@ -11,8 +11,8 @@ interface PartyMembers {
   followers: Record<string, unknown>;
 }
 interface HuntCommands {
-  activeConvoy?: { purpose?: string | null; participants?: string[] } | null;
-  commands: Record<string, { purpose?: string | null } | undefined>;
+  activeConvoy?: { id?: string; purpose?: string | null; walkingActivity?: string; participants?: string[] } | null;
+  commands: Record<string, { purpose?: string | null; convoyId?: string } | undefined>;
   monsterHunt: { cycleId?: string; participants?: string[] } | null;
 }
 interface Position {
@@ -60,7 +60,16 @@ export function cancelCoordinatorHuntConvoy(state: HuntCommands): void {
   state.activeConvoy = null;
 }
 
+function clearHuntChild(state: HuntCommands): void {
+  const child = state.activeConvoy;
+  if (state.monsterHunt && child?.purpose === 'shared-walk' && child.walkingActivity === 'farm-recovery') {
+    for (const name of child.participants || [])
+      if (child.id && state.commands[name]?.convoyId === child.id) delete state.commands[name];
+    state.activeConvoy = null;
+  }
+}
 export function clearCoordinatorHunt(state: HuntCommands): void {
+  clearHuntChild(state);
   cancelCoordinatorHuntConvoy(state);
   for (const name of Object.keys(state.commands)) {
     if (state.monsterHunt?.participants?.includes(name) && state.commands[name]?.purpose === "monster-hunt") delete state.commands[name];

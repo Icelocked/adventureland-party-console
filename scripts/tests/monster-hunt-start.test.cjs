@@ -5,7 +5,7 @@ function fixture(policy='auto') {
   const party={monsterFocus:["snake"],monsterFocusByCharacter:{},statuses:{},leader:'L',farmingPolicy:policy,monsterHunterLocation:{map:'main',x:-100,y:-100}};
   let cancelled=true;
   const context={validFarmingLocation:require("../../.build/shared/farming-areas.cjs").validFarmingLocation,party,huntParticipants:()=>['L','F','P'],farmingNavigation:{waypoint:()=>party.monsterHunterLocation,intent:()=>({cancelled}),authorize:(names,point,shared)=>{assert.deepEqual(Array.from(names),['L','F','P']);assert.equal(shared,true);assert.ok(point && point.map);cancelled=false;authorizations++;}},
-    escapeControl:{release(){}},beginMonsterHuntCycle:()=>{assert.equal(cancelled,false);starts++;party.monsterHunt={stage:'daisy-sync-travel',returnLocation:party.monsterHunterLocation};},persistSettings(){},express_inst:{post:(url,handler)=>{if(url==='/party-api/farming-mode')route=handler;}}};
+    clearMonsterHuntState(){party.monsterHunt=null;},escapeControl:{release(){}},beginMonsterHuntCycle:()=>{assert.equal(cancelled,false);starts++;party.monsterHunt={stage:'daisy-sync-travel',returnLocation:party.monsterHunterLocation};},persistSettings(){},express_inst:{post:(url,handler)=>{if(url==='/party-api/farming-mode')route=handler;}}};
   route=require('./helpers/coordinator-hunt-mode.cjs').huntMode(context);
   const res={status(n){this.code=n;return this;},json(v){this.body=v;return this;}};
   return {party,post:(extra={})=>route({body:{mode:'hunt',...extra}},res),starts:()=>starts,authorizations:()=>authorizations,res};

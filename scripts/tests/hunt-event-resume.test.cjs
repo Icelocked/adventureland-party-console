@@ -30,8 +30,8 @@ function fixture(event = 'goobrawl') {
     state.commands.QwenTina={id:74,type:'party-monster-travel',convoyId:'child'};}
   const mode=createHuntMode(state,{participants:()=>names,cancelled:n=>!!state.navigationIntents[n].cancelled,selectedDestination:()=>({location:backup}),
     release(){},authorize:nav.authorize,
-    clear(){throw Error('must not erase recovery')},convoy(){throw Error('must not dispatch fallback')},
-    begin(){state.monsterHunt.stage='checking-quests';},returnToDaisy(){throw Error('must await evacuation')}});
+    clear(){state.monsterHunt=null;},convoy(){throw Error('must not dispatch fallback')},
+    begin(){state.monsterHunt={cycleId:'fresh',participants:names,missions:[],currentIndex:-1,stage:'checking-quests'};},returnToDaisy(){throw Error('must await evacuation')}});
   return {state,names,recovery,service:()=>service,atTown,child,mode,starts:()=>starts,
     restart(){Object.assign(state,JSON.parse(JSON.stringify(state)));service=createCoordinatorEventReturns(state,ports);}};
 }
@@ -51,7 +51,7 @@ test('staggered restart, deferred exit, failed farm child and Hunt off/on resume
   f.mode.select('auto',null,undefined,false);f.mode.select('hunt',null,undefined,false);
   f.restart();f.restart();f.service().reconcile();
   assert.equal(f.state.eventReturn,null);assert.equal(f.state.activeConvoy,null);assert.equal(f.starts(),0);
-  assert.equal(f.state.monsterHunt.stage,'checking-quests');assert.equal(f.state.monsterHunt.target,'bee');
+  assert.equal(f.state.monsterHunt.stage,'checking-quests');assert.equal(f.state.monsterHunt.target,undefined);
   assert.equal(f.state.deferredEventReturns.GDroidPT.checkpoint,null);
   assert.equal(f.state.commands.GDroidPT.type,'event-return-town','offline member still has an evacuation obligation');
 });
@@ -85,13 +85,13 @@ test('leaving Hunt during evacuation returns to the newly selected normal destin
   assert.equal(f.state.activeConvoy.purpose,'event-return');assert.equal(f.state.activeConvoy.location.map,'winterland');
 });
 
-test('leaving Hunt retains pending loot and completed turn-in without departing during evacuation',()=>{
+test('leaving Hunt discards pending execution while preserving event evacuation',()=>{
   const f=fixture();f.state.statuses.QwenTina.monsterHunt={id:'bee',count:0,remainingMs:300000};
   f.mode.select('auto',null,undefined,false);
-  assert.equal(f.state.monsterHunt.exitMode,'auto');assert.equal(f.starts(),0);
+  assert.equal(f.state.monsterHunt,null);assert.equal(f.starts(),0);
   f.names.forEach(f.atTown);f.service().reconcile();
-  assert.equal(f.state.eventReturn,null);assert.equal(f.state.monsterHunt.stage,'returning');
-  assert.equal(f.state.monsterHunt.loot.complete,false);assert.equal(f.starts(),0);
+  assert.equal(f.state.monsterHunt,null);assert.ok(f.state.eventReturn);
+  assert.equal(f.state.statuses.QwenTina.monsterHunt.count,0);
 });
 
 test('normal farming repairs an owned failed checkpoint child after runtime replacement',()=>{

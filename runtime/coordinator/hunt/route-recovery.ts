@@ -3,7 +3,6 @@ import type { HuntCycle, HuntConvoy, HuntTickState, HuntTickPorts } from "./cont
 import type { ReturnLocation } from "../events/return-types.ts";
 import type { Relocation } from "../../characters/movement-relocation.ts";
 import { requestObject } from "../http/contracts.ts";
-import { readRoutePoint } from "../navigation/shared-route-store.ts";
 import { zones } from "../../../dashboard/lib/farming-zones.ts";
 import { coordinatorHuntDestination } from "./controls.ts";
 import * as policy from "../../hunt/policy.ts";
@@ -56,14 +55,6 @@ function entryFor(
   const entry = hunt.routeRecovery?.[routeDestinationKey(destination)];
   return entry?.geometry === geometry(state) ? entry : undefined;
 }
-function relocationFrom(c: HuntConvoy): Relocation | undefined {
-  const movement = requestObject(requestObject(c.failureDetails).movement);
-  const candidate = requestObject(requestObject(movement.failureContext).relocation);
-  const origin = readRoutePoint(candidate.origin),
-    destination = readRoutePoint(candidate.destination);
-  if (!origin || !destination || !["town", "door"].includes(String(candidate.method))) return;
-  return { origin, destination, method: candidate.method === "town" ? "town" : "door" };
-}
 function recordFailure(
   hunt: HuntCycle,
   state: HuntTickState,
@@ -78,13 +69,11 @@ function recordFailure(
     ((hunt.routeRecovery ||= {})[key] = {
       destination,
       geometry: geometry(state),
-      phase: "relocation",
-      relocation: relocationFrom(c),
+      phase: "native",
       firstFailure: c.failure || "Route failed without a reason",
       message: "",
       attempts: [],
     });
-  entry.relocation ||= relocationFrom(c);
   const id = c.id + ":" + (c.epoch ?? 0);
   if (entry.attempts.some((a) => a.id === id)) return entry;
   entry.attempts.push({
@@ -109,15 +98,8 @@ function classifyFailure(
     entry.phase = "native";
     return;
   }
-  if ((!previous || previous.phase === "native") && entry.relocation) {
-    entry.phase = "relocation";
-    return;
-  }
-  entry.phase = "held";
-  entry.message =
-    "Cannot escape origin: " +
-    (c.failure || entry.firstFailure) +
-    (entry.relocation ? "" : "; no permitted relocation was reported");
+  entry.phase = "excluded";
+  entry.message = 'Route exhausted; trying another spawn';
 }
 function paused(hunt: HuntCycle, state: HuntTickState, ports: HuntTickPorts): boolean {
   if (
@@ -147,38 +129,12 @@ function newerOwner(hunt: HuntCycle, state: HuntTickState, ports: HuntTickPorts)
     return !!command && command.convoyId !== c?.id && command.purpose !== "monster-hunt";
   });
 }
-function arrived(
-  hunt: HuntCycle,
-  state: HuntTickState,
-  destination: ReturnLocation,
-  now: number,
-): boolean {
-  return hunt.participants.every((n) => {
-    const s = state.statuses[n];
-    return (
-      !!s &&
-      !s.rip &&
-      s.hp !== 0 &&
-      now - s.seenAt <= 3000 &&
-      s.seenAt <= now + 500 &&
-      s.map === destination.map &&
-      String(s.in ?? s.map) === String(destination.in ?? destination.map) &&
-      Math.hypot(s.x - destination.x, s.y - destination.y) <= 50
-    );
-  });
-}
 function configure(hunt: HuntCycle, state: HuntTickState, entry: HuntRouteRecovery): void {
   const c = state.activeConvoy;
   if (!c || c.id !== hunt.convoyId) return;
   const command: RouteRecoveryCommand = {
     key: routeDestinationKey(entry.destination),
-    stage:
-      entry.phase === "native"
-        ? "native"
-        : entry.phase === "relocation"
-          ? "relocation"
-          : "post-relocation",
-    relocation: entry.phase === "relocation" ? entry.relocation?.method : undefined,
+    stage: "native",
   };
   state.location = entry.destination;
   c.routeRecovery = command;
@@ -233,14 +189,8 @@ function dispatch(
   entry: HuntRouteRecovery,
 ): boolean {
   if (state.activeConvoy) return true;
-  const destination =
-    entry.phase === "relocation" ? entry.relocation!.destination : entry.destination;
-  hunt.message =
-    entry.phase === "native"
-      ? "Recovering Hunt route with native planner (one attempt)"
-      : entry.phase === "relocation"
-        ? "Recovering Hunt route: leaving blocked origin via " + entry.relocation!.method
-        : "Retrying Hunt route from verified relocation";
+  const destination = entry.destination;
+  hunt.message = "Recovering Hunt route with native planner (one attempt)";
   if (ports.start(hunt, destination, hunt.message, "mission-travel")) {
     configure(hunt, state, entry);
     ports.persist();
@@ -299,34 +249,21 @@ function advanceRecovery(
   ports: HuntTickPorts,
   entry: HuntRouteRecovery,
 ): boolean {
+  // Retire persisted relocation attempts from older versions, including bank detours.
+  if (entry.relocation || entry.phase === 'relocation' || entry.phase === 'post-relocation') {
+    delete entry.relocation;
+    entry.phase = 'excluded';
+    ports.cancelConvoy();
+    hunt.convoyId = null;
+    ports.persist();
+  }
   if (entry.phase === "held") {
     hunt.message = entry.message;
     return true;
   }
   if (entry.phase === "excluded") return alternate(hunt, state, ports, entry);
-  advanceRelocation(hunt, state, ports, entry);
-  if (entry.phase === "post-relocation" && arrived(hunt, state, entry.destination, ports.now()))
-    return false;
   return dispatch(hunt, state, ports, entry);
 }
-function advanceRelocation(
-  hunt: HuntCycle,
-  state: HuntTickState,
-  ports: HuntTickPorts,
-  entry: HuntRouteRecovery,
-): void {
-  if (entry.phase !== "relocation") return;
-  if (state.activeConvoy?.failureCode === "hunt-route-held") {
-    ports.cancelConvoy();
-    hunt.convoyId = null;
-  }
-  if (state.activeConvoy || !arrived(hunt, state, entry.relocation!.destination, ports.now()))
-    return;
-  entry.phase = "post-relocation";
-  delete hunt.originArrivedAt;
-  ports.persist();
-}
-
 /** Applied before route preparation, including child walks restored after a restart. */
 export function inheritedHuntRoute(
   hunt: HuntCycle | null | undefined,
