@@ -13,3 +13,8 @@ logs/
 .env
 secrets/
 *.tsbuildinfo
+
+# Generated test journals and process-specific storage locks.
+/test-state
+/test-rotation
+*.writer.lock
