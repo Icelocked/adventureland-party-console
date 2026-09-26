@@ -19,7 +19,8 @@ from the commits merged into `main`.
 - Improved dashboard performance by memoizing character cards, inventory/equipment,
   bank and stand panels, monster controls, and upgrade-offering context, with
   stable data and action props to avoid unrelated renders.
-- Equipment catalog opens in batches of 120 items with a Show more button.
+- Equipment catalog uses infinite scroll, loading more items automatically as
+  you approach the bottom while keeping the initial render bounded.
 - Dashboard settings, rules, and marks use a separate 15-second configuration
   poll; actions refresh them immediately while live progress retains fast updates.
 - Live logs reuse derived entries and rendered rows when their contents have not

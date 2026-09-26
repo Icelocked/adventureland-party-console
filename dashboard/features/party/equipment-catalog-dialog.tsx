@@ -25,7 +25,7 @@ import type { InventoryEntry } from "./inventory-entry";
 // The full equipment catalog can run into the hundreds of items; mounting every
 // row at once (each with a sprite, several labels and an optional compare
 // button) has been observed to freeze the tab for multiple seconds on open.
-// Render a bounded window and let the user page in more.
+// Render a bounded initial window and append more as the user scrolls.
 const ROW_BATCH = 120;
 
 export const EquipmentCatalogDialog = memo(function EquipmentCatalogDialog({
@@ -280,7 +280,12 @@ export const EquipmentCatalogDialog = memo(function EquipmentCatalogDialog({
               : " · usable by every selected class"
             : ""}
         </p>
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto" onScroll={(event) => {
+          const panel = event.currentTarget;
+          if (open && visibleCount < rows.length &&
+              panel.scrollHeight - panel.scrollTop - panel.clientHeight <= 400)
+            setVisibleCount(Math.min(visibleCount + ROW_BATCH, rows.length));
+        }}>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
             {visibleRows.map((item) => {
               const def = item.meta?.definition || {},
@@ -328,17 +333,6 @@ export const EquipmentCatalogDialog = memo(function EquipmentCatalogDialog({
               );
             })}
           </div>
-          {visibleRows.length < rows.length ? (
-            <div className="mt-3 flex justify-center">
-              <Button
-                variant="outline"
-                onClick={() => setVisibleCount((count) => count + ROW_BATCH)}
-                className="border-cyan-700 bg-black text-cyan-100 hover:bg-cyan-950 hover:text-white"
-              >
-                Show {Math.min(ROW_BATCH, rows.length - visibleRows.length)} more ({rows.length - visibleRows.length} remaining)
-              </Button>
-            </div>
-          ) : null}
         </div>
       </DialogContent>
     </Dialog>

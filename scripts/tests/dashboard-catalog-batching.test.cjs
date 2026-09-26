@@ -7,7 +7,7 @@ const React = require('../../dashboard/node_modules/react');
 const { create, act } = require('../../dashboard/node_modules/react-test-renderer');
 global.IS_REACT_ACT_ENVIRONMENT = true;
 
-test('catalog mounts 120 rows, expands, and resets its batch on filtering and reopening', async () => {
+test('catalog appends rows near the scroll bottom and resets on filtering and reopening', async () => {
   const exports = {};
   const code = ts.transpileModule(fs.readFileSync('dashboard/features/party/equipment-catalog-dialog.tsx', 'utf8'), {
     compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -25,20 +25,28 @@ test('catalog mounts 120 rows, expands, and resets its batch on filtering and re
   const render = () => React.createElement(exports.EquipmentCatalogDialog, { open, catalog, onOpenChange() {}, onInspect() {} });
   const rows = () => tree.root.findAllByType('ItemSprite').length;
   const more = () => tree.root.findAllByType('Button').find(button => String(button.props.children).startsWith('Show '));
+  const scroll = (remaining) => tree.root.findAllByType('div').find(node => node.props.onScroll).props.onScroll({
+    currentTarget: { scrollHeight: 4000, clientHeight: 600, scrollTop: 3400 - remaining },
+  });
   try {
     await act(async () => { tree = create(render()); });
     assert.equal(rows(), 120);
-    await act(async () => more().props.onClick());
+    assert.equal(more(), undefined);
+    await act(async () => scroll(1000));
+    assert.equal(rows(), 120, 'scrolling far from the end does not mount more rows');
+    await act(async () => { scroll(400); scroll(400); });
     assert.equal(rows(), 240);
-    await act(async () => more().props.onClick());
+    await act(async () => scroll(0));
     assert.equal(rows(), 250);
     assert.equal(more(), undefined);
+    await act(async () => scroll(0));
+    assert.equal(rows(), 250, 'the final batch is bounded by the filtered catalog');
     const input = tree.root.findByType('Input');
     await act(async () => input.props.onChange({ target: { value: 'Item 249' } }));
     assert.equal(rows(), 1);
     await act(async () => input.props.onChange({ target: { value: '' } }));
     assert.equal(rows(), 120);
-    await act(async () => more().props.onClick());
+    await act(async () => scroll(0));
     open = false;
     await act(async () => tree.update(render()));
     open = true;
