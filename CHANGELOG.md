@@ -11,6 +11,10 @@ from the commits merged into `main`.
 
 ### Fixed
 
+- Added Farming Settings > Set preferred hunt spawns: expand monsters with multiple available spawns and save a destination for future Monster Hunts. Automatic selection remains the default; normal farming is unaffected.
+
+- Set alpathfinder route-cost speed to 200 for all planner calls, replacing the inflated no-Town estimate that could discourage useful door and tunnel routes.
+
 - Hunt returns now release a failed travel hold after fresh, matching reports
   verify the whole party stopped at Daisy, allowing quest turn-in to continue.
   Recovery also accepts holds reissued after restart and ignores released Escape

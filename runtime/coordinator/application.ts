@@ -693,7 +693,8 @@ export function startCoordinatorApplication(
       validPhoenixOrder: (order) => rareHunting.validateOrder(party.monsterChoices, order),
       validLocation: (id, location) =>
         validFarmingLocation(party.monsterChoices || [], [id], location),
-      destination: monsterDestination,
+      destination: (type) => coordinatorPolicies.coordinatorHuntDestination(party, type,
+        (choices, focus) => farmZones.zones(choices, focus), false),
       release: () => escapeControl.release(),
       clearHunt: clearMonsterHuntState,
       members: () => farmingNavigation.members(),

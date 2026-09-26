@@ -975,3 +975,14 @@ status-stage and barrier timings expose handler cost separately from event-loop 
 Validate barrier-communication, movement-service, return-planner, shared-convoy,
 convoy-communication, movement-barrier, anniversary kiss/return, and status-ingestion.
 Publish characters and coordinator together with the supported full restart.
+
+## Preferred Hunt spawns
+
+Farming settings store per-monster spawn preferences in huntSettings.preferredSpawns.
+The popup lists multiple available zones from the same catalog used by Hunt routing.
+Preferences apply when selecting future Hunt destinations, including recovery candidates;
+missing or excluded zones fall back to the existing nearest same-map ordering.
+Manual monster selection opts out. Existing missions keep their assigned destination.
+The scoped settings endpoint merges per-monster patches and validates catalog membership;
+an empty key restores Automatic. Settings use the existing persistence/export path.
+Validate hunt-spawn-preferences and hunt-settings; activate with coordinator-only restart.

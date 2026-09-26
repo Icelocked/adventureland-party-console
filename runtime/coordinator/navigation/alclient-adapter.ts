@@ -7,6 +7,8 @@ import type { GameData, PlanRequest, Step } from '../../navigation/contracts.ts'
  * Only prepare/getPath are needed. No cheat edges; no Character/socket client.
  */
 let preparedGame: GameData;
+// Route-cost estimate only; actual movement and town authorization are separate.
+const PLANNER_SPEED = 200;
 export function prepare(g: GameData): void {
   preparedGame = g;
   const maps = new Set(['main']);
@@ -17,9 +19,8 @@ export function prepare(g: GameData): void {
 }
 export function getPath(request: PlanRequest): Step[] {
   const { from, to } = request;
-  // ALClient's avoidTownWarps is a cost preference, never an authorization check.
   const raw = request.avoidLeave ? withoutLeave(request) : pathfinder.getPath(from.map as MapKey, from.x, from.y, to.map as MapKey, to.x, to.y,
-    { speed: request.town ? request.speed : 100000 });
+    { speed: PLANNER_SPEED });
   if (!raw?.length) throw Error('ALClient found no route');
   const plot: Step[] = transporterApproaches(raw, from).map(p => ({ map: p.map, x: p.x, y: p.y, method: p.method,
     ...(p.method === 'town' ? { town: true } : {}),
@@ -31,7 +32,7 @@ export function getPath(request: PlanRequest): Step[] {
 
 function withoutLeave(request: PlanRequest): pathfinder.PathNode[] | null {
   const {from, to} = request;
-  const options = {speed: request.town ? request.speed : 100000, avoidMaps: ['cyberland', 'jail'] as MapKey[]};
+  const options = {speed: PLANNER_SPEED, avoidMaps: ['cyberland', 'jail'] as MapKey[]};
   if (!['cyberland', 'jail'].includes(from.map))
     return pathfinder.getPath(from.map as MapKey, from.x, from.y, to.map as MapKey, to.x, to.y, options);
   const door = preparedGame.maps[from.map]?.doors?.find(d => d[4] === 'main' && !d[7] && !d[8]);
@@ -65,7 +66,7 @@ function transporterApproach(from: Step, npc: number[]): pathfinder.PathNode[] |
   points.sort((a,b) => Math.hypot(a.x-from.x,a.y-from.y)-Math.hypot(b.x-from.x,b.y-from.y));
   for (const p of points) {
     if(pathfinder.canWalkPath(p.map,from.x,from.y,p.x,p.y))return [p];
-    const path=pathfinder.getPath(p.map,from.x,from.y,p.map,p.x,p.y,{speed:100000});
+    const path=pathfinder.getPath(p.map,from.x,from.y,p.map,p.x,p.y,{speed:PLANNER_SPEED});
     if(path?.length && path.every(step=>step.map===from.map && step.method==='move')) {
       // Stop at the first graph node in interaction range. The library's final
       // exact-point connector can cut through a corner near the transporter.

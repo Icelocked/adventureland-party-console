@@ -20,6 +20,7 @@ import { MonsterHuntStatus } from "./monster-hunt-status";
 import { PartyState } from "./party-state";
 import { MonsterRadiusControl } from './monster-radius-control';
 import {HuntSettingsControl} from "./hunt-settings-control";
+import { HuntSpawnSettings } from './hunt-spawn-settings';
 import { huntBlacklistLabel } from './hunt-blacklist-label';
 
 export const FarmingModeControl = memo(function FarmingModeControl({
@@ -145,6 +146,7 @@ export const FarmingModeControl = memo(function FarmingModeControl({
           <fieldset disabled={inherited} aria-describedby={inherited ? followDescription : undefined}>
           <HuntSettingsControl value={huntSettings} onSave={inherited ? undefined : onHuntSettingsSave}/>
           </fieldset>
+          <HuntSpawnSettings catalog={catalog} value={huntSettings} onSave={onHuntSettingsSave} disabled={inherited}/>
           {onRadiusSave && <MonsterRadiusControl radius={radius||400} onSave={onRadiusSave} context={radiusContext}/>}
           <PassiveHuntingMenu settings={migratePassiveSettings(passiveHunting,passiveRareHunts)} catalog={catalog} disabled={inherited} onSave={onRareChange} renderMonsterDetails={renderMonsterDetails}/>
           <div className="flex items-center gap-3">
