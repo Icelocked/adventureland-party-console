@@ -1,9 +1,31 @@
 import {huntLootId} from '../hunt/loot-identity.ts';
+// Both `engagements` and `retired` below only ever grew (never pruned/evicted) before this
+// fix - one entry per distinct monster/chest ever engaged or lost control of, for the entire
+// life of the coordinator process. Over days of continuous combat that's unbounded memory
+// growth, and the larger heap that results makes GC do more work too, which shows up as rising
+// CPU over uptime even though the Map/Set operations themselves stay O(1). The bounds below
+// (a time window for `engagements`, matching the TTL `engaged()` already checks against; a
+// generous size cap for `retired`, since it has no natural timestamp) are chosen to be far
+// larger than any realistic short-term working set, so normal gameplay behavior is unchanged -
+// they only ever evict entries that are already too old/numerous to matter.
+const ENGAGEMENT_TTL_MS=300000;
+const RETIRED_MAX_ENTRIES=500;
+function retireBounded(retired:any,id:string) {
+  retired.add(id);
+  while(retired.size>RETIRED_MAX_ENTRIES) {
+    const oldest=retired.values().next().value;
+    if(oldest===undefined)break;
+    retired.delete(oldest);
+  }
+}
 /** Loot completion requires a pass and a subsequent observation in the same place. */
 export function createDepartureLoot(ports:any) {
   let control:any=null, progress:any=null, pending=false, retired=new Set<string>(), latest=0;
   const engagements=new Map<string,number>();
   const identity=(t:any)=>JSON.stringify([t.realm,t.map,String(t.in??t.map),String(t.id)]);
+  function pruneEngagements(now:number) {
+    for(const [key,at] of engagements) if(now-at>=ENGAGEMENT_TTL_MS) engagements.delete(key);
+  }
   function valid(c:any) {
     const s=ports.position();
     return c && s.realm===c.realm && s.map===c.map && String(s.in)===String(c.in) &&
@@ -12,7 +34,7 @@ export function createDepartureLoot(ports:any) {
   function accept(c:any,at:number) {
     if(at<latest)return;latest=at;
     if(control && c && identity(control)===identity(c) && control.after===c.after)return;
-    if(control && control.id!==c?.id)retired.add(control.id);
+    if(control && control.id!==c?.id)retireBounded(retired,control.id);
     control=c && !retired.has(c.id) ? c : null;
   }
   async function tick() {
@@ -32,8 +54,8 @@ export function createDepartureLoot(ports:any) {
     } finally {pending=false;}
   }
   return {accept,tick,valid,report:()=>progress,blocks:()=>valid(control)&&!(progress?.id===control.id&&progress.complete),
-    hit(t:any){engagements.set(identity(t),ports.now());},
-    engaged(t:any){const at=engagements.get(identity(t));return at!==undefined&&ports.now()-at<300000;}};
+    hit(t:any){const now=ports.now();pruneEngagements(now);engagements.set(identity(t),now);},
+    engaged(t:any){const at=engagements.get(identity(t));return at!==undefined&&ports.now()-at<ENGAGEMENT_TTL_MS;}};
 }
 
 export function installLootClient(root:any,shared:any) {
@@ -84,7 +106,7 @@ export function installLootClient(root:any,shared:any) {
       if(finalKill && state.serverNow>finalKillAt+1500 && !mission?.loot && !ownerDone(0))finalKill=null;
       if(!mission || finalKill!==huntLootId(mission) || mission.loot?.complete)finalKill=null;
       let c=state.rareControl;
-      if(lastRare && lastRare.id!==c?.id)retired.add(lastRare.id);
+      if(lastRare && lastRare.id!==c?.id)retireBounded(retired,lastRare.id);
       if(c && (retired.has(c.id)||c.kind==='loot'&&!rare.valid({...c.target,id:c.id})))c=null;
       lastRare=c;
       rare.accept(c?.kind==='loot'?{...c.target,id:c.id,after:c.killedAt}:null,state.serverNow);
