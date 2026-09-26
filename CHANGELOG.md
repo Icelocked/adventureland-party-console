@@ -11,6 +11,18 @@ from the commits merged into `main`.
 
 ### Fixed
 
+- Improved dashboard performance by memoizing character cards, inventory/equipment,
+  bank and stand panels, monster controls, and upgrade-offering context, with
+  stable data and action props to avoid unrelated renders.
+- Equipment catalog opens in batches of 120 items with a Show more button.
+- Dashboard settings, rules, and marks use a separate 15-second configuration
+  poll; actions refresh them immediately while live progress retains fast updates.
+- Live logs reuse derived entries and rendered rows when their contents have not
+  changed, reducing repeated sorting and rendering during long sessions.
+  ([#22](https://github.com/Ryan-Haines/adventureland-party-console/issues/22))
+- Added the pinned game-17175 route fixture and refreshed Hunt, convoy, and
+  coordinator-storage regression fixtures for repeatable offline validation.
+
 - Long-running coordinators no longer retain complete character heartbeats in
   rare-target rejection receipts. Existing receipts are compacted without losing
   rejection evidence, and unchanged merchant queue checks avoid redundant saves.

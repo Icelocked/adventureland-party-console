@@ -5,13 +5,13 @@ const {validateRoute}=require('../../runtime/navigation/validation.ts');
 const {repairDoorApproaches}=require('../../runtime/navigation/door-approach.ts');
 const fixture=require('./fixtures/cgoo-routes-17175.json');
 const directory=path.resolve('.caracal/game_files/17175');
-const installed=fs.existsSync(path.join(directory,'data.js'));
-test('reported cgoo segment is blocked in both directions with processed game 17175 and the actual character base',{skip:!installed},()=>{
+assert.ok(fs.existsSync(path.join(directory,'data.js')),'Restore pinned game fixtures with node scripts/ci/restore-game-fixtures.cjs');
+test('reported cgoo segment is blocked in both directions with processed game 17175 and the actual character base',()=>{
  const native=createNative(directory),[a,b]=fixture.blocked;
  assert.deepEqual(JSON.parse(JSON.stringify(native.context.character.base)),fixture.base);
  assert.equal(native.canWalk(a,b),false);assert.equal(native.canWalk(b,a),false);
 });
-for(const route of fixture.routes)test('fresh planner and bounded connector: '+route.name,{skip:!installed},async(t)=>{
+for(const route of fixture.routes)test('fresh planner and bounded connector: '+route.name,async(t)=>{
  const native=createNative(directory),service=createPlannerService(path.resolve('.build/runtime/movement-planner.cjs'));
  const ports={game:native.game,walk:(a,b)=>native.canWalk(a,b),door:(p,d)=>native.context.is_door_close(p.map,d,p.x,p.y)&&native.context.can_use_door(p.map,d,p.x,p.y),hasKey:()=>false};
  try {

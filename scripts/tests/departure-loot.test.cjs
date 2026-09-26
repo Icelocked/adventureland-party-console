@@ -69,9 +69,17 @@ function coordinator(){
  const ports={now:()=>100,intent:()=>({}),cancelHuntConvoy(){state.activeConvoy=null;}};
  return {hunt,state,ports};
 }
-test('final kill installs barrier before quest return and convoy startup; delivery is not acknowledgement',()=>{
+test('completed Hunt returns to Daisy without a departure loot hold',()=>{
+ const r=coordinator();let returned=0;
+ r.hunt.loot={id:'old',complete:false};
+ createHuntTick(r.state,{...r.ports,rareEncounter:()=>false,ownsTravel:()=>true,
+  recordDeaths:()=>[],fresh:()=>true,persist(){},returnToDaisy(){returned++;}}).tick();
+ assert.equal(returned,1);assert.equal(r.hunt.loot,undefined);assert.ok(r.hunt.turnIn);
+});
+
+test('explicit Hunt loot barrier requires a matching fresh acknowledgement, not delivery',()=>{
  const r=coordinator();r.state.activeConvoy={id:'race',purpose:'monster-hunt'};
- createHuntTick(r.state,{...r.ports,rareEncounter:()=>false,ownsTravel(){assert.fail('departure won the loot race');}}).tick();
+ assert.equal(huntLootPending(r.hunt,r.state,r.ports),true);
  assert.equal(r.state.activeConvoy,null);assert.match(r.hunt.message,/Pending Hunt loot/);
  assert.equal(huntLootPending(r.hunt,r.state,r.ports),true);
  const p={...r.hunt.loot,observedAt:101,complete:true};

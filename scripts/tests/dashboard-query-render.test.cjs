@@ -11,6 +11,54 @@ const { useCharacterData, characterKey } = load('dashboard-live.tsx');
 const { usePanelModel } = load('use-panel-model.ts');
 global.IS_REACT_ACT_ENVIRONMENT = true;
 
+test('panel merges retain unchanged characters and handle roster and subscription changes', async () => {
+  const client = createDashboardClient();
+  let latest, tree;
+  let model = { state: { characters: { A: { name: 'A' }, B: { name: 'B' } }, marked: {} }, chars: [{ name: 'A' }, { name: 'B' }] };
+  let needs = { inventory: true };
+  client.setQueryData(characterKey('A', 'inventory'), { items: [], slots: {} });
+  client.setQueryData(characterKey('B', 'inventory'), { items: [], slots: {} });
+  function Panel() { latest = usePanelModel(model, needs); return null; }
+  const render = () => React.createElement(QueryClientProvider, { client }, React.createElement(Panel));
+  try {
+    await act(async () => { tree = create(render()); });
+    const first = latest;
+    await act(async () => tree.update(render()));
+    assert.equal(latest.state, first.state);
+    assert.equal(latest.chars, first.chars);
+    await act(async () => {
+      client.setQueryData(characterKey('A', 'inventory'), { items: [{ slot: 0, item: { name: 'coat' } }], slots: {} });
+      await new Promise(resolve => setTimeout(resolve, 5));
+    });
+    assert.notEqual(latest.state.characters.A, first.state.characters.A);
+    assert.equal(latest.state.characters.B, first.state.characters.B);
+    needs = { vitals: true };
+    client.setQueryData(characterKey('A', 'vitals'), { hp: 42 });
+    await act(async () => tree.update(render()));
+    assert.equal(latest.state.characters.A.hp, 42);
+    assert.equal(latest.state.characters.A.items, undefined);
+    model = { ...model, state: { ...model.state, characters: { A: model.state.characters.A } }, chars: [{ name: 'A' }] };
+    await act(async () => tree.update(render()));
+    assert.deepEqual(Object.keys(latest.state.characters), ['A']);
+    assert.equal(latest.chars.length, 1);
+  } finally { if (tree) await act(async () => tree.unmount()); client.clear(); }
+});
+
+test('forwarding actions retain identity and invoke the latest committed closure', async () => {
+  const { useForwardingActions } = load('use-forwarding-actions.ts');
+  const keys = ['action'];
+  let actions, tree;
+  function Host({ value }) { actions = useForwardingActions({ action: () => value }, keys); return null; }
+  try {
+    await act(async () => { tree = create(React.createElement(Host, { value: 'first' })); });
+    const original = actions.action;
+    assert.equal(original(), 'first');
+    await act(async () => tree.update(React.createElement(Host, { value: 'latest' })));
+    assert.equal(actions.action, original);
+    assert.equal(original(), 'latest');
+  } finally { if (tree) await act(async () => tree.unmount()); }
+});
+
 test('React vitals subscriptions isolate other cards and the inventory subscription; unchanged values do not commit', async (t) => {
   const previousDocument = global.document;
   global.document = { hidden: false, addEventListener() {}, removeEventListener() {} };

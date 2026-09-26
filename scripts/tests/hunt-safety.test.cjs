@@ -87,7 +87,7 @@ test('a follower quest cannot replace a missing leader quest',()=>{
 test('return planning waits for compatible runtimes without consuming retries',()=>{
  const t=fixture();delete t.party.statuses.W.convoyProtocol;
  t.party.statuses.W.monsterHunt.count=0;collectFinalLoot(t);
- assert.equal(t.party.activeConvoy,null);assert.equal(t.hunt.returnRetries,0);
+ assert.equal(t.party.activeConvoy,null);assert.equal(t.hunt.returnRetries,undefined);
  assert.match(t.hunt.message,/load the return-routing update/);
  t.party.statuses.W.convoyProtocol=4;t.r.monsterHuntTick();
  assert.equal(t.party.activeConvoy.returnRouting,true);
@@ -130,17 +130,19 @@ test('unfinished leader already at Daisy under the old policy resumes farming in
  assert.equal(t.convoys.at(-1).location.map,'tunnel');
 });
 
-test('restart resumes a failed protected turn-in without releasing events or reselecting hunts',()=>{
+test('failed protected turn-in remains held without recreating its retry budget or releasing ownership',()=>{
  const t=fixture();t.party.statuses.W.monsterHunt.count=0;collectFinalLoot(t);
  t.hunt.turnIn=JSON.parse(JSON.stringify(t.hunt.turnIn));
  t.party.activeConvoy.phase='failed';t.party.activeConvoy.failure='Coordinator restarted; request a fresh convoy';t.party.activeConvoy.failureCode='runtime-lost';
- const before=t.convoys.length;t.r.monsterHuntTick();
- assert.equal(t.convoys.length,before+1);assert.equal(t.hunt.stage,'returning');
+ const before=t.convoys.length,convoy=t.party.activeConvoy;convoy.recoveryAttempts=1;convoy.retryExhausted=true;
+ t.r.monsterHuntTick();
+ assert.equal(t.convoys.length,before);assert.equal(t.hunt.stage,'returning');
+ assert.equal(t.party.activeConvoy,convoy);assert.equal(convoy.recoveryAttempts,1);assert.match(t.hunt.message,/Retry return/);
  assert.equal(t.r.huntTurnInOwnsTravel(t.hunt),true);assert.deepEqual(t.convoys.at(-1).location,t.party.monsterHunterLocation);
  t.party.activeConvoy.phase='failed';t.party.activeConvoy.failure='runtime lost';
- t.r.monsterHuntTick();assert.equal(t.convoys.length,before+1,'retry is throttled');
+ t.r.monsterHuntTick();assert.equal(t.convoys.length,before,'failed return cannot reset its own budget');
  t.advance(6000);t.r.farmingNavigation.intent=()=>({cancelled:true});t.r.monsterHuntTick();
- assert.equal(t.convoys.length,before+1,'manual cancellation cannot revive a route');
+ assert.equal(t.convoys.length,before,'manual cancellation cannot revive a route');
 });
 
 test('leadership switches targets and releases a turn-in owner who leaves the party',()=>{

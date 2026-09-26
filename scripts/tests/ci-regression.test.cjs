@@ -24,11 +24,11 @@ function temporary() {
   return fs.mkdtempSync(path.resolve('.build/ci-fixture-tests/run-'));
 }
 
-test('CI restores both complete game versions offline and can repeat safely', () => {
+test('CI restores all pinned game versions offline and can repeat safely', () => {
   const target = temporary();
-  assert.deepEqual(restoreGameFixtures(target), ['16846', '17083']);
-  assert.deepEqual(restoreGameFixtures(target), ['16846', '17083']);
-  for (const version of ['16846', '17083']) {
+  assert.deepEqual(restoreGameFixtures(target), ['16846', '17083', '17175']);
+  assert.deepEqual(restoreGameFixtures(target), ['16846', '17083', '17175']);
+  for (const version of ['16846', '17083', '17175']) {
     const directory = path.join(target, version);
     const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'client_scripts.json'), 'utf8'));
     for (const file of [...manifest.game, ...manifest.runner])

@@ -15,7 +15,7 @@ const order = [
   '../../scripts/bank-stack-routing.cjs', '../../scripts/mail-inbox.cjs',
   '../../dashboard/lib/farming-areas.cjs', '../../scripts/party-escape.cjs',
   '../../scripts/convoy-defense.cjs', '../../scripts/combat-disengagement.cjs',
-  '../src/CONSTANTS', '../src/LogUtils', '../src/FileStoredKeyValues',
+  '../src/CONSTANTS', '../src/LogUtils',
 ];
 
 test('dependencies use launcher resolution in legacy order and preserve getters and references', () => {
@@ -32,7 +32,8 @@ test('dependencies use launcher resolution in legacy order and preserve getters 
   assert.deepEqual(calls, order);
   assert.equal(dependencies.huntPolicy, modules.get(order[0]));
   assert.equal(dependencies.rareHunting.createRareHunting, require('../../runtime/coordinator/navigation/rare-hunting.ts').createRareHunting);
-  assert.equal(dependencies.FileStoredKeyValues, modules.get(order.at(-1)));
+  assert.equal(dependencies.FileStoredKeyValues, require('../../runtime/coordinator/persistence/jsonl-store.ts').CoordinatorJsonlStore);
+  assert.equal(calls.includes('../src/FileStoredKeyValues'), false, 'storage is maintained by the coordinator');
   assert.deepEqual(gets.filter(([name]) => name === order[3]).map(([, key, at]) => [key, at]),
     [['installRosterRoutes', 4], ['reservedForSteam', 4], ['publicHandoff', 4]]);
   assert.equal(dependencies.log, modules.get('../src/LogUtils').log);

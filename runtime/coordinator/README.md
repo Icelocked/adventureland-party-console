@@ -1,5 +1,20 @@
 # Character coordinator
 
+## Dashboard render and polling performance
+
+Dashboard `core` reads retain live Hunt, convoy, anniversary, slot, and client-update
+progress. The separate `config` section carries settings, rules and marks, polled
+every fifteen seconds and invalidated immediately after dashboard mutations.
+Non-dashboard core and full-state responses retain their existing contracts.
+Character/panel merges structurally share unchanged data; memoized controls and
+stable event callbacks avoid unrelated work. Catalogs initially mount 120 entries,
+and log derivation/rendering is reused when its inputs are unchanged.
+
+Validate public-state, dashboard-query/render, inventory, event-selection, and
+monster-focus tests. Activate coordinator and dashboard assets using the supported
+coordinator-only restart; no character asset publication is required. Browser
+profiling over long sessions is still needed to quantify the performance change.
+
 ## Long-running coordinator responsiveness
 
 Rare rejection receipts explicitly project sighting and position fields. Startup

@@ -12,6 +12,22 @@ test('pending command projection preserves empty entries and excludes absent val
 });
 function read(r,query){let result;r.route({query},{json:value=>{result=value;}});return JSON.parse(JSON.stringify(result));}
 
+test('dashboard config and core partition settings without slowing live progress or changing legacy core', () => {
+ const r=publicStateRuntime();
+ const core=read(r,{section:'core',dashboard:'1'}), config=read(r,{section:'config',dashboard:'1'});
+ for(const field of ['threshold','marked','monsterFocus','huntSettings','merchantRules']) {
+  assert.equal(Object.hasOwn(core,field),false,field);
+  assert.deepEqual(config[field],r.party[field]);
+ }
+ for(const field of ['monsterHunt','activeConvoy','anniversary','activeSlots','gameVersion','clientUpdate','nativeStand','partyFarmingMode']) {
+  assert.ok(Object.hasOwn(core,field),field);
+  assert.equal(Object.hasOwn(config,field),false,field);
+ }
+ assert.deepEqual(read(r,{section:'core'}).threshold,r.party.threshold);
+ assert.deepEqual(read(r,{}).marked,r.party.marked);
+ for(const field of Object.keys(config)) assert.equal(Object.hasOwn(core,field),false,field);
+});
+
 test('dashboard core exposes observed characters before a heartbeat',()=>{
  const r=publicStateRuntime();
  require('../../runtime/roster/connection-status.ts').recordConnections(r.party,[{name:'P',primary:true,state:'loading'}],r.ports.now());
@@ -70,12 +86,12 @@ test('dashboard core keeps the latest bank balance without subscribing to bank c
  assert.equal(read(r,query).bankGold,null);
 });
 
-test('dashboard exposes deconstruction marks, rules and eligibility catalog in core',()=>{
+test('dashboard exposes deconstruction marks, rules and eligibility catalog in config',()=>{
  const r=publicStateRuntime();
  r.party.deconstructionMarks=[{id:'d',owner:'M',state:'ready'}];
  r.party.autoDeconstruction={P:{ring:{item:{name:'ring',level:1}}}};
  r.party.deconstructionCatalog={ring:{compound:true}};
- const result=read(r,{section:'core',dashboard:'1'});
+ const result=read(r,{section:'config',dashboard:'1'});
  for(const key of ['deconstructionMarks','autoDeconstruction','deconstructionCatalog'])
   assert.deepEqual(result[key],r.party[key]);
 });
