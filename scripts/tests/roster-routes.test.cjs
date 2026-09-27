@@ -25,6 +25,19 @@ function fixture(overrides = {}) {
   const bridge = (body = {}) => request('/steam/bridge', { version: 1, clientId: 'window', character: 'Priest', ...body });
   return { state, ports, online, installed, request, bridge, advance: value => { now += value; } };
 }
+test('selection-screen bridge readiness permits a headless transfer without claiming a connected character',async()=>{
+ const f=fixture();f.state.native=null;
+ try {
+  assert.deepEqual((await f.request('/steam/connection')).body,{connected:false,ready:false});
+  await f.bridge({version:2,character:null,running:[]});
+  assert.deepEqual((await f.request('/steam/connection')).body,{connected:false,ready:true});
+  const response=await f.request('/steam/action',{action:'primary',character:'Mage'});
+  assert.equal(response.code,200);assert.equal(f.online.has('Mage'),false);
+  assert.equal(f.state.handoff.phase,'release');
+  f.advance(8000);assert.equal((await f.request('/steam/connection')).body.ready,false);
+ }finally{f.installed.dispose();}
+});
+
 test('bridge realm recovers an unknown-realm operation without a CODE heartbeat',async()=>{
  const f=fixture();f.ports.realmContext=()=>({current:null,home:'SR_USII'});
  try {

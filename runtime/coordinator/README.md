@@ -1,5 +1,32 @@
 # Character coordinator
 
+## Local Steam launch and attachment
+
+The hosting gateway prepares Windows WebView2 or native Linux WebKitGTK before
+forwarding a dashboard Steam login/primary action. The local helper discovers
+Steam libraries, attaches to an existing loopback inspector, or launches the game
+with a process-scoped inspector on 127.0.0.1:19245. A normally launched client
+without inspection enabled requires one manual close and retry; it is never
+silently terminated. Linux requires a graphical desktop session and its native
+Steam build (not Proton). AL_STEAM_EXECUTABLE can select a nonstandard installation.
+
+Setup placement/client choices are persisted under hosting data and migrated from
+existing browser preferences on Steam actions. Different-PC setups cannot trigger
+a local launch; an already connected remote bridge continues to work. Unknown
+placement requires setup. The helper injects only the maintained Steam bridge into
+the authenticated game page and reattaches after navigation. Missing account login,
+multiple windows, attachment failures and readiness timeouts leave headless ownership
+unchanged. No account passwords are copied or entered by the helper. Linux retains
+the existing HTTPS certificate setup requirement.
+
+The connection endpoint distinguishes bridge readiness from a connected character.
+The existing coordinator handoff still confirms offline ownership and waits for
+native CODE arrival. Validate steam-desktop, roster-routes, hosting, setup, Steam
+handoff/group/bridge and query action regressions. Activate gateway, coordinator
+and dashboard with the supported coordinator-only restart. Test cold launch,
+selection-screen attachment, existing native sessions and fresh arrival on each OS;
+protocol fixtures alone do not establish live Linux compatibility.
+
 A failed continuous Daisy return can finish after three seconds of fresh stopped
 terminal-hold acknowledgements at its destination. Command, runtime, route, realm,
 instance and navigation ownership must still match the current Hunt return.

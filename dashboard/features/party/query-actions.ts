@@ -5,6 +5,7 @@ import {
 } from '@tanstack/react-query';
 import { API } from './api';
 import { authenticationLost, key, type Domain } from './query-cache';
+import { steamClientSetup } from './steam-client-setup';
 
 // 'config' (rules/marks/configuration) sits alongside 'core' (live operational
 // state) in every one of these groups: most mutations here are dashboard-driven
@@ -111,7 +112,7 @@ export async function performAction(
   const response = await fetch(API + path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(path === '/steam/action' ? steamClientSetup(body, typeof window === 'undefined' ? undefined : window.localStorage) : body),
   });
   const result = (await response.json().catch(() => ({}))) as Record<
     string,

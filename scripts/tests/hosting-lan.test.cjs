@@ -163,7 +163,7 @@ test('choosing a supported local setup generates its loader automatically; LAN c
   const flush=()=>new Promise(r=>setImmediate(r));await flush();const el=id=>dom.window.document.getElementById(id);
   assert.equal(calls.length,1);assert.equal(tick,undefined);assert.equal(poll,undefined);
   el('placement').value='same';el('client').value='windows-steam';el('client').onchange();
-  await flush();assert.equal(el('loader'),null);assert.deepEqual(JSON.parse(calls[1][1].body),{origin:'http://127.0.0.1:3010'});
+  await flush();assert.equal(el('loader'),null);assert.deepEqual(JSON.parse(calls.find(([url])=>url==='/setup/client')[1].body),{placement:'same',client:'windows-steam',https:false});assert.deepEqual(JSON.parse(calls.find(([url])=>url==='/setup/steam')[1].body),{origin:'http://127.0.0.1:3010',placement:'same',client:'windows-steam',https:false});
   assert.equal(tick,undefined);assert.match(el('linkStatus').textContent,/retry/);
   el('copy').click();await flush();assert.equal(el('code').selectionStart,0);assert.equal(el('code').selectionEnd,'client loader'.length);
   assert.equal(el('continue').getAttribute('href'),'/');el('continue').onclick();

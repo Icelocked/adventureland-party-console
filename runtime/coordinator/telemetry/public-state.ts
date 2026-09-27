@@ -134,7 +134,8 @@ function fullPayload(
     roster: ports.roster(),
     activeSlots: ports.slots(),
     characterConnections: characterConnections(state, ports.now(), name =>
-      state.statuses[name]?.runtime === 'native' && state.statuses[name].seenAt > ports.now() - 5000),
+      (state.statuses[name]?.runtime === 'native' || state.statuses[name]?.runtime === 'headless') &&
+      state.statuses[name].seenAt > ports.now() - 5000),
     classChoices: ports.classes,
     steamSwitch,
     partyLocation: state.location,

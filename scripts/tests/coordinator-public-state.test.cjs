@@ -36,6 +36,23 @@ test('dashboard core exposes observed characters before a heartbeat',()=>{
  assert.equal(result.characterConnections[0].state,'loading');
 });
 
+test('fresh headless telemetry supersedes a lost Steam observation after handoff',()=>{
+ const r=publicStateRuntime();
+ require('../../runtime/roster/connection-status.ts').recordConnections(r.party,
+  [{name:'P',primary:false,state:'waiting'}],r.ports.now()-30000);
+ r.party.statuses.P.runtime='headless';
+ for(const query of [{},{section:'core',dashboard:'1'}]) {
+  const connection=read(r,query).characterConnections[0];
+  assert.equal(connection.status,'connected');
+  assert.equal(connection.delayed,false);
+ }
+ r.party.statuses.P.seenAt=r.ports.now()-5000;
+ assert.equal(read(r,{}).characterConnections[0].status,'lost');
+ r.party.statuses.P.runtime='native';
+ r.party.statuses.P.seenAt=r.ports.now();
+ assert.equal(read(r,{}).characterConnections[0].status,'connected');
+});
+
 test('all dashboard state sections preserve their pre-extraction response contracts',()=>{
  for(const fixture of contracts){const actual=read(publicStateRuntime(),fixture.query);if (actual.characterConnections) { assert.deepEqual(actual.characterConnections, []); delete actual.characterConnections; } delete actual.upgradeOfferingRules;delete actual.upgradeOfferingStock;delete actual.bankSortMode;delete actual.bankSortRequest;delete actual.gameVersion;delete actual.clientUpdate;delete actual.bankboiPrefix;delete actual.anniversaryAutoChat;delete actual.gameLogs;delete actual.autoBlacklistMerchants;delete actual.nativeStand;delete actual.autoStandBuys;delete actual.combatRecovery;delete actual.huntSettings;delete actual.huntFailures;delete actual.deconstructionMarks;delete actual.autoDeconstruction;delete actual.deconstructionCatalog;delete actual.luckyUpgradeSlots;delete actual.luckySlotTracking;assert.deepEqual(actual,fixture.payload,JSON.stringify(fixture.query));}
 });
