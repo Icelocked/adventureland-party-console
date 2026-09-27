@@ -9,7 +9,20 @@
 Changes queued for the next release. The release workflow determines its version
 from the commits merged into `main`.
 
+### Added
+
+- Steam primary/login actions can launch a local Windows or native Linux client,
+  or attach to a running client with automation enabled. The bridge must be ready
+  before headless ownership is released; completion still requires native CODE
+  reports. Setup choices prevent launching a client on a different PC. A running
+  client without automation enabled requires one close and retry. Windows was
+  verified live; Linux has protocol tests and still needs live desktop validation.
+
 ### Fixed
+
+- Fresh headless reports now override stale Steam connection observations, so a
+  successful Steam-to-headless transfer no longer hides the character behind a
+  false "Connection lost" card.
 
 - Hunt off/on now resets execution, holds, failure counts and blacklist while retaining live quests and saved settings. Removed arbitrary-door route recovery; exhausted routes try another actual monster spawn. Retire saved relocation detours.
 
