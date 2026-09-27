@@ -1,3 +1,4 @@
+import { doorDetour } from "./door-detour.ts";
 import { stepIssue, type ValidationPorts } from "./validation.ts";
 import { distance, isTransition, type Point, type Step } from "./contracts.ts";
 
@@ -10,7 +11,7 @@ function approaches(ports: ValidationPorts, from: Point, to: Step): Point[] {
         w = Number(d[2]),
         h = Number(d[3]);
       const spawn = ports.game.maps[from.map].spawns[Number(d[6])];
-      return [
+      const anchors = [
         [x, y],
         [x - w / 2, y],
         [x + w / 2, y],
@@ -19,6 +20,14 @@ function approaches(ports: ValidationPorts, from: Point, to: Step): Point[] {
         [x + w / 2, y - h],
         ...(spawn ? [spawn] : []),
       ].map((p) => ({ map: from.map, x: p[0], y: p[1] }));
+      // A door's center/spawn can be behind scenery even when its interaction
+      // area is reachable. Sample inside the native 40-unit spawn radius;
+      // connector still checks both collision clearance and actual door access.
+      return anchors.concat(spawn ? Array.from({ length: 32 }, (_, i) => ({
+        map: from.map,
+        x: spawn[0] + 32 * Math.cos(i * Math.PI / 16),
+        y: spawn[1] + 32 * Math.sin(i * Math.PI / 16),
+      })) : []);
     });
   return doors.concat(transporterPoints(ports, from, to));
 }
@@ -39,7 +48,11 @@ function connector(ports: ValidationPorts, from: Point, to: Step): Point | undef
     .sort((a, b) => distance(from, a) - distance(from, b))
     .find((p) => ports.walk(from, p) && !stepIssue(ports, p, to, true));
 }
-/** Repair only direct, native-validated connectors; inaccessible doors retain fallback. */
+function connectorPath(ports: ValidationPorts, from: Point, to: Step): Point[] {
+  const direct = connector(ports, from, to);
+  return direct ? [direct] : doorDetour(ports, from, to, approaches(ports, from, to)) || [];
+}
+/** Native-validated approaches with a bounded local detour; inaccessible doors retain fallback. */
 export function repairDoorApproaches(ports: ValidationPorts, from: Point, plot: Step[]): Step[] {
   const result: Step[] = [];
   let previous = from;
@@ -57,8 +70,7 @@ export function repairDoorApproaches(ports: ValidationPorts, from: Point, plot: 
       step.transport &&
       stepIssue(ports, previous, step, true) === "door/transporter approach or access invalid"
     ) {
-      const repaired = connector(ports, previous, step);
-      if (repaired) result.push(repaired);
+      result.push(...connectorPath(ports, previous, step));
     }
     result.push(step);
     previous = step;

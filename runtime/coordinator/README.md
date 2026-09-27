@@ -1,5 +1,16 @@
 # Character coordinator
 
+## Daisy departure and door approaches
+
+Door repair samples reachable interaction points near the source spawn before
+using a bounded local walking search (8-unit grid, 224-unit extent, at most 2048
+expansions). Every segment and the final door access use native validation;
+inaccessible doors retain normal fallback. This repairs the Main/Level1/Level2
+approaches on Daisy-to-booboo routes without replacing the shared destination or
+resetting Hunt recovery budgets. Validate daisy-door-routes, movement-service and
+planner-geometry. Publish character assets with the full restart workflow, then
+verify fresh character generations and actual convoy departure separately.
+
 ## Local Steam launch and attachment
 
 The hosting gateway prepares Windows WebView2 or native Linux WebKitGTK before

@@ -83,8 +83,8 @@
     return !!xy && Math.hypot(p.x - xy[0], p.y - xy[1]) <= 1;
   }
   function doorAllowed(ports, from, to) {
-    const key = to.key || { bank_b: "bkey", bank_u: "ukey" }[to.map];
-    return !!ports.game.maps[from.map]?.doors?.some((d) => d[4] === to.map && Number(d[5] || 0) === to.s && d[8] !== "complicated" && (d[7] !== "key" || !!key && ports.hasKey(key)) && ports.door(from, d));
+    const key2 = to.key || { bank_b: "bkey", bank_u: "ukey" }[to.map];
+    return !!ports.game.maps[from.map]?.doors?.some((d) => d[4] === to.map && Number(d[5] || 0) === to.s && d[8] !== "complicated" && (d[7] !== "key" || !!key2 && ports.hasKey(key2)) && ports.door(from, d));
   }
   function transporterAllowed(g, from, to) {
     if (g.npcs.transporter?.places[to.map] !== to.s) return false;
@@ -456,14 +456,14 @@
       destination = point(destination);
       if (issue) issue = { reason: issue.reason, from: point(issue.from), to: point(issue.to) };
       const message = `${name}: ${description(phase, issue, detail)}. Destination: ${coordinates(destination)}. Journey: ${id}; game ${version}; geometry ${fingerprint}.`;
-      const key = JSON.stringify([context?.convoyId || id, phase, detail, issue, destination]);
-      const prior = recent.get(key), now = ports.now();
+      const key2 = JSON.stringify([context?.convoyId || id, phase, detail, issue, destination]);
+      const prior = recent.get(key2), now = ports.now();
       const count = (prior && now - prior.at < 6e4 ? prior.count : 0) + 1;
       if (prior && now - prior.at < 1e4) {
         prior.count = count;
         return;
       }
-      recent.set(key, { count, at: now });
+      recent.set(key2, { count, at: now });
       if (recent.size > 100) recent.delete(recent.keys().next().value);
       ports.diagnostic({ id, character: name, version, fingerprint, destination, phase, issue, detail, context, count, at: now }, message + (count > 1 ? ` Similar messages: ${count} (not route attempts).` : ""));
     };
@@ -472,12 +472,68 @@
     return phase + (issue ? ` \u2014 ${issue.reason} between ${coordinates(issue.from)} and ${coordinates(issue.to)}` : "") + (detail && detail !== phase ? `; ${detail}` : "");
   }
 
+  // runtime/navigation/door-detour.ts
+  var GRID = 8;
+  var EXTENT = 28;
+  var MAX_EXPANSIONS = 2048;
+  function key(from, p) {
+    return Math.round((p.x - from.x) / GRID) + "," + Math.round((p.y - from.y) / GRID);
+  }
+  function takeNext(open) {
+    let index = 0;
+    for (let i = 1; i < open.length; i++) if (open[i].score < open[index].score) index = i;
+    return open.splice(index, 1)[0];
+  }
+  function neighbors(from, p) {
+    const result = [];
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+      if (!dx && !dy) continue;
+      const next = { map: from.map, x: p.x + dx * GRID, y: p.y + dy * GRID };
+      if (Math.abs(next.x - from.x) <= EXTENT * GRID && Math.abs(next.y - from.y) <= EXTENT * GRID) result.push(next);
+    }
+    return result;
+  }
+  function simplify(ports, from, node) {
+    const path = [], result = [];
+    for (let current = node; current?.parent; current = current.parent) path.unshift(current.p);
+    let previous = from;
+    for (let i = 0; i < path.length; i++) {
+      let end = path.length - 1;
+      while (end > i && !ports.walk(previous, path[end])) end--;
+      result.push(path[end]);
+      previous = path[end];
+      i = end;
+    }
+    return result;
+  }
+  function doorDetour(ports, from, to, candidates) {
+    const targets = candidates.filter((p) => !stepIssue(ports, p, to, true));
+    if (!targets.length || Math.min(...targets.map((p) => distance(from, p))) > 160) return;
+    const heuristic = (p) => Math.min(...targets.map((t) => distance(p, t)));
+    const open = [{ p: from, cost: 0, score: heuristic(from) }];
+    const best = /* @__PURE__ */ new Map([[key(from, from), 0]]);
+    for (let count = 0; open.length && count < MAX_EXPANSIONS; count++) {
+      const node = takeNext(open);
+      if (node.cost !== best.get(key(from, node.p))) continue;
+      if (!stepIssue(ports, node.p, to, true)) return simplify(ports, from, node);
+      expand(ports, from, node, best, open, heuristic);
+    }
+  }
+  function expand(ports, from, node, best, open, heuristic) {
+    for (const p of neighbors(from, node.p)) {
+      const id = key(from, p), cost = node.cost + distance(node.p, p);
+      if (cost >= (best.get(id) ?? Infinity) || !ports.walk(node.p, p)) continue;
+      best.set(id, cost);
+      open.push({ p, cost, score: cost + heuristic(p), parent: node });
+    }
+  }
+
   // runtime/navigation/door-approach.ts
   function approaches(ports, from, to) {
     const doors = (ports.game.maps[from.map]?.doors || []).filter((d) => d[4] === to.map && Number(d[5] || 0) === to.s).flatMap((d) => {
       const x = Number(d[0]), y = Number(d[1]), w = Number(d[2]), h = Number(d[3]);
       const spawn = ports.game.maps[from.map].spawns[Number(d[6])];
-      return [
+      const anchors = [
         [x, y],
         [x - w / 2, y],
         [x + w / 2, y],
@@ -486,6 +542,11 @@
         [x + w / 2, y - h],
         ...spawn ? [spawn] : []
       ].map((p) => ({ map: from.map, x: p[0], y: p[1] }));
+      return anchors.concat(spawn ? Array.from({ length: 32 }, (_, i) => ({
+        map: from.map,
+        x: spawn[0] + 32 * Math.cos(i * Math.PI / 16),
+        y: spawn[1] + 32 * Math.sin(i * Math.PI / 16)
+      })) : []);
     });
     return doors.concat(transporterPoints(ports, from, to));
   }
@@ -504,6 +565,10 @@
   function connector(ports, from, to) {
     return approaches(ports, from, to).sort((a, b) => distance(from, a) - distance(from, b)).find((p) => ports.walk(from, p) && !stepIssue(ports, p, to, true));
   }
+  function connectorPath(ports, from, to) {
+    const direct = connector(ports, from, to);
+    return direct ? [direct] : doorDetour(ports, from, to, approaches(ports, from, to)) || [];
+  }
   function repairDoorApproaches(ports, from, plot) {
     const result = [];
     let previous = from;
@@ -518,8 +583,7 @@
         }
       }
       if (step.transport && stepIssue(ports, previous, step, true) === "door/transporter approach or access invalid") {
-        const repaired = connector(ports, previous, step);
-        if (repaired) result.push(repaired);
+        result.push(...connectorPath(ports, previous, step));
       }
       result.push(step);
       previous = step;
@@ -595,7 +659,7 @@
       },
       walk: (a, b) => host.can_move({ map: a.map, x: a.x, y: a.y, going_x: b.x, going_y: b.y, base: host.character.base }),
       door: (p, d) => host.is_door_close(p.map, d, p.x, p.y) && host.can_use_door(p.map, d, p.x, p.y),
-      hasKey: (key) => host.character.items.some((item) => item?.name === key)
+      hasKey: (key2) => host.character.items.some((item) => item?.name === key2)
     };
     const executor = createMovementExecutor(
       host,
@@ -992,7 +1056,7 @@
   // runtime/bank-stacks.ts
   var stackQuantity = (item) => item ? Number(item.q) || 1 : 0;
   function stackIdentity(item) {
-    return JSON.stringify(["name", "level", "p", "stat_type", "data", "rid", "b", "m", "l"].map((key) => key === "level" ? Number(item?.level) || 0 : item?.[key] ?? null));
+    return JSON.stringify(["name", "level", "p", "stat_type", "data", "rid", "b", "m", "l"].map((key2) => key2 === "level" ? Number(item?.level) || 0 : item?.[key2] ?? null));
   }
   function stackProtected(location, protection) {
     return !!protection.error || location.pack === "items1" && location.slot >= 35 || !!location.item?.b || location.item?.name === "placeholder" || protection.locations.some((mark) => mark.pack === location.pack && (mark.slot === void 0 || mark.slot === location.slot)) || protection.items.some((item) => item.name === location.item?.name && (item.level || 0) === (location.item?.level || 0));
@@ -1222,7 +1286,7 @@
   // runtime/characters/upgrade-preview.ts
   var same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   function matchesPreviewItem(live, wanted) {
-    return !!live && Object.entries(wanted).every(([key, value]) => same(live[key], value));
+    return !!live && Object.entries(wanted).every(([key2, value]) => same(live[key2], value));
   }
   async function previewUpgrade(request, ports) {
     const live = ports.items()[request.slot];

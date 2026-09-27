@@ -20,6 +20,10 @@ from the commits merged into `main`.
 
 ### Fixed
 
+- Fixed Hunt departures stuck at Daisy when later door approaches crossed scenery.
+  Validate reachable interaction points and bounded local detours before accepting
+  the shared route, preserving the selected destination and recovery limits.
+
 - Fresh headless reports now override stale Steam connection observations, so a
   successful Steam-to-headless transfer no longer hides the character behind a
   false "Connection lost" card.
