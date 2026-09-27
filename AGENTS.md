@@ -1,5 +1,8 @@
 # Repository UI guidance
 
+- Right-click context menus, all their submenus, and embedded upgrade previews use opaque WHITE backgrounds with BLACK text and light-gray hover states. This is an explicit exception to the dark dashboard control guidance.
+
+
 - Keep dashboard controls on dark, opaque backgrounds with explicit high-contrast text and borders.
 - Do not rely on the default outline-button colors; they can render as light gray on white in this dashboard.
 - For outline, icon, cancel, and secondary-action buttons, set background, text, border, and hover colors explicitly and verify readability against the surrounding panel.

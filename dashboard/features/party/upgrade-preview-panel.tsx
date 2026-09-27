@@ -44,10 +44,10 @@ export function UpgradePreviewPanel({ item, source }: { item: Item; source?: Off
     return () => { clearInterval(timer); controller.abort(); };
   }, [body, key, unavailable]);
   const current = state?.key === key ? state : undefined;
-  return <section aria-label="Upgrade chances" className="w-64 max-w-full border-t border-slate-600 !bg-slate-950 p-3 text-sm !text-slate-100 sm:border-l sm:border-t-0">
+  return <section aria-label="Upgrade chances" className="w-64 max-w-full border-t border-slate-300 !bg-white p-3 text-sm !text-black sm:border-l sm:border-t-0">
     <p className="font-semibold">Next attempt: +{item.level || 0} → +{(item.level || 0)+1}</p>
-    <p className="mt-1 text-xs text-slate-300">Server preview{controls?.executor ? ` · ${controls.executor}` : ''}</p>
-    <p role="status" className="mt-2 text-xs text-emerald-300">{unavailable || current?.error ||
+    <p className="mt-1 text-xs text-black">Server preview{controls?.executor ? ` · ${controls.executor}` : ''}</p>
+    <p role="status" className="mt-2 text-xs text-black">{unavailable || current?.error ||
       (current?.status === 'queued' ? 'Queued — waiting for merchant priority' : current?.status === 'running' ? 'Refreshing chances…' :
        current?.status === 'unavailable' ? 'No chances calculated - resolve the missing supplies and refresh' : current?.status === 'partial' ? 'Some chances saved - see unavailable options below' : current?.status === 'complete' ? 'Stored preview — valid until the next upgrade' : current?.status === 'invalidated' ? 'Upgrade performed — refresh chances again' : 'Choose Refresh chances to queue a preview')}</p>
     <dl aria-live="polite" className="mt-3 space-y-3">
@@ -56,14 +56,14 @@ export function UpgradePreviewPanel({ item, source }: { item: Item; source?: Off
         return <div key={option} className="flex flex-wrap justify-between gap-x-3 gap-y-1">
           <dt>{option === 'none' ? 'No offering' : upgradeOfferings[option]}</dt>
           <dd className="text-right">{value && 'preview' in value
-            ? <><span className="font-mono tabular-nums">{(Math.min(1,value.preview.chance)*100).toFixed(2)}%</span><span className="block text-xs text-slate-300">{new Date(value.observedAt).toLocaleTimeString()}</span></>
-            : <span className="block text-xs text-slate-300">{unavailable || current?.error || (value && 'reason' in value ? value.reason : 'Not calculated')}</span>}</dd>
+            ? <><span className="font-mono tabular-nums">{(Math.min(1,value.preview.chance)*100).toFixed(2)}%</span><span className="block text-xs text-black">{new Date(value.observedAt).toLocaleTimeString()}</span></>
+            : <span className="block text-xs text-black">{unavailable || current?.error || (value && 'reason' in value ? value.reason : 'Not calculated')}</span>}</dd>
         </div>;
       })}
     </dl>
-    <ContextMenuItem className="mt-3 justify-center border border-slate-500 !bg-slate-900 !text-slate-100 focus:!bg-slate-700 data-highlighted:!bg-slate-700"
+    <ContextMenuItem className="mt-3 justify-center border border-slate-500 !bg-white !text-black focus:!bg-slate-100 data-highlighted:!bg-slate-100"
       disabled={!!unavailable || current?.status === 'queued' || current?.status === 'running'} closeOnClick={false}
       onClick={() => { refreshBody.current = body; refresh(value => value+1); }}>Refresh chances</ContextMenuItem>
-    <p className="mt-3 text-xs text-slate-300">Chances can change before upgrading. The server preview excludes the separate lucky-slot roll bonus.</p>
+    <p className="mt-3 text-xs text-black">Chances can change before upgrading. The server preview excludes the separate lucky-slot roll bonus.</p>
   </section>;
 }

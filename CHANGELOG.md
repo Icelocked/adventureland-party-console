@@ -26,7 +26,9 @@ from the commits merged into `main`.
 
 ### Fixed
 
-- Restore dark upgrade menus and correct preview text encoding. Distinguish unavailable and partial chances from successful previews, and wait for bank data before borrowing supplies.
+- Keep every right-click menu, submenu, and embedded upgrade preview white with black text, including focus and hover states.
+
+- Correct preview text encoding. Distinguish unavailable and partial chances from successful previews, and wait for bank data before borrowing supplies.
 - Release convoy pauses when merchant jobs fail, expire, clear, yield, or change realm. Ignore late handoff completions without overwriting newer commands; preserve the original Hunt/event destination.
 
 - Prevent Town-rally arrival from falsely failing Hunt runtime readiness; defer merchant work while Hunt owns movement instead of repeatedly failing handoffs.
