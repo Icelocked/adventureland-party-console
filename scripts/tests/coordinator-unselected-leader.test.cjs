@@ -9,7 +9,7 @@ const {createHuntMode} = require('../../runtime/coordinator/hunt/mode.ts');
 test('Hunt authorization preserves an exhausted destination result and missing quest id', () => {
   const calls = [], state = {leader: 'L', farmingPolicy: 'auto', monsterHunt: null,
     monsterHunterLocation: null, statuses: {}, monsterFocus: [], monsterFocusByCharacter: {}};
-  const mode = createHuntMode(state, {participants: () => ['L'], release: () => {},
+  const mode = createHuntMode(state, {participants: () => ['L'], release: () => {}, clear: () => {},
     monsterDestination: id => {calls.push(['destination', id]); return undefined;},
     authorize: (names, location, shared) => calls.push(['authorize', names, location, shared]),
     begin: () => {}});

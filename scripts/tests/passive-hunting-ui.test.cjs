@@ -53,10 +53,10 @@ test('closing nested monster details preserves both passive hunting and farming 
   await act(async()=>search().props.onChange({target:{value:'bee'}}));
   for(const dismiss of ['x','escape']) {
    await act(async()=>view.root.findByProps({'aria-label':'Inspect Bee'}).props.onClick());
-   const dialogs=view.root.findAllByType('Dialog');assert.equal(dialogs.length,3);assert.ok(dialogs.every(dialog=>dialog.props.open));
+   const dialogs=view.root.findAllByType('Dialog').filter(dialog=>dialog.props.open);assert.equal(dialogs.length,3);assert.ok(dialogs.every(dialog=>dialog.props.open));
    assert.ok(dialogs[1].findAllByType('Dialog').includes(dialogs[2]),'monster dialog must be nested inside passive hunting');
    await act(async()=>dismiss==='x'?view.root.findByProps({'aria-label':'Close monster'}).props.onClick():dialogs[2].props.onOpenChange(false));
-   const remaining=view.root.findAllByType('Dialog');assert.equal(remaining.length,2);assert.ok(remaining.every(dialog=>dialog.props.open));assert.equal(search().props.value,'bee');
+   const remaining=view.root.findAllByType('Dialog').filter(dialog=>dialog.props.open);assert.equal(remaining.length,2);assert.ok(remaining.every(dialog=>dialog.props.open));assert.equal(search().props.value,'bee');
   }
  }finally{await act(async()=>view?.unmount());}
 });

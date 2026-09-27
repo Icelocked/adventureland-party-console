@@ -20,6 +20,9 @@ from the commits merged into `main`.
 
 ### Fixed
 
+- Updated Hunt and farming UI test fixtures for execution-state clearing and the
+  preferred-spawn dialog; nested-dialog checks count only open dialogs.
+
 - Fixed Hunt departures stuck at Daisy when later door approaches crossed scenery.
   Validate reachable interaction points and bounded local detours before accepting
   the shared route, preserving the selected destination and recovery limits.
