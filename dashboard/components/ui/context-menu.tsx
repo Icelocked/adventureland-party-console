@@ -148,7 +148,7 @@ function ContextMenuSubContent({
   return (
     <ContextMenuContent
       data-slot="context-menu-sub-content"
-      className="border border-slate-300 bg-white text-black shadow-lg [&_[data-slot=context-menu-item]]:text-black [&_[data-slot=context-menu-item]_*]:text-inherit [&_[data-slot=context-menu-sub-trigger]]:text-black [&_[data-slot=context-menu-item]]:data-highlighted:bg-slate-100 [&_[data-slot=context-menu-item]]:data-highlighted:text-black"
+      className="border border-slate-600 bg-slate-950 text-slate-100 shadow-lg [&_[data-slot=context-menu-item]]:text-slate-100 [&_[data-slot=context-menu-item]_*]:text-inherit [&_[data-slot=context-menu-sub-trigger]]:text-slate-100 [&_[data-slot=context-menu-item]]:data-highlighted:bg-slate-800 [&_[data-slot=context-menu-item]]:data-highlighted:text-slate-100"
       side="right"
       {...props}
     />

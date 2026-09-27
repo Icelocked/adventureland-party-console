@@ -40,14 +40,14 @@ export function UpgradeActions({
 }) {
   const offerings = useUpgradeOfferings();
   const [previewOpen, setPreviewOpen] = useState(false);
-  const menuColors = "border-slate-300 !bg-white !text-black [&_[role=menuitem]]:!text-black [&_[role=menuitem]]:focus:!bg-slate-100 [&_[role=menuitem]]:data-highlighted:!bg-slate-100 [&_[role=menuitem][data-disabled]]:!text-slate-500";
+  const menuColors = "border-slate-600 !bg-slate-950 !text-slate-100 [&_[role=menuitem]]:!text-slate-100 [&_[role=menuitem]]:focus:!bg-slate-800 [&_[role=menuitem]]:data-highlighted:!bg-slate-800 [&_[role=menuitem][data-disabled]]:!text-slate-400";
   const level = item.level || 0,
     max = Math.max(0, itemMaximumLevel(meta) - level);
   return (
     <>
       {meta?.upgradeable && max > 0 ? (
         <ContextMenuSub open={previewOpen} onOpenChange={setPreviewOpen}>
-          <ContextMenuSubTrigger className="!text-black focus:!text-black data-open:!text-black">
+          <ContextMenuSubTrigger className="!bg-slate-950 !text-slate-100 focus:!bg-slate-800 data-open:!bg-slate-800">
             <Swords className="mr-2 h-4 w-4" />
             Mark for upgrade
             {mark ? ` · ${mark.tiers || 1} tier${(mark.tiers || 1) === 1 ? "" : "s"}` : ""}
@@ -59,12 +59,12 @@ export function UpgradeActions({
                 <span>
                   +{level} → +{level + tiers}
                 </span>
-                <span className="ml-auto pl-5 font-mono text-black">
+                <span className="ml-auto pl-5 font-mono text-slate-300">
                   {upgradeScrollCost(meta, level, tiers).toLocaleString()}g
                 </span>
               </ContextMenuItem>
             ))}
-            <div className="mt-3 border-t border-slate-300 pt-2">
+            <div className="mt-3 border-t border-slate-600 pt-2">
               {(Object.entries(upgradeOfferings) as [UpgradeOffering,string][]).map(([id,label]) => (
                 <ContextMenuItem key={id} disabled={!offerings?.stock[id] || !offeringSource}
                   onClick={() => offerings?.select({item,meta,source:offeringSource,offering:id})}>Upgrade with {label}</ContextMenuItem>
@@ -78,7 +78,7 @@ export function UpgradeActions({
       ) : null}
       {meta?.upgradeable && max > 0 ? (
         <ContextMenuSub>
-          <ContextMenuSubTrigger className="!text-black focus:!text-black data-open:!text-black">
+          <ContextMenuSubTrigger className="!bg-slate-950 !text-slate-100 focus:!bg-slate-800 data-open:!bg-slate-800">
             <AutoActionIcon><Swords /></AutoActionIcon>
             Auto mark for upgrade
             {autoTiers ? ` · ${autoTiers} tier${autoTiers === 1 ? "" : "s"}` : ""}
@@ -87,12 +87,12 @@ export function UpgradeActions({
             {Array.from({ length: max }, (_, index) => index + 1).map((tiers) => (
               <ContextMenuItem key={tiers} disabled={autoTiers === tiers} onClick={() => onAutoMark(tiers)}>
                 <span>+{level} → +{level + tiers}</span>
-                <span className="ml-auto pl-5 font-mono text-black">
+                <span className="ml-auto pl-5 font-mono text-slate-300">
                   {upgradeScrollCost(meta, level, tiers).toLocaleString()}g
                 </span>
               </ContextMenuItem>
             ))}
-            <div className="mt-3 border-t border-slate-300 pt-2">
+            <div className="mt-3 border-t border-slate-600 pt-2">
               <ContextMenuItem disabled={!offerings} onClick={() => offerings?.select({item,meta})}>Add upgrade rule</ContextMenuItem>
             </div>
           </ContextMenuSubContent>

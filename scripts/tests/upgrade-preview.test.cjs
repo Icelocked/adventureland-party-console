@@ -58,7 +58,7 @@ test('results survive restart and reopening but a real upgrade invalidates every
  assert.equal(f.send('/result',{...payload,session:'stale'}).statusCode,409);
  assert.equal(f.send('/result',payload).statusCode,200);f.state.merchantCurrent=null;
  const g=coordinator(JSON.parse(JSON.stringify(f.state)));
- assert.equal(g.send('',g.body).value.status,'complete');
+ assert.equal(g.send('',g.body).value.status,'unavailable');
  g.state.statuses.M.upgradePreviewRevision='123';assert.equal(g.send('',g.body).value.status,'invalidated');
  assert.equal(g.send('',g.body).value.result,undefined);
 });
@@ -72,6 +72,7 @@ function bankFixture() {
  const items=[{name:'sword',level:8},{name:'scroll1',q:3},null,null,null],bank={items0:[{name:'offeringp',q:2},{name:'offeringx'},null]};
  const c=vm.createContext({root:{localStorage:{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)}},
   character:{name:'M',map:'main',items,bank},parent:{},bank_packs:{items0:['bank']},item_grade:()=>1,freeInventorySlots:()=>items.filter(x=>!x).length,
+  waitForBankPack:async pack=>{if(!bank[pack])throw Error('bank not loaded');},
   smart_move:async d=>{calls.push(['move',d]);c.character.map=d;},
   findBankItem:w=>{const slot=bank.items0.findIndex(i=>i?.name===w.name);return slot>=0?{pack:'items0',slot}:null;},
   bankRetrieveConfirmed:async(pack,slot)=>{calls.push(['withdraw',bank[pack][slot].name]);items[items.indexOf(null)]=bank[pack][slot];bank[pack][slot]=null;},
@@ -124,4 +125,24 @@ test('only a real upgrade packet invalidates saved previews',()=>{
  vm.runInContext(namedFunction(fs.readFileSync('characters/shared.js','utf8'),'luckySlotRollListener'),c);
  c.luckySlotRollListener({calculate:true,chance:0.2});c.luckySlotRollListener({q:{compound:{}}});assert.equal(writes.length,0);
  c.luckySlotRollListener({q:{upgrade:{ms:100}}});assert.equal(writes.length,1);assert.equal(writes[0][0],'party-upgrade-preview-revision:M');
+});
+
+
+test('borrowing waits for bank data after arrival instead of reporting an empty bank',async()=>{
+ const fs=require('node:fs'),vm=require('node:vm'),{namedFunction}=require('./helpers/named-function.cjs');
+ const f=bankFixture();let waits=0;
+ f.c.character.bank=null;
+ f.c.sleep=async()=>{waits++;f.c.character.bank=f.bank;};
+ vm.runInContext(namedFunction(fs.readFileSync('characters/shared.js','utf8'),'waitForBankPack'),f.c);
+ await f.c.borrowUpgradePreviewSupplies({item:f.items[0]});assert.equal(waits,1);
+ assert.equal(f.calls.filter(c=>c[0]==='withdraw').length,2);
+ await f.c.restoreUpgradePreviewSupplies();assert.equal(f.store.size,0);
+});
+
+test('one calculated option is a partial preview, never an all-options success',()=>{
+ const f=coordinator();f.send('',{...f.body,refresh:true});f.state.merchantCurrent={...f.state.merchantQueue.shift(),commandId:7};
+ const result=unavailablePreview('M',f.item,'Offering missing');
+ result.options.none={preview:{calculate:true,chance:0.15,item:f.item,scroll:'scroll1'},observedAt:1000};
+ f.send('/result',{character:'M',id:f.state.merchantCurrent.id,commandId:7,session:'session',revision:'0',result});f.state.merchantCurrent=null;
+ assert.equal(f.send('',f.body).value.status,'partial');assert.equal(f.send('',f.body).value.result.options.none.preview.chance,0.15);
 });

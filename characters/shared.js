@@ -2140,6 +2140,7 @@
     while(borrowed.length) {
       var entry=borrowed[0];
       await previewTravel(entry.map);
+      await waitForBankPack(entry.pack);
       var slots=character.items.map(function(item,slot){return JSON.stringify(item)===JSON.stringify(entry.item)?slot:-1;}).filter(function(slot){return slot>=0;});
       var stored=character.bank && character.bank[entry.pack] && character.bank[entry.pack][entry.slot];
       if(!slots.length && JSON.stringify(stored)===JSON.stringify(entry.item)) {
@@ -2161,6 +2162,7 @@
     var missing=names.filter(function(name){return !character.items.some(function(item){return item && item.name===name;});});
     if(!missing.length)return;
     await previewTravel("bank");
+    await waitForBankPack("items0");
     var definitions=typeof bank_packs!=="undefined"?bank_packs:parent.bank_packs||{};
     for(var name of missing) {
       var found=findBankItem({name:name});
@@ -2168,6 +2170,7 @@
       if(freeInventorySlots()<1)throw new Error("No inventory space for preview supplies");
       var map=definitions[found.pack] && definitions[found.pack][0] || "bank";
       await previewTravel(map);
+      await waitForBankPack(found.pack);
       var item=character.bank[found.pack] && character.bank[found.pack][found.slot];
       if(!item || item.name!==name || item.l)continue;
       var borrowed=JSON.parse(root.localStorage.getItem(previewSuppliesKey())||"[]");
@@ -2202,6 +2205,11 @@
       // Keep ownership until the game's shared upgrade promise settles. An HTTP
       // timeout must not free it for a real upgrade to receive a late preview.
       result=await work;
+      Object.keys(result.options).forEach(function(option) {
+        var value=result.options[option];
+        if(value.reason && /merchant inventory/.test(value.reason))
+          value.reason=value.reason.replace("in merchant inventory", "in merchant inventory or accessible bank");
+      });
     } catch(error) {
       result={executor:character.name,item:previewRequest.item,options:{}};
       ["none","offeringp","offering","offeringx"].forEach(function(option){result.options[option]={reason:String(error.reason||error.message||error)};});

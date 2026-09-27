@@ -1,3 +1,4 @@
+import { releaseMerchantInterruption } from "../navigation/merchant-interruption.ts";
 import { currentMerchantReport } from '../merchant/commerce-progress.ts';
 import { merchantJobReady } from '../merchant/priority.ts';
 import { routineEnabled } from '../merchant/routines.ts';
@@ -106,6 +107,7 @@ export function createMerchantProgressRoutes(state: ProgressState, ports: Progre
     delete paused.heartbeatAt;
     delete paused.progressAt;
     paused.pauseReason = 'Waiting for higher-priority work or event';
+    releaseMerchantInterruption(state, current.id);
     state.merchantQueue.push(ports.stamp(paused));
     delete state.commands[String(state.merchantCharacter)];
     state.merchantCurrent = null;

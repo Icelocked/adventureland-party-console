@@ -48,6 +48,7 @@ export interface CompletionReport {
   deferredWork?: unknown;
 }
 export interface CompletionCommand {
+  jobId?: unknown;
   deliveryIds?: (string | undefined)[];
   id?: number;
   type: string;

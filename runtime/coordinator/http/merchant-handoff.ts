@@ -136,7 +136,7 @@ export function createMerchantHandoffRoutes(state: HandoffState, ports: HandoffP
     const body = requestObject(req.body),
       job = current(body, body.character),
       name = requestText(body.character);
-    if (!job) return res.status(409).json({ error: "merchant job is no longer current" });
+    if (!job) return res.json({ ok: true, stale: true });
     receiveDeconstruction({ deconstructionMarks: state.deconstructionMarks || [], merchantCharacter: state.merchantCharacter, merchantMarked: state.merchantMarked as import("../merchant/deconstruction.ts").DeconstructionState["merchantMarked"] }, name, body.kept, ports.now?.() ?? Date.now());
     receivePlayerSales({ npcSaleMarks: state.npcSaleMarks || [], merchantMarked: state.merchantMarked as import("../merchant/player-npc-sales.ts").PlayerSaleState["merchantMarked"] }, name, body.kept, ports.now?.() ?? Date.now());
     job.handoff = body;
@@ -189,7 +189,7 @@ export function createMerchantHandoffRoutes(state: HandoffState, ports: HandoffP
     const body = requestObject(req.body),
       job = state.merchantCurrent;
     if (!job || job.id !== body.jobId)
-      return res.status(409).json({ error: "merchant commerce job is no longer current" });
+      return res.json({ ok: true, stale: true });
     job.orderHandoff = { character: body.character, sent: body.sent || [] };
     clearCommand(requestText(body.character), body, "merchant-order-handoff");
     ports.persist();

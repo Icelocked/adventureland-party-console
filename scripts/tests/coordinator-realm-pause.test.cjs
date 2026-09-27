@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {pauseMerchantForRealm}=require('../../runtime/coordinator/merchant/realm-pause.ts');
 test('realm pause retains work intent and queue age but discards command progress',()=>{
  const current={id:'job',target:'F',queuedAt:'42',phase:'work',startedAt:1,heartbeatAt:2,progressAt:3,handoff:{gold:4},order:{buys:['ring']}};
- const state={merchantCurrent:current,merchantQueue:[{id:'next'}],commands:{F:{id:1},M:{id:2}}};
+ const state={merchantCurrent:current,merchantQueue:[{id:'next'}],commands:{F:{id:1,type:'merchant-handoff',jobId:'job'},M:{id:2}}};
  pauseMerchantForRealm(state,()=>100,job=>({...job,priority:5}));
  assert.deepEqual(state.merchantQueue[0],{id:'job',target:'F',queuedAt:42,order:{buys:['ring']},priority:5});
  assert.equal(state.merchantQueue[1].id,'next');assert.equal(state.merchantCurrent,null);assert.equal(state.commands.F,undefined);assert.deepEqual(state.commands.M,{id:2});assert.equal(current.phase,'work');

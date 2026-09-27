@@ -34,6 +34,7 @@ export interface SharedStatus extends RoutePoint {
   moving?: boolean; transporting?: boolean; speed?: number; convoyProtocol?: number; convoyNavigation?: SharedReport;
 }
 export interface SharedCommand {
+  jobId?: unknown;
   routeRecovery?: import('../hunt/route-recovery.ts').RouteRecoveryCommand;
   returnWalking?: boolean;
   continuousReturn?: number;

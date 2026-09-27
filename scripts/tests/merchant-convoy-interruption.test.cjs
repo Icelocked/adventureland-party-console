@@ -124,3 +124,39 @@ test('merchant resumption processes combat before waiting for held reports',()=>
  engine.step(s,1000);assert.equal(calls,1);assert.ok(s.activeConvoy.merchantInterruption);
  f.tick();assert.equal(s.activeConvoy.phase,'shared-prepare');assert.equal(s.activeConvoy.merchantInterruption,undefined);
 });
+
+
+for(const purpose of ['monster-hunt','shared-walk-return','event-return','empty-spawn-recovery']) {
+ for(const reason of ['failure','timeout','clear','force','realm'])test(purpose+' resumes after merchant '+reason+' without accepting a late handoff',()=>{
+  const f=fixture(purpose),s=f.state,c=s.activeConvoy,destination=structuredClone(c.location);
+  f.send('handoff');f.tick();f.ack();f.tick();f.send('handoff');const old=s.commands.F;
+  if(reason==='timeout') {s.merchantCurrent=null;delete s.commands.F;}
+  else if(reason==='realm')require('../../runtime/coordinator/merchant/realm-pause.ts').pauseMerchantForRealm(Object.assign(s,{merchantQueue:[]}),()=>1000,j=>j);
+  else if(['clear','force'].includes(reason)) {
+   const routes=require('../../runtime/coordinator/http/merchant-control.ts').createMerchantControlRoutes(Object.assign(s,{merchantQueue:[]}),{nextCommand:()=>999,now:()=>1000,stamp:j=>j,log(){},persist(){},returnHome(){}});
+   routes[reason]({body:{enabled:true}},{json(){}});
+  } else {
+   const base=require('./helpers/coordinator-completion.cjs').fixture({});
+   Object.assign(base.state,s);
+   require('../../runtime/coordinator/merchant/completion.ts').createMerchantCompletion(base.state,base.ports).complete(base.state.merchantCurrent,{success:false,error:'Merchant died during rendezvous'});
+   s.merchantCurrent=base.state.merchantCurrent;
+  }
+  f.tick();f.ack();f.tick();assert.equal(c.phase,'shared-prepare');assert.deepEqual(c.location,destination);
+  const next=s.commands.F;
+  const reply=f.send('complete',{jobId:'job',character:'F',commandId:old.id});
+  assert.equal(reply.body.stale,true);assert.equal(s.commands.F,next);assert.equal(c.merchantInterruption,undefined);
+ });
+}
+
+test('job release keeps newer commands and equipment ownership intact',()=>{
+ const {releaseMerchantInterruption}=require('../../runtime/coordinator/navigation/merchant-interruption.ts');
+ const f=fixture(),s=f.state;f.send('handoff');f.tick();f.ack();f.tick();f.send('handoff');
+ s.commands.F={id:999,type:'character-travel'};s.navigationIntents.F.revision++;
+ releaseMerchantInterruption(s,'job');s.merchantCurrent=null;f.tick();assert.equal(s.commands.F.id,999);assert.equal(s.activeConvoy.phase,'failed');
+});
+
+test('late commerce receipt for an ended job does not overwrite the next job',()=>{
+ const f=fixture(),s=f.state;s.merchantCurrent={id:'next',target:'F'};s.commands.F={id:99,type:'character-travel'};
+ const reply=f.send('orderComplete',{jobId:'job',character:'F',commandId:1,sent:[]});
+ assert.equal(reply.body.stale,true);assert.equal(s.merchantCurrent.orderHandoff,undefined);assert.equal(s.commands.F.id,99);
+});

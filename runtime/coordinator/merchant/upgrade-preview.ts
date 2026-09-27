@@ -28,7 +28,7 @@ export function createUpgradePreviews(state: State, ports: Ports, now = Date.now
     const cached=stored && revision!==undefined && stored.revision===revision ? stored : undefined;
     const existing = [state.merchantCurrent,...state.merchantQueue].find(job=>job?.reason==='upgrade preview' && job.previewKey===key);
     if (existing) return res.json({status:existing===state.merchantCurrent?'running':'queued',jobId:existing.id,result:cached?.result});
-    if (body.refresh !== true) return res.json({status:cached?'complete':stored?'invalidated':'idle',result:cached?.result});
+    if (body.refresh !== true) return res.json({status:cached?previewStatus(cached.result):stored?'invalidated':'idle',result:cached?.result});
     const live = state.statuses[executor]?.items?.find(entry=>entry?.slot===body.slot)?.item;
     if (!live || !Object.entries(item).every(([key,value])=>JSON.stringify(live[key])===JSON.stringify(value)))
       return res.status(409).json({error:'Item changed; reopen the menu'});
@@ -58,4 +58,9 @@ export function createUpgradePreviews(state: State, ports: Ports, now = Date.now
     router.post('/party-api/upgrade-preview',request);
     router.post('/party-api/upgrade-preview/result',response);
   }};
+}
+
+function previewStatus(result: UpgradePreviewResult): string {
+  const count = previewOptions.filter(option => 'preview' in result.options[option]).length;
+  return count === 0 ? 'unavailable' : count === previewOptions.length ? 'complete' : 'partial';
 }

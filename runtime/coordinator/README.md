@@ -1,5 +1,15 @@
 # Character coordinator
 
+Merchant interruption cleanup releases only matching handoff commands and transitions
+the convoy pause to resuming before ownership checks. Failure, worker expiry, clear,
+force-stand, priority yield and realm pause retain the original travel destination;
+late receipts for ended jobs are acknowledged as stale. Changed navigation revisions
+and newer commands still win. Validate merchant-convoy-interruption, merchant
+completion/control/progress and realm-pause tests. Preview results distinguish
+complete, partial and unavailable; bank borrowing waits for mounted pack data.
+Validate upgrade-preview and upgrade-offerings-ui; activate with the full restart.
+
+
 ## Town rally and merchant movement ownership
 
 A Town fallback retains its rally until route preparation succeeds. Walking time

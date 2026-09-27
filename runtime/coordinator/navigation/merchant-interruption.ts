@@ -45,6 +45,17 @@ export function finishMerchantInterruption(input: unknown, name: string, command
   if (pause?.recipient === name && pause.commandId === commandId) pause.phase = "resuming";
 }
 
+/** Release only the ending job's collection. Never erase a newer navigation command. */
+export function releaseMerchantInterruption(input: unknown, jobId: unknown): void {
+  const state = input as SharedState, pause = state.activeConvoy?.merchantInterruption;
+  if (jobId === undefined) return;
+  if (pause && pause.kind !== 'equipment' && pause.jobId === jobId) pause.phase = 'resuming';
+  for (const [name, command] of Object.entries(state.commands)) {
+    if (command?.jobId === jobId && ['merchant-handoff', 'merchant-order-handoff'].includes(command.type))
+      delete state.commands[name];
+  }
+}
+
 function owned(state: SharedState, c: SharedConvoy, name: string): boolean {
   const pause = c.merchantInterruption!, command = state.commands[name];
   if (!sameIntent(state, c, name)) return false;
@@ -78,13 +89,15 @@ export function stepMerchantInterruption(input: SharedState, now: number, ports:
 }): boolean | null {
   const state = input as MerchantState, c = state.activeConvoy, pause = c?.merchantInterruption;
   if (!pause) return null;
+  // Job cleanup can remove its handoff before this tick. Release the pause before
+  // checking ownership, while still rejecting changed intents or newer commands.
+  if (expired(state, pause, now)) pause.phase = "resuming";
   if (!c.participants.every(n => c.completed.includes(n) || owned(state, c, n))) {
     delete c.merchantInterruption;
     return ports.fail("Merchant continuation superseded by newer navigation or command");
   }
   c.departAt = null;
   c.phase = "shared-hold";
-  if (expired(state, pause, now)) pause.phase = "resuming";
   if (pause.phase === "collecting") return false;
   hold(state, c, ports.hold);
   if (!stopped(state, c, now)) return true;
