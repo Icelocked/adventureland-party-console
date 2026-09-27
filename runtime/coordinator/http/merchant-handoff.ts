@@ -1,3 +1,4 @@
+import { protectedMerchantRecipient } from "../merchant/movement-block.ts";
 import { collectionPickups, type PickupState } from "../merchant/collection-pickups.ts";
 import { ruleOwner } from "../inventory/shared-rules.ts";
 import { craftProtection } from "../merchant/craft-reservations.ts";
@@ -50,7 +51,7 @@ export function createMerchantHandoffRoutes(state: HandoffState, ports: HandoffP
     return job && body.jobId === job.id && name === job.target ? job : null;
   }
   function protectedRecipient(name: string): boolean {
-    return !!state.activeConvoy?.nonPreemptible && state.activeConvoy.participants.includes(name);
+    return protectedMerchantRecipient(state,name);
   }
   function waiting(name: string, jobId: unknown, res: HttpResponse): unknown {
     if (admitMerchantInterruption(state, name, jobId, ports.now?.() ?? Date.now())) return null;
@@ -120,7 +121,7 @@ export function createMerchantHandoffRoutes(state: HandoffState, ports: HandoffP
       name = requestText(body.target);
     if (!job) return res.status(409).json({ error: "merchant job is no longer current" });
     if (protectedRecipient(name))
-      return res.status(409).json({ error: "Hunt turn-in owns the recipient's movement" });
+      return res.json({ deferred: true, reason: "hunt_movement_owned" });
     if (alreadyIssued(name, body.jobId, "merchant-handoff")) return res.json({ ok: true });
     const deferred = waiting(name, body.jobId, res);
     if (deferred) return deferred;
@@ -167,7 +168,7 @@ export function createMerchantHandoffRoutes(state: HandoffState, ports: HandoffP
     )
       return res.status(409).json({ error: "merchant commerce job is no longer current" });
     if (protectedRecipient(name))
-      return res.status(409).json({ error: "Hunt turn-in owns the recipient's movement" });
+      return res.json({ deferred: true, reason: "hunt_movement_owned" });
     if (alreadyIssued(name, body.jobId, "merchant-order-handoff")) return res.json({ ok: true });
     const deferred = waiting(name, body.jobId, res);
     if (deferred) return deferred;

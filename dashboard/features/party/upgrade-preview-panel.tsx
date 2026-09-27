@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ContextMenuItem } from '@/components/ui/context-menu';
 import { API } from './api';
 import { useUpgradeOfferings, type OfferingSource } from './upgrade-offering-controls';
@@ -9,8 +9,9 @@ import type { Item } from './item';
 
 export function UpgradePreviewPanel({ item, source }: { item: Item; source?: OfferingSource }) {
   const controls = useUpgradeOfferings();
+  const refreshBody = useRef<string | null>(null);
   const [revision, refresh] = useState(0);
-  const [state, setState] = useState<{key:string; result?:UpgradePreviewResult; error?:string}>();
+  const [state, setState] = useState<{key:string; result?:UpgradePreviewResult; status?:string; error?:string}>();
   const body = JSON.stringify({ character:controls?.character, ...source, item });
   const key = `${body}:${controls?.executor}:${revision}`;
   const unavailable = !controls?.executor ? 'No merchant configured'
@@ -18,38 +19,51 @@ export function UpgradePreviewPanel({ item, source }: { item: Item; source?: Off
   useEffect(() => {
     if (unavailable) return;
     const controller = new AbortController();
-    const timer = setTimeout(() => { controller.abort(); setState({key,error:'Preview timed out; refresh'}); }, 12000);
-    void fetch(API + '/upgrade-preview', {method:'POST',headers:{'Content-Type':'application/json'},body,signal:controller.signal})
-      .then(async response => {
+    let polling = false;
+    async function read(queue = false) {
+      if (polling) return;
+      polling = true;
+      try {
+        const response = await fetch(API + '/upgrade-preview', {method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({...JSON.parse(body),refresh:queue}),signal:controller.signal});
         if (response.status === 401 || response.status === 403 || response.redirected) {
           window.dispatchEvent(new Event('party-auth-loss'));
           throw Error('Session expired. Reconnect this browser.');
         }
-        const result = await response.json() as UpgradePreviewResult & {error?:string};
-        if (!response.ok || response.redirected) throw Error(result.error || 'Server preview unavailable');
-        if (!result.options) throw Error('Invalid preview response');
-        if (!controller.signal.aborted) setState({key,result});
-      }).catch(error => {
+        const value = await response.json() as {error?:string;result?:UpgradePreviewResult;status?:string};
+        if (!response.ok) throw Error(value.error || 'Server preview unavailable');
+        if (!controller.signal.aborted) setState({key,result:value.result,status:value.status});
+      } catch(error) {
         if (!controller.signal.aborted) setState({key,error:error instanceof Error ? error.message : 'Server preview unavailable'});
-      }).finally(() => clearTimeout(timer));
-    return () => { clearTimeout(timer); controller.abort(); };
+      } finally { polling = false; }
+    }
+    const queue = refreshBody.current === body;
+    refreshBody.current = null;
+    void read(queue);
+    const timer = setInterval(() => void read(), 2000);
+    return () => { clearInterval(timer); controller.abort(); };
   }, [body, key, unavailable]);
   const current = state?.key === key ? state : undefined;
-  return <section aria-label="Upgrade chances" className="w-64 max-w-full border-t border-slate-300 p-3 text-sm text-black sm:border-l sm:border-t-0">
-    <p className="font-semibold">Next attempt: +{item.level || 0} → +{(item.level || 0)+1}</p>
-    <p className="mt-1 text-xs text-slate-700">Server preview{controls?.executor ? ` · ${controls.executor}` : ''}</p>
+  return <section aria-label="Upgrade chances" className="w-64 max-w-full border-t border-slate-600 bg-slate-950 p-3 text-sm text-slate-100 sm:border-l sm:border-t-0">
+    <p className="font-semibold">Next attempt: +{item.level || 0} â†’ +{(item.level || 0)+1}</p>
+    <p className="mt-1 text-xs text-slate-300">Server preview{controls?.executor ? ` Â· ${controls.executor}` : ''}</p>
+    <p role="status" className="mt-2 text-xs text-emerald-300">{unavailable || current?.error ||
+      (current?.status === 'queued' ? 'Queued — waiting for merchant priority' : current?.status === 'running' ? 'Refreshing chances…' :
+       current?.status === 'complete' ? 'Stored preview — valid until the next upgrade' : current?.status === 'invalidated' ? 'Upgrade performed — refresh chances again' : 'Choose Refresh chances to queue a preview')}</p>
     <dl aria-live="polite" className="mt-3 space-y-3">
       {previewOptions.map(option => {
         const value = current?.result?.options[option];
         return <div key={option} className="flex flex-wrap justify-between gap-x-3 gap-y-1">
           <dt>{option === 'none' ? 'No offering' : upgradeOfferings[option]}</dt>
           <dd className="text-right">{value && 'preview' in value
-            ? <><span className="font-mono tabular-nums">{(Math.min(1,value.preview.chance)*100).toFixed(2)}%</span><span className="block text-xs text-slate-600">{new Date(value.observedAt).toLocaleTimeString()}</span></>
-            : <span className="block text-xs text-slate-600">{unavailable || current?.error || (value && 'reason' in value ? value.reason : 'Loading…')}</span>}</dd>
+            ? <><span className="font-mono tabular-nums">{(Math.min(1,value.preview.chance)*100).toFixed(2)}%</span><span className="block text-xs text-slate-300">{new Date(value.observedAt).toLocaleTimeString()}</span></>
+            : <span className="block text-xs text-slate-300">{unavailable || current?.error || (value && 'reason' in value ? value.reason : 'Loadingâ€¦')}</span>}</dd>
         </div>;
       })}
     </dl>
-    <ContextMenuItem className="mt-3 justify-center border border-slate-400 !bg-white !text-black focus:!bg-slate-100 data-highlighted:!bg-slate-100" disabled={!!unavailable || !current} closeOnClick={false} onClick={() => refresh(value => value+1)}>Refresh chances</ContextMenuItem>
-    <p className="mt-3 text-xs text-slate-600">Chances can change before upgrading. The server preview excludes the separate lucky-slot roll bonus.</p>
+    <ContextMenuItem className="mt-3 justify-center border border-slate-500 !bg-slate-900 !text-slate-100 focus:!bg-slate-700 data-highlighted:!bg-slate-700"
+      disabled={!!unavailable || current?.status === 'queued' || current?.status === 'running'} closeOnClick={false}
+      onClick={() => { refreshBody.current = body; refresh(value => value+1); }}>Refresh chances</ContextMenuItem>
+    <p className="mt-3 text-xs text-slate-300">Chances can change before upgrading. The server preview excludes the separate lucky-slot roll bonus.</p>
   </section>;
 }

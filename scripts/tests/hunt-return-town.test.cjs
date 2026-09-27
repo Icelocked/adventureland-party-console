@@ -87,3 +87,38 @@ test('real client preparation keeps its route and command when an attacker hits'
  c.defendPartyHit({id:'F',hid:'bee'});await settle();assert.equal(c.convoyTraveling,handle);
  await r.cancel();await started.promise;assert.equal(c.convoyTraveling,null);
 });
+
+
+function rallyFixture() {
+ const p=party(),c=p.activeConvoy;
+ Object.assign(c,{phase:'assemble',returnTownRally:{map:'main',x:0,y:0},rally:{map:'main',x:0,y:0},
+  sharedStartedAt:1000,sharedProgressAt:70000,sharedWaitingAt:1000,sharedDistances:{L:100,F:0,P:0},
+  returnTown:{map:'main',interruptions:1,walking:true,blockedReadiness:'true:true:true'},disableTown:true});
+ for(const s of Object.values(p.statuses)){s.x=0;s.y=0;s.seenAt=71000;s.groupedCombat.currentAttackersAt=71000;}
+ p.statuses.L.y=50;p.statuses.L.moving=true;
+ return {p,c,engine:createSharedConvoyNavigation(legacy)};
+}
+test('overnight regression: late Town-rally arrival preserves its marker until the moving leader stops',()=>{
+ const {p,c,engine}=rallyFixture();
+ engine.step(p,71000);
+ assert.equal(c.phase,'assemble');assert.ok(c.returnTownRally);assert.equal(c.sharedWaitingAt,undefined);
+ p.statuses.L.moving=false;p.statuses.L.y=0;
+ engine.step(p,71200);
+ assert.equal(c.phase,'shared-prepare');assert.equal(c.returnTownRally,undefined);
+ assert.deepEqual(c.location,{map:'main',x:126,y:-413});assert.equal(c.recoveryAttempts,undefined);
+ assert.equal(p.commands.L.phase,'shared-prepare');assert.equal(p.commands.L.disableTown,true);
+});
+test('leader stuck moving within the rally radius consumes bounded route recovery, not a runtime failure',()=>{
+ const {p,c,engine}=rallyFixture();c.sharedDistances.L=50;c.sharedProgressAt=1000;c.recoveryAttempts=1;
+ engine.step(p,71000);
+ assert.equal(c.phase,'failed');assert.equal(c.failureCode,'route-failed');
+ assert.match(c.failure,/leader moving or transporting/);assert.equal(c.retryExhausted,true);
+});
+test('runtime incompatibility gets a fresh continuous deadline after compatible rally progress',()=>{
+ const {p,c,engine}=rallyFixture();engine.step(p,71000);
+ p.statuses.F.convoyProtocol=3;
+ engine.step(p,71200);assert.equal(c.sharedWaitingAt,71200);assert.equal(c.phase,'assemble');
+ for(const s of Object.values(p.statuses)){s.seenAt=101201;s.groupedCombat.currentAttackersAt=101201;}
+ engine.step(p,101201);
+ assert.equal(c.failureCode,'runtime-lost');assert.match(c.failure,/party runtimes: F/);
+});

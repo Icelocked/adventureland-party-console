@@ -102,3 +102,36 @@ test('failed admission inspection preserves the journal for a later recovery',as
  await assert.rejects(f.c.trackedProduction('upgrade',[0],null,async()=>{}),/admission rejected/);
  assert.equal(f.storage.size,1);
 });
+
+test('commerce production failure with empty old slot retains journal and never writes a poof receipt',async()=>{
+ const f=fixture();f.c.root.__merchantActiveJob={commerceJournalKey:'commerce',commerceSequence:4};
+ f.storage.set('commerce',JSON.stringify({sequence:4,pendingUpgrade:{level:1}}));
+ await assert.rejects(f.c.trackedProduction('upgrade',[0],null,async()=>{
+  f.c.character.items[5]=f.c.character.items[0];f.c.character.items[0]=null;
+  throw Error('item or scroll unavailable');
+ }),/uncertain|unavailable/);
+ assert.ok(f.storage.has('party-production:M'));
+ assert.equal(JSON.parse(f.storage.get('commerce')).pendingUpgrade.outcome,undefined);
+});
+
+test('commerce recovery cannot infer destruction from an empty original slot',async()=>{
+ const f=fixture(),body={id:'commerce-restart',item:{name:'cap',level:0},kind:'upgrade'};
+ beginProduction(f.state,body);
+ f.storage.set('party-production:M',JSON.stringify({id:body.id,item:body.item,slots:[0],phase:'running',
+  request:body,commerce:{key:'commerce',sequence:4}}));
+ f.c.character.items[0]=null;
+ await assert.rejects(f.c.recoverProductionJournal(),/needs review/);
+ assert.ok(f.storage.has('party-production:M'));
+ assert.equal(f.state.production.attempts[body.id].completed,undefined);
+});
+
+test('commerce recovery locates one relocated survivor and preserves its receipt',async()=>{
+ const f=fixture(),body={id:'relocated',item:{name:'cap',level:0},kind:'upgrade'};
+ beginProduction(f.state,body);
+ f.storage.set('commerce',JSON.stringify({sequence:4,pendingUpgrade:{level:1}}));
+ f.storage.set('party-production:M',JSON.stringify({id:body.id,item:body.item,slots:[0],phase:'running',
+  request:body,commerce:{key:'commerce',sequence:4}}));
+ f.c.character.items[5]={name:'cap',level:1};f.c.character.items[0]=null;
+ await f.c.recoverProductionJournal();
+ assert.deepEqual(JSON.parse(f.storage.get('commerce')).pendingUpgrade.outcome,{item:{name:'cap',level:1},destroyed:false});
+});

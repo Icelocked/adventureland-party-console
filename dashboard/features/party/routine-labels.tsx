@@ -13,6 +13,7 @@ export const routineLabels: Record<string, string> = {
   "auto npc sales": "Auto NPC sales",
   "collect mail": "Collect mail",
   "stand bid purchases": "Automatic WTB fills",
+  "upgrade preview": "Refresh upgrade chances",
   "manual upgrades": "Manual upgrades",
   "auto upgrade": "Auto upgrade",
   "manual compounds": "Manual compounds",

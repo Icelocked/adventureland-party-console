@@ -25,7 +25,7 @@ function worker(poofs = 0) {
         else items[items.indexOf(null)] = {name, q: quantity};}
     },
     upgradeConfirmed: async (slot, scroll) => {upgrades++; items[scroll].q--; if (!items[scroll].q) items[scroll] = null;
-      if (failures-- > 0) {items[slot] = null; throw {reason: 'upgrade_destroyed'};}
+      if (failures-- > 0) {items[slot] = null; throw {reason: 'upgrade_destroyed', confirmedDestroyed:true};}
       items[slot].level++; upgradeHook(items[slot]);
     },
   });
@@ -185,9 +185,9 @@ test('production receipt survives a lost completion response and records poof be
  const storage=new Map([['commerce',JSON.stringify({sequence:4,pendingUpgrade:{level:3},spent:19,attempts:2})]]);
  const c=vm.createContext({root:{localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)}}});
  vm.runInContext(namedFunction(source,'rememberCommerceProduction'),c);
- c.rememberCommerceProduction({commerce:{key:'commerce',sequence:4},outcomeItem:null});
+ c.rememberCommerceProduction({commerce:{key:'commerce',sequence:4},outcomeItem:null,destroyed:true});
  const saved=JSON.parse(storage.get('commerce'));
- assert.deepEqual(saved,{sequence:5,pendingUpgrade:{level:3,outcome:{item:null}},spent:19,attempts:2});
+ assert.deepEqual(saved,{sequence:5,pendingUpgrade:{level:3,outcome:{item:null,destroyed:true}},spent:19,attempts:2});
  c.rememberCommerceProduction({commerce:{key:'commerce',sequence:4},outcomeItem:{name:'coat',level:3}});
  assert.equal(JSON.parse(storage.get('commerce')).pendingUpgrade.outcome.item,null,'late replay cannot replace the receipt');
 });
@@ -196,4 +196,111 @@ test('an uncertain scroll purchase protects its quantity baseline while queued',
  const state={merchantCharacter:'M',merchantQueue:[{resumeState:{pendingPurchase:{name:'scroll0',before:4,quantity:3}}}]};
  const items=[{slot:0,item:{name:'scroll0',q:7},craftLocation:'inventory:M'}];
  assert.deepEqual(availableCraftStock(items,craftProtection(state)),[null]);
+});
+
+test('live regression: survivor moves after checkpoint and completes without another purchase',async()=>{
+ const w=worker();let moved=false;
+ w.checkpoint(p=>{
+  if(!moved&&p.activeItem?.level===2&&p.pendingUpgrade?.level===3){
+   moved=true;w.items[15]=w.items[p.activeSlot];w.items[p.activeSlot]=null;
+  }
+ });
+ await w.run();
+ assert.equal(moved,true);assert.equal(w.counts().upgrades,3);
+ assert.equal(w.calls.filter(c=>c[0]==='buy'&&c[1]==='coat').length,1);
+ assert.equal(w.items[15].level,3);
+});
+
+test('empty original slot and arbitrary upgrade error cannot report poof or buy again',async()=>{
+ const w=worker();let poofs=0;
+ w.services.activity=async e=>{if(/poof/.test(e.message))poofs++;};
+ w.context.upgradeConfirmed=async slot=>{
+  w.items[15]=w.items[slot];w.items[slot]=null;
+  throw Object.assign(Error('item or scroll unavailable'),{code:'lucky_slot_unavailable'});
+ };
+ await assert.rejects(w.run(),/unavailable/);
+ assert.equal(w.calls.filter(c=>c[0]==='buy'&&c[1]==='coat').length,1);
+ assert.equal(w.items[15].level,0);assert.equal(poofs,0);
+ assert.ok(w.command._commerceState.activeItem);
+ assert.ok(w.command._commerceState.pendingUpgrade);
+});
+
+test('legacy inferred destruction is not a confirmed destruction receipt',async()=>{
+ const w=worker();let poofs=0;
+ w.services.activity=async e=>{if(/poof/.test(e.message))poofs++;};
+ w.context.upgradeConfirmed=async slot=>{w.items[slot]=null;throw {reason:'upgrade_destroyed'};};
+ await assert.rejects(w.run(),e=>e.reason==='upgrade_destroyed');
+ assert.equal(w.calls.filter(c=>c[0]==='buy'&&c[1]==='coat').length,1);assert.equal(poofs,0);
+});
+
+test('ambiguous relocated survivors block rather than choosing an unrelated item',async()=>{
+ const w=worker();
+ w.checkpoint(p=>{
+  if(p.activeItem?.level===2&&p.pendingUpgrade?.level===3){
+   w.items[15]=w.items[p.activeSlot];w.items[16]={...w.items[15]};w.items[p.activeSlot]=null;
+  }
+ });
+ await assert.rejects(w.run(),/ambiguous/);
+ assert.equal(w.calls.filter(c=>c[0]==='buy'&&c[1]==='coat').length,1);
+});
+
+test('legacy empty outcome after restart requires review and cannot purchase another base',async()=>{
+ const w=worker();w.command._commerceState={phase:'leveling',buyIndex:0,attempts:1,spent:13,
+  activeItem:{name:'coat',level:2},activeSlot:5,cycleActive:true,results:[],
+  pendingUpgrade:{level:3,outcome:{item:null}}};
+ await assert.rejects(w.run(),/uncertain/);
+ assert.equal(w.counts().buys,0);
+});
+
+
+test('batch buys starting-tier scrolls together and finishes all items after early success', async () => {
+  const w = worker(); w.command.buyUpgradeBatchSize = 10;
+  w.context.item_grade = item => (item.level || 0) >= 2 ? 1 : 0;
+  w.context.G.items.scroll1 = {g: 5, s: 9999};
+  await w.run();
+  assert.equal(w.items.filter(i => i?.name === 'coat' && i.level === 3).length, 10);
+  assert.deepEqual(w.calls.filter(c => c[0] === 'buy' && c[1] === 'scroll0'), [['buy','scroll0',20]]);
+  const higher = w.calls.filter(c => c[0] === 'buy' && c[1] === 'scroll1');
+  assert.equal(higher.length, 10); assert.ok(higher.every(c => c[2] === 1));
+  assert.equal(w.calls.filter(c => c[0] === 'buy' && c[1] === 'coat').length, 10);
+});
+
+test('interrupted batch purchase resumes without duplicate purchases or attempts', async () => {
+  const w = worker(); w.command.buyUpgradeBatchSize = 4; let stopped = false;
+  w.checkpoint(p => { if (!stopped && p.batchItems?.length === 2 && !p.pendingPurchase) {
+    stopped = true; throw Error('reload');
+  }});
+  await assert.rejects(w.run(), /reload/);
+  assert.equal(w.command._commerceState.attempts, 2);
+  await w.run();
+  assert.equal(w.calls.filter(c => c[0] === 'buy' && c[1] === 'coat').length, 4);
+  assert.equal(w.items.filter(i => i?.name === 'coat' && i.level === 3).length, 4);
+});
+
+test('uncertain batch upgrade cannot steal another purchased base or buy replacements', async () => {
+  const w = worker(); w.command.buyUpgradeBatchSize = 3;
+  w.context.upgradeConfirmed = async slot => { w.items[slot] = null; throw Error('connection lost'); };
+  await assert.rejects(w.run(), /connection lost/);
+  await assert.rejects(w.run(), /missing without confirmed destruction/);
+  assert.equal(w.calls.filter(c => c[0] === 'buy' && c[1] === 'coat').length, 3);
+  assert.equal(w.command._commerceState.batchItems.length, 2);
+});
+
+test('batch respects free space, remaining attempts, and budget', async () => {
+  for (const kind of ['space','attempts','budget']) {
+    const w = worker(); w.command.buyUpgradeBatchSize = 10;
+    if (kind === 'space') for (let i=0;i<36;i++) w.items[i]={name:'unrelated'};
+    if (kind === 'attempts') w.purchase.attempts=2;
+    if (kind === 'budget') w.purchase.budget=26;
+    await w.run();
+    assert.equal(w.calls.filter(c => c[0] === 'buy' && c[1] === 'coat').length, 2, kind);
+  }
+});
+
+test('queued batches reserve every purchased base during a yield', () => {
+  const protection = craftProtection({merchantCharacter:'M',merchantQueue:[{resumeState:{
+    batchItems:[{slot:4,item:{name:'coat',level:0}},{slot:5,item:{name:'coat',level:0}}]
+  }}]});
+  assert.equal(protection.deliveries.length,2);
+  assert.deepEqual(protection.deliveries.map(i=>i.slot),[4,5]);
 });

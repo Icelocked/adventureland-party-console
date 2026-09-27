@@ -3,6 +3,7 @@ import type { MerchantWork } from './work.ts';
 /** Dispatch fencing is opt-in for durable commerce; legacy routines retain their wire contract. */
 export function currentMerchantReport(job: MerchantWork | null, body: Record<string, unknown>): job is MerchantWork {
   if (!job || body.jobId !== job.id) return false;
+  if (body.commandId !== undefined || body.failureKind === "hunt_movement_owned") return body.commandId === job.commandId;
   if (job.commerceProgressVersion !== 2) return true;
   return body.commandId === job.commandId;
 }

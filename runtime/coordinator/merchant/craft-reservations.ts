@@ -80,10 +80,11 @@ function commerceProtection(state: CraftReservationState): NonNullable<CraftProt
   return [state.merchantCurrent, ...(state.merchantQueue || [])].flatMap(job => {
     if (!job) return [];
     const progress = job.resumeState as {results?: {slot?: number; item: import('../contracts/item.ts').Item}[];
+      batchItems?: {slot: number; item: import('../contracts/item.ts').Item}[];
       activeSlot?: number; activeItem?: import('../contracts/item.ts').Item;
       pendingUpgrade?: {level: number}; pendingPurchase?: {base?: boolean; name: string}} | undefined;
     if (!progress) return [];
-    const owned = [...(progress.results || [])];
+    const owned = [...(progress.results || []), ...(progress.batchItems || [])];
     if (progress.activeItem) {
       owned.push({slot: progress.activeSlot, item: progress.activeItem});
       if (progress.pendingUpgrade) owned.push({slot: progress.activeSlot,

@@ -1,3 +1,4 @@
+import { merchantMovementBlocked, type MerchantMovementState } from "./movement-block.ts";
 import {
   collectionSlotCount,
   isItemCollection,
@@ -12,7 +13,7 @@ import type { ObservedPosition } from "../contracts/position.ts";
 import { collectionPickups, type PickupState } from './collection-pickups.ts';
 import { pickupReason } from './pickup-jobs.ts';
 
-interface CollectionState extends PickupState {
+interface CollectionState extends PickupState, MerchantMovementState {
   merchantCharacter: string | null;
   statuses: Record<string, (ObservedPosition & { items?: (InventoryEntry | null)[] }) | undefined>;
   marked?: Record<string, ItemMark[] | undefined>;
@@ -53,6 +54,7 @@ export function coordinatorCollectionReady(
   job: PrioritizedJob,
   now: () => number,
 ): boolean {
+  if (merchantMovementBlocked(state, job)) return false;
   const reason = pickupReason(job.reason, job.target, state.merchantCharacter);
   if (!isItemCollection(reason)) return true;
   return markedCollectionReady(
@@ -70,7 +72,7 @@ export function pruneIneligibleCollections<Job extends PrioritizedJob>(
   state: QueueState<Job> & {transferSignatures?: Record<string,string>}, now: () => number,
 ): boolean {
   const retained = state.merchantQueue.filter(job => {
-    if (coordinatorCollectionReady(state,job,now)) return true;
+    if (merchantMovementBlocked(state,job) || coordinatorCollectionReady(state,job,now)) return true;
     if (state.transferSignatures && job.target) delete state.transferSignatures[job.target];
     return false;
   });

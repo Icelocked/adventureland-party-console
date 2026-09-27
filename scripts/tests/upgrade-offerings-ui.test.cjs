@@ -27,21 +27,22 @@ test('manual offering options are last and individually disabled; confirmation s
  }finally{await act(async()=>v.unmount());}
 });
 
-test('manual preview loads only while open, formats percentages, refreshes and uses white menus',async()=>{
+test('preview opens stored results without queueing and explicit refresh queues a job',async()=>{
  const previous=global.fetch,calls=[];
- global.fetch=async(url,options)=>{calls.push([url,JSON.parse(options.body)]);return {ok:true,json:async()=>({executor:'M',item:{name:'sword',level:8},options:{
+ global.fetch=async(url,options)=>{calls.push([url,JSON.parse(options.body)]);return {ok:true,json:async()=>({status:'complete',result:{executor:'M',item:{name:'sword',level:8},options:{
   none:{preview:{chance:0.15321},observedAt:1000},offeringp:{preview:{chance:0.24256},observedAt:1000},
   offering:{reason:'Offering not in merchant inventory'},offeringx:{reason:'Offering not in merchant inventory'},
- }})};};
+ }}})};};
  let v;
  try {
   v=await render({executor:'M'});assert.equal(calls.length,0);
   for(const sub of v.root.findAllByType('ContextMenuSubContent')){assert.match(sub.props.className,/!bg-white/);assert.match(sub.props.className,/!text-black/);}
   await act(async()=>v.root.findAllByType('ContextMenuSub')[0].props.onOpenChange(true));
-  assert.equal(calls.length,1);assert.deepEqual(calls[0][1],{character:'M',slot:2,item:{name:'sword',level:8}});
+  assert.equal(calls.length,1);assert.deepEqual(calls[0][1],{character:'M',slot:2,item:{name:'sword',level:8},refresh:false});
   const panel=v.root.findByProps({'aria-label':'Upgrade chances'});assert.match(text(panel),/15\.32%/);assert.match(text(panel),/24\.26%/);assert.match(text(panel),/Offering not in merchant inventory/);
   assert.equal(menu(v,'Refresh chances').props.closeOnClick,false);
-  await act(async()=>menu(v,'Refresh chances').props.onClick());assert.equal(calls.length,2);
+  await act(async()=>menu(v,'Refresh chances').props.onClick());assert.equal(calls.length,2);assert.equal(calls[1][1].refresh,true);
+  assert.match(panel.props.className,/bg-slate-950/);assert.match(panel.props.className,/text-slate-100/);
   await act(async()=>v.root.findAllByType('ContextMenuSub')[0].props.onOpenChange(false));assert.equal(calls.length,2);
  } finally {if(v)await act(async()=>v.unmount());global.fetch=previous;}
 });

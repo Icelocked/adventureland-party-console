@@ -45,6 +45,7 @@ function reassembleReturn(state: SharedState, c: SharedConvoy): void {
   delete c.returnLegs; c.townFirst = false; c.completed = [];
   c.rally = c.returnTownRally || point(state.statuses[c.leader]!);
   c.failure = undefined; c.failureCode = undefined;
+  delete c.sharedStartedAt; delete c.sharedProgressAt; delete c.sharedWaitingAt; delete c.sharedDistances;
   clearSharedRoute(c);
   issue(state, c, "assemble");
 }
@@ -338,15 +339,30 @@ export function createSharedConvoyNavigation(legacy: ConvoyNavigationPlatform,
     return changed;
   }
   function bootstrapWalking(state: SharedState, c: SharedConvoy, now: number): boolean {
-    if(c.sharedWaitingAt===undefined){c.sharedWaitingAt=now;c.sharedStartedAt=now;c.sharedProgressAt=now;c.sharedDistances={};}
-    if(c.returnTownRally && compatible(state,c,now))return awaitTownRally(state,c,now);
-    if (now-c.sharedWaitingAt>30000)return terminal(state,"Waiting for protocol 4 party runtimes","runtime-lost");
-    return scanAssemblyReady(state,c) && begin(state,c,now);
+    c.sharedStartedAt ??= now; c.sharedProgressAt ??= now; c.sharedDistances ||= {};
+    if (!compatible(state,c,now)) {
+      c.sharedWaitingAt ??= now;
+      if (now-c.sharedWaitingAt>30000) return terminal(state,
+        "Waiting for protocol 4 party runtimes: " + members(c).filter(name => {
+          const s=state.statuses[name];
+          return !fresh(s,now) || s.convoyProtocol!==4 || !characterRuntime(s) || s.server!==state.statuses[c.leader]?.server;
+        }).join(', '), "runtime-lost");
+      return false;
+    }
+    delete c.sharedWaitingAt;
+    if(c.returnTownRally)return awaitTownRally(state,c,now);
+    if (scanAssemblyReady(state,c) && begin(state,c,now)) return true;
+    observeProgress(state,c,now);
+    if(assemblyTimeout(c,now))return recover(state,'Rendezvous readiness timed out: leader moving, transporting, or assembly acknowledgement pending',now);
+    return false;
   }
   function awaitTownRally(state:SharedState,c:SharedConvoy,now:number):boolean {
     observeProgress(state,c,now);
-    if(members(c).every(n=>distance(state.statuses[n]!,c.rally)<=55)){delete c.returnTownRally;return begin(state,c,now);}
-    if(assemblyTimeout(c,now))return recover(state,'Town rendezvous made no progress',now);
+    const arrived=members(c).every(n=>distance(state.statuses[n]!,c.rally)<=55);
+    if(arrived && begin(state,c,now)){delete c.returnTownRally;return true;}
+    if(assemblyTimeout(c,now))return recover(state,arrived
+      ? 'Town rendezvous readiness timed out: leader moving or transporting'
+      : 'Town rendezvous made no progress',now);
     return false;
   }
   function step(input: Parameters<ConvoyNavigationPlatform["step"]>[0], now = Date.now()): boolean {

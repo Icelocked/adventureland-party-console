@@ -1,5 +1,20 @@
 # Character coordinator
 
+## Town rally and merchant movement ownership
+
+A Town fallback retains its rally until route preparation succeeds. Walking time
+cannot consume the protocol-readiness deadline: that timer counts continuous
+runtime incompatibility only. Rally movement remains bounded by 30 seconds without
+progress and 120 seconds total, including arrivals whose leader is still moving.
+Non-preemptible Hunt recipients defer merchant dispatch even when the return is
+failed. Handoff races return `deferred: true, reason: "hunt_movement_owned"`; clients
+report that failure kind and completion preserves job identity, progress and retry
+allowance. Command IDs fence redispatched completions. Validate hunt-return-town,
+shared-convoy, continuous-hunt-return, automatic-collection, merchant completion,
+queue, interruption and commerce tests. Publish character/coordinator assets with
+the full restart. Existing failed Hunt returns still require Retry return once;
+verify actual Daisy arrival and subsequent merchant eligibility.
+
 ## Daisy departure and door approaches
 
 Door repair samples reachable interaction points near the source spawn before
@@ -80,7 +95,28 @@ For redirected local launch logs, `scripts/watch-console.ps1` follows the newest
 `.build/*.stdout.log`; `-Errors` follows stderr. Run it in a visible PowerShell
 terminal. Closing the viewer does not stop the coordinator.
 
+## Merchant upgrade purchase batches
+
+Merchant settings persist `buyUpgradeBatchSize` (1–42, default 1), passed to commerce
+commands. Each batch buys only its starting-grade scroll requirements in bulk;
+subsequent grades are purchased one at a time. Capacity, remaining attempts and
+budget can reduce the batch. All purchased items finish even after the requested
+quantity succeeds. Durable `batchItems` and pending purchase checkpoints reserve
+queued items across yields/restarts; uncertain outcomes cannot consume another
+batch item as a replacement. Validate merchant-buy-cycle and merchant configuration
+tests. Publish character assets along with coordinator and dashboard using the full
+restart workflow below.
+
 ## Durable buy-with-upgrade orders
+
+Commerce follows the owned item after checkpoints and between upgrade attempts.
+A missing old inventory slot is never destruction evidence: only a matching
+server upgrade-failure response can authorize the poof receipt and next purchase.
+Production journals persist that explicit destruction flag; legacy empty receipts
+and ambiguous or missing survivors require review. Recovery can follow one uniquely
+identified survivor without buying a replacement. Existing orphaned items are not
+silently adopted into an order. Validate merchant-buy-cycle, production-journal,
+item-operations, lucky-upgrade and merchant-upgrade-recovery before the full restart.
 
 Buy-with-upgrade saves confirmed purchases and upgrade results separately from
 scheduling boundaries. Normal priority and anniversary preemption happens after
@@ -518,16 +554,18 @@ flow. Empty delivery jobs are discarded before dispatch. Validate delivery-trip
 settings/UI, scheduling, queue, dispatch, and delivery-recovery tests. This change
 needs a coordinator-only restart and refreshed dashboard assets.
 
-Manual upgrade menus request server previews through `/party-api/upgrade-preview`.
-The auxiliary heartbeat request and `/upgrade-preview/result` response are ephemeral
-and expire after ten seconds; they never create merchant jobs. Only the executing
-merchant's exact inventory item and currently carried scroll/offerings are queried.
-The runtime always uses `upgrade(item, scroll, offering, true)` and serializes it
-against inventory/production work. A timed-out official deferred retains its guard
-until it settles, so a late preview cannot resolve a real upgrade. The menu shows
-unavailable reasons instead of estimates, and labels the server percentage without
-the separate lucky-slot roll adjustment. Validate with `upgrade-preview.test.cjs`
-and `upgrade-offerings-ui.test.cjs`; publish character and coordinator assets together.
+Manual upgrade menus read stored server previews through `/party-api/upgrade-preview`;
+only explicit Refresh chances (`refresh: true`) queues the "upgrade preview" merchant
+routine (default priority 70). The normal dispatcher serializes it with production.
+Missing scrolls/offerings are borrowed from available bank packs and returned before
+completion; a local recovery journal reconciles interrupted transfers before any
+subsequent merchant job. No supplies are bought or consumed. Calculations use only
+`upgrade(item, scroll, offering, true)` and retain the shared promise guard until
+settlement. Results persist in settings, bounded to 100 entries, and are hidden once
+the merchant reports a real upgrade queue packet with a newer revision. Requests
+are tied to the original item; old sessions/commands cannot publish results.
+Validate upgrade-preview, upgrade-offerings-ui and merchant queue/dispatch tests.
+Publish character, coordinator and dashboard assets with the full restart.
 
 Lucky-slot discovery records only ordinary upgrade-scroll `q_data` rolls, excluding
 compound, stat-scroll and offering-only operations. Unknown slots no longer block

@@ -55,3 +55,19 @@ test('routine checkboxes share the gathering button state and issue one combined
  t.invoke(t.service.priorities,{priorities:{},enabled:{fishing:true,mining:false}});assert.equal(t.state.nextCommandId,11);
  t.invoke(t.service.settings.gather,{mode:'fishing',enabled:false});assert.deepEqual(t.state.gatheringModes,[]);
 });
+
+
+test('upgrade batch setting defaults to one and persists only valid integer limits', () => {
+ const t=fixture();
+ assert.equal(t.invoke(t.service.thresholds,{threshold:100}).body.buyUpgradeBatchSize,1);
+ for(const value of [0,43,1.5,'invalid']) assert.equal(t.invoke(t.service.thresholds,{buyUpgradeBatchSize:value}).code,400);
+ assert.equal(t.state.buyUpgradeBatchSize,undefined);
+ assert.equal(t.invoke(t.service.thresholds,{buyUpgradeBatchSize:10}).code,200);
+ assert.equal(t.state.buyUpgradeBatchSize,10);
+ const {initialCollectionState}=require('../../runtime/coordinator/inventory/initial-collection.ts');
+ assert.equal(initialCollectionState({},{}).buyUpgradeBatchSize,1);
+ assert.equal(initialCollectionState({buyUpgradeBatchSize:10},{}).buyUpgradeBatchSize,10);
+ const {validators}=require('../../runtime/coordinator/persistence/dashboard-import.ts');
+ assert.equal(validators.buyUpgradeBatchSize(10),true);
+ assert.equal(validators.buyUpgradeBatchSize(1.5),false);
+});

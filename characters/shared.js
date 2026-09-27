@@ -609,7 +609,10 @@
     return luckySlotTracker;
   }
   function luckySlotRollListener(event) {
-    if (runtimeCurrent()) luckySlotTracking().observe(event);
+    if (runtimeCurrent()) {
+      if (event && event.q && event.q.upgrade) root.localStorage.setItem("party-upgrade-preview-revision:"+character.name,String(Date.now()));
+      luckySlotTracking().observe(event);
+    }
   }
   var merchantIdleActive = false;
   var merchantIdlePending = null;
@@ -2125,43 +2128,89 @@
       luckyUpgradeService && luckyUpgradeService.pending() ||
       character.q && Object.keys(character.q).length || currentTravelAttackers().length);
   }
-  async function handleUpgradePreview(previewRequest) {
-    if (previewRequest.id === lastUpgradePreview || previewRequest.session !== upgradePreviewSession ||
-        previewRequest.executor !== character.name || upgradePreviewActive) return;
-    lastUpgradePreview = previewRequest.id;
-    var reason = consoleMaintenanceBusy() || character.rip || character.moving ||
-      root.localStorage.getItem(productionJournalKey()) ||
-      root.localStorage.getItem("party-lucky-upgrade:" + character.name) ||
-      parent.deferreds && parent.deferreds.upgrade && parent.deferreds.upgrade.length
-      ? "Merchant busy" : null;
+  function previewSuppliesKey() { return "party-preview-supplies:"+character.name; }
+  async function previewTravel(destination) {
+    if(character.map===destination)return;
+    var npc=typeof find_npc==="function"?find_npc(destination):null;
+    if(npc && (!npc.map || npc.map===character.map) && Math.hypot(character.x-npc.x,character.y-npc.y)<=35)return;
+    await smart_move(destination);
+  }
+  async function restoreUpgradePreviewSupplies() {
+    var borrowed=JSON.parse(root.localStorage.getItem(previewSuppliesKey())||"[]");
+    while(borrowed.length) {
+      var entry=borrowed[0];
+      await previewTravel(entry.map);
+      var slots=character.items.map(function(item,slot){return JSON.stringify(item)===JSON.stringify(entry.item)?slot:-1;}).filter(function(slot){return slot>=0;});
+      var stored=character.bank && character.bank[entry.pack] && character.bank[entry.pack][entry.slot];
+      if(!slots.length && JSON.stringify(stored)===JSON.stringify(entry.item)) {
+        borrowed.shift();root.localStorage.setItem(previewSuppliesKey(),JSON.stringify(borrowed));continue;
+      }
+      if(slots.length!==1)throw new Error("Preview supply recovery needs inventory review: "+entry.item.name);
+      if(stored) {
+        var empty=character.bank[entry.pack].findIndex(function(item){return !item;});
+        if(empty<0)throw new Error("No room to return preview supplies to "+entry.pack);
+        entry.slot=empty;root.localStorage.setItem(previewSuppliesKey(),JSON.stringify(borrowed));
+      }
+      await bankStageConfirmed(slots[0],entry.pack,entry.slot);
+      borrowed.shift();root.localStorage.setItem(previewSuppliesKey(),JSON.stringify(borrowed));
+    }
+    root.localStorage.removeItem(previewSuppliesKey());
+  }
+  async function borrowUpgradePreviewSupplies(previewRequest) {
+    var names=["scroll"+item_grade(previewRequest.item),"offeringp","offering","offeringx"];
+    var missing=names.filter(function(name){return !character.items.some(function(item){return item && item.name===name;});});
+    if(!missing.length)return;
+    await previewTravel("bank");
+    var definitions=typeof bank_packs!=="undefined"?bank_packs:parent.bank_packs||{};
+    for(var name of missing) {
+      var found=findBankItem({name:name});
+      if(!found)continue;
+      if(freeInventorySlots()<1)throw new Error("No inventory space for preview supplies");
+      var map=definitions[found.pack] && definitions[found.pack][0] || "bank";
+      await previewTravel(map);
+      var item=character.bank[found.pack] && character.bank[found.pack][found.slot];
+      if(!item || item.name!==name || item.l)continue;
+      var borrowed=JSON.parse(root.localStorage.getItem(previewSuppliesKey())||"[]");
+      borrowed.push({pack:found.pack,slot:found.slot,map:map,item:JSON.parse(JSON.stringify(item))});
+      root.localStorage.setItem(previewSuppliesKey(),JSON.stringify(borrowed));
+      await bankRetrieveConfirmed(found.pack,found.slot);
+    }
+  }
+  async function merchantUpgradePreview(command) {
+    var previewRequest = Object.assign({}, command.upgradePreview, {id:command.jobId,executor:character.name,
+      session:upgradePreviewSession,expiresAt:Date.now()+coordinatorClockOffset+10000});
     var result;
-    if (reason) {
-      result = {executor:character.name,item:previewRequest.item,options:{}};
-      ["none","offeringp","offering","offeringx"].forEach(function (option) { result.options[option]={reason:reason}; });
-    } else {
-      upgradePreviewActive = true;
-      upgrading = true;
-      // Retain the guard until the official deferred settles, including after an
-      // HTTP timeout: a late upgrade_chance must never resolve an actual upgrade.
-      var work = root.previewPartyUpgrade(previewRequest, {
-        items:function () { return character.items; }, grade:item_grade,
-        current:function () { return runtimeCurrent() && previewRequest.session === upgradePreviewSession; },
-        now:function () { return Date.now() + coordinatorClockOffset; }, preview:upgrade,
-      }).finally(function () {
-        upgradePreviewActive=false; upgrading=false;
-        if (root.__partyUpgradePreviewInFlight === work) root.__partyUpgradePreviewInFlight=null;
+    try {
+      // The job wrapper settles old production journals before entry. Never use
+      // the broad maintenance-busy check: it includes this active job itself.
+      if (character.rip || character.q && Object.keys(character.q).length ||
+          parent.deferreds && parent.deferreds.upgrade && parent.deferreds.upgrade.length)
+        throw new Error("Upgrade operation still settling; refresh again");
+      if(!sameItem(character.items[previewRequest.slot],previewRequest.item))throw new Error("Item changed; reopen the menu");
+      await borrowUpgradePreviewSupplies(previewRequest);
+      await previewTravel("newupgrade");
+      previewRequest.expiresAt=Date.now()+coordinatorClockOffset+10000;
+      upgradePreviewActive=true; upgrading=true;
+      var work=root.previewPartyUpgrade(previewRequest, {
+        items:function(){return character.items;},grade:item_grade,
+        current:function(){return runtimeCurrent() && root.__merchantActiveJob && root.__merchantActiveJob.commandId===command.id;},
+        now:function(){return Date.now()+coordinatorClockOffset;},preview:upgrade,
+      }).finally(function(){upgradePreviewActive=false;upgrading=false;
+        if(root.__partyUpgradePreviewInFlight===work)root.__partyUpgradePreviewInFlight=null;
       });
       root.__partyUpgradePreviewInFlight=work;
-      var timeout;
-      try {
-        result = await Promise.race([work, new Promise(function (resolve) {
-          timeout=setTimeout(function () { resolve(null); }, 9000);
-        })]);
-      } finally { clearTimeout(timeout); }
+      // Keep ownership until the game's shared upgrade promise settles. An HTTP
+      // timeout must not free it for a real upgrade to receive a late preview.
+      result=await work;
+    } catch(error) {
+      result={executor:character.name,item:previewRequest.item,options:{}};
+      ["none","offeringp","offering","offeringx"].forEach(function(option){result.options[option]={reason:String(error.reason||error.message||error)};});
     }
-    if (result && runtimeCurrent()) await request("/upgrade-preview/result", {method:"POST",body:{
-      character:character.name,id:previewRequest.id,session:upgradePreviewSession,result:result,
-    }}).catch(function () {});
+    await restoreUpgradePreviewSupplies();
+    await request("/upgrade-preview/result",{method:"POST",body:{character:character.name,id:command.jobId,
+      commandId:command.id,session:upgradePreviewSession,revision:root.localStorage.getItem("party-upgrade-preview-revision:"+character.name)||"0",result:result}});
+    await request("/merchant/complete",{method:"POST",body:{jobId:command.jobId,commandId:command.id,success:true,
+      activity:[{level:"info",message:"Upgrade chances refreshed for "+previewRequest.item.name}]}});
   }
   function consoleMaintenanceReport() {
     var pause = root.__partyConsoleMaintenance;
@@ -2233,6 +2282,7 @@
       clientVersion: parent.__partyClientVersion || Number(G.version),
       clientInstance: parent.__partyClientInstance || null,
       upgradePreviewSession: upgradePreviewSession,
+      upgradePreviewRevision: root.localStorage.getItem("party-upgrade-preview-revision:"+character.name) || "0",
       luckySlotTracking: luckySlotTracking().report(),
       merchantEventReserved: merchantEventWorkReserved(),
       upgradeInventoryBusy: !!(root.__merchantInventoryTidy || luckyUpgradeService && luckyUpgradeService.pending() ||
@@ -3913,7 +3963,7 @@
     if (!journal.commerce) return;
     var progress = JSON.parse(root.localStorage.getItem(journal.commerce.key) || "null");
     if (!progress || progress.sequence !== journal.commerce.sequence || !progress.pendingUpgrade) return;
-    progress.pendingUpgrade.outcome = {item: journal.outcomeItem || null};
+    progress.pendingUpgrade.outcome = {item: journal.outcomeItem || null, destroyed: journal.destroyed === true};
     progress.sequence += 1;
     root.localStorage.setItem(journal.commerce.key, JSON.stringify(progress));
   }
@@ -3952,8 +4002,17 @@
       if (luckyUpgradeService && luckyUpgradeService.pending()) await luckyUpgradeService.recover();
       else if (character.ctype === "merchant" && root.localStorage.getItem("party-lucky-upgrade:" + character.name)) await merchantLuckyUpgrade().recover();
       var live = character.items[journal.slots[0]];
+      if (journal.commerce && !live) {
+        var previous = JSON.stringify(journal.item), upgraded = JSON.stringify(Object.assign({}, journal.item, {level: (journal.item.level || 0) + 1}));
+        var candidates = character.items.map(function (item, slot) {
+          var state = JSON.stringify(fingerprint(item));
+          return state === previous || state === upgraded ? slot : -1;
+        }).filter(function (slot) { return slot >= 0; });
+        if (candidates.length !== 1) throw Error("Production outcome needs review before another attempt: " + journal.item.name);
+        journal.slots[0] = candidates[0]; live = character.items[candidates[0]];
+      }
       if (live && live.name === journal.item.name && (live.level || 0) === (journal.item.level || 0)+1) journal.success=true;
-      else if (!live || JSON.stringify(fingerprint(live)) === JSON.stringify(journal.item)) journal.success=false;
+      else if ((!live && !journal.commerce) || JSON.stringify(fingerprint(live)) === JSON.stringify(journal.item)) journal.success=false;
       else throw Error("Production outcome needs review before another attempt: " + journal.item.name);
     }
     if (journal.commerce) journal.outcomeItem = fingerprint(character.items[journal.slots[0]]);
@@ -4009,10 +4068,14 @@
     var result, failure;
     try { result=await operation(); } catch(error) { failure=error; }
     if (body.requestId) journal.issued=!!JSON.parse(root.localStorage.getItem(productionJournalKey()) || "{}").issued;
-    var live=character.items[slots[0]];
+    var live=journal.commerce && result && result.item || character.items[slots[0]];
+    if (journal.commerce && !live && !(failure && failure.reason === "upgrade_destroyed" && failure.confirmedDestroyed === true))
+      throw Error("Upgrade outcome uncertain; production receipt requires inventory review");
+    if (journal.commerce && failure && !(failure.reason === "upgrade_destroyed" && failure.confirmedDestroyed === true)) throw failure;
     if (failure && /timed out|uncertain|interrupted|recovery/i.test(String(failure.message || failure))) throw failure;
+    journal.destroyed = !!(failure && failure.reason === "upgrade_destroyed" && failure.confirmedDestroyed === true);
     journal.success=!!live && live.name===item.name && (live.level || 0)===(item.level || 0)+1;
-    if (journal.commerce) journal.outcomeItem = fingerprint(character.items[journal.slots[0]]);
+    if (journal.commerce) journal.outcomeItem = journal.destroyed ? null : fingerprint(live);
     journal.phase="complete";root.localStorage.setItem(productionJournalKey(),JSON.stringify(journal));
     await finishProductionJournal(journal);
     if (failure) throw failure;
@@ -4060,7 +4123,15 @@
 
   async function observedUpgradeConfirmed(itemSlot, scrollSlot, expectedName, expectedLevel, offeringAttempt) {
     var intendedScroll = character.items[scrollSlot] && character.items[scrollSlot].name;
+    var intendedItem = JSON.stringify(character.items[itemSlot]);
+    if (!character.items[itemSlot]) throw Error("Owned upgrade item missing before preparation");
     await verifyMerchantItemMarks();
+    if (JSON.stringify(character.items[itemSlot]) !== intendedItem) {
+      var matches = character.items.map(function (item, slot) { return JSON.stringify(item) === intendedItem ? slot : -1; })
+        .filter(function (slot) { return slot >= 0; });
+      if (matches.length !== 1) throw Error("Owned upgrade item uncertain after checkpoint; inventory review required");
+      itemSlot = matches[0];
+    }
     if (character.ctype !== "merchant") return upgradeAtSlotConfirmed(itemSlot, scrollSlot, expectedName, expectedLevel);
     var offeringSlot;
     if (offeringAttempt && offeringAttempt.offering) {
@@ -4134,11 +4205,11 @@
           return { result: result, slot: itemSlot, item: fingerprint(liveItem),
             fromLevel: Number(beforeItem && beforeItem.level) || 0, toLevel: expectedLevel };
         }
-        if (!queueActive && settled && result && result.success === false &&
-            (result.num === undefined || Number(result.num) === itemSlot)) {
+        if (!queueActive && settled && result && result.failed === true && result.success === false &&
+            Number(result.num) === itemSlot) {
           if (liveItem && liveItem.name === expectedName)
             return { success: false, slot: itemSlot, item: fingerprint(liveItem) };
-          if (!liveItem) { var destroyed = new Error(expectedName + " was destroyed"); destroyed.reason = "upgrade_destroyed"; throw destroyed; }
+          if (!liveItem) { var destroyed = new Error(expectedName + " was destroyed"); destroyed.reason = "upgrade_destroyed"; destroyed.confirmedDestroyed = true; throw destroyed; }
         }
         // Promise settlement and queue disappearance are not proof of success.
         // Allow the inventory proxy a short synchronization window, then fail
@@ -4147,7 +4218,7 @@
           if (!operationEndedAt) operationEndedAt = Date.now();
           if (Date.now() - operationEndedAt >= 1500) {
             if (failure) throw failure;
-            if (!liveItem) { var missing = new Error(expectedName + " was destroyed"); missing.reason = "upgrade_destroyed"; throw missing; }
+            if (!liveItem) throw new Error("Upgrade outcome uncertain: item missing without a confirmed destruction result");
             var confirmationError = new Error("Upgrade result was not confirmed in slot " + itemSlot +
               ": expected " + expectedName + " +" + expectedLevel + ", found " +
               (liveItem ? liveItem.name + " +" + (Number(liveItem.level) || 0) : "empty"));
@@ -4585,6 +4656,9 @@
     var deadline = Date.now() + 60000;
     while (true) {
       var result = await request(url, options);
+      if (result.deferred && result.reason === "hunt_movement_owned") {
+        var deferred = new Error(result.reason); deferred.reason = result.reason; throw deferred;
+      }
       if (!result.waiting) return result;
       if (Date.now() >= deadline) throw new Error("Timed out waiting for convoy merchant pause");
       await sleep(3000);
@@ -5821,7 +5895,7 @@
         merchantPendingGold = 0;
       }
       activity.push({ level: "success", message: "Serviced " + command.target });
-      await request("/merchant/complete", { method: "POST", body: { jobId: command.jobId, success: true,
+      await request("/merchant/complete", { method: "POST", body: { jobId: command.jobId, commandId: command.id, success: true,
         banked: bankedByCharacter[command.target] || [], bankedByCharacter: bankedByCharacter,
         kept: handoff.kept,
         cargo: { bank: merchantPendingBank, gold: merchantPendingGold },
@@ -5848,12 +5922,14 @@
         merchantPendingGold += handoff.gold;
       }
       var serviceReason = String(error.reason || error.message || error);
-      activity.push({ level: serviceReason === "merchant_anniversary_reserved" || serviceReason.toLowerCase() === "interrupted" ? "info" : "error",
-        message: serviceReason === "merchant_anniversary_reserved" ? "Service paused for anniversary" : serviceReason.toLowerCase() === "interrupted"
+      var movementDeferred = serviceReason === "hunt_movement_owned";
+      activity.push({ level: movementDeferred || serviceReason === "merchant_anniversary_reserved" || serviceReason.toLowerCase() === "interrupted" ? "info" : "error",
+        message: movementDeferred ? "Service deferred until Hunt releases movement" : serviceReason === "merchant_anniversary_reserved" ? "Service paused for anniversary" : serviceReason.toLowerCase() === "interrupted"
           ? "Service interrupted for " + command.target + "; retrying"
           : "Service failed for " + command.target, details: error.details || serviceReason });
       try {
-        await request("/merchant/complete", { method: "POST", body: { jobId: command.jobId, success: false,
+        await request("/merchant/complete", { method: "POST", body: { jobId: command.jobId, commandId: command.id, success: false,
+          failureKind: movementDeferred ? "hunt_movement_owned" : undefined,
           error: String(error.reason || error.message || error),
           ...(serviceReason.indexOf("merchant job failed: wrong realm") === 0 ? {
             upgradesResolved: !!improvementsCompleted,
@@ -5870,6 +5946,7 @@
           cargo: { bank: merchantPendingBank, gold: merchantPendingGold },
           merchantDeliveriesDelivered: deliveredMerchantItems, activity: activity } });
       } catch (_completeError) { /* A cleared job is already terminal. */ }
+      if (movementDeferred) return;
       throw error;
     }
   }
@@ -6113,6 +6190,7 @@
       results: saved.results || [], activeItem: null, cycleActive: false,
     };
     progress.results = progress.results || [];
+    progress.batchItems = progress.batchItems || [];
     progress.attempts = Number(progress.attempts) || 0;
     progress.spent = Number(progress.spent) || 0;
     progress.completedResults = Number(progress.completedResults) || 0;
@@ -6130,12 +6208,18 @@
     function stock(name) {
       return character.items.reduce(function (sum, item) { return sum + (item && item.name === name ? Number(item.q) || 1 : 0); }, 0);
     }
-    function ownedSlot() {
-      if (!progress.activeItem) return -1;
-      var direct = character.items[progress.activeSlot];
-      if (direct && sameItem(direct, progress.activeItem)) return progress.activeSlot;
-      return findItem(progress.activeItem);
+    function matchingSlot(item) {
+      if (!item) return -1;
+      function reserved(slot) {
+        return progress.batchItems.concat(progress.results).some(function (entry) { return entry.slot === slot && sameItem(character.items[slot], entry.item); });
+      }
+      if (!reserved(progress.activeSlot) && sameItem(character.items[progress.activeSlot], item)) return progress.activeSlot;
+      var matches = character.items.map(function (live, slot) { return !reserved(slot) && sameItem(live, item) ? slot : -1; })
+        .filter(function (slot) { return slot >= 0; });
+      if (matches.length > 1) throw new Error("Owned upgrade item is ambiguous; order requires inventory review");
+      return matches.length ? matches[0] : -1;
     }
+    function ownedSlot() { return matchingSlot(progress.activeItem); }
     async function settlePurchase() {
       var pending = progress.pendingPurchase;
       if (!pending) return;
@@ -6150,8 +6234,13 @@
             pending.beforeSlots[index] !== JSON.stringify(fingerprint(item));
         });
         if (slot < 0) throw new Error("Purchased upgrade item could not be identified");
-        progress.activeSlot = slot;
-        progress.activeItem = fingerprint(character.items[slot]);
+        if (pending.batch) {
+          progress.batchItems.push({slot: slot, item: fingerprint(character.items[slot])});
+          progress.batchRemaining -= 1;
+        } else {
+          progress.activeSlot = slot;
+          progress.activeItem = fingerprint(character.items[slot]);
+        }
       }
       delete progress.pendingPurchase;
       await save(false);
@@ -6164,7 +6253,8 @@
       await services.fund(cost);
       await services.move(itemSeller(name));
       progress.spent += cost;
-      progress.pendingPurchase = {name: name, quantity: quantity, cost: cost, before: stock(name), base: base,
+      if (base && progress.batchRemaining) progress.attempts += 1;
+      progress.pendingPurchase = {name: name, quantity: quantity, cost: cost, before: stock(name), base: base, batch: base && progress.batchRemaining > 0,
         beforeSlots: base ? character.items.map(function (item) { return JSON.stringify(fingerprint(item)); }) : []};
       await save(false);
       await settlePurchase();
@@ -6173,14 +6263,18 @@
       var pending = progress.pendingUpgrade;
       if (!pending) return;
       // runMerchantJob settles the production/lucky-slot journals before entry.
-      var live = pending.outcome ? pending.outcome.item : character.items[progress.activeSlot];
-      if (pending.outcome && live) {
-        var receiptSlot = findItem(live);
-        if (receiptSlot < 0) throw new Error("Owned upgrade item missing; order requires inventory review");
-        progress.activeSlot = receiptSlot;
-      }
-      if (character.q && character.q.upgrade || live && live.name === 'placeholder') throw new Error("Commerce production is still settling");
-      if (!live) {
+      if (character.q && character.q.upgrade || character.items.some(function (item) { return item && item.name === 'placeholder'; }))
+        throw new Error("Commerce production is still settling");
+      var destroyed = pending.outcome && pending.outcome.destroyed === true;
+      var expected = pending.outcome && pending.outcome.item ||
+        Object.assign({}, progress.activeItem, {level: pending.level});
+      var receiptSlot = destroyed ? -1 : pending.outcome && pending.outcome.item ? matchingSlot(expected) :
+        sameItem(character.items[progress.activeSlot], expected) ? progress.activeSlot : -1;
+      if (receiptSlot < 0 && !destroyed) receiptSlot = ownedSlot();
+      var live = receiptSlot >= 0 ? character.items[receiptSlot] : null;
+      if (!destroyed && !live) throw new Error("Upgrade outcome uncertain; owned item missing without confirmed destruction");
+      if (live) progress.activeSlot = receiptSlot;
+      if (destroyed) {
         progress.activeItem = null;
         progress.cycleActive = false;
         await services.activity({level: "info", message: (definition.name || purchase.id) + " went poof upgrading to +" + pending.level});
@@ -6206,32 +6300,49 @@
     await settlePurchase();
     await settleUpgrade();
     await finishItem();
-    while (progress.completedResults < purchase.quantity) {
-      if (!progress.cycleActive) {
+    while (progress.completedResults < purchase.quantity || progress.activeItem || progress.batchItems.length || progress.batchRemaining) {
+      if (!progress.activeItem && !progress.batchItems.length && !progress.batchRemaining) {
         await save(true);
         var limit = Number(purchase.attempts || purchase.maxAttempts) || 10000;
-        if (progress.attempts >= limit)
+        // Older checkpoints reserved one attempt before buying their active item.
+        var legacyAllowance = progress.cycleActive ? 1 : 0;
+        var count = Math.min(Math.max(1, Math.min(42, Math.floor(Number(command.buyUpgradeBatchSize) || 1))),
+          limit - progress.attempts + legacyAllowance);
+        if (count <= 0)
           throw new Error("90% attempt allowance exhausted for " + purchase.id + " after spending " + progress.spent + " of " + purchase.budget + " gold");
-        progress.attempts += 1;
-        progress.cycleActive = true;
+        var basicScroll = "scroll" + item_grade({name: purchase.id, level: 0}), basicSteps = 0;
+        for (var level = 0; level < target; level += 1) {
+          if ("scroll" + item_grade({name: purchase.id, level: level}) !== basicScroll) break;
+          basicSteps += 1;
+        }
+        // Keep space for lucky-slot logistics and later scroll grades.
+        count = Math.min(count, character.items.filter(function (item) { return !item; }).length - 3 - (stock(basicScroll) ? 0 : 1));
+        if (count <= 0) throw new Error("Merchant inventory has no room for an upgrade batch");
+        function batchCost(n) {
+          return n * Number(definition.g) + Math.max(0, basicSteps * n - stock(basicScroll)) * Number(G.items[basicScroll].g);
+        }
+        while (count > 0 && Number.isFinite(Number(purchase.budget)) && progress.spent + batchCost(count) > Number(purchase.budget)) count -= 1;
+        if (!count) throw new Error("90% estimated budget exhausted for " + purchase.id + " (spent " + progress.spent + " of " + purchase.budget + " gold)");
+        await services.fund(batchCost(count));
+        progress.attempts -= legacyAllowance;
+        progress.cycleActive = false;
+        progress.batchRemaining = count;
+        progress.batchScroll = {name: basicScroll, quantity: basicSteps * count};
         await save(false);
       }
+      if (progress.batchScroll) {
+        var missing = Math.max(0, progress.batchScroll.quantity - stock(progress.batchScroll.name));
+        if (missing) await purchaseStock(progress.batchScroll.name, missing, false);
+        delete progress.batchScroll;
+        await save(false);
+      }
+      while (progress.batchRemaining > 0) await purchaseStock(purchase.id, 1, true);
       if (!progress.activeItem) {
-        var plan = {};
-        for (var level = 0; level < target; level += 1) {
-          var name = "scroll" + item_grade({name: purchase.id, level: level});
-          plan[name] = (plan[name] || 0) + 1;
-        }
-        var cycleCost = Number(definition.g) || 0;
-        Object.keys(plan).forEach(function (name) { cycleCost += Math.max(0, plan[name] - stock(name)) * Number(G.items[name].g); });
-        if (Number.isFinite(Number(purchase.budget)) && progress.spent + cycleCost > Number(purchase.budget))
-          throw new Error("90% estimated budget exhausted for " + purchase.id + " (spent " + progress.spent + " of " + purchase.budget + " gold)");
-        await services.fund(cycleCost);
-        for (var scrollName of Object.keys(plan)) {
-          var missing = Math.max(0, plan[scrollName] - stock(scrollName));
-          if (missing) await purchaseStock(scrollName, missing, false);
-        }
-        await purchaseStock(purchase.id, 1, true);
+        var owned = progress.batchItems.shift();
+        progress.activeSlot = owned.slot;
+        progress.activeItem = owned.item;
+        progress.cycleActive = true;
+        await save(false);
       }
       var slot = ownedSlot();
       if (slot < 0) throw new Error("Owned upgrade item missing; order requires inventory review");
@@ -6241,19 +6352,30 @@
         var scroll = "scroll" + item_grade(progress.activeItem);
         if (!stock(scroll)) await purchaseStock(scroll, 1, false);
         await services.move("newupgrade");
+        slot = ownedSlot();
+        if (slot < 0) throw new Error("Owned upgrade item missing; order requires inventory review");
+        progress.activeSlot = slot;
         progress.pendingUpgrade = {level: nextLevel};
         await save(false);
-        try { await upgradeConfirmed(slot, findInventoryItemByName(scroll), purchase.id, nextLevel); }
+        // Checkpoints and lucky-slot restoration can move the item. Resolve its
+        // current location for every attempt, not just once per purchase.
+        slot = ownedSlot();
+        if (slot < 0) throw new Error("Owned upgrade item missing; order requires inventory review");
+        progress.activeSlot = slot;
+        try {
+          var receipt = await upgradeConfirmed(slot, findInventoryItemByName(scroll), purchase.id, nextLevel);
+          if (receipt && receipt.item) progress.pendingUpgrade.outcome = {item: receipt.item, destroyed: false};
+        }
         catch (error) {
-          // A journal/transport failure is not a poof. Leave its evidence intact.
-          if (error.partyRequest || character.items[slot]) throw error;
+          if (error.reason !== "upgrade_destroyed" || error.confirmedDestroyed !== true) throw error;
+          progress.pendingUpgrade.outcome = {item: null, destroyed: true};
         }
         await settleUpgrade();
         if (!progress.activeItem) { await save(true); break; }
       }
       await finishItem();
     }
-    await services.activity({level: "success", message: "Completed " + purchase.quantity + " × " + purchase.id + " at +" + target +
+    await services.activity({level: "success", message: "Completed " + progress.completedResults + " × " + purchase.id + " at +" + target +
       " for " + progress.spent + " / " + Number(purchase.budget || progress.spent) + " estimated gold"});
     await services.checkpoint({phase: "leveling", buyIndex: buyIndex + 1, attempts: 0, spent: 0,
       results: progress.results, activeItem: null, completedResults: 0}, true);
@@ -6623,7 +6745,7 @@
                     " at +" + attemptedToLevel);
               }
               catch (error) {
-                if (error.code === "lucky_slot_unavailable") throw error;
+                if (error.reason !== "upgrade_destroyed" || error.confirmedDestroyed !== true) throw error;
                 var survived = character.items[itemSlot] && character.items[itemSlot].name === purchase.id;
                 var displayName = definition.name || purchase.id;
                 await liveMerchantActivity({ level: "error", message: survived
@@ -6727,14 +6849,15 @@
       if (command.commerceProgressVersion === 2 && error.partyRequest && error.partyRequest.path === '/movement-plan') error.commerceMovement = true;
       var commerceRecovery = command.commerceProgressVersion === 2 && (error.partyRequest ||
         /Upgrade operation timed out|upgrade_result_not_confirmed|Commerce production is still settling|Production recovery waiting/.test(String(error.reason || error.message || error)));
-      var recoverable = error.commerceMovement || commerceRecovery || /^(interrupted|merchant_anniversary_reserved|bankboi_pending)$/.test(String(error.reason || error.message || error));
+      var recoverable = error.reason === "hunt_movement_owned" || error.commerceMovement || commerceRecovery || /^(interrupted|merchant_anniversary_reserved|bankboi_pending)$/.test(String(error.reason || error.message || error));
       activity.push({ level: recoverable ? "info" : "error", message: recoverable ? "Merchant order paused; progress preserved" : "Merchant order failed", details: String(error.reason || error.message || error) });
       try { await request("/merchant/complete", { method: "POST", body: {
         jobId: command.jobId, commandId: command.id, success: false,
-        failureKind: error.commerceMovement ? "commerce_movement" : commerceRecovery ? "commerce_recovery" : undefined, error: String(error.reason || error.message || error),
+        failureKind: error.reason === "hunt_movement_owned" ? "hunt_movement_owned" : error.commerceMovement ? "commerce_movement" : commerceRecovery ? "commerce_recovery" : undefined, error: String(error.reason || error.message || error),
         merchantWithdrawalsDelivered: command._merchantWithdrawalsCompleted || [],
         merchantBanked: command._merchantBankedCompleted || [], activity: activity,
       }}); } catch (_completeError) { /* The job was already cleared. */ }
+      if (error.reason === "hunt_movement_owned") return;
       throw error;
     }
   }
@@ -6946,7 +7069,7 @@
     await heartbeat();
     var heartbeatTimer = setInterval(heartbeat, 5000), suspendedGathering = null, actionStarted = false;
     try {
-      if (["merchant-npc-sale", "merchant-deconstruct", "merchant-commerce"].indexOf(command.type) >= 0) {
+      if (["merchant-npc-sale", "merchant-deconstruct", "merchant-commerce", "merchant-upgrade-preview"].indexOf(command.type) >= 0) {
         suspendedGathering = gatheringMode;
         gatheringGeneration += 1; root.__merchantGatheringGeneration = gatheringGeneration;
         if (gatheringTimer) clearInterval(gatheringTimer);
@@ -6960,12 +7083,13 @@
           await new Promise(function (resolve) { setTimeout(resolve, 100); });
         }
       }
-      if (command.type === "merchant-commerce" && character.stand) await close_stand();
+    if (["merchant-commerce","merchant-upgrade-preview"].indexOf(command.type)>=0 && character.stand) await close_stand();
       if (command.commerceProgressVersion === 2) await recoverProductionJournal();
+      if (root.localStorage.getItem("party-preview-supplies:"+character.name)) await restoreUpgradePreviewSupplies();
       luckyUpgradeSlot = command.luckyUpgradeSlot;
       if (luckyUpgradeService && luckyUpgradeService.pending()) await luckyUpgradeService.recover();
       else if (character.ctype === "merchant" && root.localStorage.getItem("party-lucky-upgrade:" + character.name)) await merchantLuckyUpgrade().recover();
-      if (command.commerceProgressVersion !== 2 && freeInventorySlots() > 0) await merchantLuckyUpgrade().tidy(luckyUpgradeSlot);
+      if (command.type !== "merchant-upgrade-preview" && command.commerceProgressVersion !== 2 && freeInventorySlots() > 0) await merchantLuckyUpgrade().tidy(luckyUpgradeSlot);
       actionStarted = true;
       return await action();
     } catch (error) {
@@ -8918,6 +9042,8 @@
       command, "merchant potion restock", function () { return afterCombat(function () {
         return merchantSelfRestock(command);
       }, "merchant potion restock"); });
+    if (command.type === "merchant-upgrade-preview" && character.ctype === "merchant") return runMerchantJob(
+      command, "upgrade preview", function () { return merchantUpgradePreview(command); });
     if (command.type === "merchant-commerce" && character.ctype === "merchant") return runMerchantJob(
       command, "merchant shopping and crafting", function () {
         return afterCombat(function () { return merchantCommerce(command); }, "merchant shopping and crafting");
@@ -9483,7 +9609,6 @@
         if (!consoleMaintenanceBusy() && typeof stop === 'function') await stop('smart');
         return;
       }
-      if (state.upgradePreview) await handleUpgradePreview(state.upgradePreview);
       await applyMerchantVisibility(state.merchantVisibility);
       if (character.ctype === "merchant") await flushNativePurchaseReceipts();
       if (character.ctype === "merchant" && character.stand && !merchantIdleActive && !root.__merchantActiveJob &&

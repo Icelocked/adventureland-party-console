@@ -105,6 +105,7 @@ export function ownMerchantCommand(
   status: ServiceStatus,
   inputs: CommandInputs,
 ): MerchantCommand {
+  if (job.reason === "upgrade preview") return {id,type:"merchant-upgrade-preview",jobId:job.id,upgradePreview:job.upgradePreview};
   const work = inputs.work(job.target);
   return scopeWork(job, {
     id,
@@ -119,6 +120,7 @@ export function ownMerchantCommand(
     ...(inputs.sharedAutoCompounds ? { autoCompounds: inputs.sharedAutoCompounds, sharedBankImprovements: true } : {}),
     ...(job.reason === "auto upgrade" && inputs.bankUpgradeRules?.length ? { bankUpgradeRules: inputs.bankUpgradeRules } : {}),
     goldTarget: goldTarget(work, 0),
+    buyUpgradeBatchSize: inputs.buyUpgradeBatchSize ?? 1,
     order: job.order || null,
     resumeState: job.resumeState || null,
     ...commerceDetails(job),

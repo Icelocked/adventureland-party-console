@@ -66,7 +66,7 @@ const configFields = [
   "characterAppearances", "merchantRules",
   "bankboiPrefix", "anniversaryAutoChat", "farmingProfiles",
   "passiveRareHunts", "passiveHunting", "phoenixRouteOrder",
-  "threshold", "itemCollectionThreshold",
+  "threshold", "itemCollectionThreshold", "buyUpgradeBatchSize",
   "marked", "merchantMarked", "autoItemMarks", "merchantDeliveries",
   "standListings", "npcSaleMarks", "deconstructionMarks", "autoDeconstruction",
   "deconstructionCatalog", "autoNpcSales", "autoStandMarks",

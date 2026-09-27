@@ -460,7 +460,7 @@ export function startCoordinatorApplication(
       persist: persistSettings,
       now: () => Date.now(),
     });
-    const upgradePreviews = createUpgradePreviews(party);
+    const upgradePreviews = createUpgradePreviews(party, {persist:persistSettings, dispatch:dispatchMerchant, stamp:stampMerchantJob});
     const heartbeatResponse = coordinatorPolicies.createCoordinatorHeartbeatResponse(party, {
       now: () => Date.now(),
       activeNames: () => activeNames().filter(n => n === party.merchantCharacter || farmingScopes.owner(n) === party.leader),
@@ -982,7 +982,6 @@ export function startCoordinatorApplication(
           if (maintenance) return { serverNow: Date.now(), consoleMaintenance: maintenance };
           const lease = mode ? undefined : dashboardStream.lease(name);
           return { ...(soloFor(name)?.heartbeatResponse || heartbeatResponse).response(name, mode),
-            upgradePreview: upgradePreviews.next(name),
             merchantVisibility: merchantVisibility(party, name, Date.now()),
             ...(party.statuses[name]?.dashboardRuntime ? { dashboardLease: lease } : {}) };
         },

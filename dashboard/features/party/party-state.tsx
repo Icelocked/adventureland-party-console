@@ -66,6 +66,7 @@ export type PartyState = {
   };
   threshold: number;
   itemCollectionThreshold?: number;
+  buyUpgradeBatchSize?: number;
   characters: Record<string, Char>;
   roster?: RosterMember[];
   activeSlots?: ActiveSlot[];

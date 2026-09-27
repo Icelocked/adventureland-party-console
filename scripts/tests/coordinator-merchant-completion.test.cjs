@@ -52,3 +52,18 @@ test('empty deferred work creates no follow-up, and automatic upgrade marks keep
   assert.deepEqual(f.calls.filter(c=>c[0]==='queue'),upgrades.length?[['queue',['F'],'auto upgrade']]:[]);
  }
 });
+
+
+test('Hunt ownership defers once with the same job identity and preserved progress',()=>{
+ const f=fixture({job:{reason:'merchant commerce',queuedAt:123,retryCount:2,resumeState:{phase:'leveling',attempts:17,spent:400}}});
+ const job=f.state.merchantCurrent;
+ const body={jobId:job.id,commandId:job.commandId,success:false,failureKind:'hunt_movement_owned',error:'hunt_movement_owned'};
+ const route=createMerchantCompletionRoute(f.state,f.ports);
+ route({body},f.response);route({body},f.response);
+ assert.equal(f.state.merchantQueue.length,1);
+ const q=f.state.merchantQueue[0];assert.equal(q.id,job.id);assert.equal(q.queuedAt,123);assert.equal(q.retryCount,2);
+ assert.deepEqual(q.resumeState,job.resumeState);assert.equal(q.commandId,undefined);
+ f.state.merchantCurrent={...q,commandId:999};
+ const current=f.state.merchantCurrent;route({body:{...body,commandId:123}},f.response);
+ assert.equal(f.response.code,409);assert.equal(f.state.merchantCurrent,current);
+});

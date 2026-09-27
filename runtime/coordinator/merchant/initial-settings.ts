@@ -15,6 +15,7 @@ interface SavedListing extends Partial<StandMark> {
   queuedAt?: number;
 }
 interface SavedMerchantSettings {
+  upgradePreviewResults?: Record<string, import("./upgrade-preview.ts").StoredUpgradePreview>;
   giveawayAttempts?: Record<string, number>;
   deconstructionMarks?: DeconstructionMark[];
   autoDeconstruction?: DeconstructionRules;
@@ -40,6 +41,7 @@ export function defaultMerchantRoutinePriorities(): Record<string, number> {
     "auto npc sales": 80,
     "auto npc sale pickup": 80,
     "manual marketplace purchases": 76,
+    "upgrade preview": 70,
     "manual upgrades": 70,
     "auto upgrade": 70,
     "manual compounds": 70,
@@ -89,6 +91,7 @@ export function defaultMerchantAutomations(): Record<string, boolean> {
 /** Fill legacy listing metadata while retaining saved automation overrides, including false and zero. */
 export function initialMerchantSales(settings: SavedMerchantSettings, now: () => number) {
   return {
+    upgradePreviewResults: settings.upgradePreviewResults || {},
     giveawayAttempts: settings.giveawayAttempts || {},
     standListings: (settings.standListings || []).map((entry, index) => ({
       ...entry,

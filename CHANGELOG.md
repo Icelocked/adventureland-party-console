@@ -11,6 +11,8 @@ from the commits merged into `main`.
 
 ### Added
 
+- Refresh upgrade chances is a prioritized merchant job that borrows missing scrolls and offerings from the bank without buying supplies, returns them after calculation with interrupted-transfer recovery, and saves results across reopenings and restarts. Any real merchant upgrade invalidates saved chances; the menu shows queued/running status and missing supplies.
+
 - Steam primary/login actions can launch a local Windows or native Linux client,
   or attach to a running client with automation enabled. The bridge must be ready
   before headless ownership is released; completion still requires native CODE
@@ -18,7 +20,17 @@ from the commits merged into `main`.
   client without automation enabled requires one close and retry. Windows was
   verified live; Linux has protocol tests and still needs live desktop validation.
 
+### Added
+
+- Merchant setting for upgrade purchase batches (default 1), with bulk starting-tier scrolls, durable item ownership, and completion of every purchased item.
+
 ### Fixed
+
+- Prevent Town-rally arrival from falsely failing Hunt runtime readiness; defer merchant work while Hunt owns movement instead of repeatedly failing handoffs.
+
+- Buy-with-upgrade follows relocated items and requires a matching server failure
+  before logging destruction or buying another base item. Uncertain outcomes retain
+  their journals instead of abandoning partially upgraded survivors.
 
 - Updated Hunt and farming UI test fixtures for execution-state clearing and the
   preferred-spawn dialog; nested-dialog checks count only open dialogs.

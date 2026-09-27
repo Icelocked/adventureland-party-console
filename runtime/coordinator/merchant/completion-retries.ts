@@ -11,6 +11,7 @@ import type {
 
 interface RetryDecision {
   movement: boolean;
+  movementOwned: boolean;
   realm: boolean;
   storageYield: boolean;
   anniversaryYield: boolean;
@@ -33,13 +34,14 @@ function classify(job: CompletionJob, body: CompletionReport): RetryDecision {
   const realm = realmFailure(body), movement = commerceRouteFailure(job, body) ||
     improvementCommunicationFailure(job, body);
   return {
+    movementOwned: failed && body.failureKind === "hunt_movement_owned",
     movement,
     realm,
     storageYield,
     anniversaryYield,
     rendezvous,
     interruptedCommerce: interrupted && job.reason === "merchant commerce",
-    retry: retryDecision(job, {movement, realm, storageYield, anniversaryYield, rendezvous}, interrupted),
+    retry: retryDecision(job, {movementOwned: failed && body.failureKind === "hunt_movement_owned", movement, realm, storageYield, anniversaryYield, rendezvous}, interrupted),
   };
 }
 function improvementCommunicationFailure(job: CompletionJob, body: CompletionReport): boolean {
@@ -69,6 +71,7 @@ function completionMessage(
   body: CompletionReport,
   decision: RetryDecision,
 ): string {
+  if (decision.movementOwned) return "Merchant work deferred until Hunt releases movement";
   if (decision.movement) return "Merchant work queued for movement retry; progress preserved";
   if (decision.anniversaryYield) return "Merchant paused for anniversary; preserving job";
   if (decision.realm) return "Merchant target changed realm; preserving unfinished work";
@@ -91,7 +94,7 @@ function resourceLimited(
   );
 }
 function retryIncrement(decision: RetryDecision): number {
-  return decision.storageYield || decision.anniversaryYield || decision.rendezvous ? 0 : 1;
+  return decision.movementOwned || decision.storageYield || decision.anniversaryYield || decision.rendezvous ? 0 : 1;
 }
 
 export function createCompletionRetries(state: CompletionState, ports: CompletionPorts) {
@@ -153,12 +156,12 @@ export function createCompletionRetries(state: CompletionState, ports: Completio
     if (!decision.retry) return;
     const retry: CompletionJob = {
       ...job,
-      id: "merchant-" + ports.now() + "-" + ports.nextCommand(),
+      id: decision.movementOwned ? job.id : "merchant-" + ports.now() + "-" + ports.nextCommand(),
       resumedFrom: job.id,
       retryCount: (Number(job.retryCount) || 0) + retryIncrement(decision),
       rendezvousRetryCount: (Number(job.rendezvousRetryCount) || 0) + (decision.rendezvous ? 1 : 0),
       retryAt: decision.rendezvous ? ports.now() + 10000 : 0,
-      queuedAt: ports.now(),
+      queuedAt: decision.movementOwned ? job.queuedAt : ports.now(),
     };
     retryRecoveryDelay(job, retry, decision, ports.now());
     if (decision.realm) realmRetry(job, retry, ports.now());
@@ -172,7 +175,7 @@ export function createCompletionRetries(state: CompletionState, ports: Completio
     delete retry.checkpointAt;
     delete retry.handoff;
     delete retry.itemMarksCleared;
-    state.merchantQueue.unshift(ports.stamp(retry));
+    if (!state.merchantQueue.some(queued => queued.id === retry.id)) state.merchantQueue.unshift(ports.stamp(retry));
     if (job.reason === "merchant luck")
       ports.log(
         "Retrying failed Merchant's Luck itinerary leg without returning to stand",
@@ -184,7 +187,7 @@ export function createCompletionRetries(state: CompletionState, ports: Completio
 }
 
 function retryDecision(job: CompletionJob, decision: Omit<RetryDecision, 'retry' | 'interruptedCommerce'>, interrupted: boolean): boolean {
-  return decision.movement || decision.realm || retryAllowed(job,
+  return decision.movementOwned || decision.movement || decision.realm || retryAllowed(job,
     decision.storageYield || decision.anniversaryYield || decision.rendezvous, interrupted);
 }
 function movementRetry(job: CompletionJob, retry: CompletionJob, now: number): void {

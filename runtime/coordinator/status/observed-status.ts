@@ -17,6 +17,7 @@ export interface ObservedInventoryEntry extends InventoryEntry {
 /** Latest character heartbeat after ingestion stamps its coordinator observation time. */
 export interface ObservedCharacterStatus extends HeartbeatStatus, AnniversaryMerchantStatus {
   upgradePreviewSession?: string;
+  upgradePreviewRevision?: string;
   upgradeInventoryBusy?: boolean;
   seenAt: number;
   clientVersion?: number;
