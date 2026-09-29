@@ -53,6 +53,10 @@ type ObservationPorts<R extends Report> = Omit<
   publish: () => void;
 };
 
+function isOwnedMerchant(owned: unknown): boolean {
+  return !!owned && typeof owned === "object" && "type" in owned && owned.type === "merchant";
+}
+
 /** Compose ordered heartbeat consumers while retaining live ownership, report and market state. */
 export function createCoordinatorStatusIngestion<R extends Report>(
   state: ObservationState<R>,
@@ -74,8 +78,7 @@ export function createCoordinatorStatusIngestion<R extends Report>(
       // Roster discovery alone must not pick an offline merchant or a storage worker.
       if (state.merchantCharacter || body.ctype !== "merchant" || state.bankbois?.[body.name] ||
           !state.headlessSlots.includes(body.name) && !state.steamMembers.includes(body.name)) return;
-      const owned = ports.owned(body.name);
-      if (!owned || typeof owned !== "object" || !("type" in owned) || owned.type !== "merchant") return;
+      if (!isOwnedMerchant(ports.owned(body.name))) return;
       state.merchantCharacter = body.name;
       ports.persist();
     },

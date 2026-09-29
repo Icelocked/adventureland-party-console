@@ -26,6 +26,8 @@ from the commits merged into `main`.
 
 ### Fixed
 
+- Restore coordinator lint compliance by extracting travel-attacker collection, assembly runtime lookup, and merchant eligibility helpers without changing behavior.
+
 - Handle movement-barrier ownership rejections without reporting a new route failure: superseded walks retire quietly, early departures wait, and completed transitions are not repeated. Preserve genuine route errors and communication recovery (#27).
 
 - Preserve ALData marketplace sale commands across realm-switch worker restarts until completion (#26).

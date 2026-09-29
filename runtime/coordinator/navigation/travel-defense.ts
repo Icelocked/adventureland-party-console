@@ -51,8 +51,7 @@ function includeAttacker(party:DefenseState,passing:Map<string,PassingEncounter>
   if(passing.get(passingIdentity(attacker))?.keepMoving && !passiveStopRequired(party.passiveHunting,attacker.mtype))return false;
   return passiveStopRequired(party.passiveHunting,attacker.mtype) || outboundHunt(c) || !!departure || !!c?.continuousReturn || !passing.has(passingIdentity(attacker));
 }
-/** Travel consults live targeting, never retained engagements or recent outgoing hits. */
-export function classifyTravelDefense(party: DefenseState, names: string[], now = Date.now(), includePassingAttackers = false): DefenseResult {
+function observeTravelAttackers(party: DefenseState, names: string[], now: number, includePassingAttackers: boolean): Pick<DefenseResult, 'attackers' | 'waiting'> {
   const waiting: string[] = [], found = new Map<string, CurrentAttacker>();
   const dead = confirmedDeaths(party);
   const passing = includePassingAttackers ? new Map<string,PassingEncounter>() : passingForDefense(party,names,now);
@@ -66,7 +65,12 @@ export function classifyTravelDefense(party: DefenseState, names: string[], now 
       }
     }
   }
-  const attackers = [...found.values()];
+  return { attackers: [...found.values()], waiting };
+}
+
+/** Travel consults live targeting, never retained engagements or recent outgoing hits. */
+export function classifyTravelDefense(party: DefenseState, names: string[], now = Date.now(), includePassingAttackers = false): DefenseResult {
+  const { attackers, waiting } = observeTravelAttackers(party, names, now, includePassingAttackers);
   const defend = huntNeedsDefense(party,names,attackers,now);
   if (defend) return { state: "defending", attackers, waiting,
     message: defenseMessage(party,attackers) };
