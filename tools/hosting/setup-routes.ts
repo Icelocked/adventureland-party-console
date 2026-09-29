@@ -9,6 +9,7 @@ import { trustHelper } from './trust.ts';
 import { requestOrigin } from './request-origin.ts';
 import { transfer } from './setup-transfer.ts';
 export interface Options {
+  debug?: import('../debug/service.ts').DebugInstances;
   steam?: import('../steam/service.ts').LocalSteam;
   tls?: LocalTLS;
   updates?: import('../update/hosting.ts').UpdateRoutes;

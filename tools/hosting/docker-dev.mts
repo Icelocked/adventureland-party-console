@@ -2,12 +2,14 @@
 import { cp, mkdir, readFile, writeFile, rm, symlink } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
+import { grantDockerSocket } from '../debug/docker-access.ts';
 
 const seed = '/opt/party-seed';
 const root = '/app';
 const uid = process.env.AL_DEV_UID || '1000';
 const gid = process.env.AL_DEV_GID || '1000';
 if (!/^\d+$/.test(uid) || !/^\d+$/.test(gid)) throw new Error('Invalid development UID/GID');
+await grantDockerSocket(uid);
 const identity = `${(await readFile(path.join(seed, 'seed-id'), 'utf8')).trim()}:${uid}:${gid}`;
 function run(command: string, args: string[]) {
   const result = spawnSync(command, args, { stdio: 'inherit', cwd: root });

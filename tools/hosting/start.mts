@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile, rename, symlink, lstat } from "node:fs/prom
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Access } from "./access.ts";
+import { DebugInstances } from '../debug/service.ts';
 import { listen } from "./listen.ts";
 import { gateway } from "./gateway.ts";
 import { accountConfig, sessionValue } from "./account.ts";
@@ -84,6 +85,7 @@ let steamServer: string | undefined;
 const steam = createLocalSteam(root, data, apiPort, async () => steamServer ??=
   (process.platform === 'linux' ? `https://localhost:${tls.publicPort}` : `http://127.0.0.1:${process.env.AL_PORT || 3010}`) + '/bridge/' + await access.steam());
 const server = gateway({
+  debug: await new DebugInstances(root, path.join(data, 'debug')).load(),
   steam,
   tls,
   access,

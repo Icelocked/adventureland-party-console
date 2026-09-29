@@ -12,6 +12,11 @@ from the commits merged into `main`.
 
 ### Added
 
+- Settings can launch a disposable Cave of Many Dreams debug server and separate
+  Party Console with a god-equipped party and unlimited visits. Startup shows
+  progress; Stop running cancels startup or destroys the instance and saved data.
+  Supports Windows/Linux Docker engines and Docker-hosted consoles with engine access.
+
 - Cave progress clears required rooms and travels through stairs automatically,
   pausing for combat, loot, revival and manual choices. Pause/continue controls
   preserve manual routing; leaving the final floor remains a manual decision.

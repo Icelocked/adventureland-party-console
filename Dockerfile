@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1
+FROM docker:28-cli AS docker-client
 FROM --platform=$BUILDPLATFORM node:24.14.0-bookworm-slim AS build
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
@@ -19,6 +20,8 @@ RUN rm -rf /app/node_modules /app/dashboard/node_modules /app/.caracal/node_modu
 
 FROM node:24.14.0-bookworm-slim AS development
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates tini gosu && rm -rf /var/lib/apt/lists/*
+COPY --from=docker-client /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=docker-client /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
 WORKDIR /opt/party-seed
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -38,6 +41,8 @@ FROM node:24.14.0-bookworm-slim AS production
 ARG RELEASE_VERSION=development
 LABEL org.opencontainers.image.title="Adventureland Party Console" org.opencontainers.image.version=$RELEASE_VERSION org.opencontainers.image.source="https://github.com/ryan-haines/adventureland-party-console"
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tini gosu && rm -rf /var/lib/apt/lists/*
+COPY --from=docker-client /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=docker-client /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
 WORKDIR /app
 COPY --from=build /app/package.json /app/package-lock.json ./
 COPY --from=build /app/dashboard/package.json /app/dashboard/package-lock.json ./dashboard/
@@ -53,3 +58,16 @@ VOLUME ["/data"]
 HEALTHCHECK --interval=30s --start-period=60s CMD node -e "fetch('http://127.0.0.1:'+process.env.AL_PORT+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "tools/hosting/docker-production.mts"]
+
+FROM node:24.14.0-bookworm-slim AS debug-browser
+RUN npm install --prefix /opt/browser @playwright/test@1.63.0 && /opt/browser/node_modules/.bin/playwright install --with-deps chromium
+
+FROM debug-browser AS debug
+WORKDIR /app
+COPY --from=production /app /app
+ENV NODE_ENV=production AL_DEBUG_INSTANCE=1 AL_DATA_DIR=/data AL_HOST=0.0.0.0 AL_PORT=3010
+HEALTHCHECK --interval=3s --timeout=3s --start-period=300s CMD node -e "fetch('http://127.0.0.1:3010/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["node", "tools/debug/instance.mts"]
+
+# Preserve the ordinary image as the default docker build target.
+FROM production AS release

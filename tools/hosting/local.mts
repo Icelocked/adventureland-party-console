@@ -10,6 +10,7 @@ import { updateHosting } from '../update/hosting.ts';
 import { LocalTLS } from './tls.ts';
 import { configureDashboardGateway } from '../dashboard/gateway-access.ts';
 import { createLocalSteam } from '../steam/service.ts';
+import { DebugInstances } from '../debug/service.ts';
 configureDashboardGateway();
 const root = fileURLToPath(new URL("../../", import.meta.url)),
   services = new Services();
@@ -21,7 +22,7 @@ const tls = new LocalTLS(root, data);
 let steamServer: string | undefined;
 const steam = createLocalSteam(root, data, 924, async () => steamServer ??= (process.platform === 'linux'
   ? `https://localhost:${tls.publicPort}` : `http://127.0.0.1:${process.env.AL_PORT || 3010}`) + '/bridge/' + await access.steam());
-const server = gateway({ steam, tls, access, updates: await updateHosting(root, data), configured: () => true, healthy: () => servicesHealthy(true), dashboardPort: 3030, publicUrl: process.env.AL_PUBLIC_URL || undefined });
+const server = gateway({ steam, tls, access, debug: await new DebugInstances(root, path.join(data, 'debug')).load(), updates: await updateHosting(root, data), configured: () => true, healthy: () => servicesHealthy(true), dashboardPort: 3030, publicUrl: process.env.AL_PUBLIC_URL || undefined });
 await listen(server, access);
 await tls.start();
 if (!process.argv.includes("--coordinator-only"))

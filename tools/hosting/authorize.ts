@@ -78,6 +78,11 @@ export async function authorizeBrowser(
   return await routeBrowser(req, res, url, options);
 }
 async function routeBrowser(req: IncomingMessage, res: ServerResponse, url: URL, options: Options) {
+  if (url.pathname === '/console-debug' || url.pathname.startsWith('/console-debug/')) {
+    if (options.debug) await options.debug.route(req, res, url.pathname);
+    else json(res, 503, { error: 'Debug instances are unavailable on this console.' });
+    return false;
+  }
   if (url.pathname === '/console-update' || url.pathname.startsWith('/console-update/')) {
     if (options.updates) await options.updates.route(req, res, url.pathname);
     else json(res, 503, { error: 'Update service is unavailable' });

@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { gateway } from '../tools/hosting/gateway';
 import { Access } from '../tools/hosting/access';
+import { DebugInstances } from '../tools/debug/service';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -99,7 +100,8 @@ export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantCo
     }
     const access = new Access(path.join(directory, 'access.json'));
     await access.load();
-    const server = gateway({ access, configured: () => true, dashboardPort: dashboard.port, apiPort: port });
+    const debug = await new DebugInstances(root, path.join(directory, 'debug')).load();
+    const server = gateway({ access, debug, configured: () => true, dashboardPort: dashboard.port, apiPort: port });
     let app: App | undefined;
     try {
       await start();
@@ -117,6 +119,10 @@ export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantCo
       await use(app);
     } finally {
       try {
+        if ((await debug.status()).project) {
+          await debug.stop();
+          await expect.poll(async () => (await debug.status()).phase, { timeout: 120_000 }).toBe('stopped');
+        }
         if (app) {
           try { await testInfo.attach('final-state', { body: JSON.stringify(await app.state(), null, 2), contentType: 'application/json' }); }
           catch (error) { await testInfo.attach('state-error', { body: String(error), contentType: 'text/plain' }); }

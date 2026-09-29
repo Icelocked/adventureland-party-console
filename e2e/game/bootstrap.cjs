@@ -1,7 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const webUrl = 'http://127.0.0.1:8083';
-const gameUrl = 'http://127.0.0.1:9003';
+const webUrl = process.env.AL_DEBUG_INSTANCE === '1' ? 'http://127.0.0.1:8090' : 'http://127.0.0.1:8083';
+const gameUrl = process.env.AL_DEBUG_INSTANCE === '1' ? 'http://127.0.0.1:7192' : 'http://127.0.0.1:9003';
 const roster = [
   { name: 'E2EWarrior', type: 'warrior' },
   { name: 'E2EPriest', type: 'priest' },
