@@ -54,3 +54,13 @@ Full-suite follow-up failure modes (recorded before the recovery change):
   stopping movement. Native range checks and all-party admission still gate the
   eventual attack. Seed the E2E encounter ahead on an actual walking leg rather
   than introducing it at the last possible melee-range instant.
+- A delayed Town packet can arrive after walking recovery starts, moving one
+  member back to Town and interrupting its walk. After the bounded recovery hold,
+  preparing from the retained Town rally while the leader remains far away loops
+  on "Leader moved from planning origin". Reassemble at that rally before route
+  preparation, then plan from the leader's actual stopped position. Preserve the
+  walking timeout, recovery budget, owner checks and restart behavior.
+- Ambient Bee damage can interrupt the leader's cast before the partial-Town test
+  injects its follower-only interruption. Seed peaceful Bees for this navigation
+  scenario, recording and restoring their aggression settings; native casting,
+  interruption, walking, collision and reward handling remain under test.

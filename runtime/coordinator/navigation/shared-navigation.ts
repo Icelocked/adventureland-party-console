@@ -73,10 +73,17 @@ function begin(state: SharedState, c: SharedConvoy, now: number): boolean {
   delete c.missingRoutes;
   const leader = state.statuses[c.leader];
   if (!compatible(state, c, now) || !leader || leader.moving || leader.transporting) return false;
+  // A late Town transport can interrupt the walking rally. A recovery hold
+  // does not imply that its destination has been reached by the whole party.
+  if (c.returnTownRally && members(c).some(n => distance(state.statuses[n]!, c.returnTownRally!) > 55)) {
+    reassembleReturn(state, c);
+    return true;
+  }
   c.phase = "shared-prepare";
   delete c.arrivalReadySince;
   c.routeVersion = (c.routeVersion || 0) + 1;
-  c.rally = c.returnTownRally || point(leader); c.departAt = null; c.sharedReadySince = 0;
+  c.rally = point(leader); c.departAt = null; c.sharedReadySince = 0;
+  delete c.returnTownRally;
 
   c.routeServer = leader.server;
   c.sharedStartedAt = now; c.sharedProgressAt = now; c.sharedPreparationStartedAt = now; c.sharedDistances = {}; c.sharedPositions = {};
