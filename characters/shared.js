@@ -2618,6 +2618,7 @@
           error && error !== "error" ? (error.message || error) : status;
         var context = { method: options.method || "GET", path: String(path).split(/[?#]/)[0],
           status: httpStatus, kind: kind, reason: diagnosticText(reason || kind) };
+        if (xhr && xhr.responseJSON && typeof xhr.responseJSON.code === "string") context.code = xhr.responseJSON.code;
         var failure = new Error(context.method + " " + context.path + " · " +
           (httpStatus ? "HTTP " + httpStatus + " · " : "") + kind +
           (context.reason && context.reason !== kind && context.reason !== "error" ? ": " + context.reason : ""));
@@ -13255,23 +13256,34 @@
       },
       barrier: command.phase === 'plan-return' || command.routeVersion == null ? undefined : function(step, index, completed) {
         var began=convoyDiagnosticClock(), attempts=0, lastFailure;
-        function owned() {
+        function matchesOwner() {
           var c=convoyTraveling, signal=convoySignal;
           return c && c.id===command.convoyId && c.commandId===command.id && signal &&
             signal.id===command.convoyId && Number(signal.epoch)===Number(command.epoch) &&
             Number(signal.commandId)===command.id && signal.runtimeId===convoyRuntimeId &&
-            signal.routeVersion===command.routeVersion && !convoySignalExpired(signal);
+            signal.routeVersion===command.routeVersion;
+        }
+        function owned() { return matchesOwner() && !convoySignalExpired(convoySignal); }
+        function ownerError() {
+          var waiting = !convoySignal || matchesOwner();
+          return Object.assign(new Error(waiting ? 'Barrier waiting for current coordinator signal' : 'Barrier owner superseded'),
+            {partyRequest:{path:'/movement-barrier',method:'POST',kind:waiting ? 'network' : 'aborted',status:0}});
         }
         function attempt() {
           if(lastFailure && convoyDiagnosticClock()-began>=10000)return Promise.reject(lastFailure);
-          if(!owned())return Promise.reject(Object.assign(new Error('Barrier waiting for current coordinator signal'),
-            {partyRequest:{path:'/movement-barrier',method:'POST',kind:'network',status:0}}));
+          if(!owned())return Promise.reject(ownerError());
         return request('/movement-barrier', {method:'POST',timeout:Math.max(1,Math.min(2000,10000-(convoyDiagnosticClock()-began))),body:Object.assign(sharedConvoyIdentity(command),{
           step:index, destination:step, completed:completed, ready:completed || ((command.continuousReturn === 1 || command.huntTarget) && !step.town || !departureCombatPending()) && (command.continuousReturn === 1 || command.huntTarget || eligibleDepartureChests().length === 0) && (!step.town || can_use('use_town'))
         })}).then(function(result){
-            if(!owned())throw Object.assign(new Error('Barrier owner superseded'),{partyRequest:{path:'/movement-barrier',kind:'aborted'}});
+            if(!owned())throw ownerError();
             return !!result.ready;
           }).catch(function(error){
+            var rejection=error && error.partyRequest;
+            if(rejection && rejection.path==='/movement-barrier' && rejection.status===409 && rejection.code==='before-departure') {
+              if(!owned())throw ownerError();
+              // Let the executor poll again without casting or replaying an acknowledged transition.
+              return false;
+            }
             lastFailure=error;
             if(!convoyRetryableRequest(error) || !owned() || convoyDiagnosticClock()-began>=10000)throw error;
             var delay=Math.min(1000,250*Math.pow(2,attempts++));
@@ -13907,6 +13919,12 @@
       game_log("Arrived with party at " + (command.label || "selected monster"), "#51D2E1");
     } catch (error) {
       if (!ownsConvoy()) return;
+      var barrierRejection=error && error.partyRequest;
+      if(barrierRejection && barrierRejection.path==='/movement-barrier' &&
+          (barrierRejection.kind==='aborted' || barrierRejection.status===409 && barrierRejection.code==='superseded')) {
+        convoy.cancelled=true; convoy.routeReady=false; convoy.phase='superseded';
+        return;
+      }
       if (command.routeProtocol === 4 && convoyRetryableRequest(error))
         convoyCommunication(convoy, error.partyRequest.path, error.partyRequest.kind);
       if (convoy.communication) {

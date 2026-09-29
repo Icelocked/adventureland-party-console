@@ -1,5 +1,42 @@
 # Movement and marketplace failure regressions
 
+## Barrier ownership (#27)
+
+Failure modes recorded before the barrier fix:
+
+- HTTP transport drops the server's rejection code, conflating supersession,
+  early departure, and invalid itineraries.
+- A superseded barrier fails the movement promise and reports a fresh convoy
+  failure instead of retiring the old walk; late replies can affect replacement
+  ownership or leave the old promise unresolved.
+- An early-departure rejection dispatches a transition too soon, consumes route
+  retries, or replays a transition whose arrival is already being acknowledged.
+- Unknown 409 errors are swallowed, while true timeouts lose bounded retry and
+  communication-hold behavior.
+- Movement diagnostics label an ownership cancellation as a terminal failure.
+
+Extend retained barrier/transport and shared-convoy integration checks before
+production edits. These exceptions inject exact HTTP races through maintained
+client functions and the movement executor; the native fixture cannot reliably
+schedule a coordinator epoch change between a barrier request and its response.
+Keep existing native convoy/Town E2Es as the game-behavior validation and retain
+their checksummed artifacts. No claim is made that those journeys inject #27.
+
+Barrier rejection codes remain attached to request errors. A superseded 409 or
+locally replaced barrier owner cancels only the old movement and retires its
+convoy coroutine without sending `/convoy-failed`. A matching before-departure
+409 returns a wait to the executor, which polls again without repeating an
+already completed transition. Missing/expired leases retain communication
+recovery; invalid or unrecognized rejections retain failure handling.
+
+Repeat the retained checks with `node --test scripts/tests/barrier-communication.test.cjs
+scripts/tests/movement-barrier.test.cjs scripts/tests/shared-convoy.test.cjs
+scripts/tests/convoy-communication.test.cjs scripts/tests/movement-service.test.cjs`.
+Publish the character assets and use the full supported restart from the
+coordinator README to activate this change; building alone does not activate it.
+
+## Planner and marketplace failures (#29, #26)
+
 Failure modes recorded before implementation for issues #29 and #26:
 
 - A planner rejection becomes HTTP 503 and is mistaken for a transport outage,

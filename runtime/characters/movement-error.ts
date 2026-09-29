@@ -11,7 +11,10 @@ export function retryableMovementRequest(value: unknown): boolean {
 }
 
 export function movementFailureCause(failure: unknown, cause?: Record<string, unknown>): Record<string, unknown> | undefined {
-  const request = movementError(failure).partyRequest;
+  const request = movementError(failure).partyRequest as {path?: string; kind?: string; status?: number; code?: string} | undefined;
   if (!request) return cause;
+  if (request.path === '/movement-barrier' &&
+      (request.kind === 'aborted' || request.status === 409 && request.code === 'superseded'))
+    return {...cause, partyRequest: request, code: 'superseded'};
   return {...cause, partyRequest: request, ...(retryableMovementRequest(failure) ? {code: 'convoy-communication-hold'} : {})};
 }

@@ -26,6 +26,8 @@ from the commits merged into `main`.
 
 ### Fixed
 
+- Handle movement-barrier ownership rejections without reporting a new route failure: superseded walks retire quietly, early departures wait, and completed transitions are not repeated. Preserve genuine route errors and communication recovery (#27).
+
 - Preserve ALData marketplace sale commands across realm-switch worker restarts until completion (#26).
 - Treat movement planner rejections as native-pathfinding fallback results instead of communication outages. Distinguish fallback, terminal movement failures, and temporary communication holds, and avoid duplicate command-failure logs for already reported movement outcomes (#29).
 

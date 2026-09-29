@@ -641,6 +641,46 @@ test('planning-origin drift regroups without spending the Hunt route budget',()=
  assert.equal(c.failureCode,'assembly-timeout');assert.equal(p.monsterHunt.routeRecovery,undefined);
 });
 
+for(const rejection of ['superseded','before-departure','invalid-step'])for(const completed of [false,true])
+test('barrier '+rejection+' during '+(completed?'arrival':'departure')+' preserves convoy ownership semantics',async()=>{
+ const p=party(),e=engine();e.step(p,1000);
+ const r=client('F',p),body=publication(p);
+ body.route.plot=[{map:'main',x:0,y:0,town:true},{map:'main',x:120,y:0}];
+ body.route.geometry={...r.context.movement.identity};
+ assert.equal(publishSharedRoute(p,body,1000),null);
+ const original=r.context.request;let rejected=false,observedTownCount;
+ r.context.request=async(url,options)=>{
+  if(url==='/movement-barrier' && !!options.body.completed===completed && !rejected){
+   rejected=true;observedTownCount=r.calls.filter(c=>c[0]==='use'&&c[1]==='town').length;
+   throw Object.assign(Error('Stale movement barrier owner'),{partyRequest:{path:url,kind:'http',status:409,code:rejection}});
+  }
+  return original(url,options);
+ };
+ const running=await r.start(p.commands.F);
+ r.context.convoySignal=e.signal(p,'F',1000);
+ r.tick();await settle();await settle();
+ r.context.convoySignal={...r.context.convoySignal,phase:'scheduled',departAt:4000,validUntil:20000};
+ r.tick();r.setNow(3950);
+ for(let i=0;i<100;i++){r.tick();await new Promise(resolve=>setTimeout(resolve,10));}
+ const calls=r.calls.slice(),last=r.context.movement.last(),local=r.context.convoyTraveling;
+ await r.cancel();await running.promise;
+ assert.equal(rejected,true,JSON.stringify(calls));assert.equal(observedTownCount,completed?1:0);
+ const failures=calls.filter(c=>c[0]==='request'&&c[1]==='/convoy-failed');
+ if(rejection==='invalid-step'){assert.equal(failures.length,1);return;}
+ assert.equal(failures.length,0);
+ assert.equal(p.activeConvoy.recoveryAttempts,undefined);
+ assert.ok(!calls.some(c=>c[0]==='log'&&/Convoy movement failed|Convoy failed/.test(c[1])));
+ if(rejection==='superseded') {
+  assert.equal(local,null);assert.equal(last.failureContext.code,'superseded');
+  assert.ok(calls.some(c=>c[0]==='diagnostic'&&c[1].phase==='Movement cancelled'));
+  assert.equal(calls.filter(c=>c[0]==='use'&&c[1]==='town').length,completed?1:0);
+ } else {
+  assert.equal(r.context.character.x,120);
+  assert.equal(calls.filter(c=>c[0]==='use'&&c[1]==='town').length,1);
+  assert.ok(calls.some(c=>c[0]==='request'&&c[1]==='/convoy-complete'));
+ }
+});
+
 for(const lostPhase of ['departure','completion'])test('native Town/transport survives lost '+lostPhase+' barrier response without duplicate transitions',async()=>{
  const p=party(),e=engine();p.activeConvoy.location={map:'cave',x:120,y:0};e.step(p,1000);
  const r=client('F',p);r.context.G.maps.main.doors=[[0,0,0,0,'cave',0,0]];

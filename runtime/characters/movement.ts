@@ -11,6 +11,11 @@ import { repairDoorApproaches } from '../navigation/door-approach.ts';
 import { planReturnCandidates } from './return-planner.ts';
 interface SegmentRepair { plot: Step[]; index: number; target: Point; started: boolean }
 interface Journey { repair?: SegmentRepair; repaired?: boolean; firstIssue?: Issue; failureContext?: Record<string, unknown>; id: string; context: MovementContext; options: MovementOptions; native: boolean; pending: boolean; searches: number; retries: number; started: number; planningAt: number; fallback: boolean; plannerMs?: number; requestMs?: number; distance?: number; transitions?: number; importedEngine?: string }
+const failurePhases = new Map([
+  ['superseded', 'Movement cancelled'],
+  ['convoy-communication-hold', 'Movement paused: coordinator communication unavailable'],
+  ['convoy-failure', 'Movement failed'],
+]);
 function arrivalTolerance(options: MovementOptions): number {
   const tolerance = options.arrivalTolerance ?? 20;
   if (!Number.isFinite(tolerance) || tolerance < 1) throw Error('Arrival tolerance must be at least 1');
@@ -66,8 +71,8 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
   }
   function engine(j: Journey) { return j.importedEngine || (j.native ? 'native' : 'alclient'); }
   function outcome(done: boolean, reason?: string, cause?: Record<string,unknown>): string {
-    if (cause?.code === 'convoy-communication-hold') return 'Movement paused: coordinator communication unavailable';
-    if (cause?.code === 'convoy-failure') return 'Movement failed';
+    const causePhase = failurePhases.get(String(cause?.code));
+    if (causePhase) return causePhase;
     if (done) return 'Native fallback succeeded';
     if (reason === 'Combat handoff') return 'Travel paused for combat';
     return /cancelled|replaced|superseded|stop|regroup|takeover|hold/i.test(reason || '') ? 'Movement cancelled' : 'Movement failed';
