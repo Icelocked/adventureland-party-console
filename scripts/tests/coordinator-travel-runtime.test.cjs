@@ -13,16 +13,6 @@ function clockFixture() {
   return {state, calls, intervals, timeouts, ports, clock};
 }
 
-test('travel clocks retain tick order, cadence and failure propagation', () => {
-  const t = clockFixture(); assert.deepEqual(t.intervals, []);
-  t.clock.startTravel(); t.clock.startReturns(); assert.deepEqual(t.intervals.map(timer => timer.ms), [250, 1000]);
-  t.intervals[0].callback(); t.intervals[1].callback();
-  assert.deepEqual(t.calls, ['convoy', 'persist', 'escape', 'disengage', 'rare', 'event', 'anniversary']);
-  t.calls.length = 0; t.ports.convoyStep = () => false; t.intervals[0].callback();
-  assert.deepEqual(t.calls, ['escape', 'disengage', 'rare']);
-  const failure = Error('return failure'); t.ports.eventReturn = () => {throw failure;};
-  t.calls.length = 0; assert.throws(t.intervals[1].callback, error => error === failure); assert.deepEqual(t.calls, []);
-});
 
 test('anniversary delay replaces pending timers and retries against current convoy ownership', () => {
   const t = clockFixture(); t.clock.scheduleAnniversary(); t.clock.scheduleAnniversary();

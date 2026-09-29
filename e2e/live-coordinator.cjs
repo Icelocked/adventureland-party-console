@@ -1,0 +1,109 @@
+// Production coordinator, with account/client-file transport pointed at the disposable upstream server.
+// Character status and every game action come from actual browser CODE runtimes.
+const fs = require('node:fs');
+const path = require('node:path');
+const { createRequire } = require('node:module');
+const root = path.resolve(__dirname, '..');
+const directory = path.resolve(process.env.E2E_DATA_DIR || '');
+const relative = path.relative(path.join(root, '.build/e2e'), directory);
+if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw Error('Dedicated E2E_DATA_DIR required');
+const webUrl = process.env.E2E_GAME_WEB_URL;
+if (!webUrl || !['localhost', '127.0.0.1'].includes(new URL(webUrl).hostname)) throw Error('Local upstream web URL required');
+const auth = process.env.E2E_GAME_AUTH;
+if (!auth) throw Error('Disposable account auth required');
+const port = Number(process.env.E2E_COORDINATOR_PORT);
+const nativeFetch = globalThis.fetch;
+async function localFetch(input, init) {
+  let url = new URL(String(input));
+  if (url.hostname === 'adventure.land') url = new URL(url.pathname + url.search, webUrl);
+  if (!['127.0.0.1', 'localhost', '::1'].includes(url.hostname)) throw Error('Unexpected nonlocal request: ' + url.origin);
+  return nativeFetch(url, init);
+}
+globalThis.fetch = localFetch;
+async function api(method, body = {}) {
+  const response = await localFetch(webUrl + '/api/' + method, { method: 'POST',
+    headers: { Cookie: 'auth=' + auth, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!response.ok) throw Error('Upstream API ' + method + ': ' + response.status);
+  return response.json();
+}
+const account = {
+  response: null, listeners: [],
+  async updateInfo() {
+    const raw = await api('servers_and_characters');
+    const info = Array.isArray(raw) ? raw[0] : raw.servers ? raw : raw.infs?.find(value => value.type === 'servers_and_characters');
+    if (!Array.isArray(info?.characters) || !Array.isArray(info?.servers)) throw Error('Local account API returned no roster');
+    this.response = info;
+    for (const listener of this.listeners) listener(info);
+    return info;
+  },
+  resolve_char(name) { return this.response.characters.find(character => character.name === name); },
+  resolve_realm(realm) { return this.response.servers.find(server => server.key === realm || server.region + server.name === realm); },
+  add_listener(listener) { this.listeners.push(listener); },
+};
+const resolve = createRequire(path.join(root, '.caracal/standalones/CharacterCoordinator.js'));
+let version;
+const platformDirectory = path.join(root, '.build/standalones');
+let gameDirectory;
+async function main() {
+  const dataResponse = await localFetch(webUrl + '/data.js');
+  if (!dataResponse.ok) throw Error('Upstream /data.js: ' + dataResponse.status);
+  const dataSource = await dataResponse.text();
+  const gameContext = {};
+  require('node:vm').runInNewContext(dataSource, gameContext, { timeout: 10000 });
+  version = Number(gameContext.G?.version);
+  if (!Number.isSafeInteger(version) || version < 1) throw Error('Upstream G.version missing');
+  gameDirectory = path.join(directory, 'game_files', String(version));
+  fs.mkdirSync(gameDirectory, { recursive: true });
+  await account.updateInfo();
+  for (const [name, route] of [['data.js', '/data.js'], ['old_common_functions.js', '/js/old_common_functions.js']]) {
+    const response = await localFetch(webUrl + route);
+    if (!response.ok) throw Error('Upstream asset ' + route + ': ' + response.status);
+    const source = await response.text();
+    fs.writeFileSync(path.join(gameDirectory, name), source);
+  }
+  // Production paths resolve relative to the launcher and cwd. All writable paths stay disposable.
+  fs.mkdirSync(platformDirectory, { recursive: true });
+  fs.mkdirSync(path.join(root, '.build/game_files', String(version)), { recursive: true });
+  fs.cpSync(gameDirectory, path.join(root, '.build/game_files', String(version)), { recursive: true });
+  for (const destination of [path.join(root, '.build/CODE/adventure_land'), path.join(directory, 'CODE/adventure_land')]) {
+    fs.mkdirSync(destination, { recursive: true });
+    fs.cpSync(path.join(root, '.build/game'), destination, { recursive: true });
+    for (const file of ['universal-loader.js', 'steam-bridge.js'])
+      fs.copyFileSync(path.join(root, '.build/runtime', file), path.join(destination, file));
+  }
+  process.chdir(directory);
+  process.env.AL_SESSION = auth;
+  process.env.AL_DATA_DIR = directory;
+  let startupError;
+  const logger = { log: console.log, info: console.log, warn: console.warn,
+    error: (...args) => { startupError = Error(args.map(String).join(' ')); console.error(...args); } };
+  const realm = account.response.servers.find(server => server.region === 'US' && server.name === 'I');
+  if (!realm) throw Error('Disposable US I realm was not registered');
+  const configuredCharacters = Object.fromEntries(account.response.characters.map(character =>
+    [character.name, { enabled: false, realm: realm.key, version }]));
+  const adapters = {
+    '../config': { characters: configuredCharacters, merchant: JSON.parse(process.env.E2E_MERCHANT_DEFAULT || '"E2EMerchant"'), watch_CODE: false, enable_TYPECODE: false,
+      web_app: { party_dashboard: true, expose_CODE: true, port } },
+    '../account_info': async () => account,
+    '../game_files': { ensure_latest: async () => version, cull_versions: async () => {},
+      available_versions: async () => [version], get_revision: async () => 'local-upstream',
+      locate_game_file: resource => path.join(gameDirectory, resource) },
+    '../api': api,
+    '../src/CONSTANTS': { LOCALSTORAGE_PATH: path.join(directory, 'state.jsonl'),
+      LOCALSTORAGE_ROTA_PATH: path.join(directory, 'rotation.jsonl'), STAT_BEAT_INTERVAL: 1000 },
+    '../src/LogUtils': { log: logger, console: logger, ctype_to_clid: {} },
+    // Browsers own the three actual clients. Fail if a scenario accidentally requests a headless worker.
+    'node:child_process': { fork() { throw Error('Live E2E uses real browser clients; headless launch requested'); } },
+    'bot-web-interface': function() { throw Error('Legacy monitor is disabled'); },
+    '../monitoring_util': {},
+    express: require('express'),
+  };
+  const { startCoordinatorApplication } = require(path.join(root, '.build/runtime/coordinator-application.cjs'));
+  await startCoordinatorApplication({ require: name => Object.hasOwn(adapters, name) ? adapters[name] : resolve(name),
+    directory: platformDirectory, loadFetch: async () => localFetch });
+  if (startupError) throw startupError;
+  const response = await localFetch('http://127.0.0.1:' + port + '/party-api/state?section=core');
+  if (!response.ok) throw Error('Coordinator readiness: ' + response.status);
+  if (process.send) process.send({ type: 'ready', port });
+}
+main().catch(error => { console.error(error); process.exit(1); });

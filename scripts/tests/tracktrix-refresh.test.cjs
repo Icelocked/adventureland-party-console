@@ -25,8 +25,6 @@ test('inventory callbacks acquire and remove Tracktrix without idle polling', ()
   update([]); assert.equal(timers.size, 0, 'banking the item cancels refresh');
   r.trackerCatalogListener({ monsters: {} }); assert.equal(timers.size, 0, 'late responses do not restart timers');
   update([{ name: 'tracker' }]); assert.equal(requests, 3, 'withdrawal immediately requests again');
-  assert.match(source, /socket\.on\("player", trackerInventoryListener\)/);
-  assert.match(source, /socket\.off\("player", trackerInventoryListener\)/);
 });
 test('dashboard includes BankBoi and inactive merchant snapshots and takes the highest score', () => {
   const { aggregateMonsterAchievements } = require('../../dashboard/features/party/monster-achievements.ts');

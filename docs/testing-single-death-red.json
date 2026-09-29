@@ -1,0 +1,21 @@
+{
+  "scenario": "an active Hunt survives native death and restart with death threshold 2",
+  "archive": ".build/remaining54-diagnostic-e2e-report/manifest.json",
+  "classification": "fixture fault; production correctly counted two real deaths",
+  "observed": {
+    "attacker": "682",
+    "projectile": "sAbbrs",
+    "position": {"map": "main", "x": -32, "y": 719},
+    "stacked": ["E2EWarrior", "E2EPriest"],
+    "priestNativeDeathAt": 1790632406525,
+    "warriorNativeDeathAt": 1790632406527,
+    "recordedHuntDeaths": 2
+  },
+  "failureModesBeforeCorrection": [
+    "Ordinary monster damage is shared with stacked party members, so a supposedly single death kills companions.",
+    "Native skill preconditions or resistance prevent the requested death within the bounded attempt count.",
+    "Missing real hit/death receipts falsely report success.",
+    "The injected monster survives or respawns, damages peers, changes global definitions, or changes navigation ownership."
+  ],
+  "correction": "A temporary native Rime Djinn uses bounded native Rime Shatter casts, whose upstream attack path disables stacked-hit sharing. Require actual hit/death events, unchanged peer HP, and native temporary-monster cleanup. No death counter or recovery behavior is changed."
+}

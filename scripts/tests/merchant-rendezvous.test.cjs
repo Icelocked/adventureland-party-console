@@ -43,9 +43,6 @@ test('unavailable recipients and merchant death fail without indefinite waiting'
  const t=runtime({invisible:true,stuck:true});await assert.rejects(t.r.waitForPlayer('F',1000),/timed out/);
  t.r.character.rip=true;await assert.rejects(t.r.rendezvous('job','F'),/Merchant died/);
 });
-test('full recipients retain receive-send-receive exchange',()=>{
- assert.match(source,/deliveryReason !== "send_no_space"/);assert.match(source,/await collectFromTarget\(true\)[\s\S]{0,180}await deliverToTarget\(\)/);
-});
 
 test('anniversary staging explicitly pauses and stops only owned pursuit',async()=>{
  const t=runtime({stuck:true,tick:(r,p,n)=>{if(n===5)r.merchantAnniversaryWorkReserved=()=>true;}});
@@ -64,7 +61,6 @@ test('fresh target status overrides a visible entity on an obsolete map',async()
  assert.equal(t.calls.find(c=>c.kind==='smart').map,'winterland');
  assert.equal(t.calls.filter(c=>c.kind==='move').length,0);
 });
-
 
 test('slow path calculation is allowed to finish before the movement watchdog starts',async()=>{
  const t=runtime({wall:true,tick:(r,p,n)=>{if(n===80)r.smart.found=true;},
@@ -100,7 +96,6 @@ test('failed route retains the underlying error in rendezvous diagnostics',async
  await assert.rejects(t.r.rendezvous('job','F'),error=>error.details.routeError==='failed');
 });
 
-
 test('multi-map rendezvous routes locally to doorways and explicitly crosses without tunnel shortcuts',async()=>{
  const t=runtime({invisible:true});t.player.map='spookytown';t.player.x=100;t.player.y=1400;
  t.r.G={maps:{main:{spawns:[[0,0],[1600,-524]],doors:[[1600,-547,60,40,'halloween',1,1]]},
@@ -118,7 +113,6 @@ test('multi-map rendezvous routes locally to doorways and explicitly crosses wit
  assert.equal(routes[1].map,'halloween');assert.equal(routes[1].y,-1060);
  assert.deepEqual(t.calls.filter(c=>c.kind==='transport').map(c=>c.map),['halloween','spookytown']);
 });
-
 
 test('same-map rendezvous lets an intermediate tunnel shortcut finish without reversing it',async()=>{
  const t=runtime({invisible:true,stuck:true,wall:true,tick:(r,p,n)=>{

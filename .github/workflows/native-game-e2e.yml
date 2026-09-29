@@ -1,0 +1,45 @@
+name: Native game E2E (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-game-e2e-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  native-game:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.0'
+          cache: npm
+      - run: npm ci
+      - run: npm --prefix dashboard ci
+      - run: node tools/caracal/setup.mts
+      - run: npm --prefix .caracal ci
+      - run: node scripts/ci/restore-game-fixtures.cjs
+      - run: npx playwright install --with-deps chromium
+      - name: Build and run native gameplay
+        run: npm run test:e2e:live
+      - name: Verify native evidence
+        if: always()
+        run: npm run test:e2e:verify
+      - name: Preserve verifiable native game evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-game-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .build/e2e-report/
+            .build/e2e-results/
+            .build/e2e-live/server.log
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14

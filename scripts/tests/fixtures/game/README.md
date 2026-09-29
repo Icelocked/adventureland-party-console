@@ -1,8 +1,9 @@
 # Pinned game fixtures
 
 These gzip-compressed JSON maps contain the official client scripts and script
-manifests already used by the regression suite for Adventure Land versions 16846
-and 17083. The source is https://adventure.land. Upstream notices remain in the
+manifests already used by the regression suite for Adventure Land versions 16846,
+17083, and 17175. Version 17175 covers the blocked cgoo arena segment, tower
+routes, and level4 approach. The source is https://adventure.land. Upstream notices remain in the
 files. No account configuration, credentials, saved state, or logs are included.
 
 Each archive contains only `client_scripts.json` and the scripts named by that

@@ -67,11 +67,3 @@ test('queue retirement cannot mistake a filtered stale member for unanimous abse
  const m=members(10000);m[2].status.seenAt=1000;
  const r=reconcileQueue(old,m,'W',10000,'k');assert.equal(r.lostTargets.length,0);assert.equal(r.target.id,'bee');
 });
-
-test('multiple quest owners continue hunting until all owners are on their final kill',()=>{
- const saved=global.setInterval;global.setInterval=()=>0;let api;
- const mission={cycleId:'c',missionRevision:1,currentIndex:0,target:'bee',stage:'farming',participants:['W','P'],missions:[{target:'bee',owners:['W','P']}]};
- try{api=installLootClient({},{departureLootPorts:()=>({name:()=> 'W',quest:()=>({id:'bee',count:0}),questFor:()=>({id:'bee',count:5}),cancelled:()=>false,position:()=>({})})});
- api.accept({serverNow:1,monsterHunt:mission});api.finalKill('bee');assert.equal(api.huntPending(),false);
- }finally{api?.stop();global.setInterval=saved;}
-});

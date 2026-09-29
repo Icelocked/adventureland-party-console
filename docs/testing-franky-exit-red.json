@@ -1,0 +1,67 @@
+{
+  "sourceArchive": ".build/hunt63-contamination-e2e-results/evidence/2a425851d3f45be5ea4e-8357d4b84632da301ddf/retry-0",
+  "status": "failed-before-fix",
+  "assertion": "Both maintained native clients must report the issued exit convoy ownership within 30 seconds",
+  "before": {
+    "server": {
+      "live": true,
+      "boss": true,
+      "players": {
+        "E2EWarrior": {
+          "map": "level2w",
+          "x": -315.49541253469357,
+          "y": 103.21361727547848,
+          "rip": false
+        },
+        "E2EPriest": {
+          "map": "level2w",
+          "x": -421.574622841951,
+          "y": -25.780581639848617,
+          "rip": false
+        }
+      }
+    },
+    "participants": [
+      "E2EPriest",
+      "E2EWarrior"
+    ]
+  },
+  "final": {
+    "convoyId": "convoy-1790620369188-1790620344780",
+    "characters": [
+      {
+        "name": "E2EWarrior",
+        "map": "level2w",
+        "target": {
+          "id": "495",
+          "type": "monster",
+          "name": "Franky",
+          "team": null,
+          "mtype": "franky",
+          "hp": 119996188,
+          "max_hp": 120000000,
+          "x": -527.5909022337361,
+          "y": -153.8438525315137
+        },
+        "activeCombatTarget": {
+          "id": "495",
+          "map": "level2w",
+          "in": "level2w",
+          "server": "USI",
+          "at": 1790620399134.5
+        },
+        "convoyInstalled": false,
+        "departurePending": true
+      },
+      {
+        "name": "E2EPriest",
+        "map": "level2w",
+        "target": null,
+        "activeCombatTarget": null,
+        "convoyInstalled": true,
+        "departurePending": true
+      }
+    ]
+  },
+  "cause": "Franky exit assemble waited for engagedMonster to disappear before installing the protected exit convoy. Native boss combat continued despite deselection."
+}

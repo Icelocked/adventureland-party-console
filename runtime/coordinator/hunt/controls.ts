@@ -1,3 +1,5 @@
+import { huntSpawnKey } from './spawn-preferences.ts';
+import type { HuntSettings } from './settings.ts';
 interface HuntMember {
   seenAt: number;
   ctype?: string;
@@ -9,8 +11,8 @@ interface PartyMembers {
   followers: Record<string, unknown>;
 }
 interface HuntCommands {
-  activeConvoy?: { purpose?: string | null; participants?: string[] } | null;
-  commands: Record<string, { purpose?: string | null } | undefined>;
+  activeConvoy?: { id?: string; purpose?: string | null; walkingActivity?: string; participants?: string[] } | null;
+  commands: Record<string, { purpose?: string | null; convoyId?: string } | undefined>;
   monsterHunt: { cycleId?: string; participants?: string[] } | null;
 }
 interface Position {
@@ -58,7 +60,16 @@ export function cancelCoordinatorHuntConvoy(state: HuntCommands): void {
   state.activeConvoy = null;
 }
 
+function clearHuntChild(state: HuntCommands): void {
+  const child = state.activeConvoy;
+  if (state.monsterHunt && child?.purpose === 'shared-walk' && child.walkingActivity === 'farm-recovery') {
+    for (const name of child.participants || [])
+      if (child.id && state.commands[name]?.convoyId === child.id) delete state.commands[name];
+    state.activeConvoy = null;
+  }
+}
 export function clearCoordinatorHunt(state: HuntCommands): void {
+  clearHuntChild(state);
   cancelCoordinatorHuntConvoy(state);
   for (const name of Object.keys(state.commands)) {
     if (state.monsterHunt?.participants?.includes(name) && state.commands[name]?.purpose === "monster-hunt") delete state.commands[name];
@@ -72,24 +83,32 @@ function distance(location: Position, leader: Position): number {
     : Number.MAX_SAFE_INTEGER;
 }
 
-/** Prefer the nearest same-map zone; retain source order for equally ranked zones. */
+function selectDestination<Location extends Position>(candidates: Location[], leader: Position,
+  settings: HuntSettings | undefined, type: string): Location | undefined {
+  const preferred = settings?.preferredSpawns?.[type];
+  const selected = preferred && candidates.find(location => huntSpawnKey(location) === preferred);
+  return selected || candidates.sort((first, second) => distance(first, leader) - distance(second, leader))[0];
+}
+
+/** Prefer the saved Hunt zone, then nearest same-map zone with stable ties. */
 export function coordinatorHuntDestination<Choice extends MonsterChoice, Location extends Position>(
   state: {
     leader: string | null;
     statuses: Record<string, Position | undefined>;
     monsterChoices?: Choice[] | null;
+    huntSettings?: HuntSettings;
   },
   type: string | null | undefined,
   zones: (choices: Choice[], focus: string[]) => Location[],
+  usePreference = true,
 ): Location | null | undefined {
   const leader = state.leader && state.statuses[state.leader];
   const choice = (state.monsterChoices || []).find((entry) => entry.id === type);
   if (!leader || !choice || !Array.isArray(choice.locations) || !choice.locations.length)
     return null;
   // A matching catalog choice establishes the string id; retain the caller's exact value.
-  return zones(state.monsterChoices || [], [type!]).sort(
-    (first, second) => distance(first, leader) - distance(second, leader),
-  )[0];
+  const candidates = zones(state.monsterChoices || [], [type!]);
+  return selectDestination(candidates, leader, usePreference ? state.huntSettings : undefined, type!);
 }
 
 export function coordinatorHuntThreat(

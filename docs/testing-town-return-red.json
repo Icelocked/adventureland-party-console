@@ -1,0 +1,90 @@
+{
+  "boundary": "Pinned native server15555; real walking, Bee kills, split Town cast, native stop, and both Daisy rewards. Sanitized excerpt; full hashed evidence remains in the ignored run archive.",
+  "scenario": " > live > live-hunt-town-recovery.spec.ts > partial native Town failure reunites the Hunt party and claims both rewards",
+  "failure": "Walking-only recovery request received another Town warp",
+  "request": {
+    "character": "E2EPriest",
+    "from": {
+      "map": "main",
+      "in": "main",
+      "x": 497.60439336359684,
+      "y": 679.770210938084
+    },
+    "to": {
+      "map": "main",
+      "x": 0,
+      "y": 0
+    },
+    "speed": 54,
+    "town": false,
+    "version": 15555
+  },
+  "response": {
+    "plot": [
+      {
+        "map": "main",
+        "in": "main",
+        "x": 497.60439336359684,
+        "y": 679.770210938084
+      },
+      {
+        "map": "main",
+        "x": 489,
+        "y": 664,
+        "method": "move"
+      },
+      {
+        "map": "main",
+        "x": 0,
+        "y": 0,
+        "method": "town",
+        "town": true
+      }
+    ],
+    "status": 200
+  },
+  "faults": [
+    {
+      "event": "town-request-delayed",
+      "at": 1790615486241
+    },
+    {
+      "event": "town-request-forwarded",
+      "reason": "authoritative-leader-town-arrival",
+      "at": 1790615489574
+    },
+    {
+      "event": "native-stop-town",
+      "map": "main",
+      "x": 497.60439336359684,
+      "y": 679.770210938084,
+      "casting": true,
+      "at": 1790615489730
+    }
+  ],
+  "falseRecovery": {
+    "at": 1790615528538,
+    "type": "navigation",
+    "message": "Convoy regrouping",
+    "details": {
+      "convoyId": "convoy-1790615484288-1790615384078",
+      "epoch": 1790615383988,
+      "phase": "shared-hold",
+      "purpose": "monster-hunt",
+      "label": "Monster Hunt turn-in",
+      "destination": {
+        "map": "main",
+        "x": 126,
+        "y": -413
+      },
+      "huntStage": "returning",
+      "huntTarget": null,
+      "revisions": {
+        "E2EWarrior": 5,
+        "E2EPriest": 5
+      },
+      "reason": "Town rendezvous made no progress",
+      "recoveryAttempts": 1
+    }
+  }
+}

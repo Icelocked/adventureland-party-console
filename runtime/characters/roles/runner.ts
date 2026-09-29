@@ -93,6 +93,7 @@ export function installRoleRunner(
   function passingTarget(): Target | null {
     if (sharedRoutine.dungeonOwned?.()) return null;
     if (character.ctype === "merchant" || !active || character.rip || !resolvedRole().combat || ["pending","feed"].includes(sharedRoutine.getAbtestingMode())) return null;
+    if (sharedRoutine.frankyCombatActive?.()) return sharedRoutine.getWalkingPassiveTarget?.() || null;
     return (sharedRoutine as any).getPassingTarget?.() || null;
   }
   function attackTarget(): Target | null {
@@ -103,6 +104,7 @@ export function installRoleRunner(
     return priority && priority(passing) > priority(current) ? passing : current;
   }
   function currentTarget() {
+    if(sharedRoutine.returnCombatActive?.())return combatAllowed() ? sharedRoutine.returnDefenseTarget?.() || null : null;
     let reason: string | null = null;
     const target = selectedTarget ? get_entity(selectedTarget) : null;
     if (!combatAllowed()) reason = "combat paused by movement or activity owner";
@@ -127,17 +129,21 @@ export function installRoleRunner(
   }
   function chooseTarget() {
     if (sharedRoutine.dungeonOwned?.()) return sharedRoutine.getDungeonTarget?.() || null;
+    if(sharedRoutine.returnCombatActive?.())return sharedRoutine.returnDefenseTarget?.() || null;
+    if (sharedRoutine.frankyCombatActive?.()) return sharedRoutine.getEventTarget();
     if (character.ctype === "merchant") return resolvedRole().chooseTarget();
     if (sharedRoutine.usesLeaderTarget?.()) return sharedRoutine.getGroupedTarget();
     const rare = sharedRoutine.getRareTarget?.();
     if (rare) return rare;
-    return sharedRoutine.usesLeaderTarget?.()
-      ? sharedRoutine.getGroupedTarget() : resolvedRole().chooseTarget();
+    return resolvedRole().chooseTarget();
+  }
+  function exclusiveCombat(): boolean {
+    return !!sharedRoutine.dungeonOwned?.() || !!sharedRoutine.returnCombatActive?.() || !!sharedRoutine.frankyCombatActive?.();
   }
   async function publishSelection(target: Target | null): Promise<void> {
-    selectedTarget = target?.id || (sharedRoutine as any).sharedTargetId?.() || null;
+    selectedTarget = target?.id || (!exclusiveCombat() && sharedRoutine.sharedTargetId?.()) || null;
     sharedRoutine.setCombatTarget(target);
-    if (!target && !sharedRoutine.dungeonOwned?.() && sharedRoutine.getFarmingMode() !== "scatter" && !sharedRoutine.usesGroupedCombat?.())
+    if (!target && !exclusiveCombat() && sharedRoutine.getFarmingMode() !== "scatter" && !sharedRoutine.usesGroupedCombat?.())
       await sharedRoutine.followLeaderIfFar(150);
   }
   async function selectTarget() {
@@ -149,14 +155,14 @@ export function installRoleRunner(
       return;
     }
     const current = currentTarget();
-    const closer = !sharedRoutine.dungeonOwned?.() && current && !attacks.hasStarted(current.id) && sharedRoutine.getCloserHuntTarget?.(current);
+    const closer = !exclusiveCombat() && current && !attacks.hasStarted(current.id) && sharedRoutine.getCloserHuntTarget?.(current);
     if (closer) {
       root.sharedRoutine?.resetCombatMovement?.();
       await publishSelection(closer);
       attacks.wake();
       return;
     }
-    if (!invalidated && current) {
+    if (!sharedRoutine.returnCombatActive?.() && !invalidated && current) {
       const rare = sharedRoutine.dungeonOwned?.() ? null : sharedRoutine.getRareTarget?.();
       const nominated = sharedRoutine.dungeonOwned?.() ? sharedRoutine.getDungeonTarget?.() : sharedRoutine.usesLeaderTarget?.() ? sharedRoutine.getGroupedTarget() : null;
       if ((!rare || rare.id === selectedTarget) && (!(sharedRoutine.dungeonOwned?.() || sharedRoutine.usesLeaderTarget?.()) || nominated?.id === selectedTarget)) return;
@@ -185,15 +191,28 @@ export function installRoleRunner(
     const target = sharedRoutine.equipmentTarget ? sharedRoutine.equipmentTarget() : currentTarget();
     equipment?.tick(target, actor.damage_type, Number(character.range), combatAllowed());
   }
+  function frankyMovement(): boolean {
+    if (!sharedRoutine.frankyCombatActive?.()) return false;
+    if (selectedTarget && !currentTarget()) { invalidated = true; void selectTarget(); }
+    if (combatAllowed()) sharedRoutine.frankyMovementTick?.(currentTarget());
+    attacks.wake();
+    return true;
+  }
   function movementTick() {
     const dungeon = !!sharedRoutine.dungeonOwned?.();
     if (dungeon && !combatAllowed()) { root.sharedRoutine?.resetCombatMovement?.(); return; }
     try {
       equipmentTick();
       if (!dungeon) {
+        if(sharedRoutine.returnCombatActive?.()) {
+          sharedRoutine.returnMovementTick?.();
+          attacks.wake();
+          return;
+        }
+        if (frankyMovement()) return;
         if (sharedRoutine.pollRareHunting?.()) return;
-        sharedRoutine.pollFarmingCombatHandoff?.();
-        sharedRoutine.pollFarmingSpawnRecovery?.();
+        if (sharedRoutine.pollFarmingCombatHandoff) sharedRoutine.pollFarmingCombatHandoff();
+        if (sharedRoutine.pollFarmingSpawnRecovery) sharedRoutine.pollFarmingSpawnRecovery();
       }
       if (selectedTarget && !currentTarget()) { invalidated = true; void selectTarget(); }
       const target = currentTarget();
@@ -282,6 +301,7 @@ export function installRoleRunner(
       attacks.wake();
     },
     wake() { void selectTarget(); attacks.wake(); },
+    advanceTarget() {generation++;selectedTarget=null;invalidated=true;selecting=false;working=false;},
     resetTargeting() {generation++;selectedTarget=null;invalidated=true;selecting=false;working=false;attacks.reset();skills?.reset();queueClient?.reset();},
     role: function () {
       return resolvedRole();

@@ -66,3 +66,19 @@ Run type checks, coordinator lint, full tests and production build. Verify respo
 dark controls and keyboard access. Document real-run validation gaps honestly.
 Update README/changelog, open PR to main. Live activation is separate: use the
 supported full restart with fresh character and coordinator verification.
+
+## Main integration, 2026-09-28
+
+Merged main at `6bc6602` into PR #19, retaining dungeon combat ownership alongside
+main's return defense, Franky controls, successor handoffs and delivery recovery.
+Regenerated the character compatibility bundles from maintained TypeScript.
+Updated existing isolated fixtures to load the dungeon helper used by merged code.
+
+Production build, typechecking and coordinator lint passed. The retained suite
+ran 3,265 checks: 3,211 passed, two skipped, and 52 failed due to missing fixture
+dependencies. All 85 checks in the four affected files passed after correction.
+Three native E2Es (convoy and both delivery recovery cases) and six console E2Es
+passed in separate runs, with 91 and 62 verified evidence files respectively.
+Native evidence is retained locally in `.build/pr19-native-{report,results}`;
+console evidence is in `.build/e2e-{report,results}`. This smoke validation does
+not claim a real Cave entry, daily-visit consumption or paid dungeon action.

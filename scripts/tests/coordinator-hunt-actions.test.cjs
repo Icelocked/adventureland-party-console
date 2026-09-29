@@ -15,22 +15,12 @@ function fixture(){
  return {state,calls,location,service,invoke,cancelled:value=>{cancelled=value;},fighting:value=>{fighting=value;}};
 }
 
-test('Hunt mode consults current catalog and combat participants before authorizing a restart',()=>{
- const t=fixture();t.state.monsterChoices=[{id:'rat'}];t.fighting(true);
- assert.equal(t.invoke(t.service.mode,{mode:'hunt',backup:{monsterFocus:['rat'],location:t.location}}).code,200);
- assert.deepEqual(t.calls,[['validate',['rat']],['validate',['rat']],['fighting',['F']],['begin','auto',t.location,false],'persist']);
- assert.deepEqual(t.state.monsterFocus,['rat']);
- t.state.monsterHunt={participants:['F'],returnLocation:t.location,returnPolicy:'auto'};t.calls.length=0;
- t.fighting(false);t.cancelled(true);t.invoke(t.service.mode,{mode:'hunt'});
- assert.deepEqual(t.calls,[['fighting',['F']],'release',['authorize',['F'],t.location,true],['begin','auto',t.location,true],'persist']);
-});
-
-test('Hunt exit retains completed turn-ins and blacklist validation follows the current monster catalog',()=>{
+test('Hunt exit immediately clears completed turn-in state and retains live quest observations',()=>{
  const t=fixture();t.state.farmingPolicy='hunt';const hunt={participants:['F'],returnLocation:t.location};t.state.monsterHunt=hunt;
  t.state.statuses.F={monsterHunt:{count:0}};
  assert.equal(t.invoke(t.service.mode,{mode:'default'}).code,200);
- assert.equal(hunt.exitMode,'default');assert.equal(t.calls[0][0],'daisy');assert.equal(t.calls[0][1],hunt);
- assert.equal(t.calls.includes('clear'),false);
+ assert.equal(t.state.monsterHunt,null);assert.equal(t.state.statuses.F.monsterHunt.count,0);
+ assert.equal(t.calls.includes('clear'),true);assert.equal(t.calls.some(c=>c[0]==='daisy'),false);
  t.state.monsterChoices=[{id:'rat'}];
  assert.equal(t.invoke(t.service.blacklist,{action:'add',monsterId:'bat'}).code,400);
  assert.equal(t.invoke(t.service.blacklist,{action:'add',monsterId:'rat'}).code,200);

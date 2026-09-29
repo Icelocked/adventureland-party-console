@@ -1,8 +1,10 @@
+import { finishMerchantInterruption } from '../navigation/merchant-interruption.ts';
+import type { DeliveryRequest } from '../merchant/delivery-recovery.ts';
 import { requestObject, requestText, type HttpRequest, type HttpResponse } from "./contracts.ts";
 import { receiveBankDeconstruction } from "../merchant/bank-deconstruction.ts";
 
 interface ReceiptState {
-  merchantDeliveries?: Record<string, {id?: string; item?: import('../contracts/item.ts').Item; awaitingEquip?: boolean}[] | undefined>;
+  merchantDeliveries?: Record<string, DeliveryRequest[] | undefined>;
   merchantCharacter?: string | null;
   deconstructionMarks?: import("../merchant/deconstruction.ts").DeconstructionMark[];
   commands: Record<string, { id?: unknown; type: string } | undefined>;
@@ -72,11 +74,12 @@ export function createInventoryReceiptRoutes(state: ReceiptState, ports: Receipt
   }
   function confirmDeliveryEquip(name: string, raw: unknown): void {
     const result = requestObject(raw);
-    if (result.success !== true) return;
     const marks = state.merchantDeliveries?.[name] || [];
     const index = marks.findIndex(mark => mark.awaitingEquip &&
       (result.deliveryId ? mark.id === result.deliveryId : !mark.id) && JSON.stringify(mark.item) === JSON.stringify(result.item));
-    if (index >= 0) marks.splice(index,1);
+    if (index < 0) return;
+    if (result.success === true) marks.splice(index,1);
+    else marks[index].equipFailedAt = Date.now();
   }
   function equipment(req: HttpRequest, res: HttpResponse): unknown {
     const body = requestObject(req.body),
@@ -86,6 +89,7 @@ export function createInventoryReceiptRoutes(state: ReceiptState, ports: Receipt
     if (!command || command.type !== "equip-deliveries" || command.id !== body.commandId)
       return res.status(409).json({ error: "equip-delivery command is no longer current" });
     for (const result of list(body.results)) { equipmentLog(result, name); confirmDeliveryEquip(name,result); }
+    finishMerchantInterruption(state, name, command.id);
     delete state.commands[name];
     ports.persist();
     return res.json({ ok: true });

@@ -50,7 +50,7 @@ import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { DollarSign, RefreshCw, Store, Landmark } from "lucide-react";
 
-import { useRef, useState } from "react";
+import { memo, useRef, useState } from "react";
 
 import { abbreviatedGold } from "./abbreviated-gold";
 
@@ -89,7 +89,7 @@ import { Withdrawal } from "./withdrawal";
 
 
 
-export function BankSheet({
+export const BankSheet = memo(function BankSheet({
 
   open,
 
@@ -1197,9 +1197,9 @@ export function BankSheet({
 
                 ? unlockKind === "key"
 
-                  ? `GoldMajesty will retrieve and consume ${unlocking.key?.name || "the required key"} to unlock ${floorNames[unlocking.floor] || unlocking.floor}.`
+                  ? `${merchant || "The merchant"} will retrieve and consume ${unlocking.key?.name || "the required key"} to unlock ${floorNames[unlocking.floor] || unlocking.floor}.`
 
-                  : `GoldMajesty will spend ${unlocking.gold.toLocaleString()} gold to permanently unlock ${unlocking.pack}.`
+                  : `${merchant || "The merchant"} will spend ${unlocking.gold.toLocaleString()} gold to permanently unlock ${unlocking.pack}.`
 
                 : ""}
 
@@ -1255,4 +1255,4 @@ export function BankSheet({
 
   );
 
-}
+});

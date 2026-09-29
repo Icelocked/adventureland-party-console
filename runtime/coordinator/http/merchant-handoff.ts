@@ -1,7 +1,9 @@
+import { protectedMerchantRecipient } from "../merchant/movement-block.ts";
 import { collectionPickups, type PickupState } from "../merchant/collection-pickups.ts";
 import { ruleOwner } from "../inventory/shared-rules.ts";
 import { craftProtection } from "../merchant/craft-reservations.ts";
 import { scopeWork } from '../merchant/command-scope.ts';
+import { collectsPartyItems } from '../merchant/pickup-jobs.ts';
 import { receiveDeconstruction, type DeconstructionMark } from "../merchant/deconstruction.ts";
 import { receivePlayerSales } from "../merchant/player-npc-sales.ts";
 import type { NpcSale } from "../merchant/npc-sales.ts";
@@ -50,7 +52,7 @@ export function createMerchantHandoffRoutes(state: HandoffState, ports: HandoffP
     return job && body.jobId === job.id && name === job.target ? job : null;
   }
   function protectedRecipient(name: string): boolean {
-    return !!state.activeConvoy?.nonPreemptible && state.activeConvoy.participants.includes(name);
+    return protectedMerchantRecipient(state,name);
   }
   function waiting(name: string, jobId: unknown, res: HttpResponse): unknown {
     if (admitMerchantInterruption(state, name, jobId, ports.now?.() ?? Date.now())) return null;
@@ -75,11 +77,12 @@ export function createMerchantHandoffRoutes(state: HandoffState, ports: HandoffP
   }
   function scopeHandoff(name: string, job: HandoffJob, command: NonNullable<HandoffState["commands"][string]>) {
     const scoped = scopeWork(job, command);
-    if (!['marked items', 'inventory cleanout'].includes(job.reason)) scoped.marked = [];
+    const collection = collectsPartyItems(job.reason);
+    if (!collection) scoped.marked = [];
     if (job.reason === 'npc sale pickup' || job.reason === 'auto npc sale pickup') {
       scoped.merchantMarked = (state.npcSaleMarks || []).filter(mark => mark.character === name && mark.source === 'character' && Boolean(mark.auto) === (job.reason === 'auto npc sale pickup')).map(mark => ({slot: mark.slot, item: mark.item}));
-    } else if (job.reason !== 'marked items' && job.reason !== 'inventory cleanout' && job.reason !== 'deconstruction pickup') scoped.merchantMarked = [];
-    if (['marked items', 'inventory cleanout'].includes(job.reason)) {
+    } else if (!collection && job.reason !== 'deconstruction pickup') scoped.merchantMarked = [];
+    if (collection) {
       const pickups = collectionPickups(state, name);
       scoped.marked = pickups.bank;
       scoped.merchantMarked = pickups.keep;
@@ -120,7 +123,7 @@ export function createMerchantHandoffRoutes(state: HandoffState, ports: HandoffP
       name = requestText(body.target);
     if (!job) return res.status(409).json({ error: "merchant job is no longer current" });
     if (protectedRecipient(name))
-      return res.status(409).json({ error: "Hunt turn-in owns the recipient's movement" });
+      return res.json({ deferred: true, reason: "hunt_movement_owned" });
     if (alreadyIssued(name, body.jobId, "merchant-handoff")) return res.json({ ok: true });
     const deferred = waiting(name, body.jobId, res);
     if (deferred) return deferred;
@@ -135,7 +138,7 @@ export function createMerchantHandoffRoutes(state: HandoffState, ports: HandoffP
     const body = requestObject(req.body),
       job = current(body, body.character),
       name = requestText(body.character);
-    if (!job) return res.status(409).json({ error: "merchant job is no longer current" });
+    if (!job) return res.json({ ok: true, stale: true });
     receiveDeconstruction({ deconstructionMarks: state.deconstructionMarks || [], merchantCharacter: state.merchantCharacter, merchantMarked: state.merchantMarked as import("../merchant/deconstruction.ts").DeconstructionState["merchantMarked"] }, name, body.kept, ports.now?.() ?? Date.now());
     receivePlayerSales({ npcSaleMarks: state.npcSaleMarks || [], merchantMarked: state.merchantMarked as import("../merchant/player-npc-sales.ts").PlayerSaleState["merchantMarked"] }, name, body.kept, ports.now?.() ?? Date.now());
     job.handoff = body;
@@ -167,7 +170,7 @@ export function createMerchantHandoffRoutes(state: HandoffState, ports: HandoffP
     )
       return res.status(409).json({ error: "merchant commerce job is no longer current" });
     if (protectedRecipient(name))
-      return res.status(409).json({ error: "Hunt turn-in owns the recipient's movement" });
+      return res.json({ deferred: true, reason: "hunt_movement_owned" });
     if (alreadyIssued(name, body.jobId, "merchant-order-handoff")) return res.json({ ok: true });
     const deferred = waiting(name, body.jobId, res);
     if (deferred) return deferred;
@@ -188,7 +191,7 @@ export function createMerchantHandoffRoutes(state: HandoffState, ports: HandoffP
     const body = requestObject(req.body),
       job = state.merchantCurrent;
     if (!job || job.id !== body.jobId)
-      return res.status(409).json({ error: "merchant commerce job is no longer current" });
+      return res.json({ ok: true, stale: true });
     job.orderHandoff = { character: body.character, sent: body.sent || [] };
     clearCommand(requestText(body.character), body, "merchant-order-handoff");
     ports.persist();

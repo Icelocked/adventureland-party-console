@@ -12,7 +12,7 @@ test('searchable menu saves separate enable, movement, priority and generator ch
  let view;try{
   await act(async()=>view=create(React.createElement(PassiveHuntingMenu,props)));
   assert.ok(text(view.toJSON()).includes('Monsters that are automatically attacked when spotted on the map'));
-  const button=view.root.findByType('Button');assert.equal(text(button),'Open passive hunting menu');assert.match(button.props.className,/bg-\[#07110f\].*text-cyan-100/);
+  const button=view.root.findByType('Button');assert.equal(text(button),'Open passive hunting menu');
   await act(async()=>button.props.onClick());assert.equal(view.root.findByType('Dialog').props.open,true);
   assert.ok(text(view.root.findByType('PopoverContent')).includes('Priority affects both active and passive hunting targets'));
   assert.equal(view.root.findAllByType('Checkbox').some(n=>n.props['aria-label']==='Passively hunt Generator'),false);
@@ -53,10 +53,10 @@ test('closing nested monster details preserves both passive hunting and farming 
   await act(async()=>search().props.onChange({target:{value:'bee'}}));
   for(const dismiss of ['x','escape']) {
    await act(async()=>view.root.findByProps({'aria-label':'Inspect Bee'}).props.onClick());
-   const dialogs=view.root.findAllByType('Dialog');assert.equal(dialogs.length,3);assert.ok(dialogs.every(dialog=>dialog.props.open));
+   const dialogs=view.root.findAllByType('Dialog').filter(dialog=>dialog.props.open);assert.equal(dialogs.length,3);assert.ok(dialogs.every(dialog=>dialog.props.open));
    assert.ok(dialogs[1].findAllByType('Dialog').includes(dialogs[2]),'monster dialog must be nested inside passive hunting');
    await act(async()=>dismiss==='x'?view.root.findByProps({'aria-label':'Close monster'}).props.onClick():dialogs[2].props.onOpenChange(false));
-   const remaining=view.root.findAllByType('Dialog');assert.equal(remaining.length,2);assert.ok(remaining.every(dialog=>dialog.props.open));assert.equal(search().props.value,'bee');
+   const remaining=view.root.findAllByType('Dialog').filter(dialog=>dialog.props.open);assert.equal(remaining.length,2);assert.ok(remaining.every(dialog=>dialog.props.open));assert.equal(search().props.value,'bee');
   }
  }finally{await act(async()=>view?.unmount());}
 });

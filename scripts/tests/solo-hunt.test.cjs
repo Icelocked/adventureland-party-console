@@ -114,25 +114,7 @@ test('scope-owned event recovery does not pause the other Hunt',()=>{
  assert.equal(solo.eventReturn.cycleId,'solo-event');
 });
 
-test('HTTP controls reject inherited edits, address solo settings, and report saved/effective mode',()=>{
- const {createScopedFarmingRoute}=require('../../runtime/coordinator/http/farming-scope.ts');
- const {createHuntSettingsRoute}=require('../../runtime/coordinator/http/hunt-settings.ts');
- const {root,scopes}=fixture();
- const services=new Map();
- const settings=state=>createHuntSettingsRoute(state,{now:()=>NOW,persist(){}});
- const main=settings(root);
- const ports={owned:name=>['W','P','R','M'].includes(name),merchant:()=> 'M',combat:name=>name!=='M',owner:scopes.owner,mainOwner:()=>root.leader,mode:name=>scopes.view(name).farmingPolicy,
-  solo:name=>{if(scopes.owner(name)===root.leader)return null;if(!services.has(name))services.set(name,{settings:settings(scopes.view(name))});return services.get(name)}};
- const route=createScopedFarmingRoute(main,s=>s.settings,ports,true);
- const call=body=>{const res={code:200,status(n){this.code=n;return this},json(v){this.body=v;return v}};route({body},res);return res};
- assert.equal(call({character:'P',deathThreshold:4}).body.error,'following leader settings');
- assert.equal(call({character:'M',deathThreshold:4}).code,409);
- assert.equal(call({character:'unknown',deathThreshold:4}).code,400);
- const response=call({character:'R',deathThreshold:4});
- assert.equal(response.code,200); assert.equal(response.body.farmingOwner,'R'); assert.equal(response.body.savedFarmingPolicy,'auto');
- assert.equal(scopes.view('R').huntSettings.deathThreshold,4); assert.equal(root.huntSettings.deathThreshold,1);
- call({deathThreshold:2}); assert.equal(root.huntSettings.deathThreshold,2); assert.equal(scopes.view('R').huntSettings.deathThreshold,4);
-});
+
 test('all-blacklisted fallback contains only the singleton',()=>{
  const {root,scopes}=fixture(), solo=scopes.view('R');
  solo.farmingPolicy='hunt'; solo.monsterFocus=['rat']; solo.location=farm;

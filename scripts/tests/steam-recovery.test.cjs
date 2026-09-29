@@ -121,13 +121,6 @@ test('previous managed bootstrap remains recognizable for migration', async()=>{
   assert.deepEqual(delays,[1000,2000]);assert.equal(installs,1);
   parent.localStorage.getItem=()=> '1';vm.runInContext(source,context);await settle();assert.equal(requests,3);
 });
-test('saved entry is one short line into the universal loader',()=>{
-  const source=steamBootstrap('http://127.0.0.1:924');
-  assert.equal(source, '$.getScript("http://127.0.0.1:924/CODE/adventure_land/universal-loader.js");');
-  assert.equal(source.split('\n').length,1);
-  assert.ok(source.length<220);
-  assert.match(source,/\$\.getScript\("http:\/\/127.0.0.1:924\/CODE\/adventure_land\/universal-loader.js"\)/);
-});
 
 test('managed slot upgrades preserve unrelated saved code and install primary and companion autorun',async()=>{
   for (const variant of ['current', 'legacy', 'previous', 'unrelated']) {

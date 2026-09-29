@@ -472,7 +472,7 @@ export function startCoordinatorApplication(
       persist: persistSettings,
       now: () => Date.now(),
     });
-    const upgradePreviews = createUpgradePreviews(party);
+    const upgradePreviews = createUpgradePreviews(party, {persist:persistSettings, dispatch:dispatchMerchant, stamp:stampMerchantJob});
     const heartbeatResponse = coordinatorPolicies.createCoordinatorHeartbeatResponse(party, {
       now: () => Date.now(),
       activeNames: () => activeNames().filter(n => n === party.merchantCharacter || farmingScopes.owner(n) === party.leader),
@@ -706,7 +706,8 @@ export function startCoordinatorApplication(
       validPhoenixOrder: (order) => rareHunting.validateOrder(party.monsterChoices, order),
       validLocation: (id, location) =>
         validFarmingLocation(party.monsterChoices || [], [id], location),
-      destination: monsterDestination,
+      destination: (type) => coordinatorPolicies.coordinatorHuntDestination(party, type,
+        (choices, focus) => farmZones.zones(choices, focus), false),
       release: () => escapeControl.release(),
       clearHunt: clearMonsterHuntState,
       members: () => farmingNavigation.members(),
@@ -763,6 +764,12 @@ export function startCoordinatorApplication(
       location: marketplaceLocationRoute,
     } = coordinatorPolicies.createCoordinatorMerchantJobActions(party, {
       now: () => Date.now(),
+      capacityBlocked: merchantTransferCapacityBlocked,
+      collectionReady: markedCollectionReady,
+      anniversaryReserved: () => {
+        const control = merchantAnniversaryControl();
+        return control.featured || control.reserved || control.kissDue || control.busy;
+      },
       priority: merchantJobPriority,
       routinePriority: merchantRoutinePriority,
       persist: persistSettings,
@@ -991,7 +998,6 @@ export function startCoordinatorApplication(
           return { ...(soloFor(name)?.heartbeatResponse || heartbeatResponse).response(name, mode),
             ...(dungeonOwns(party, name) ? { groupedCombat: groupedCombatSnapshot() } : {}),
             ...(party.dailyDungeons ? { dailyDungeon: dungeons.control(name) } : {}),
-            upgradePreview: upgradePreviews.next(name),
             merchantVisibility: merchantVisibility(party, name, Date.now()),
             ...(party.statuses[name]?.dashboardRuntime ? { dashboardLease: lease } : {}) };
         },
@@ -1616,6 +1622,7 @@ export function startCoordinatorApplication(
       restartFailedHunt,
     });
     const rareControl = rareHunting.createRareHunting(party, {...recoveryHooks.rare,
+      reconcileHuntArrival: () => huntTick.reconcileArrival(),
       routeDistance: createRareRouteDistance(request=>movementPlanner.plan(request),
         ()=>({version, fingerprint:movementFingerprints.get(version) || ''})),
     });

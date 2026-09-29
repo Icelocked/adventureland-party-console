@@ -43,6 +43,7 @@ export const validators: Record<string, (value: unknown) => boolean> = {
   anniversaryAutoChat: boolean,
   threshold: number,
   itemCollectionThreshold: positive,
+  buyUpgradeBatchSize: value => number(value) && Number.isSafeInteger(value) && Number(value) >= 1 && Number(value) <= 42,
   goldTargets: mapOf(number),
   eventsByCharacter: mapOf(boolean),
   eventSelectionsByCharacter: mapOf(listOf(text)),

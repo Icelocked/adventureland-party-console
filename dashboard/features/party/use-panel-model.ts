@@ -1,11 +1,13 @@
 'use client';
 import { levelPriceHistory } from './level-price-history';
 import { occupiedStandSlots } from './stand-inspection';
-import { useQueries, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { useCallback, useMemo } from 'react';
 import { domainOptions, useVisible } from './query-cache';
 import { characterKey } from './dashboard-live';
 import { STAT_SCROLLS } from './stat-scrolls';
 import { aggregateMonsterAchievements } from './monster-achievements';
+import { emptyArray } from './empty-values';
 import type { Char } from './char';
 import type { PartyConsoleModel } from './use-party-console';
 import type { Item } from './item';
@@ -25,14 +27,26 @@ export function usePanelModel<T extends Pick<PartyConsoleModel, 'state' | 'chars
 ) {
   const client = useQueryClient(),
     visible = useVisible();
-  const names = Object.keys(model.state.characters);
-  const kinds = (['inventory', 'vitals', 'position', 'diagnostics'] as const).filter(
-    (kind) => kind === 'position' ? needs.position ?? needs.vitals : needs[kind],
-  );
-  const subscriptions: ((typeof kinds)[number] | 'presence')[] = needs.inventory
-    ? [...kinds, 'presence']
-    : kinds;
-  const values = useQueries({
+  const baseCharacters = model.state.characters;
+  const names = useMemo(() => Object.keys(baseCharacters), [baseCharacters]);
+  const subscriptions = useMemo(() => {
+    const kinds: ('inventory' | 'vitals' | 'position' | 'diagnostics' | 'presence')[] = [];
+    if (needs.inventory) kinds.push('inventory', 'presence');
+    if (needs.vitals) kinds.push('vitals');
+    if (needs.position ?? needs.vitals) kinds.push('position');
+    if (needs.diagnostics) kinds.push('diagnostics');
+    return kinds;
+  }, [needs.inventory, needs.vitals, needs.position, needs.diagnostics]);
+  // useQueries structurally shares the combined result, including unchanged
+  // characters when another character receives an inventory update.
+  const combineCharacters = useCallback((values: UseQueryResult<Partial<Char>>[]) =>
+    Object.fromEntries(names.map((name, index) => [name, Object.assign(
+      {}, baseCharacters[name], ...subscriptions.map(
+        (_, kind) => values[index * subscriptions.length + kind].data,
+      ),
+    ) as Char])), [names, baseCharacters, subscriptions]);
+  const characters = useQueries({
+    combine: combineCharacters,
     queries: names.flatMap((name) =>
       subscriptions.map((kind) => ({
         queryKey: characterKey(name, kind),
@@ -51,43 +65,33 @@ export function usePanelModel<T extends Pick<PartyConsoleModel, 'state' | 'chars
       ...domainOptions(client, domain),
       enabled: visible,
     })),
+    combine: combineDomains,
   });
-  const characters = Object.fromEntries(
-    names.map((name, index) => [
-      name,
-      Object.assign(
-        {},
-        model.state.characters[name],
-        ...subscriptions.map(
-          (_, kind) => values[index * subscriptions.length + kind].data,
-        ),
-      ) as Char,
-    ]),
+  const state: PartyState = useMemo(
+    () => Object.assign({}, model.state, ...queries.data, { characters }),
+    [model.state, characters, queries.data],
   );
-  const state: PartyState = Object.assign(
-    {},
-    model.state,
-    ...queries.map((query) => query.data),
-    { characters },
-  );
-  const quantities: Record<string, number> = {};
-  const add = (item?: Item | null) => {
-    if (item && STAT_SCROLLS.some((entry) => entry.scroll === item.name))
-      quantities[item.name] =
-        (quantities[item.name] || 0) + Math.max(1, Number(item.q) || 1);
-  };
   const merchant = characters[state.merchantCharacter || ''];
-  (merchant?.items || []).forEach((entry) => add(entry?.item));
-  Object.values(state.bank?.packs || {}).forEach((pack) =>
-    pack.forEach((entry) => add(entry?.item)),
-  );
+  const quantities: Record<string, number> = useMemo(() => {
+    const totals: Record<string, number> = {};
+    const add = (item?: Item | null) => {
+      if (item && STAT_SCROLLS.some((entry) => entry.scroll === item.name))
+        totals[item.name] =
+          (totals[item.name] || 0) + Math.max(1, Number(item.q) || 1);
+    };
+    (merchant?.items || []).forEach((entry) => add(entry?.item));
+    Object.values(state.bank?.packs || {}).forEach((pack) =>
+      pack.forEach((entry) => add(entry?.item)),
+    );
+    return totals;
+  }, [merchant?.items, state.bank?.packs]);
   const standObserved = model.standItem
     ? levelPriceHistory(
         state.standPriceHistory?.[model.standItem.entry.item.name],
         Number(model.standItem.entry.item.level) || 0,
       )
     : undefined;
-  const marketAt = queries[domains.indexOf('market')]?.dataUpdatedAt || 0;
+  const marketAt = queries.updatedAt[domains.indexOf('market')] || 0;
   const standMarketCount = model.standItem
     ? (state.aldata?.listings || [])
         .filter(
@@ -105,16 +109,31 @@ export function usePanelModel<T extends Pick<PartyConsoleModel, 'state' | 'chars
           0,
         )
     : 0;
+  const chars = useMemo(() => model.chars.map((char) => characters[char.name]),
+    [model.chars, characters]);
+  const monsterAchievements = useMemo(
+    () => aggregateMonsterAchievements(characters),
+    [characters],
+  );
+  const standListings = state.standListings || emptyArray();
+  const occupiedSlots = useMemo(
+    () => occupiedStandSlots(standListings, state.nativeStand, merchant, state.standBids),
+    [standListings, state.nativeStand, merchant, state.standBids],
+  );
   return {
     ...model,
     state,
-    chars: model.chars.map((char) => characters[char.name]),
+    chars,
     standObserved,
     standMarketCount,
     standMarketReference:
       standObserved?.marketLow || standObserved?.lowest || 0,
     statScrollInventory: quantities,
-    monsterAchievements: aggregateMonsterAchievements(characters),
-    occupiedStandSlots: occupiedStandSlots(state.standListings || [], state.nativeStand, merchant, state.standBids),
+    monsterAchievements,
+    occupiedStandSlots: occupiedSlots,
   };
+}
+
+function combineDomains(queries: UseQueryResult<Partial<PartyState>>[]) {
+  return { data: queries.map(query => query.data), updatedAt: queries.map(query => query.dataUpdatedAt) };
 }

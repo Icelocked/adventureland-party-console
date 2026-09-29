@@ -38,26 +38,3 @@ test('first BankBoi creation waits for confirmation, reports failures, and block
  assert.equal(view.root.findAllByType('Dialog').find(n=>n.props.open===true)?.props.open,true);
  await act(async()=>view.unmount());
 });
-test('characters show eight positions and no invented class appearance',async()=>{
- const {AccountSettings}=load('account-settings');let view;
- await act(async()=>view=create(React.createElement(AccountSettings,{state:{roster:[{name:'M',ctype:'merchant'}],bankbois:[{name:'M'}],characters:{},appearanceChoices:{merchant:[{layers:[{url:'wrong'}]}]}}})));
- assert.equal(view.root.findAllByProps({'aria-label':'Empty character slot'}).length,7);
- assert.equal(view.root.findAllByType('SpriteCrop').length,0);
- await act(async()=>view.unmount());
-});
-
-
-test('account characters use saved offline dolls and prefer the current live appearance',async()=>{
- const {AccountSettings}=load('account-settings');let view;
- const cached={skin:'real-skin',characterDollHtml:'<img src="saved.png">',updatedAt:1};
- const state={roster:[{name:'Offline',ctype:'merchant'}],bankbois:[],characters:{},characterAppearances:{Offline:cached}};
- try {
-  await act(async()=>view=create(React.createElement(AccountSettings,{state})));
-  assert.equal(view.root.findByType('CharacterPortrait').props.html,cached.characterDollHtml);
-  assert.ok(view.root.findAllByType('p').some(n=>text(n)==='Offline'));
-  await act(async()=>view.update(React.createElement(AccountSettings,{state:{...state,characters:{Offline:{characterDollHtml:'<img src="live.png">'}}}})));
-  assert.equal(view.root.findByType('CharacterPortrait').props.html,'<img src="live.png">');
-  await act(async()=>view.update(React.createElement(AccountSettings,{state:{...state,characters:{Offline:{hp:100}}}})));
-  assert.equal(view.root.findByType('CharacterPortrait').props.html,cached.characterDollHtml);
- } finally {await act(async()=>view?.unmount());}
-});

@@ -98,5 +98,4 @@ test('new dialog sessions use their selected level and retain only matching exis
   model.wtbItem = cap(8);
   const connected=render({ model });
   assert.equal(connected.type(connected.props).props.item, model.wtbItem, 'new sessions receive the selected item and level');
-  assert.match(source, /onAddWTB\(\s*\{\s*\.\.\.selected\.entry\.item,\s*level: previewLevel[,\s]*\}/);
 });

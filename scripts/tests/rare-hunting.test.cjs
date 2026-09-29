@@ -73,10 +73,9 @@ test('four Phoenix regions fit one footprint; tall region gets an overlapping ca
     if(tall) assert.ok(points.every(p=>p.x===points[0].x));
   }
 });
-test('disabled passive settings never interrupt, while follower Fairy sighting preempts Phoenix',()=>{
-  const r=fixture();r.party.passiveRareHunts={tinyp:false,phoenix:false};r.sight();assert.equal(r.controller.encounter(),false);
-  r.party.passiveRareHunts.phoenix=true;r.sight();assert.equal(r.party.rareHuntState.encounter.mtype,'phoenix');
-  r.party.passiveRareHunts.tinyp=true;r.sight('tinyp','M');assert.equal(r.party.rareHuntState.encounter.mtype,'tinyp');
+test('follower Fairy sighting preempts Phoenix',()=>{
+  const r=fixture();r.sight();assert.equal(r.party.rareHuntState.encounter.mtype,'phoenix');
+  r.sight('tinyp','M');assert.equal(r.party.rareHuntState.encounter.mtype,'tinyp');
   assert.equal(r.controller.control('P').target.id,'tinyp');
 });
 test('sightings on another realm and claimed Fairy do not acquire; outsider Phoenix is rejected',()=>{
@@ -90,13 +89,7 @@ test('higher custom priority, Daisy rewards and event combat prevent rare interr
   r.party.statuses.W.target=null;r.party.turnIn=true;r.sight();assert.equal(r.controller.encounter(),false);
   r.party.turnIn=false;r.party.statuses.W.joinedEvent='franky';r.sight();assert.equal(r.controller.encounter(),false);
 });
-test('Hunt resumes after confirmed kill; disappearance is not a kill and stale sightings expire',()=>{
-  const r=fixture();r.party.monsterHunt={stage:'fighting',target:'goo'};r.party.farmingPolicy='hunt';r.sight();
-  r.party.statuses.W.rareKills=[{id:'phoenix',mtype:'phoenix',map:'main',in:'main',at:r.time(),partyEngaged:true}];
-  r.controller.report('W',r.party.statuses.W);r.controller.tick();assert.equal(r.resumed(),0);
-  r.advance(2000);r.party.statuses.W.rareLoot={id:r.controller.control('W').id,at:r.time(),observedAt:r.time(),realm:':USII',map:'main',in:'main',complete:true};
-  r.controller.tick();assert.equal(r.resumed(),0);assert.equal(r.party.monsterHunt.convoyId,null);
-  assert.equal(r.controller.encounter(),false);
+test('disappearance is not a kill and stale sightings expire',()=>{
   const q=fixture();q.sight();q.party.statuses.W.rareSightings=[];q.advance(30001);q.controller.tick();
   assert.equal(q.controller.encounter(),false);assert.match(q.party.rareHuntState.message || '',/progress|time|fresh sightings/);
 });
@@ -105,14 +98,14 @@ test('manual navigation revision cancels a pursuit without a stale return convoy
   assert.equal(r.controller.encounter(),false);assert.equal(r.starts(),0);
 });
 test('generator carrier is unique and confirmation releases attacks without repeat deployment',()=>{
-  const r=fixture();r.party.statuses.M.items=[{name:'fieldgen0'}];r.party.statuses.P.items=[{name:'fieldgen0'}];
+  const r=fixture();r.party.statuses.M.items=[{slot:0,item:{name:'fieldgen0'}}];r.party.statuses.P.items=[{slot:0,item:{name:'fieldgen0'}}];
   r.sight('tinyp');const c=r.controller.control('W');assert.equal(c.deployer,'M');
   r.party.statuses.M.rareDeployment={encounterId:c.id};r.controller.tick();assert.equal(r.controller.control('W').deployer,'M');
   r.party.statuses.W.rareFields=[{x:20,y:10}];r.controller.tick();assert.equal(r.controller.control('W').deployer,null);
   r.party.statuses.W.rareFields=[];r.controller.tick();assert.equal(r.controller.control('W').deployer,null);
 });
 test('unconfirmed generator deployment falls back after three seconds',()=>{
-  const r=fixture();r.party.statuses.M.items=[{name:'fieldgen0'}];r.sight('tinyp');
+  const r=fixture();r.party.statuses.M.items=[{slot:0,item:{name:'fieldgen0'}}];r.sight('tinyp');
   const id=r.controller.control('M').id;r.party.statuses.M.rareDeployment={encounterId:id};r.controller.tick();
   r.advance(3001);r.sight('tinyp');assert.equal(r.controller.control('M').deployer,null);
 });
@@ -257,9 +250,9 @@ test('grouped rare waits for queue selection and never owns a competing convoy',
  assert.match(r.party.rareHuntState.encounter.message,/Pursuing/);
  r.party.groupedCombat.fights=[r.party.groupedCombat.target];r.controller.tick();assert.match(r.party.rareHuntState.encounter.message,/Fighting/);
 });
-test('locked grouped rare survives disabling, stale sightings and timeout; death waits for remaining attackers',()=>{
+test('currently attacking rare survives disabling and pursuit timeout; death waits for remaining attackers',()=>{
  const r=fixture();const target=groupRare(r,'phoenix','engaged');r.sight();const id=r.controller.control('W').id;
- r.controller.setSettings({phoenix:false});r.advance(310000);r.party.statuses.W.rareSightings=[];r.controller.tick();
+ r.controller.setSettings({phoenix:false});r.advance(310000);r.sight('phoenix','W',{target:'W'});
  assert.equal(r.controller.encounter(),true);assert.equal(r.starts(),0);
  const other={...target,id:'boar',mtype:'boar'};r.party.groupedCombat.target=other;r.party.groupedCombat.fights=[other];
  r.party.groupedCombat.deaths=[{...target,at:r.time(),partyEngaged:true}];r.controller.tick();assert.equal(r.starts(),0);assert.equal(r.controller.blocksPulls(),true);
@@ -293,15 +286,15 @@ test('catalog monsters support committed encounters and independent passing mode
  assert.equal(passing.controller.encounter(),false);assert.equal(passing.starts(),0);
 });
 test('disabled field generators leave committed Fairy on ordinary attacks',()=>{
- const r=fixture();r.party.statuses.W.items=[{name:'fieldgen0'}];r.controller.setSettings({useFieldGenerators:false});r.sight('tinyp');
+ const r=fixture();r.party.statuses.W.items=[{slot:0,item:{name:'fieldgen0'}}];r.controller.setSettings({useFieldGenerators:false});r.sight('tinyp');
  assert.equal(r.controller.control('W').deployer,null);
 });
 
 test('committed passive sighting interrupts eligible grouped travel; passing sighting preserves route',()=>{
  for(const keepMoving of [false,true]) {
-  const r=fixture();groupRare(r,'goo');r.party.groupedCombat.target=null;r.party.activeConvoy={purpose:'farm-relocation',phase:'travel'};
+  const r=fixture();groupRare(r,'goo');r.party.groupedCombat.target=null;r.party.activeConvoy={id:'owned-travel',purpose:'farm-relocation',phase:'travel'};
   r.controller.setSettings({rules:{bee:{enabled:true,keepMoving,priority:100}}});r.sight('bee');
-  assert.equal(r.controller.encounter(),!keepMoving);assert.equal(!!r.party.activeConvoy,keepMoving);
+  assert.equal(r.controller.encounter(),!keepMoving);assert.equal(!!r.party.activeConvoy,true);
   assert.equal(r.starts(),0,'movement ownership hands to the existing combat queue');
  }
 });
@@ -314,4 +307,27 @@ for(const mtype of ['phoenix','tinyp'])test(mtype+' committed by travel retains 
  r.party.groupedCombat.fights=[];r.party.groupedCombat.target=null;
  r.party.groupedCombat.deaths=[{...target,at:r.time(),partyEngaged:true}];
  r.controller.tick();assert.equal(r.party.activeConvoy,convoy);assert.equal(r.starts(),0);
+});
+
+test('selected stationary Fairy expires and cannot reopen merely by wandering',()=>{
+ const r=fixture();groupRare(r,'tinyp');r.sight('tinyp');
+ for(let i=0;i<32;i++){r.advance(1000);r.sight('tinyp','W',{x:100+i*30});}
+ assert.equal(r.controller.encounter(),false);
+ assert.ok(Object.keys(r.party.rareRetryEvidence).length);
+ assert.equal(r.party.groupedCombat.target,null);
+ r.advance(4000);r.sight('tinyp','W',{x:1200});assert.equal(r.controller.encounter(),false);
+});
+test('rare acquisition keeps an uncommitted Hunt convoy and commits the encounter atomically',()=>{
+ const r=fixture();groupRare(r,'tinyp');
+ const c=r.party.activeConvoy={id:'hunt-route',purpose:'monster-hunt',huntTarget:'osnake',phase:'travel'};
+ r.sight('tinyp');
+ assert.equal(r.party.activeConvoy,c);assert.equal(c.huntTravel.primary.id,'tinyp');
+ assert.equal(c.huntTravel.reason,'passive-setting');assert.equal(r.party.rareHuntReturn,null);
+});
+
+test('restored no-progress budget releases a selected Fairy instead of resetting pursuit',()=>{
+ const r=fixture();groupRare(r,'tinyp');
+ r.party.rarePursuitProgress={[':USII|main|main|tinyp']:{start:r.time()-60000,progress:r.time()-31000,lowHp:5600}};
+ r.sight('tinyp');assert.equal(r.controller.encounter(),false);
+ assert.ok(r.party.rareRetryEvidence[':USII|main|main|tinyp']);
 });

@@ -1,0 +1,696 @@
+{
+  "source": "HC-STOP native failure, fresh god loadout, 2026-09-28",
+  "encounter": {
+    "cycle": "hunt-1790606776859-1790606723273",
+    "encounter": {
+      "id": "524",
+      "map": "main",
+      "x": 40.224785354456124,
+      "y": 107.86653635006196,
+      "hp": 175005,
+      "observableCombatSeconds": 5
+    }
+  },
+  "initialConvoy": {
+    "id": "convoy-1790606776862-1790606723274",
+    "epoch": 1790606723238,
+    "phase": "defending",
+    "huntTravel": {
+      "primary": {
+        "id": "524",
+        "mtype": "goo",
+        "map": "main",
+        "in": "main",
+        "x": 39.47598236319363,
+        "y": 108.8370248979051,
+        "hp": 160296,
+        "max_hp": 175005,
+        "target": "E2EWarrior",
+        "server": "USI",
+        "fighter": "E2EWarrior",
+        "startedAt": 1790606787848,
+        "state": "engaged"
+      },
+      "searches": {},
+      "retired": [
+        "[\"USI\",\"main\",\"main\",\"522\"]",
+        "[\"USI\",\"main\",\"main\",\"509\"]",
+        "[\"USI\",\"main\",\"main\",\"508\"]"
+      ],
+      "committed": [
+        {
+          "id": "524",
+          "mtype": "goo",
+          "map": "main",
+          "in": "main",
+          "x": 39.47598236319363,
+          "y": 108.8370248979051,
+          "hp": 160296,
+          "max_hp": 175005,
+          "target": "E2EWarrior",
+          "server": "USI",
+          "fighter": "E2EWarrior",
+          "startedAt": 1790606787848,
+          "state": "engaged"
+        }
+      ],
+      "released": {
+        "[\"USI\",\"main\",\"main\",\"508\"]": 1790606786962
+      },
+      "reason": "passive-setting"
+    }
+  },
+  "finalHunt": {
+    "version": 2,
+    "cycleId": "hunt-1790606776859-1790606723273",
+    "stage": "farming",
+    "participants": [
+      "E2EWarrior",
+      "E2EPriest"
+    ],
+    "missions": [
+      {
+        "target": "armadillo",
+        "owners": [
+          "E2EWarrior"
+        ],
+        "skipped": false,
+        "destination": {
+          "map": "main",
+          "mapName": "Mainland",
+          "x": 526,
+          "y": 1846,
+          "boundary": [
+            376,
+            1696,
+            676,
+            1996
+          ],
+          "shapes": [
+            {
+              "boundary": [
+                376,
+                1696,
+                676,
+                1996
+              ]
+            }
+          ],
+          "monsterIds": [
+            "armadillo"
+          ],
+          "id": "[\"main\",[{\"boundary\":[376,1696,676,1996]}]]"
+        },
+        "destinationVersion": 1
+      }
+    ],
+    "currentIndex": 0,
+    "target": "armadillo",
+    "startedAt": 1790606776859,
+    "message": "Collecting goo drops",
+    "returnPolicy": "auto",
+    "returnLocation": {
+      "map": "main",
+      "mapName": "Mainland",
+      "x": 526,
+      "y": 1846,
+      "boundary": [
+        376,
+        1696,
+        676,
+        1996
+      ],
+      "shapes": [
+        {
+          "boundary": [
+            376,
+            1696,
+            676,
+            1996
+          ]
+        }
+      ],
+      "monsterIds": [
+        "armadillo"
+      ],
+      "id": "[\"main\",[{\"boundary\":[376,1696,676,1996]}]]"
+    },
+    "returnFocus": "[\"armadillo\"]",
+    "deathCount": 0,
+    "deathObservations": {
+      "E2EWarrior": {
+        "at": 0,
+        "dead": false,
+        "countedAt": 0
+      },
+      "E2EPriest": {
+        "at": 0,
+        "dead": false,
+        "countedAt": 0
+      }
+    },
+    "owner": "E2EWarrior",
+    "selectionLeader": "E2EWarrior",
+    "policyVersion": 3,
+    "pickupPending": false,
+    "missionRevision": 1,
+    "convoyId": null,
+    "expiryAttempts": {
+      "1:E2EWarrior:armadillo": {
+        "target": "armadillo",
+        "owner": "E2EWarrior",
+        "revision": 1,
+        "deadline": 1790608575757
+      }
+    },
+    "eventTrips": {},
+    "arrivalHandoff": {
+      "at": 1790606828302,
+      "confirmedAt": 1790606828302,
+      "releasedCommands": {
+        "E2EWarrior": {
+          "id": 1790606723339,
+          "revision": 3
+        },
+        "E2EPriest": {
+          "id": 1790606723340,
+          "revision": 3
+        }
+      }
+    },
+    "originArrivedAt": 1790606828302
+  },
+  "finalRare": {
+    "encounter": {
+      "id": "rare-1790606786980-2",
+      "revisions": {
+        "E2EWarrior": 3,
+        "E2EPriest": 3
+      },
+      "mtype": "goo",
+      "stage": "loot",
+      "generator": "none",
+      "message": "Collecting goo drops"
+    },
+    "patrol": null,
+    "message": "Collecting goo drops"
+  },
+  "finalConvoy": null,
+  "fighters": {
+    "E2EWarrior": {
+      "native": {
+        "map": "main",
+        "x": 463,
+        "y": 1664,
+        "hp": 19137,
+        "s": {
+          "mluck": {
+            "ms": 3298489,
+            "f": "E2EMerchant",
+            "strong": true
+          },
+          "monsterhunt": {
+            "sn": "US I",
+            "id": "armadillo",
+            "c": 1,
+            "ms": 1534862
+          }
+        }
+      },
+      "coordinator": {
+        "seenAt": 1790607039678,
+        "rareLoot": {
+          "id": "rare-1790606784584-1",
+          "realm": ":USI",
+          "map": "main",
+          "in": "main",
+          "observedAt": 1790606786127.5,
+          "complete": true
+        },
+        "convoyLoot": {
+          "id": "[\"convoy\",\"convoy-1790606776862-1790606723274\",1790606723238,1790606799320]",
+          "realm": ":USI",
+          "map": "main",
+          "in": "main",
+          "observedAt": 1790606800120,
+          "complete": true
+        },
+        "lootStatus": {
+          "at": 1790607038682,
+          "map": "main",
+          "in": "main",
+          "eligible": 0,
+          "pending": false,
+          "error": null
+        },
+        "rareNavigation": {
+          "id": "rare-1790606786980-2",
+          "failed": false
+        },
+        "rareKills": [
+          {
+            "id": "524",
+            "mtype": "goo",
+            "map": "main",
+            "in": "main",
+            "at": 1790606799116,
+            "partyEngaged": true
+          }
+        ]
+      },
+      "matchedSocketEvents": [
+        {
+          "at": 1790606787436,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "SQK8v4",
+            "id": "524",
+            "damage": 14709
+          }
+        },
+        {
+          "at": 1790606788505,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "txvl2G",
+            "id": "524",
+            "damage": 14117
+          }
+        },
+        {
+          "at": 1790606789609,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "s9fzW4",
+            "id": "524",
+            "damage": 13340
+          }
+        },
+        {
+          "at": 1790606790550,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "xQUos6",
+            "id": "524",
+            "damage": 13724
+          }
+        },
+        {
+          "at": 1790606791513,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "BQyC2W",
+            "id": "524",
+            "damage": 14136
+          }
+        },
+        {
+          "at": 1790606792417,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "mFvsHf",
+            "id": "524",
+            "damage": 15775
+          }
+        },
+        {
+          "at": 1790606793441,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "dsikOT",
+            "id": "524",
+            "damage": 13658
+          }
+        },
+        {
+          "at": 1790606794301,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "hOMPRm",
+            "id": "524",
+            "damage": 13352
+          }
+        },
+        {
+          "at": 1790606795288,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "n86QM6",
+            "id": "524",
+            "damage": 13997
+          }
+        },
+        {
+          "at": 1790606796200,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "AgfFVs",
+            "id": "524",
+            "damage": 15626
+          }
+        },
+        {
+          "at": 1790606797185,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "Z9BywF",
+            "id": "524",
+            "damage": 15204
+          }
+        },
+        {
+          "at": 1790606798233,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "lPDdVJ",
+            "id": "524",
+            "damage": 14473
+          }
+        },
+        {
+          "at": 1790606799123,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "hBGfdp",
+            "id": "524",
+            "damage": 13941,
+            "kill": true
+          }
+        },
+        {
+          "at": 1790606799164,
+          "event": "death",
+          "data": {
+            "id": "524",
+            "luckm": 1.12,
+            "death": true
+          }
+        }
+      ]
+    },
+    "E2EPriest": {
+      "native": {
+        "map": "main",
+        "x": 463,
+        "y": 1672,
+        "hp": 5861,
+        "s": {
+          "mluck": {
+            "ms": 3298867,
+            "f": "E2EMerchant",
+            "strong": true
+          },
+          "monsterhunt": {
+            "sn": "US I",
+            "id": "armadillo",
+            "c": 1,
+            "ms": 1534862
+          }
+        }
+      },
+      "coordinator": {
+        "seenAt": 1790607039691,
+        "rareLoot": {
+          "id": "rare-1790606786980-2",
+          "realm": ":USI",
+          "map": "main",
+          "in": "main",
+          "observedAt": 1790606800365.5,
+          "complete": true
+        },
+        "convoyLoot": {
+          "id": "[\"convoy\",\"convoy-1790606776862-1790606723274\",1790606723237,1790606785137]",
+          "realm": ":USI",
+          "map": "main",
+          "in": "main",
+          "observedAt": 1790606785401.5,
+          "complete": true
+        },
+        "lootStatus": {
+          "at": 1790607038842,
+          "map": "main",
+          "in": "main",
+          "eligible": 0,
+          "pending": false,
+          "error": null
+        },
+        "rareNavigation": {
+          "id": "rare-1790606786980-2",
+          "failed": false
+        },
+        "rareKills": [
+          {
+            "id": "508",
+            "mtype": "goo",
+            "map": "main",
+            "in": "main",
+            "at": 1790606784959.5,
+            "partyEngaged": true
+          },
+          {
+            "id": "524",
+            "mtype": "goo",
+            "map": "main",
+            "in": "main",
+            "at": 1790606799122.5,
+            "partyEngaged": true
+          }
+        ]
+      },
+      "matchedSocketEvents": [
+        {
+          "at": 1790606787435,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "SQK8v4",
+            "id": "524",
+            "damage": 14709
+          }
+        },
+        {
+          "at": 1790606788506,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "txvl2G",
+            "id": "524",
+            "damage": 14117
+          }
+        },
+        {
+          "at": 1790606789656,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "s9fzW4",
+            "id": "524",
+            "damage": 13340
+          }
+        },
+        {
+          "at": 1790606790608,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "xQUos6",
+            "id": "524",
+            "damage": 13724
+          }
+        },
+        {
+          "at": 1790606791555,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "BQyC2W",
+            "id": "524",
+            "damage": 14136
+          }
+        },
+        {
+          "at": 1790606792419,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "mFvsHf",
+            "id": "524",
+            "damage": 15775
+          }
+        },
+        {
+          "at": 1790606793442,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "dsikOT",
+            "id": "524",
+            "damage": 13658
+          }
+        },
+        {
+          "at": 1790606794303,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "hOMPRm",
+            "id": "524",
+            "damage": 13352
+          }
+        },
+        {
+          "at": 1790606795289,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "n86QM6",
+            "id": "524",
+            "damage": 13997
+          }
+        },
+        {
+          "at": 1790606796200,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "AgfFVs",
+            "id": "524",
+            "damage": 15626
+          }
+        },
+        {
+          "at": 1790606797186,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "Z9BywF",
+            "id": "524",
+            "damage": 15204
+          }
+        },
+        {
+          "at": 1790606798235,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "lPDdVJ",
+            "id": "524",
+            "damage": 14473
+          }
+        },
+        {
+          "at": 1790606799123,
+          "event": "hit",
+          "data": {
+            "hid": "E2EWarrior",
+            "source": "attack",
+            "projectile": "momentum",
+            "damage_type": "physical",
+            "pid": "hBGfdp",
+            "id": "524",
+            "damage": 13941,
+            "kill": true
+          }
+        },
+        {
+          "at": 1790606799162,
+          "event": "death",
+          "data": {
+            "id": "524",
+            "luckm": 1.12,
+            "death": true
+          }
+        }
+      ]
+    }
+  },
+  "sourceTrace": ".build/hunt-fixes-red-e2e-results/live-hunt-combat-native-Hu-a8bfb--Hunt-after-the-actual-kill-live/trace.zip"
+}

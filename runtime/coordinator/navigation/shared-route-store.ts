@@ -119,13 +119,49 @@ export function sharedArrivalReady(input: unknown, now: number): boolean {
   });
 }
 
+/** Terminal return holds may finish from current physical arrival, never from
+ * the stale movement failure's position or a superseded command. */
+export function heldReturnArrivalReady(state: SharedState, c: SharedConvoy, now: number): boolean {
+  if (!c.participants.length || c.merchantInterruption || c.communicationHold) return false;
+  if (state.escape && state.escape.stage !== 'released') return false;
+  return c.participants.every(name => {
+    const status = state.statuses[name], command = state.commands[name];
+    if (!arrivalStatus(status, now) || status.transporting || !heldArrivalOwned(state, c, name)) return false;
+    return command?.phase === 'hold' && command.routeVersion === c.routeVersion && arrivedPosition(c, status);
+  });
+}
+
+function heldArrivalOwned(state: SharedState, c: SharedConvoy, name: string): boolean {
+  const status = state.statuses[name]!, command = state.commands[name], report = status.convoyNavigation;
+  const expected = c.expected?.[name];
+  if (!command || !report || !expected || report.phase !== 'failed') return false;
+  if (status.server !== c.routeServer || !intentMatches(state.navigationIntents?.[name], command, c)) return false;
+  return heldReportMatches(c, command, report, expected) && currentHeldRuntime(status);
+}
+
+function currentHeldRuntime(status: NonNullable<SharedState['statuses'][string]>): boolean {
+  const runtime = status.convoyNavigation?.runtimeId;
+  return !!runtime && characterRuntime(status) === runtime;
+}
+
+function heldReportMatches(c: SharedConvoy, command: SharedCommand,
+  report: NonNullable<SharedState['statuses'][string]>['convoyNavigation'] & {},
+  expected: NonNullable<SharedConvoy['expected']>[string]): boolean {
+  // A hold installs no route (clients report routeVersion=0). Its fresh command
+  // acknowledgment is authoritative, including holds reissued after restart.
+  return command.convoyId === c.id && command.epoch === c.epoch && command.id === expected.commandId &&
+    report.id === c.id && report.epoch === c.epoch && report.commandId === command.id &&
+    report.navigationRevision === command.navigationRevision && expected.revision === command.navigationRevision &&
+    (!expected.runtimeId || expected.runtimeId === report.runtimeId);
+}
+
 function arrivalStatus(s: SharedState['statuses'][string], now: number): s is NonNullable<SharedState['statuses'][string]> {
   return !!s && !s.rip && s.hp !== 0 && !s.moving && s.seenAt >= now - 3000 && s.seenAt <= now + 500;
 }
 function arrivalOwned(state: SharedState, c: SharedConvoy, name: string): boolean {
   const status = state.statuses[name]!, intent = state.navigationIntents?.[name];
   if (status.server !== c.routeServer || characterRuntime(status) !== c.runtimes?.[name]) return false;
-  return !intent || !intent.cancelled && intent.revision === c.expected?.[name]?.revision;
+  return !intent || (!intent.cancelled || !!c.navigationExempt) && intent.revision === c.expected?.[name]?.revision;
 }
 function arrivedPosition(c: SharedConvoy, status: import('./shared-route-types.ts').SharedStatus): boolean {
   if (c.purpose === 'monster-hunt' && !samePlace(c.location, status)) return false;

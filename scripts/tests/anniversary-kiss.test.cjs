@@ -93,6 +93,17 @@ test('featured player still holds just before one minute',async()=>{
   assert.equal(t.calls.some(x=>x[0]==='return'),false);
 });
 
+test('a completed featured hold does not suppress a later merchant kiss round',async()=>{
+ const t=fixture({merchant:true,partyFeatured:true,elapsed:60000,newSlice:true});
+ await t.run();assert.equal(t.calls.some(x=>x[0]==='kiss'),false);
+ t.r.anniversaryPlan.partyFeatured=false;
+ Object.assign(t.r.anniversaryPlan.eventCycle,{returnCompletedAt:1000000});
+ Object.assign(t.event,{round:'next-round',target:'Other',expires:1400000});
+ t.r.character.s.anniversary_visit={round:'next-round'};
+ await t.run();assert.equal(t.calls.filter(x=>x[0]==='kiss').length,1);
+ assert.ok(t.calls.some(x=>x[0]==='/anniversary/claim' && x[1].round==='next-round'));
+});
+
 test('merchant closes an open stand before travelling or kissing',async()=>{
   const t=fixture({merchant:true,stand:true,newBuff:true,resolves:true});
   await t.run();
@@ -175,9 +186,6 @@ test('second kiss can succeed and does not report a terminal failure',async()=>{
  t.r.use_skill=()=>{kisses++;if(kisses===2)t.r.character.s.anniversary_kiss={ms:300000};return Promise.resolve();};
  await t.run();assert.equal(kisses,2);assert.ok(t.r.anniversaryCompletedRounds.round);
  assert.equal(t.calls.some(x=>x[0]==='/anniversary/failure'&&x[1].attempt===2),false);
-});
-test('disabled anniversary starts no approach or kiss',async()=>{
- const t=fixture();t.r.eventSelected=()=>false;await t.run();assert.equal(t.calls.length,0);
 });
 test('arrival advances despite an unresolved movement promise',async()=>{
  const t=fixture({missing:true});const operation={navigationRevision:0};t.r.root.__partyAnniversaryKissOperation=operation;

@@ -214,3 +214,20 @@ test('early Hunt handoff rejoins the current leader without returning to the obs
  r.reunion.moving=true;r.reunionWorking=true;
  await r.farmReunionTick();assert.equal(r.reunion,null);assert.equal(acknowledged,1);assert.equal(calls.some(c=>c.destination),false);
 });
+
+
+test('ended Goobrawl exit owns movement despite a restored remote farming waypoint',async()=>{
+ const {r,calls}=runtime();r.character.map='goobrawl';r.eventReturnPending=true;
+ r.beginFarmReunion();await r.farmReunionTick();
+ assert.equal(r.reunion,null);assert.equal(r.reunionBlocked(),true);assert.equal(calls.length,0);
+ // A stale in-flight farming continuation cannot stop the transporter approach.
+ const old={revision:1,moving:true,phase:'walking'};r.reunion=old;
+ r.root.__partySharedWalking={activity:'event-return',key:'return-cycle'};
+ await r.farmReunionTick();assert.equal(old.cancelled,true);assert.equal(r.reunion,null);assert.equal(calls.length,0);
+ assert.equal(r.root.__partySharedWalking.activity,'event-return');
+ // The shared exit retains ownership even between command retries.
+ r.eventReturnPending=false;r.beginFarmReunion();await r.farmReunionTick();assert.equal(calls.length,0);
+ // Verified exit and released event walk permit the existing checkpoint recovery.
+ r.root.__partySharedWalking=null;r.character.map='main';
+ r.beginFarmReunion();assert.ok(r.reunion);assert.equal(r.reunionBlocked(),false);
+});

@@ -9,6 +9,7 @@ import { Services } from "./services.ts";
 import { updateHosting } from '../update/hosting.ts';
 import { LocalTLS } from './tls.ts';
 import { configureDashboardGateway } from '../dashboard/gateway-access.ts';
+import { createLocalSteam } from '../steam/service.ts';
 configureDashboardGateway();
 const root = fileURLToPath(new URL("../../", import.meta.url)),
   services = new Services();
@@ -17,7 +18,10 @@ await mkdir(data, { recursive: true });
 const access = new Access(path.join(data, "access.json"));
 await access.load();
 const tls = new LocalTLS(root, data);
-const server = gateway({ tls, access, updates: await updateHosting(root, data), configured: () => true, healthy: () => servicesHealthy(true), dashboardPort: 3030, publicUrl: process.env.AL_PUBLIC_URL || undefined });
+let steamServer: string | undefined;
+const steam = createLocalSteam(root, data, 924, async () => steamServer ??= (process.platform === 'linux'
+  ? `https://localhost:${tls.publicPort}` : `http://127.0.0.1:${process.env.AL_PORT || 3010}`) + '/bridge/' + await access.steam());
+const server = gateway({ steam, tls, access, updates: await updateHosting(root, data), configured: () => true, healthy: () => servicesHealthy(true), dashboardPort: 3030, publicUrl: process.env.AL_PUBLIC_URL || undefined });
 await listen(server, access);
 await tls.start();
 if (!process.argv.includes("--coordinator-only"))
@@ -30,6 +34,7 @@ services.launch(
 );
 services.launch(path.join(root, ".caracal/main.js"), path.join(root, ".caracal"), process.env);
 const stop = () => {
+  steam.stop();
   tls.stop();
   server.close();
   services.stop();

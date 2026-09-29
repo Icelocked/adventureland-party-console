@@ -83,11 +83,13 @@ test('competition waits for fighting to finish, relocates once, and keeps normal
  t.party.statuses.W.target=null;t.party.statuses.W.groupedCombat.currentAttackers=[];t.advance();t.c.farmAreaTick();assert.equal(t.starts[0].x,350);assert.deepEqual(t.party.monsterFocus,['bee']);
  t.party.activeConvoy=null;t.advance();t.c.farmAreaTick();assert.equal(t.starts.length,1);
 });
-test('failed Hunt convoy is released, retried once, then tries another zone without blacklisting',()=>{
+test('failed outbound Hunt convoy retains mission recovery ownership without farming retries',()=>{
  const t=controlFixture();t.party.farmingPolicy='hunt';const h=t.party.monsterHunt={target:'bee',stage:'mission-travel',missions:[{target:'bee',destination:t.areas[0]}],currentIndex:0,deathCount:1};
- function fail(){t.party.activeConvoy={phase:'failed',purpose:'monster-hunt',location:t.areas[0],failure:'unable'};t.advance();t.c.farmAreaTick();}
- fail();assert.equal(t.party.activeConvoy,null);t.advance(2100);t.c.farmAreaTick();assert.equal(t.starts[0].x,50);
- fail();t.advance(2100);t.c.farmAreaTick();assert.equal(t.starts[1].x,350);assert.equal(h.deathCount,1);assert.equal(t.party.huntBlacklist,undefined);
+ const convoy=t.party.activeConvoy={phase:'failed',purpose:'monster-hunt',location:t.areas[0],failure:'unable'};
+ for(const delay of [1100,2100,30000]){t.advance(delay);t.c.farmAreaTick();assert.equal(t.party.activeConvoy,convoy);}
+ assert.equal(t.starts.length,0);assert.equal(t.party.farmAreaState.pending,null);
+ assert.deepEqual(t.party.farmAreaState.failures,{});assert.equal(h.missions[0].destination,t.areas[0]);
+ assert.equal(h.deathCount,1);assert.equal(t.party.huntBlacklist,undefined);
 });
 
 test('repeated convoy ownership failures retry without declaring the zone unreachable',()=>{

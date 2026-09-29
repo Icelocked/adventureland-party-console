@@ -40,7 +40,7 @@ test('HTTPS check stays on setup and shows inline success or certificate trouble
   w.AbortSignal.timeout=()=>undefined;
   w.fetch=async(url,options)=>{
    if(String(url).startsWith(secure)){if(fail)throw Error('certificate error');assert.equal(options.credentials,'omit');assert.equal(options.body.get('ticket'),'one-time');return {ok:true,json:async()=>({ok:true,origin:secure})}}
-   if(url==='/setup/steam'){assert.deepEqual(JSON.parse(options.body),{origin:secure});return {ok:true,json:async()=>({code:'$.getScript("'+secure+'/CODE/adventure_land/universal-loader.js");'})}}
+   if(url==='/setup/steam'){const input=JSON.parse(options.body);assert.equal(input.origin,secure);assert.equal(input.placement,'remote');assert.equal(input.client,'windows-steam');return {ok:true,json:async()=>({code:'$.getScript("'+secure+'/CODE/adventure_land/universal-loader.js");'})}}
    const values={'/setup/state':{configured:true,serverAddress:'http://192.168.1.239:3010',tls:{ready:true}},'/setup/https':{origin:secure,fingerprint:'test'},'/setup/transfer':{action:secure+'/setup/check-https',ticket:'one-time'},'/party-api/steam/connection':{connected:false}};
    return {ok:true,json:async()=>values[url]};
   };

@@ -54,12 +54,27 @@ export function createEventRecoveryRoutes(state: RecoveryState, ports: RecoveryP
   function disableCombat(name: string, event: string): void {
     const session = state.eventSessions[name];
     if (!session || session.event !== event) return;
-    const participants = (session.participants || [name]).filter(
-      (member) => !ports.enabled(member, event),
-    );
-    if (!participants.includes(name)) participants.push(name);
-    ports.begin(event, { ...session, participants }, true);
+    // Inherited selection changes disable the whole party before individual
+    // clients acknowledge them. Capture every actual participant on the first
+    // call: later calls cannot replace the already-started recovery.
+    const sessions = Object.values(state.eventSessions).filter(entry => entry?.event === event);
+    const participants = [...new Set(sessions.flatMap(entry => entry?.participants || []))]
+      .filter(member => !ports.enabled(member, event) &&
+        (!state.eventSessions[member] || state.eventSessions[member]?.event === event));
+    if (!participants.length) return;
+    const waypoints = disabledWaypoints(participants, event, sessions);
+    ports.begin(event, { ...session, participants, waypoints }, true);
     for (const member of participants) delete state.eventSessions[member];
+  }
+  function disabledWaypoints(participants: string[], event: string, sessions: (EventSession | undefined)[]): Waypoints {
+    const waypoints: Waypoints = {};
+    for (const member of participants) {
+      const own = state.eventSessions[member];
+      const fallback = sessions.find(entry => entry?.participants?.includes(member));
+      const waypoint = (own?.event === event && own.waypoints?.[member]) || fallback?.waypoints?.[member];
+      if (waypoint) waypoints[member] = waypoint;
+    }
+    return waypoints;
   }
   function disabled(req: HttpRequest, res: HttpResponse): unknown {
     const body = requestObject(req.body),

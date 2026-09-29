@@ -11,7 +11,7 @@ export const publicStateFields = [
   "phoenixRouteOrder",
   "rareHuntState",
   "threshold",
-  "itemCollectionThreshold",
+  "itemCollectionThreshold", "buyUpgradeBatchSize",
   "marked",
   "merchantMarked",
   "autoItemMarks",

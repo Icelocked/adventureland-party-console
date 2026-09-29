@@ -1,6 +1,9 @@
 # Changelog
 
 - Fix cave combat queue delivery and acknowledgement after farming resets or runtime reloads; preserve cave healing participants and stop issued travel segments when combat pauses movement.
+- Fixed coordinator startup on oversized saved-state journals: stream records and compact by size without constructing one giant string. Preserve existing state and writer locks.
+
+- Unified Hunt turn-in and anniversary staging returns: attack aggressors while planning and walking, cancel interrupted party Town casts together, resume Town after aggro clears, and retain bounded route retries. Removed independent anniversary casting and return combat/loot stops.
 
 ## Unreleased
 
@@ -44,6 +47,134 @@ from the commits merged into `main`.
   Live party observations guide healing; cave navigation waits for combat and loot.
 
 - Event estimates now say "Next chance" without the "event not guaranteed" text.
+- Refresh upgrade chances is a prioritized merchant job that borrows missing scrolls and offerings from the bank without buying supplies, returns them after calculation with interrupted-transfer recovery, and saves results across reopenings and restarts. Any real merchant upgrade invalidates saved chances; the menu shows queued/running status and missing supplies.
+
+- Steam primary/login actions can launch a local Windows or native Linux client,
+  or attach to a running client with automation enabled. The bridge must be ready
+  before headless ownership is released; completion still requires native CODE
+  reports. Setup choices prevent launching a client on a different PC. A running
+  client without automation enabled requires one close and retry. Windows was
+  verified live; Linux has protocol tests and still needs live desktop validation.
+
+### Added
+
+- Merchant setting for upgrade purchase batches (default 1), with bulk starting-tier scrolls, durable item ownership, and completion of every purchased item.
+
+### Fixed
+
+- Fixed interrupted deliver-and-equip recovery (#20): after a failed equip, wait for a fresh merchant inventory, remove marks for missing stock, or retry retained stock with a new delivery identity. Persist reconciliation across restarts and prevent stale inventory or delayed receipts from reviving the retry loop. Added two native E2E journeys covering missing/retained cargo, interrupted inventory reports, restart, real redelivery/equip and no replay. Documented the existing bounded shutdown behavior for SIGINT/SIGTERM.
+
+- Restore coordinator lint compliance by extracting travel-attacker collection, assembly runtime lookup, and merchant eligibility helpers without changing behavior.
+
+- Handle movement-barrier ownership rejections without reporting a new route failure: superseded walks retire quietly, early departures wait, and completed transitions are not repeated. Preserve genuine route errors and communication recovery (#27).
+
+- Preserve ALData marketplace sale commands across realm-switch worker restarts until completion (#26).
+- Treat movement planner rejections as native-pathfinding fallback results instead of communication outages. Distinguish fallback, terminal movement failures, and temporary communication holds, and avoid duplicate command-failure logs for already reported movement outcomes (#29).
+
+- Market search now matches item display names in WTS, WTB, and Classifieds while preserving searches by internal item ID, trader, and server (#32).
+
+- Keep a solo ranger (or any single fighter) attacking in Group mode by creating its coordinator combat group and target authorization. Leadership is supported; Scatter remains unchanged.
+
+- Automatically designate the first connected, managed merchant on fresh installs so merchant controls and logistics work without editing configuration. Preserve saved assignments and exclude bankboi workers.
+- Show the configured merchant's name in market, Ponty, bank-unlock and donation dialogs, with a generic fallback when no merchant is assigned (#30).
+
+- Keep every right-click menu, submenu, and embedded upgrade preview white with black text, including focus and hover states.
+
+- Correct preview text encoding. Distinguish unavailable and partial chances from successful previews, and wait for bank data before borrowing supplies.
+- Release convoy pauses when merchant jobs fail, expire, clear, yield, or change realm. Ignore late handoff completions without overwriting newer commands; preserve the original Hunt/event destination.
+
+- Prevent Town-rally arrival from falsely failing Hunt runtime readiness; defer merchant work while Hunt owns movement instead of repeatedly failing handoffs.
+
+- Buy-with-upgrade follows relocated items and requires a matching server failure
+  before logging destruction or buying another base item. Uncertain outcomes retain
+  their journals instead of abandoning partially upgraded survivors.
+
+- Updated Hunt and farming UI test fixtures for execution-state clearing and the
+  preferred-spawn dialog; nested-dialog checks count only open dialogs.
+
+- Fixed Hunt departures stuck at Daisy when later door approaches crossed scenery.
+  Validate reachable interaction points and bounded local detours before accepting
+  the shared route, preserving the selected destination and recovery limits.
+
+- Fresh headless reports now override stale Steam connection observations, so a
+  successful Steam-to-headless transfer no longer hides the character behind a
+  false "Connection lost" card.
+
+- Hunt off/on now resets execution, holds, failure counts and blacklist while retaining live quests and saved settings. Removed arbitrary-door route recovery; exhausted routes try another actual monster spawn. Retire saved relocation detours.
+
+- Added Farming Settings > Set preferred hunt spawns: expand monsters with multiple available spawns and save a destination for future Monster Hunts. Automatic selection remains the default; normal farming is unaffected.
+
+- Set alpathfinder route-cost speed to 200 for all planner calls, replacing the inflated no-Town estimate that could discourage useful door and tunnel routes.
+
+- Hunt returns now release a failed travel hold after fresh, matching reports
+  verify the whole party stopped at Daisy, allowing quest turn-in to continue.
+  Recovery also accepts holds reissued after restart and ignores released Escape
+  history, while preserving current navigation ownership and retry budgets.
+
+- Improved dashboard performance by memoizing character cards, inventory/equipment,
+  bank and stand panels, monster controls, and upgrade-offering context, with
+  stable data and action props to avoid unrelated renders.
+- Equipment catalog uses infinite scroll, loading more items automatically as
+  you approach the bottom while keeping the initial render bounded.
+- Dashboard settings, rules, and marks use a separate 15-second configuration
+  poll; actions refresh them immediately while live progress retains fast updates.
+- Live logs reuse derived entries and rendered rows when their contents have not
+  changed, reducing repeated sorting and rendering during long sessions.
+  ([#22](https://github.com/Ryan-Haines/adventureland-party-console/issues/22))
+- Added the pinned game-17175 route fixture and refreshed Hunt, convoy, and
+  coordinator-storage regression fixtures for repeatable offline validation.
+
+- Long-running coordinators no longer retain complete character heartbeats in
+  rare-target rejection receipts. Existing receipts are compacted without losing
+  rejection evidence, and unchanged merchant queue checks avoid redundant saves.
+- Upgrade and compound jobs preserve unfinished work after movement communication
+  failures, retrying with persistent 10/30/60/300-second backoff.
+- Added `scripts/watch-console.ps1` to follow redirected local console logs in a
+  visible terminal, with `-Errors` for stderr.
+  ([#21](https://github.com/Ryan-Haines/adventureland-party-console/pull/21))
+
+- Franky attendance now targets only the Franky monster, approaches into attack
+  range, and holds position without kiting, formation movement, or warrior Dash.
+  Approaches ignore monster danger zones while respecting terrain. Adds cannot
+  become fallback or offensive-skill targets; healing and event recovery continue.
+- Buy-with-upgrade orders preserve confirmed purchases, upgrade results, budgets,
+  attempt limits, and reserved items through interruptions and restarts. Priority
+  work yields between completed item cycles; movement failures retain the order
+  with bounded retry delays and visible retry status.
+
+- Hunt route failures now use bounded segment repair, native fallback and origin
+  relocation before trying another spawn. Recovery budgets survive replacement
+  convoys and restarts, with explicit causes when movement remains held.
+- Convoy phase changes no longer send duplicate cruise caps. Movement diagnostics
+  identify command takeovers and retain the original planner failure.
+
+- Delivered equipment pauses and resumes convoy travel without replacing its
+  ownership; combat during merchant recovery no longer deadlocks the regroup hold.
+
+- Hunt pickup travel recovers a missing completion acknowledgement after verified
+  party arrival, preventing an idle party at Daisy from remaining in sync travel.
+
+- Joinable events such as Franky use direct teleportation for entry and respawn
+  recovery, without waiting for a convoy. Arrival is verified before clearing
+  recovery, and failed event walks no longer leave characters unable to attack.
+- Event combat closes into boss range before kiting. Avoiding adds no longer
+  pulls characters away from the boss; blocked kiting tries safe approach and
+  escape directions instead of leaving characters stuck in corners.
+  ([#21](https://github.com/Ryan-Haines/adventureland-party-console/pull/21))
+
+- Hunt event exits resume the current quest instead of an obsolete farming
+  checkpoint. Dedicated event-map evacuation survives restarts, delayed clients,
+  and Hunt toggles; completed anniversary visits hand back to current Hunt policy.
+- Hunt communication holds retain matching runtime and command acknowledgements
+  through defensive combat. Recovery reconciles dead and released encounters,
+  checks loot, and regroups toward the original destination.
+- Rare travel interruptions share convoy ownership. Fairy targeting no longer
+  depends on a detached support controller, and unsuccessful pursuits retain
+  their progress/retry evidence across restarts instead of reopening on wandering.
+- Members separated by a map transition can join a travel encounter under its
+  existing owner. Hunt reconciles verified arrival before optional acquisition,
+  and reports the encounter or specific catch-up blocker instead of stale status.
+  ([#21](https://github.com/Ryan-Haines/adventureland-party-console/pull/21))
 
 - Invisible rogue recipients reveal themselves for merchant servicing, then resume
   their normal invisibility behavior. ([#10](https://github.com/Ryan-Haines/adventureland-party-console/pull/10))

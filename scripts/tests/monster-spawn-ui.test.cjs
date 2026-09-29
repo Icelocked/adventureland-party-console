@@ -29,7 +29,7 @@ test('spawn display distinguishes loading, missing records, ordinary routes and 
 });
 test('spawn version 2 triggers refresh and version 3 satisfies catalog discovery', () => {
   const state = Object.fromEntries(['travelPlaces','monsterChoices','monsterHunterLocation','bestiaryCatalog','skillCatalog','appearanceChoices','merchantCatalog'].map(key => [key, []]));
-  state.merchantCatalogVersion = 'token-shops-v3';
+  state.merchantCatalogVersion = 'exchange-rewards-v4';
   state.monsterLocationsVersion = 2;
   assert.equal(needsCatalog(state), true);
   state.monsterLocationsVersion = 3;

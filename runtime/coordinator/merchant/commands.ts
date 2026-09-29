@@ -1,4 +1,4 @@
-import { normalizePickupJob } from './pickup-jobs.ts';
+import { collectsPartyItems, normalizePickupJob } from './pickup-jobs.ts';
 import { scopeWork } from './command-scope.ts';
 import { ownCommandType } from "./command-kind.ts";
 import type {
@@ -105,6 +105,7 @@ export function ownMerchantCommand(
   status: ServiceStatus,
   inputs: CommandInputs,
 ): MerchantCommand {
+  if (job.reason === "upgrade preview") return {id,type:"merchant-upgrade-preview",jobId:job.id,upgradePreview:job.upgradePreview};
   const work = inputs.work(job.target);
   return scopeWork(job, {
     id,
@@ -116,14 +117,22 @@ export function ownMerchantCommand(
     ...merchantSupplies(inputs),
     ...reasonDetails[job.reason]?.(job, inputs),
     ...improvements(work, status, true, inputs.bankboiItems),
-    ...(inputs.sharedAutoCompounds ? { autoCompounds: inputs.sharedAutoCompounds, sharedBankImprovements: true } : {}),
-    ...(job.reason === "auto upgrade" && inputs.bankUpgradeRules?.length ? { bankUpgradeRules: inputs.bankUpgradeRules } : {}),
+    ...sharedImprovements(job, inputs),
     goldTarget: goldTarget(work, 0),
+    buyUpgradeBatchSize: inputs.buyUpgradeBatchSize ?? 1,
     order: job.order || null,
     resumeState: job.resumeState || null,
+    ...commerceDetails(job),
     preloadStatScrolls: work.statScrolls,
     ...(job.capacityRecovery ? { capacityRecovery: true, merchantWithdrawals: [], withdrawals: [], npcSales: [] } : {}),
   });
+}
+
+function sharedImprovements(job: MerchantWork, inputs: CommandInputs) {
+  return {
+    ...(inputs.sharedAutoCompounds ? { autoCompounds: inputs.sharedAutoCompounds, sharedBankImprovements: true } : {}),
+    ...(job.reason === "auto upgrade" && inputs.bankUpgradeRules?.length ? { bankUpgradeRules: inputs.bankUpgradeRules } : {}),
+  };
 }
 
 function clusterOptions(job: MerchantWork) {
@@ -148,7 +157,7 @@ export function partyMerchantCommand(
   return scopeWork(job, {
     id,
     type: "merchant-service",
-    ...(['marked items', 'inventory cleanout'].includes(job.reason) ? {collectionOnly: true} : {}),
+    ...(collectsPartyItems(job.reason) ? {collectionOnly: true} : {}),
     targetRealm: status.server,
     jobId: job.id,
     target: job.target,
@@ -187,4 +196,8 @@ export function luckMerchantCommand(
     radius: 200,
     npcSales: [],
   };
+}
+
+function commerceDetails(job: MerchantWork) {
+  return job.commerceProgressVersion === 2 ? {commerceProgressVersion: 2, commerceOrderId: job.commerceOrderId} : {};
 }

@@ -11,6 +11,7 @@ import { updateHosting } from '../update/hosting.ts';
 import { notifyBoot, waitForRelease } from '../update/boot.ts';
 import { LocalTLS } from './tls.ts';
 import { configureDashboardGateway } from '../dashboard/gateway-access.ts';
+import { createLocalSteam } from '../steam/service.ts';
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const data = path.resolve(process.env.AL_DATA_DIR || path.join(root, ".build/hosting-data"));
@@ -79,7 +80,11 @@ services.launch(path.join(root, "tools/dashboard/supervisor.mts"), path.join(roo
 }, development ? ['--development'] : []);
 if (development) services.launch(path.join(root, 'tools/game/watch.mts'), root, process.env);
 await notifyBoot(data);
+let steamServer: string | undefined;
+const steam = createLocalSteam(root, data, apiPort, async () => steamServer ??=
+  (process.platform === 'linux' ? `https://localhost:${tls.publicPort}` : `http://127.0.0.1:${process.env.AL_PORT || 3010}`) + '/bridge/' + await access.steam());
 const server = gateway({
+  steam,
   tls,
   access,
   updates: await updateHosting(root, data),
@@ -96,6 +101,7 @@ void startGame().catch(error => {
   if ((error as NodeJS.ErrnoException).code !== 'ENOENT') console.error('Game startup failed:', error.message);
 });
 function shutdown() {
+  steam.stop();
   tls.stop();
   server.close();
   services.stop();

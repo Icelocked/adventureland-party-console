@@ -16,6 +16,7 @@ const command = { id: 2, convoyId: 'test', epoch: 7, phase: 'prepare',
 test('explicit cancellation restores cruise before ownership is cleared, only once', () => {
   const r = runtime();
   const old = r.context.convoyTraveling = { id: 'cancelled' };
+  r.context.setConvoyCruise(old,57); r.calls.length=0;
   r.context.releaseConvoyCruise(old);
   r.context.releaseConvoyCruise(old);
   r.context.convoyTraveling = null;
@@ -154,18 +155,6 @@ test('native multi-tick search prepares without movement; same plot walks at off
   assert.equal(r.calls.filter(x=>x[1]==='/convoy-complete').length,1);
   assert.equal(r.context.character.x,120);
   assert.equal(restores, 1);
-});
-
-test('native cross-map route preserves transport steps and reaches destination', async () => {
-  const r = runtime({slow:false});
-  r.context.G.maps.main.doors = [[0,0,0,0,'cave',0,0]];
-  const {promise} = await r.start({...command, location:{map:'cave',x:120,y:0}});
-  await r.ready(); assert.ok(r.context.movement.state.plot.some(p=>p.transport));
-  assert.equal(r.calls.filter(x=>x[0]==='transport').length,0);
-  schedule(r); r.setNow(3950);
-  for(let i=0;i<80 && r.context.movement.state.moving;i++) { r.tick(); await settle(); }
-  await promise; assert.equal(r.context.character.map,'cave'); assert.equal(r.searches,1);
-  assert.equal(r.calls.filter(x=>x[0]==='transport').length,1);
 });
 
 test('native route handoff restores cruise and relinquishes movement without false arrival', async () => {
@@ -316,4 +305,32 @@ test('Franky exit resolves at the Mainland boundary without walking the remainin
   assert.equal(r.context.movement.state.searching,false);
   assert.equal(r.context.partyLocation,null);
   assert.equal(r.calls.filter(x=>x[1]==='/convoy-complete').length,1);
+});
+
+
+test('same convoy phase and epoch changes retain one cruise cap; changed speed sends one update',async()=>{
+ const r=runtime();const a=await r.start({...command,id:1,phase:'assemble'});
+ const old=r.context.convoyTraveling;old.cruiseHandoff=true;await r.cancel();await a.promise;
+ const b=await r.start({...command,epoch:8});
+ assert.deepEqual(r.calls.filter(x=>x[0]==='cruise'),[['cruise',57]]);
+ const current=r.context.convoyTraveling;r.context.setConvoyCruise(current,60);r.context.setConvoyCruise(current,60);
+ r.context.releaseConvoyCruise(old);
+ assert.deepEqual(r.calls.filter(x=>x[0]==='cruise'),[['cruise',57],['cruise',60]]);
+ await r.cancel();await b.promise;
+ assert.deepEqual(r.calls.filter(x=>x[0]==='cruise'),[['cruise',57],['cruise',60],['cruise',500]]);
+});
+test('legacy terminal hold without a reason reports convoy identity and missing context',async()=>{
+ const r=runtime();const {promise}=await r.start({...command,phase:'hold'});
+ assert.match(r.context.convoyTraveling.failure,/missing-failure-context.*test.*epoch 7.*main/);
+ assert.equal(r.calls.some(x=>String(x[1]).includes('Convoy held; request a fresh convoy')),false);
+ await r.cancel();await promise;
+});
+
+
+test('convoy diagnostics exclude movement evidence from preceding commands',()=>{
+ const r=runtime();r.context.movement.report=()=>({id:'current',owner:{commandId:8}});
+ r.context.movement.last=()=>({id:'old',failureContext:{commandId:7}});
+ assert.equal(r.context.convoyMovementEvidence({commandId:9}),null);
+ assert.equal(r.context.convoyMovementEvidence({commandId:8}).id,'current');
+ assert.equal(r.context.convoyMovementEvidence({commandId:7}).id,'old');
 });

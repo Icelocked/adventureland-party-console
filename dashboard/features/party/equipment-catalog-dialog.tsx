@@ -16,13 +16,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useMemo, useState, type ReactNode } from "react";
+import { memo, useMemo, useState, type ReactNode } from "react";
 import { EQUIPMENT_TYPES } from "./equipment-types";
 import { ItemSprite } from "./item-sprite";
 import { MerchantCatalogItem } from "./merchant-catalog-item";
 import type { InventoryEntry } from "./inventory-entry";
 
-export function EquipmentCatalogDialog({
+// The full equipment catalog can run into the hundreds of items; mounting every
+// row at once (each with a sprite, several labels and an optional compare
+// button) has been observed to freeze the tab for multiple seconds on open.
+// Render a bounded initial window and append more as the user scrolls.
+const ROW_BATCH = 120;
+
+export const EquipmentCatalogDialog = memo(function EquipmentCatalogDialog({
   open,
   onOpenChange,
   catalog,
@@ -115,6 +121,15 @@ export function EquipmentCatalogDialog({
         return value(b, sort) - value(a, sort) || a.name.localeCompare(b.name);
       });
   }, [equipment, search, sort, types, selectedClasses, exclusiveGear]);
+  const [visibleCount, setVisibleCount] = useState(ROW_BATCH);
+  const [previousRows, setPreviousRows] = useState(rows);
+  const [previousOpen, setPreviousOpen] = useState(open);
+  if (previousRows !== rows || previousOpen !== open) {
+    setPreviousRows(rows);
+    setPreviousOpen(open);
+    setVisibleCount(ROW_BATCH);
+  }
+  const visibleRows = useMemo(() => rows.slice(0, visibleCount), [rows, visibleCount]);
   const sorts = [
     ["tier", "Tier"],
     ["name", "Name"],
@@ -254,7 +269,10 @@ export function EquipmentCatalogDialog({
           </label>
         </div>
         <p className="font-mono text-[10px] uppercase text-cyan-200/55">
-          {rows.length} item{rows.length === 1 ? "" : "s"} · sorted by{" "}
+          {visibleRows.length === rows.length
+            ? `${rows.length} item${rows.length === 1 ? "" : "s"}`
+            : `Showing ${visibleRows.length} of ${rows.length} items`}
+          {" "}· sorted by{" "}
           {sorts.find(([id]) => id === sort)?.[1]}
           {selectedClasses.length
             ? exclusiveGear
@@ -262,9 +280,14 @@ export function EquipmentCatalogDialog({
               : " · usable by every selected class"
             : ""}
         </p>
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto" onScroll={(event) => {
+          const panel = event.currentTarget;
+          if (open && visibleCount < rows.length &&
+              panel.scrollHeight - panel.scrollTop - panel.clientHeight <= 400)
+            setVisibleCount(Math.min(visibleCount + ROW_BATCH, rows.length));
+        }}>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-            {rows.map((item) => {
+            {visibleRows.map((item) => {
               const def = item.meta?.definition || {},
                 primary =
                   sort !== "tier" && !["name", "set", "value"].includes(sort)
@@ -314,4 +337,4 @@ export function EquipmentCatalogDialog({
       </DialogContent>
     </Dialog>
   );
-}
+});

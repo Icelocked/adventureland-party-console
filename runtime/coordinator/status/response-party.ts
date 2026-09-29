@@ -88,6 +88,6 @@ export function needsCatalog(state: HeartbeatState): boolean {
   return (
     state.monsterLocationsVersion !== 3 ||
     requiredCatalogs.some((field) => !state[field]) ||
-    state.merchantCatalogVersion !== "token-shops-v3"
+    state.merchantCatalogVersion !== "exchange-rewards-v4"
   );
 }

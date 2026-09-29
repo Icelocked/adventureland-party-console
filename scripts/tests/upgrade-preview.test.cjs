@@ -36,49 +36,113 @@ test('server rejections and mismatched response identities are unavailable',asyn
  const g=fixture(),run=g.ports.preview;g.ports.preview=async(...args)=>({...await run(...args),scroll:'scroll0'});
  assert.match((await previewUpgrade(g.request,g.ports)).options.none.reason,/Mismatched/);
 });
-function coordinator() {
- const item={name:'sword',level:8},state={merchantCharacter:'M',statuses:{M:{seenAt:1000,upgradePreviewSession:'session',items:[{slot:0,item}]}}};
- let now=1000;const routes={},service=createUpgradePreviews(state,()=>now);
+
+function coordinator(saved) {
+ const item={name:'sword',level:8},state=saved||{merchantCharacter:'M',merchantCurrent:null,merchantQueue:[],statuses:{M:{seenAt:1000,upgradePreviewSession:'session',upgradePreviewRevision:'0',items:[{slot:0,item}]}}};
+ const routes={},service=createUpgradePreviews(state,{persist(){},dispatch(){},stamp:j=>({...j,priority:70})},()=>1000);
  service.install({post:(path,handler)=>routes[path]=handler});
  function send(path,body) {const res={statusCode:200,status(code){this.statusCode=code;return this;},json(value){this.value=value;}};routes['/party-api/upgrade-preview'+path]({body},res);return res;}
- return {state,item,service,send,setTime:value=>now=value};
+ const body={character:'M',slot:0,item};
+ return {state,item,send,body};
 }
-test('coordinator transports ephemeral previews without altering inventory or jobs',()=>{
- const f=coordinator(),before=JSON.stringify(f.state),response=f.send('',{character:'M',slot:0,item:f.item});
- const request=f.service.next('M');assert.equal(request.session,'session');assert.equal(response.value,undefined);
- const result=unavailablePreview('M',f.item,'Missing scroll');
- assert.equal(f.send('/result',{character:'M',id:request.id,session:request.session,result}).statusCode,200);
- assert.deepEqual(response.value,result);assert.equal(f.service.next('M'),undefined);assert.equal(JSON.stringify(f.state),before);
+test('preview reads do not enqueue; explicit refresh deduplicates and obeys normal job priority',()=>{
+ const f=coordinator();assert.equal(f.send('',f.body).value.status,'idle');assert.equal(f.state.merchantQueue.length,0);
+ assert.equal(f.send('',{...f.body,refresh:true}).value.status,'queued');f.send('',{...f.body,refresh:true});
+ assert.equal(f.state.merchantQueue.length,1);assert.equal(f.state.merchantQueue[0].priority,70);
+ f.state.merchantCurrent={...f.state.merchantQueue.shift(),commandId:7};assert.equal(f.send('',f.body).value.status,'running');
 });
-test('coordinator explains unavailable sources and offline runtime',()=>{
- const f=coordinator();
- assert.match(f.send('',{character:'F',slot:0,item:f.item}).value.options.none.reason,/not in merchant/);
- assert.match(f.send('',{character:'M',slot:0,equipped:true,item:f.item}).value.options.none.reason,/not in merchant/);
- f.setTime(20000);assert.match(f.send('',{character:'M',slot:0,item:f.item}).value.options.none.reason,/offline/);
+test('results survive restart and reopening but a real upgrade invalidates every previous preview',()=>{
+ const f=coordinator();f.send('',{...f.body,refresh:true});f.state.merchantCurrent={...f.state.merchantQueue.shift(),commandId:7};
+ const payload={character:'M',id:f.state.merchantCurrent.id,commandId:7,session:'session',revision:'0',result:unavailablePreview('M',f.item,'not in bank')};
+ assert.equal(f.send('/result',{...payload,commandId:8}).statusCode,409);
+ assert.equal(f.send('/result',{...payload,session:'stale'}).statusCode,409);
+ assert.equal(f.send('/result',payload).statusCode,200);f.state.merchantCurrent=null;
+ const g=coordinator(JSON.parse(JSON.stringify(f.state)));
+ assert.equal(g.send('',g.body).value.status,'unavailable');
+ g.state.statuses.M.upgradePreviewRevision='123';assert.equal(g.send('',g.body).value.status,'invalidated');
+ assert.equal(g.send('',g.body).value.result,undefined);
 });
-test('timeout and replaced sessions reject late results',t=>{
- t.mock.timers.enable({apis:['setTimeout']});const f=coordinator(),response=f.send('',{character:'M',slot:0,item:f.item});
- const request=f.service.next('M'),payload={character:'M',id:request.id,session:'session',result:unavailablePreview('M',f.item,'x')};
- f.state.statuses.M.upgradePreviewSession='replacement';assert.equal(f.send('/result',payload).statusCode,409);
- t.mock.timers.tick(10000);assert.match(response.value.options.none.reason,/timed out/);assert.equal(f.send('/result',payload).statusCode,409);
+test('changed or foreign items cannot create jobs',()=>{
+ const f=coordinator();assert.equal(f.send('',{...f.body,character:'F',refresh:true}).statusCode,400);
+ assert.equal(f.send('',{...f.body,item:{name:'sword',level:9},refresh:true}).statusCode,409);assert.equal(f.state.merchantQueue.length,0);
+});
+function bankFixture() {
+ const fs=require('node:fs'),vm=require('node:vm'),{namedFunction}=require('./helpers/named-function.cjs');
+ const source=fs.readFileSync('characters/shared.js','utf8'),store=new Map(),calls=[];
+ const items=[{name:'sword',level:8},{name:'scroll1',q:3},null,null,null],bank={items0:[{name:'offeringp',q:2},{name:'offeringx'},null]};
+ const c=vm.createContext({root:{localStorage:{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)}},
+  character:{name:'M',map:'main',items,bank},parent:{},bank_packs:{items0:['bank']},item_grade:()=>1,freeInventorySlots:()=>items.filter(x=>!x).length,
+  waitForBankPack:async pack=>{if(!bank[pack])throw Error('bank not loaded');},
+  smart_move:async d=>{calls.push(['move',d]);c.character.map=d;},
+  findBankItem:w=>{const slot=bank.items0.findIndex(i=>i?.name===w.name);return slot>=0?{pack:'items0',slot}:null;},
+  bankRetrieveConfirmed:async(pack,slot)=>{calls.push(['withdraw',bank[pack][slot].name]);items[items.indexOf(null)]=bank[pack][slot];bank[pack][slot]=null;},
+  bankStageConfirmed:async(slot,pack,target)=>{calls.push(['return',items[slot].name]);bank[pack][target]=items[slot];items[slot]=null;}
+ });
+ vm.runInContext(['previewSuppliesKey','previewTravel','borrowUpgradePreviewSupplies','restoreUpgradePreviewSupplies'].map(n=>namedFunction(source,n)).join('\n'),c);
+ return {c,items,bank,store,calls};
+}
+test('bank supplies are borrowed without buying or consuming, then returned without touching owned scrolls',async()=>{
+ const f=bankFixture(),before=JSON.stringify({items:f.items,bank:f.bank});
+ await f.c.borrowUpgradePreviewSupplies({item:f.items[0]});assert.equal(f.calls.filter(c=>c[0]==='withdraw').length,2);
+ await f.c.restoreUpgradePreviewSupplies();assert.equal(JSON.stringify({items:f.items,bank:f.bank}),before);assert.equal(f.store.size,0);
+});
+test('lost withdrawal acknowledgement keeps recovery journal and safely returns borrowed supplies',async()=>{
+ const f=bankFixture(),withdraw=f.c.bankRetrieveConfirmed;
+ f.c.bankRetrieveConfirmed=async(...args)=>{await withdraw(...args);throw Error('lost reply');};
+ await assert.rejects(f.c.borrowUpgradePreviewSupplies({item:f.items[0]}),/lost reply/);
+ await f.c.restoreUpgradePreviewSupplies();assert.equal(f.bank.items0[0].name,'offeringp');assert.equal(f.store.size,0);
+});
+test('lost deposit acknowledgement is reconciled without another withdrawal or duplicate return',async()=>{
+ const f=bankFixture();await f.c.borrowUpgradePreviewSupplies({item:f.items[0]});const deposit=f.c.bankStageConfirmed;
+ f.c.bankStageConfirmed=async(...args)=>{await deposit(...args);throw Error('lost reply');};
+ await assert.rejects(f.c.restoreUpgradePreviewSupplies(),/lost reply/);f.c.bankStageConfirmed=deposit;
+ await f.c.restoreUpgradePreviewSupplies();assert.equal(f.calls.filter(c=>c[0]==='return').length,2);assert.equal(f.store.size,0);
 });
 
-test('character integration rejects busy work and holds the upgrade guard until the preview settles',async()=>{
+
+test('preview job retains the upgrade guard until calculation settles and returns supplies before publishing',async()=>{
  const fs=require('node:fs'),vm=require('node:vm'),{namedFunction}=require('./helpers/named-function.cjs');
- const source=fs.readFileSync('characters/shared.js','utf8'),calls=[];
- let resolvePreview;
- const root={localStorage:{getItem:()=>null},previewPartyUpgrade:()=>new Promise(resolve=>{resolvePreview=resolve;})};
- const r=vm.createContext({root,parent:{},character:{name:'M',items:[]},upgradePreviewSession:'s',lastUpgradePreview:null,upgradePreviewActive:false,
-  upgrading:false,consoleMaintenanceBusy:()=>true,productionJournalKey:()=>'',item_grade:()=>1,runtimeCurrent:()=>true,
-  coordinatorClockOffset:0,upgrade:()=>{throw Error('No actual upgrade allowed');},setTimeout,clearTimeout,
-  request:async(path,options)=>calls.push({path,body:options.body})});
- vm.runInContext(namedFunction(source,'handleUpgradePreview'),r);
- await r.handleUpgradePreview({id:'busy',session:'s',executor:'M',item:{name:'sword'}});
- assert.equal(calls[0].body.result.options.none.reason,'Merchant busy');assert.equal(r.upgrading,false);
- r.consoleMaintenanceBusy=()=>false;
- const work=r.handleUpgradePreview({id:'ready',session:'s',executor:'M',item:{name:'sword'}});
- assert.equal(r.upgrading,true);assert.ok(root.__partyUpgradePreviewInFlight);
- resolvePreview(unavailablePreview('M',{name:'sword'},'Missing scroll'));await work;
- assert.equal(r.upgrading,false);assert.equal(root.__partyUpgradePreviewInFlight,null);assert.equal(calls.length,2);
- await r.handleUpgradePreview({id:'ready',session:'s',executor:'M'});assert.equal(calls.length,2);
+ const source=fs.readFileSync('characters/shared.js','utf8'),events=[];
+ let finish;const pending=new Promise(resolve=>{finish=resolve;});
+ const item={name:'sword',level:8};
+ const c=vm.createContext({root:{localStorage:{getItem:()=>null},__merchantActiveJob:{commandId:7},previewPartyUpgrade:()=>pending},
+  character:{name:'M',items:[item],q:{}},parent:{},upgradePreviewSession:'session',coordinatorClockOffset:0,
+  sameItem:()=>true,runtimeCurrent:()=>true,item_grade:()=>1,upgrade(){throw Error('unexpected real upgrade');},
+  borrowUpgradePreviewSupplies:async()=>events.push('borrow'),previewTravel:async()=>events.push('travel'),
+  restoreUpgradePreviewSupplies:async()=>events.push('return'),request:async path=>events.push(path)});
+ vm.runInContext(namedFunction(source,'merchantUpgradePreview'),c);
+ const job=c.merchantUpgradePreview({id:7,jobId:'job',upgradePreview:{slot:0,item}});
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.ok(c.root.__partyUpgradePreviewInFlight);assert.equal(c.upgrading,true);assert.deepEqual(events,['borrow','travel']);
+ finish({executor:'M',item,options:{}});await job;
+ assert.equal(c.root.__partyUpgradePreviewInFlight,null);assert.equal(c.upgrading,false);
+ assert.deepEqual(events,['borrow','travel','return','/upgrade-preview/result','/merchant/complete']);
+});
+
+test('only a real upgrade packet invalidates saved previews',()=>{
+ const fs=require('node:fs'),vm=require('node:vm'),{namedFunction}=require('./helpers/named-function.cjs'),writes=[];
+ const c=vm.createContext({character:{name:'M'},root:{localStorage:{setItem:(...args)=>writes.push(args)}},runtimeCurrent:()=>true,luckySlotTracking:()=>({observe(){}})});
+ vm.runInContext(namedFunction(fs.readFileSync('characters/shared.js','utf8'),'luckySlotRollListener'),c);
+ c.luckySlotRollListener({calculate:true,chance:0.2});c.luckySlotRollListener({q:{compound:{}}});assert.equal(writes.length,0);
+ c.luckySlotRollListener({q:{upgrade:{ms:100}}});assert.equal(writes.length,1);assert.equal(writes[0][0],'party-upgrade-preview-revision:M');
+});
+
+
+test('borrowing waits for bank data after arrival instead of reporting an empty bank',async()=>{
+ const fs=require('node:fs'),vm=require('node:vm'),{namedFunction}=require('./helpers/named-function.cjs');
+ const f=bankFixture();let waits=0;
+ f.c.character.bank=null;
+ f.c.sleep=async()=>{waits++;f.c.character.bank=f.bank;};
+ vm.runInContext(namedFunction(fs.readFileSync('characters/shared.js','utf8'),'waitForBankPack'),f.c);
+ await f.c.borrowUpgradePreviewSupplies({item:f.items[0]});assert.equal(waits,1);
+ assert.equal(f.calls.filter(c=>c[0]==='withdraw').length,2);
+ await f.c.restoreUpgradePreviewSupplies();assert.equal(f.store.size,0);
+});
+
+test('one calculated option is a partial preview, never an all-options success',()=>{
+ const f=coordinator();f.send('',{...f.body,refresh:true});f.state.merchantCurrent={...f.state.merchantQueue.shift(),commandId:7};
+ const result=unavailablePreview('M',f.item,'Offering missing');
+ result.options.none={preview:{calculate:true,chance:0.15,item:f.item,scroll:'scroll1'},observedAt:1000};
+ f.send('/result',{character:'M',id:f.state.merchantCurrent.id,commandId:7,session:'session',revision:'0',result});f.state.merchantCurrent=null;
+ assert.equal(f.send('',f.body).value.status,'partial');assert.equal(f.send('',f.body).value.result.options.none.preview.chance,0.15);
 });

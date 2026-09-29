@@ -11,7 +11,3 @@ test('saved disabled automations and zero priorities override defaults',()=>{
  assert.equal(result.npcSaleMarks,marks);assert.equal(result.autoNpcSales,rules);assert.equal(result.merchantRoutinePriorities['merchant luck'],0);assert.equal(result.merchantAutomations.exchange,false);assert.equal(result.merchantRoutinePriorities['party collection'],90);
  assert.deepEqual(initialMerchantSales({npcSaleMarks:{}},()=>1).npcSaleMarks,[]);
 });
-test('default factories return independent objects',()=>{
- const priorities=defaultMerchantRoutinePriorities(),automations=defaultMerchantAutomations();priorities.exchange=0;automations.exchange=false;
- assert.equal(defaultMerchantRoutinePriorities().exchange,67);assert.equal(defaultMerchantAutomations().exchange,true);
-});

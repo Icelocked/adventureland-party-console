@@ -3,12 +3,13 @@ const source=fs.readFileSync('characters/shared.js','utf8');
 function fixture(grouped=false){
  const passive={id:'bee',type:'monster',mtype:'bee',visible:true,hp:100,x:0,y:0};
  const c=require('./helpers/client-dependencies.cjs').passingContext({root:{__partyTravelCombat:{id:'return',revision:3},__partyDefensiveHit:{at:1000,target:passive}},
-  character:{name:'W',map:'main',in:'main'},parent:{entities:{bee:passive}},navigationIntent:{revision:3},
+  fightDeaths:[],character:{name:'W',map:'main',in:'main'},parent:{entities:{bee:passive}},navigationIntent:{revision:3},
   reunionRealm:()=> 'USII',isAttackingPartyMember:e=>e.target==='P',groupedFarming:()=>grouped,
   groupedCombat:{protocol:4,target:{...passive,map:'main',in:'main',server:'USII',state:'engaged'}},
   isExternallyClaimedMonster:()=>false,combatTargetId:'bee',farmingTravelToken:null,departurePending:false,
   game_log(){},setTimeout,engagedMonster(){assert.fail('historic fight must not be consulted during travel');}});
  for(const [start,end] of [
+  ['  function dungeonOwned()', '  function cavePartyNames()'],
   ['  function groupedEntityReport(', '  function groupedThreatReports('],
   ['  function departureTargetEngaged(', '  function inFarmRadius('],
   ['  function groupedAttackAllowed(', '  var groupRegroup ='],

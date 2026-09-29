@@ -6,6 +6,7 @@ import type { reconcileUpgradeMarks } from "./upgrade-marks.ts";
 interface SavedCollection {
   threshold?: number;
   itemCollectionThreshold?: number;
+  buyUpgradeBatchSize?: number;
   marked?: Record<string, ItemMark[]> | null;
   merchantMarked?: Record<string, ItemMark[]> | null;
   autoItemMarks?: Record<string, Parameters<typeof reconcileCollectionMarks>[2]> | null;
@@ -27,6 +28,8 @@ export function initialCollectionState(settings: SavedCollection, selections: Sa
     itemCollectionThreshold: Number.isSafeInteger(settings.itemCollectionThreshold)
       ? Math.max(1, Math.min(42, settings.itemCollectionThreshold!))
       : 1,
+    buyUpgradeBatchSize: Number.isSafeInteger(settings.buyUpgradeBatchSize)
+      ? Math.max(1, Math.min(42, settings.buyUpgradeBatchSize!)) : 1,
     statuses: {} as Record<string, ObservedCharacterStatus>,
     ...initialMarks(settings, selections),
   };

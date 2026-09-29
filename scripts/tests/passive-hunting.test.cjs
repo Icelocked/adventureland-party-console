@@ -27,7 +27,7 @@ function fixture(){
   escapeOwns:()=>false,combatRecoveryActive:()=>false,activeCombatEvent:()=>false,rareActive:()=>false,unfinishedFight:()=>false,
   reunionRealm:()=> 'USII',get_entity:id=>Object.values(c.parent.entities).find(e=>e.id===id),is_in_range:e=>Math.hypot(e.x,e.y)<=100,
   isExternallyClaimedMonster:e=>!!e.claimed,currentPartyList:()=>['W'],sameEventTeamMember:()=>true,equip:()=>{throw Error('unexpected deployment');},rareFields:()=>[]});
- const names=['passiveStopRequired','passiveTravelInterruptible','travelStopCandidates','outboundHuntTravel','huntTravelDefense','huntTravelControl','huntTravelExtraAggro','returnDepartureDefense','committedHuntEncounter','passingKey','passingEncounterReport','isPassingEncounter','passingTravelAllowed','passingTarget','beginPassingAttack','groupedEntityReport','monsterPriority','passiveRareCandidate','isPartyThreat','isAttackingPartyMember','rareAttackAllowed'];
+ const names=['passiveStopRequired','passiveTravelInterruptible','travelStopCandidates','outboundHuntTravel','huntTravelDefense','huntTravelControl','huntTravelExtraAggro','returnDepartureDefense','committedHuntEncounter','passingKey','passingEncounterReport','isPassingEncounter','convoyDiagnosticClock','convoySignalExpired','passingTravelAllowed','walkingPassiveTarget','passingTarget','beginPassingAttack','groupedEntityReport','monsterPriority','passiveRareCandidate','isPartyThreat','isAttackingPartyMember','rareAttackAllowed'];
  vm.runInContext(names.map(n=>namedFunction(source,n)).join('\n'),c);
  return {c,bee};
 }
@@ -231,4 +231,80 @@ test('outbound Phoenix stop setting excludes passing attacks and reports eligibl
  c.beginPassingAttack(bee);assert.equal(c.isPassingEncounter(bee),false);
  bee.target='W';c.currentTravelAttackers=()=>[bee];assert.equal(c.huntTravelExtraAggro(),true);
  bee.target='outsider';assert.equal(c.travelStopCandidates().length,0);
+});
+
+for (const route of [
+ {purpose:'anniversary-return',navigationExempt:true},
+ {purpose:'monster-hunt',continuousReturn:1,nonPreemptible:true},
+ {purpose:'shared-walk',walkingActivity:'anniversary-staging',continuousReturn:1},
+ {purpose:'event-return',navigationExempt:true},
+ {purpose:'party-force-travel',force:true},
+ {purpose:'escape-recovery'},
+ {purpose:'monster-hunt',huntTarget:'mole'},
+]) test('enabled keep-moving goos remain passing targets on '+JSON.stringify(route),()=>{
+ const {c,bee}=fixture();bee.mtype='goo';c.passiveHunting.rules={goo:{enabled:true,keepMoving:true,priority:100}};
+ Object.assign(c.character,{moving:true,hp:20,max_hp:100});c.convoyRuntimeId='runtime';c.navigationIntent.revision=3;
+ const convoy=c.convoyTraveling={...route,id:'C',epoch:1,commandId:4,navigationRevision:3,routeProtocol:4,phase:'travelling',location:{map:'main',x:120,y:0}};
+ c.convoySignal={id:'C',epoch:1,commandId:4,runtimeId:'runtime',phase:'travel',validUntil:Date.now()+10000};
+ c.forceTraveling=true;c.eventTraveling=true;c.partyTownActive=true;c.joinedEvent='anniversary';
+ c.escapeOwns=()=>true;c.combatRecoveryActive=()=>true;c.unfinishedFight=()=>true;
+ vm.runInContext(['returnCombatActive','returnAttacker','returnDefenseTarget'].map(n=>namedFunction(source,n)).join('\n'),c);
+ assert.equal(c.passingTarget(),bee);
+ c.beginPassingAttack(bee);bee.target='W';assert.equal(c.passingTarget(),bee);
+ assert.equal(c.isAttackingPartyMember(bee),false,'retaliation remains movement-neutral');
+ assert.equal(c.isAttackingPartyMember({...bee,id:'unrelated'}),true,'unrelated attackers remain defensive');
+ assert.equal(c.convoyTraveling,convoy);assert.equal(convoy.phase,'travelling');
+ bee.x=200;assert.equal(c.passingTarget(),null,'no chasing');bee.x=20;
+ bee.in='other';assert.equal(c.passingTarget(),null);bee.in='main';
+ c.passiveHunting.rules.goo.keepMoving=false;assert.equal(c.walkingPassiveTarget(),null);
+ c.passiveHunting.rules.goo.keepMoving=true;c.passiveHunting.rules.goo.enabled=false;assert.equal(c.walkingPassiveTarget(),null);
+ c.passiveHunting.rules.goo.enabled=true;c.character.c={town:{}};assert.equal(c.passingTarget(),null);
+ c.character.c={};c.movement={transition:()=> 'transport'};assert.equal(c.passingTarget(),null);
+ c.movement.transition=()=>null;c.convoySignal.validUntil=0;assert.equal(c.passingTarget(),null);
+ c.convoySignal.validUntil=Date.now()+10000;c.navigationIntent.cancelled=true;assert.equal(c.passingTarget(),null);
+});
+
+test('assembly walking and independent event walking allow passing attacks without releasing movement',()=>{
+ const {c,bee}=fixture();c.character.moving=true;c.eventTraveling=true;c.joinedEvent='anniversary';
+ assert.equal(c.passingTarget(),bee);
+ c.convoyRuntimeId='runtime';c.navigationIntent.revision=3;
+ c.convoyTraveling={id:'C',epoch:1,commandId:4,navigationRevision:3,routeProtocol:4,phase:'assembling'};
+ c.convoySignal={id:'C',epoch:1,commandId:4,runtimeId:'runtime',phase:'assemble',validUntil:Date.now()+10000};
+ assert.equal(c.passingTarget(),bee);
+ c.character.moving=false;assert.equal(c.passingTarget(),null,'stationary assembly is unchanged');
+ c.character.moving=true;c.convoySignal.commandId++;assert.equal(c.passingTarget(),null);
+});
+
+test('return and Hunt defense cannot promote explicit keep-moving retaliation into combat ownership',()=>{
+ for(const purpose of ['anniversary-return','monster-hunt']) {
+  const {target,status,members}=reports();status.groupedCombat.returnDefense=true;
+  status.groupedCombat.passingEncounters[0].keepMoving=true;
+  const activeConvoy={id:'C',epoch:1,purpose,phase:'travel',navigationExempt:purpose==='anniversary-return',continuousReturn:purpose==='monster-hunt'?1:undefined};
+  const party={activeConvoy,statuses:{W:status},passiveHunting:{rules:{bee:{enabled:true,keepMoving:true}}}};
+  assert.equal(classifyTravelDefense(party,['W'],1000).state,'clear');
+  const q=reconcileQueue(null,members,'W',1000,'k');assert.equal(q.target,null);assert.equal(q.fights.length,0);
+  status.groupedCombat.currentAttackers.push({...target,id:'unrelated'});
+  assert.equal(classifyTravelDefense(party,['W'],1000).state,'defending');
+ }
+});
+
+test('real attack controller hits a passing goo during continuous return without normal combat or movement ownership',async()=>{
+ const {createAttackController}=require('../../runtime/characters/roles/attack-controller.ts');
+ const {c,bee}=fixture();bee.mtype='goo';c.passiveHunting.rules={goo:{enabled:true,keepMoving:true,priority:100}};
+ c.character.moving=true;c.convoyRuntimeId='runtime';c.navigationIntent.revision=3;
+ const convoy=c.convoyTraveling={id:'C',epoch:1,commandId:4,navigationRevision:3,routeProtocol:4,purpose:'monster-hunt',continuousReturn:1,phase:'travelling'};
+ c.convoySignal={id:'C',epoch:1,commandId:4,runtimeId:'runtime',phase:'travel',validUntil:Date.now()+10000};
+ vm.runInContext(['returnCombatActive','returnAttacker','returnDefenseTarget'].map(n=>namedFunction(source,n)).join('\n'),c);
+ const keys=['parent','character','sharedRoutine','attack','can_attack','is_in_range','get_entity','setTimeout','clearTimeout'];
+ const saved=Object.fromEntries(keys.map(k=>[k,global[k]]));let hits=0,controller;
+ try {
+  Object.assign(global,{parent:{},character:{range:100,frequency:1},setTimeout:()=>0,clearTimeout(){},
+   sharedRoutine:{groupedAttackAllowed:()=>false,rareAttackAllowed:()=>true,queueEvidence:()=>assert.fail('normal combat evidence'),noteAttack:()=>assert.fail('normal combat hit')},
+   attack:async()=>{hits++;},can_attack:()=>true,is_in_range:t=>Math.hypot(t.x-c.character.x,t.y)<=100});
+  controller=createAttackController({target:()=>c.passingTarget(),selected:()=>c.passingTarget()?.id,epoch:()=>1,active:()=>true,
+   allowed:()=>!!c.passingTarget(),passing:t=>t===c.passingTarget(),preparePassing:t=>{c.beginPassingAttack(t);return true;},state:()=>({}),report:assert.fail});
+  controller.tick();await Promise.resolve();await Promise.resolve();assert.equal(hits,1);
+  bee.target='W';c.character.x=150;controller.reset();controller.tick();assert.equal(hits,1,'walking beyond range ends attacks');
+  assert.equal(c.returnDefenseTarget(),null);assert.equal(c.convoyTraveling,convoy);assert.equal(convoy.phase,'travelling');
+ } finally {controller?.stop();for(const key of keys)if(saved[key]===undefined)delete global[key];else global[key]=saved[key];}
 });

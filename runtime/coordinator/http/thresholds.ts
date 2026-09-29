@@ -3,6 +3,7 @@ import { requestObject, type HttpRequest, type HttpResponse } from "./contracts.
 interface Thresholds {
   threshold: number;
   itemCollectionThreshold: number;
+  buyUpgradeBatchSize?: number;
 }
 interface ThresholdPorts {
   collectionChanged(): void;
@@ -30,11 +31,14 @@ export function createThresholdRoute(state: Thresholds, ports: ThresholdPorts) {
       return response.status(400).json({ error: "invalid threshold" });
     if (!updateThreshold(state, body, "itemCollectionThreshold", 1, 42))
       return response.status(400).json({ error: "invalid item collection threshold" });
+    if (!updateThreshold(state, body, "buyUpgradeBatchSize", 1, 42))
+      return response.status(400).json({ error: "invalid upgrade batch size (1–42)" });
     if (Object.hasOwn(body, "itemCollectionThreshold")) ports.collectionChanged();
-    if (!Object.hasOwn(body, "threshold") && !Object.hasOwn(body, "itemCollectionThreshold"))
+    if (!Object.hasOwn(body, "threshold") && !Object.hasOwn(body, "itemCollectionThreshold") && !Object.hasOwn(body, "buyUpgradeBatchSize"))
       return response.status(400).json({ error: "no configuration value supplied" });
     ports.persist();
     return response.json({
+      buyUpgradeBatchSize: state.buyUpgradeBatchSize ?? 1,
       threshold: state.threshold,
       itemCollectionThreshold: state.itemCollectionThreshold,
     });

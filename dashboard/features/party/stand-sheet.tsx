@@ -42,7 +42,7 @@ import {
 
 import { Check, ChevronDown, ChevronRight, Settings, X } from 'lucide-react';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ALDataBuyOrder } from './aldata-buy-order';
 
@@ -110,7 +110,7 @@ import {
 
 import { WTBPriorityInput } from './wtbpriority-input';
 
-export function StandSheet({
+export const StandSheet = memo(function StandSheet({
 
   open,
 
@@ -553,7 +553,7 @@ export function StandSheet({
 
       .filter((entry) =>
 
-        `${entry.item.name} ${entry.seller} ${entry.serverRegion} ${entry.serverIdentifier}`
+        `${catalogById.get(entry.item.name)?.name || ''} ${entry.item.name} ${entry.seller} ${entry.serverRegion} ${entry.serverIdentifier}`
 
           .toLowerCase()
 
@@ -571,7 +571,7 @@ export function StandSheet({
 
       );
 
-  }, [groupedALData, aldataFilter, marketCutoff]);
+  }, [groupedALData, aldataFilter, marketCutoff, catalogById]);
 
   const listingValue = (entry: ALDataListing) => {
 
@@ -697,7 +697,7 @@ export function StandSheet({
 
     .forEach((entry) => {
 
-      if (!entry) return;
+      if (!entry?.item) return;
 
       const key = ownedKey(entry.item);
 
@@ -719,7 +719,7 @@ export function StandSheet({
 
     .filter((order) =>
 
-      `${order.item.name} ${order.buyer} ${order.serverRegion} ${order.serverIdentifier}`
+      `${catalogById.get(order.item.name)?.name || ''} ${order.item.name} ${order.buyer} ${order.serverRegion} ${order.serverIdentifier}`
 
         .toLowerCase()
 
@@ -745,7 +745,7 @@ export function StandSheet({
 
   const filteredClassifieds = publicTrades.filter(({ owner, listing }) =>
 
-    `${listing.name} ${owner.label || ''} ${owner.characters?.join(' ') || ''}`
+    `${catalogById.get(listing.name)?.name || ''} ${listing.name} ${owner.label || ''} ${owner.characters?.join(' ') || ''}`
 
       .toLowerCase()
 
@@ -1798,7 +1798,7 @@ export function StandSheet({
             <div className="flex flex-wrap items-center gap-3">
               <h2 className="text-base font-semibold text-amber-200">Items for sale · {occupancy.sales}/16 slots</h2>
               <span className={`rounded border px-2 py-1 text-xs font-semibold ${merchant?.standOpen ? 'border-emerald-600 bg-emerald-950 text-emerald-100' : 'border-red-600 bg-red-950 text-red-100'}`}>
-                {merchant?.standOpen ? 'Stand open' : 'Stand closed'}
+                {merchant?.standOpen === true ? 'Stand open' : merchant?.standOpen === false ? 'Stand closed' : 'Stand status unknown'}
               </span>
             </div>
 
@@ -2773,7 +2773,7 @@ export function StandSheet({
 
                     {bankWTB.length} offer{bankWTB.length === 1 ? '' : 's'}{' '}
 
-                    match exact items currently held by GoldMajesty or recorded
+                    match exact items currently held by {merchant?.name || "the merchant"} or recorded
 
                     in the bank.
 
@@ -3585,7 +3585,7 @@ export function StandSheet({
 
               {pontyPurchaseConfirmation
 
-                ? `Buy ${pontyPurchaseConfirmation.quantity.toLocaleString()} ${catalogById.get(pontyPurchaseConfirmation.item.name)?.name || pontyPurchaseConfirmation.item.name} for up to ${pontyPurchaseConfirmation.price.toLocaleString()}g? ${pontyPurchaseConfirmation.realmLabel || ''}. One purchase job will be queued per realm. GoldMajesty will travel as needed and verify each listing. Any matching WTB quantity will be decremented.`
+                ? `Buy ${pontyPurchaseConfirmation.quantity.toLocaleString()} ${catalogById.get(pontyPurchaseConfirmation.item.name)?.name || pontyPurchaseConfirmation.item.name} for up to ${pontyPurchaseConfirmation.price.toLocaleString()}g? ${pontyPurchaseConfirmation.realmLabel || ''}. One purchase job will be queued per realm. ${merchant?.name || "The merchant"} will travel as needed and verify each listing. Any matching WTB quantity will be decremented.`
 
                 : ''}
 
@@ -3758,4 +3758,4 @@ export function StandSheet({
 
   );
 
-}
+});

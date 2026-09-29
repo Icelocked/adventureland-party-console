@@ -40,14 +40,14 @@ export function UpgradeActions({
 }) {
   const offerings = useUpgradeOfferings();
   const [previewOpen, setPreviewOpen] = useState(false);
-  const menuColors = "border-slate-300 !bg-white !text-black [&_[role=menuitem]]:!text-black [&_[role=menuitem]]:focus:!bg-slate-100 [&_[role=menuitem]]:data-highlighted:!bg-slate-100 [&_[role=menuitem][data-disabled]]:!text-slate-500";
+  const menuColors = "border-slate-300 !bg-white !text-black [&_[role=menuitem]]:!text-black [&_[role=menuitem]]:focus:!bg-slate-100 [&_[role=menuitem]]:data-highlighted:!bg-slate-100 [&_[role=menuitem][data-disabled]]:!text-slate-400";
   const level = item.level || 0,
     max = Math.max(0, itemMaximumLevel(meta) - level);
   return (
     <>
       {meta?.upgradeable && max > 0 ? (
         <ContextMenuSub open={previewOpen} onOpenChange={setPreviewOpen}>
-          <ContextMenuSubTrigger className="!text-black focus:!text-black data-open:!text-black">
+          <ContextMenuSubTrigger className="!bg-white !text-black focus:!bg-slate-100 data-open:!bg-slate-100">
             <Swords className="mr-2 h-4 w-4" />
             Mark for upgrade
             {mark ? ` · ${mark.tiers || 1} tier${(mark.tiers || 1) === 1 ? "" : "s"}` : ""}
@@ -78,7 +78,7 @@ export function UpgradeActions({
       ) : null}
       {meta?.upgradeable && max > 0 ? (
         <ContextMenuSub>
-          <ContextMenuSubTrigger className="!text-black focus:!text-black data-open:!text-black">
+          <ContextMenuSubTrigger className="!bg-white !text-black focus:!bg-slate-100 data-open:!bg-slate-100">
             <AutoActionIcon><Swords /></AutoActionIcon>
             Auto mark for upgrade
             {autoTiers ? ` · ${autoTiers} tier${autoTiers === 1 ? "" : "s"}` : ""}
