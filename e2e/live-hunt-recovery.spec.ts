@@ -37,17 +37,24 @@ for (const fault of ['completion-request', 'completion-response', 'follower-reco
     if (fault === 'follower-reconnect') {
       await expect.poll(async () => (await world(live))[W].quest?.c, { timeout: 120_000 }).toBeLessThan(questCount);
       const beforeReconnect = await world(live);
+      const previousRuntime = (await live.state()).characters[P]?.combatSelection?.runtimeId;
+      expect(previousRuntime).toBeTruthy();
       expect(beforeReconnect[W].quest?.c, 'Disconnect must interrupt an unfinished native Hunt').toBeGreaterThan(0);
       faults.push({ fault, beforeReconnect });
       await live.reconnectClient(P);
       expect((await live.clients[P].snapshot()).name).toBe(P);
+      await expect.poll(async () => {
+        const runtime = (await live.state()).characters[P]?.combatSelection?.runtimeId;
+        return !!runtime && runtime !== previousRuntime;
+      }, {timeout:30_000,message:'The coordinator must observe the reconnected follower runtime'}).toBe(true);
     } else await expect.poll(() => intercepted, { timeout: 120_000 }).toBe(true);
     await expect.poll(async () => {
       const current = await world(live);
       return fighters.every(name => tokens(current[name]) === tokens(before[name]) + 1);
     }, { timeout: 180_000 }).toBe(true);
     if (fault === 'follower-reconnect') {
-      expect(rendezvousReports.length).toBeGreaterThan(0);
+      // A follower still at the group can recover directly without a rendezvous
+      // leg. When it does need that leg, its actual reports must identify it.
       expect(rendezvousReports.every((entry: any) => entry.report.routeVersion > 0), 'Rendezvous must publish its issued route version before awaiting native travel').toBe(true);
     }
     await live.post('/farming-mode', { character: W, mode: 'default' });

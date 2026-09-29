@@ -41,3 +41,16 @@ Full-suite follow-up failure modes (recorded before the recovery change):
   Rejecting the loot control because of distance prevents the very movement that
   would reach it. Preserve current-place ownership while approaching; completion
   must still require proximity, a real loot pass and a subsequent observation.
+- Loaded native browser timers can miss the 500 ms departure window repeatedly
+  even after accepting the schedule and while holding a fresh matching lease.
+  The Linux anniversary-return case exhausted readiness this way. Allow a bounded
+  1500 ms execution tolerance after an already accepted schedule, while retaining
+  signal expiry, origin, speed and ownership checks. A newly received late schedule
+  remains rejected; a 2500 ms injected timer stall must still force regrouping.
+- Keep-moving combat previously began its multi-party reservation exchange only
+  once a monster entered attack range. On a moving party, ordinary network delay
+  could consume that entire range window. Reserve a visible eligible monster
+  ahead on the current walking direction, without issuing attacks, generators or
+  stopping movement. Native range checks and all-party admission still gate the
+  eventual attack. Seed the E2E encounter ahead on an actual walking leg rather
+  than introducing it at the last possible melee-range instant.

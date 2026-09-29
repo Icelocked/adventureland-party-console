@@ -17,7 +17,7 @@ test('three delayed native departure signals preserve walking recovery budget an
       faults.push(fault);
       // Delaying the response itself also shifts the client's clock estimate and
       // may not miss departure. Block its actual event loop at the deadline.
-      await live.clients[W].run(`setTimeout(()=>{const end=Date.now()+1600;while(Date.now()<end){}},${Math.max(0, signal.departAt-body.serverNow-100)})`);
+      await live.clients[W].run(`setTimeout(()=>{const end=Date.now()+2500;while(Date.now()<end){}},${Math.max(0, signal.departAt-body.serverNow-100)})`);
       fault.forwardedAt = Date.now();
     }
     await route.fulfill({response});
