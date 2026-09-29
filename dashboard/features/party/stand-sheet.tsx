@@ -697,7 +697,7 @@ export const StandSheet = memo(function StandSheet({
 
     .forEach((entry) => {
 
-      if (!entry) return;
+      if (!entry?.item) return;
 
       const key = ownedKey(entry.item);
 

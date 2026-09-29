@@ -15,6 +15,39 @@ test.afterEach(async ({ page }, testInfo) => {
   expect(errors, 'The browser must not crash during the journey').toEqual([]);
 });
 
+test('Live WTB counts bank stock after empty slots without withdrawing it', async ({ page }, info) => {
+  // Failure modes: empty slot objects crash rendering; later stock is omitted;
+  // multiple bank stacks are undercounted; merchant-only stock stops matching.
+  // Inject the bank/market read boundary; the dashboard and its UI actions run normally.
+  const bank = { gold: 0, packs: { items0: [null, {}, { slot: 2, item: { name: 'leather', q: 4 } }],
+    items1: [{ slot: 0, item: { name: 'leather', q: 2 } }] } };
+  const orders = [
+    { key: 'bank-leather', buyer: 'E2EBankBuyer', item: { name: 'leather' }, quantity: 9 },
+    { key: 'inventory-sword', buyer: 'E2EInventoryBuyer', item: { name: 'sword', level: 0 }, quantity: 5 },
+  ].map(order => ({ ...order, source: 'aldata', slot: 'trade1', map: 'main', x: 0, y: 0,
+    price: 1000, serverRegion: 'US', serverIdentifier: 'II', lastSeen: new Date().toISOString(), seenAt: Date.now() }));
+  await page.route('**/party-api/state*', async route => {
+    const response = await route.fetch();
+    const state = await response.json();
+    await route.fulfill({ response, json: { ...state, bank, aldata: { ...state.aldata, buyOrders: orders } } });
+  });
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'M', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'View market', exact: true }).click();
+  await page.getByRole('button', { name: /^Live WTB/ }).click();
+  await expect(page.getByText(/2 offers match exact items currently held by M/)).toBeVisible();
+  const bankRow = page.getByRole('button', { name: /E2EBankBuyer/ }).locator('..');
+  await expect(bankRow).toContainText('You have 6');
+  await expect(bankRow.getByRole('button', { name: 'Sell', exact: true })).toBeEnabled();
+  await bankRow.getByRole('button', { name: 'All', exact: true }).click();
+  await expect(bankRow.getByLabel('Quantity of leather to sell')).toHaveValue('6');
+  const inventoryRow = page.getByRole('button', { name: /E2EInventoryBuyer/ }).locator('..');
+  await expect(inventoryRow).toContainText('You have 1');
+  await expect(inventoryRow.getByRole('button', { name: 'Sell', exact: true })).toBeEnabled();
+  await info.attach('bank-wtb-inputs', { body: JSON.stringify({ bank, orders }), contentType: 'application/json' });
+  await info.attach('bank-wtb-available-without-withdrawal', { body: await page.screenshot(), contentType: 'image/png' });
+});
+
 test('account preference rejects invalid drafts and survives reload and coordinator restart', async ({ page, app }, testInfo) => {
   const evidence: Record<string, unknown> = { before: await app.state(), exchanges: [] };
   const exchanges = evidence.exchanges as unknown[];
