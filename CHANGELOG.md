@@ -26,6 +26,8 @@ from the commits merged into `main`.
 
 ### Fixed
 
+- Market search now matches item display names in WTS, WTB, and Classifieds while preserving searches by internal item ID, trader, and server (#32).
+
 - Keep a solo ranger (or any single fighter) attacking in Group mode by creating its coordinator combat group and target authorization. Leadership is supported; Scatter remains unchanged.
 
 - Automatically designate the first connected, managed merchant on fresh installs so merchant controls and logistics work without editing configuration. Preserve saved assignments and exclude bankboi workers.
