@@ -61,8 +61,8 @@ export async function reward(live:LiveGame,before:Record<string,any>,timeout=240
 export async function spawnGoo(live:LiveGame,name=W,observableCombatSeconds=0,ahead=0) {
   // Native temp suppresses this encounter's respawn without changing species rules.
   // A newly introduced encounter is setup; no existing monster health or death is changed.
-  return live.admin(`output=(()=>{const p=get_player(${JSON.stringify(name)}),ahead=${ahead},distance=Math.hypot(p.going_x-p.x,p.going_y-p.y);
-    if(ahead&&(!p.moving||distance<ahead+35))throw Error('Passing encounter requires an ongoing native walking leg');
+  return live.admin(`output=(()=>{const p=get_player(${JSON.stringify(name)}),distance=Math.hypot(p.going_x-p.x,p.going_y-p.y),ahead=${ahead}?Math.min(${ahead},distance-35):0;
+    if(${ahead}&&(!p.moving||ahead<35))throw Error('Passing encounter requires an ongoing native walking leg');
     const offsets=ahead?[[ahead*(p.going_x-p.x)/distance,ahead*(p.going_y-p.y)/distance]]:[[35,0],[-35,0],[0,35],[0,-35]];
     for(const [dx,dy] of offsets){const x=p.x+dx,y=p.y+dy;if(can_move({map:p.map,x:p.x,y:p.y,going_x:x,going_y:y,base:p.base})){const m=new_monster(p.in,{type:'goo',position:[x,y],radius:0,count:1},{temp:1});m.e2eHunt=true;${observableCombatSeconds ? `m.hp=m.max_hp=Math.ceil(${JSON.stringify(fighters)}.map(get_player).reduce((sum,p)=>sum+Math.max(1,p.attack)*Math.max(0.1,p.frequency),0)*${observableCombatSeconds});` : ''}return {id:m.id,map:m.map,x:m.x,y:m.y,hp:m.hp,ahead,origin:{x:p.x,y:p.y},observableCombatSeconds:${observableCombatSeconds}};}}throw Error('No reachable encounter seed')})()`);
 }

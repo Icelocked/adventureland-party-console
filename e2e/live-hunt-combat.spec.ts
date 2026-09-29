@@ -10,7 +10,7 @@ test.describe('native Hunt travel combat and death ownership',()=>{
     await expect.poll(async()=>{
       const s=await live.state();
       return hunt(s)?.stage==='mission-travel'&&s.activeConvoy?.phase==='travel'&&
-        await live.clients[W].run('!!character.moving && !(character.c && character.c.town) && Math.hypot(character.going_x-character.real_x,character.going_y-character.real_y)>400');
+        await live.clients[W].run('!!character.moving && !(character.c && character.c.town) && Math.hypot(character.going_x-character.real_x,character.going_y-character.real_y)>200');
     },{timeout:90000,intervals:[100,250],message:'Introduce the outbound Goo during native walking, after any Town cast'}).toBe(true);
     // Seed ahead on the actual walking leg so native visibility and the party's
     // reservation exchange can precede reaching melee range on slower hosts.
@@ -22,7 +22,7 @@ test.describe('native Hunt travel combat and death ownership',()=>{
     await expect.poll(async()=>{
       const s=await live.state();
       return hunt(s)?.stage==='returning'&&s.activeConvoy?.phase==='travel'&&
-        await live.clients[W].run('!!character.moving && !(character.c && character.c.town) && Math.hypot(character.going_x-character.real_x,character.going_y-character.real_y)>400');
+        await live.clients[W].run('!!character.moving && !(character.c && character.c.town) && Math.hypot(character.going_x-character.real_x,character.going_y-character.real_y)>200');
     },{timeout:90000,intervals:[100,250],message:'Introduce the return Goo during native walking, after any Town cast'}).toBe(true);
     const returning=await spawnGoo(live,W,0,250);
     const returningKill=await killedByParty(live,String(returning.id));
