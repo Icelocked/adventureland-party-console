@@ -1936,10 +1936,15 @@
     var generation = catalogGeneration;
     try {
       var items = Object.keys(G.items || {});
-      for (var index = 0; index < items.length; index++) {
+      var index = 0;
+      while (index < items.length) {
         await new Promise(function (resolve) { setTimeout(resolve, 0); });
         if (!runtimeCurrent() || generation !== catalogGeneration) return;
-        itemWorldInfo(items[index]);
+        // Bound work by elapsed time, not one timer per item. Hidden/loaded
+        // clients can delay each timer substantially even for already cached data.
+        var sliceStarted = Date.now();
+        do { itemWorldInfo(items[index++]); }
+        while (index < items.length && Date.now() - sliceStarted < 8);
       }
       catalogPrepared = true;
     } catch (error) {

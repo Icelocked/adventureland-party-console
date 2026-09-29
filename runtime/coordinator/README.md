@@ -1221,3 +1221,22 @@ A single non-merchant fighter in Group mode receives the same coordinator combat
 group and target authorization as larger parties. Empty groups remain excluded.
 The native solo-ranger Goo scenario verifies singleton membership, committed Goo
 selection and continued kills after initial attacks. Explicit Scatter is unchanged.
+
+## Native draw and departure recovery
+
+The game-host texture guard retains the previous sprite texture when a requested
+frame is unavailable. It emits bounded diagnostics and retries the frame on later
+draws, so missing cosmetic data cannot unwind native draw and movement scheduling.
+The headless installer attaches this before the first game draw; browser CODE
+attaches it to the parent game window. A full supported restart is required to
+install the headless hook and recreate an already-stopped native draw loop.
+
+Catalog preparation yields between bounded 8 ms batches rather than every item.
+Shared departure retains its readiness deadline until all participants report
+departure; late preparation acknowledgements do not spend walking retries.
+Actual walking failures still use the existing bounded recovery policy.
+
+Validate with the native missing-frame walking scenario, successive Ice Roamer
+hunt rewards, and delayed shared departures, plus the retained native selector
+and installer regressions. See docs/testing-ice-roamer-failures.md for failure
+modes and docs/testing.md for repeatable evidence.

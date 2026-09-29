@@ -364,11 +364,12 @@ Native gameplay runs only when explicitly requested through the separate
 
 1. Open GitHub **Actions → Native game E2E (manual) → Run workflow**.
 2. Select the branch to test and start the run.
-3. Inspect the `native-game` job and download its `native-game-e2e-…` artifact.
+3. Inspect all three `native-game` shards and download their `native-game-e2e-…-shard-…` artifacts.
 
-That job installs the game/client dependencies, builds the maintained assets via
-`npm run test:e2e:live`, and runs the complete `live` Playwright project on its own
-Ubuntu runner. It has a 180-minute limit for the longer gameplay suite, verifies
+Each shard installs the game/client dependencies, builds the maintained assets via
+`npm run test:e2e:live`, and runs one third of the complete `live` Playwright project
+on its own Ubuntu runner and native game stack. Each has a 180-minute limit;
+fail-fast is disabled so one failure does not cancel the other evidence. Each verifies
 the evidence even after a test failure, and always attempts to upload the report,
 traces and server log. Failed or incomplete manifests still fail verification.
 This workflow has read-only repository permissions and **does not publish a release**.
