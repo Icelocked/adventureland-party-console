@@ -553,7 +553,7 @@ export const StandSheet = memo(function StandSheet({
 
       .filter((entry) =>
 
-        `${entry.item.name} ${entry.seller} ${entry.serverRegion} ${entry.serverIdentifier}`
+        `${catalogById.get(entry.item.name)?.name || ''} ${entry.item.name} ${entry.seller} ${entry.serverRegion} ${entry.serverIdentifier}`
 
           .toLowerCase()
 
@@ -571,7 +571,7 @@ export const StandSheet = memo(function StandSheet({
 
       );
 
-  }, [groupedALData, aldataFilter, marketCutoff]);
+  }, [groupedALData, aldataFilter, marketCutoff, catalogById]);
 
   const listingValue = (entry: ALDataListing) => {
 
@@ -719,7 +719,7 @@ export const StandSheet = memo(function StandSheet({
 
     .filter((order) =>
 
-      `${order.item.name} ${order.buyer} ${order.serverRegion} ${order.serverIdentifier}`
+      `${catalogById.get(order.item.name)?.name || ''} ${order.item.name} ${order.buyer} ${order.serverRegion} ${order.serverIdentifier}`
 
         .toLowerCase()
 
@@ -745,7 +745,7 @@ export const StandSheet = memo(function StandSheet({
 
   const filteredClassifieds = publicTrades.filter(({ owner, listing }) =>
 
-    `${listing.name} ${owner.label || ''} ${owner.characters?.join(' ') || ''}`
+    `${catalogById.get(listing.name)?.name || ''} ${listing.name} ${owner.label || ''} ${owner.characters?.join(' ') || ''}`
 
       .toLowerCase()
 
