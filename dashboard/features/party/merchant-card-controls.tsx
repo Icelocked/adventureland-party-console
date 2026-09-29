@@ -15,7 +15,7 @@ import {
   SlidersHorizontal,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { usePartyAction } from "./query-actions";
 import { domainOptions, useVisible } from "./query-cache";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
@@ -26,7 +26,7 @@ import { PartyState } from "./party-state";
 import { SendToPartyControl } from "./send-to-party-control";
 import { MerchantCancelJobControl } from "./merchant-cancel-job-control";
 
-export function MerchantCardControls({
+export const MerchantCardControls = memo(function MerchantCardControls({
   state: baseState,
   collectionSettings,
   onBank,
@@ -132,7 +132,7 @@ export function MerchantCardControls({
                 {jobLabel(job)}
                 {job.target && job.reason !== "join giveaway" ? ` · ${job.target}` : ""}
               </span>
-              <span className="max-w-32 shrink-0 truncate text-emerald-100/70" title={job.realmBlockedReason || status}>{job.realmBlockedReason || status}</span>
+              <span className="max-w-32 shrink-0 truncate text-emerald-100/70" title={job.realmBlockedReason || job.pauseReason || status}>{job.realmBlockedReason || (job.retryAt && job.retryAt > Date.now() ? `Retry at ${new Date(job.retryAt).toLocaleTimeString()}` : job.pauseReason || status)}</span>
               {job.realmRetryExhausted && <button type="button"
                 className="rounded border border-amber-600 bg-zinc-950 px-2 py-1 text-amber-200 hover:border-amber-300 hover:bg-amber-950 hover:text-white"
                 onClick={() => action.mutate({ path: '/merchant/job/retry', body: { id: job.id } })}>Retry</button>}
@@ -301,9 +301,9 @@ export function MerchantCardControls({
           <X className="mr-1.5 h-3.5 w-3.5" />
           Clear job queue
         </Button>
-        <MerchantCollectionSettings {...collectionSettings} bankSortState={state} deliveryTripsEnabled={state.merchantAutomations?.deliveries !== false} />
+        <MerchantCollectionSettings buyUpgradeBatchSize={state.buyUpgradeBatchSize} {...collectionSettings} bankSortState={state} deliveryTripsEnabled={state.merchantAutomations?.deliveries !== false} />
       </div>
 
     </section>
   );
-}
+});

@@ -1,0 +1,22 @@
+{
+  "scenario": "native Hunt survives follower-reconnect loss and both owners receive exactly one Daisy reward",
+  "archive": ".build/remaining54-diagnostic-e2e-report/manifest.json",
+  "outcome": "failed: native completed quests remained held instead of receiving both rewards",
+  "observed": {
+    "restoredAt": 1790633239029,
+    "lostAgainAt": 1790633240128,
+    "reason": "Waiting for coordinator communication: E2EPriest: walking signal expired",
+    "followerSeenAt": 1790633240058,
+    "lastFullResponseAt": 1790633239809,
+    "lastFullNetworkMs": 47,
+    "routeVersion": 6,
+    "followerDistanceFromRally": 226.37679838328458,
+    "bothHeldWithCurrentOwner": true
+  },
+  "failureModesRecordedBeforeFix": [
+    "A new local convoy starts without its authorized routeVersion, so fast lease responses are rejected while rendezvous awaits native movement.",
+    "A slow genuine rendezvous/planner response exceeds the initial lease, causing repeated communication recovery despite fresh transport.",
+    "Initializing route identity must not weaken rejection of old command, epoch, revision or runtime responses."
+  ],
+  "regression": "Reconnect the actual follower during an unfinished Hunt, observe native rendezvous reports with a nonzero issued route version before travel settles, then require both real Daisy rewards. Direct native walking may bypass the planner endpoint; the test does not depend on delaying a planner request."
+}

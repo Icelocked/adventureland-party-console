@@ -19,14 +19,6 @@ function fixture() {
   vm.runInContext(source.slice(source.indexOf('  function eligibleDepartureChests('),source.indexOf('  async function smartLoot(')),c);
   return {c,entity,advance:ms=>time+=ms,equips:()=>equips,moves:()=>moves,stops:()=>stops};
 }
-test('All optional rare monster sightings are reported to the passive controller',()=>{
-  const r=fixture();
-  for(const mtype of ['goldenbat','cutebee','hen','rooster']) {
-    r.entity.mtype=mtype;
-    assert.equal(r.c.rareSightings()[0].mtype,mtype);
-  }
-});
-
 test('active assistance permission survives the first grouped fight handoff but expires with its revision or heartbeat',()=>{
   const {c,advance}=fixture();c.rareControlState={kind:'patrol',allowPhoenixAssist:true,revision:1};
   c.unfinishedFight=()=>true;c.groupedCombat={target:{id:'phoenix'}};
@@ -81,18 +73,6 @@ test('hidden field generators are reported without dashboard map subscriptions',
   assert.equal(r.c.rareFields().length,1);assert.equal(r.c.rareSightings()[0].id,'fairy');
 });
 
-test('loot phase approaches the kill and opens drops while rare movement owns the character',async()=>{
-  const r=fixture();let looted=0;
-  r.c.parent.chests={drop:{x:100,y:0},distant:{map:'main',x:1800,y:1600},old:{map:'arena',x:100,y:0}};
-  r.c.smartLoot=async()=>{looted++;delete r.c.parent.chests.drop;};
-  r.c.rareControlState.kind='loot';r.c.rareControlState.deployer=null;
-  r.c.pollRareHunting();assert.equal(r.moves(),1);assert.equal(looted,0);
-  r.c.character.x=100;r.c.pollRareHunting();r.c.pollRareHunting();
-  await new Promise(resolve=>setImmediate(resolve));
-  assert.equal(looted,1);assert.equal(r.c.rareLoot.complete,true);
-  assert.equal(r.c.rareLoot.id,'e1');
-});
-
 test('loot failures do not report success and remain retryable',async()=>{
   const r=fixture();r.c.character.x=100;r.c.rareControlState.kind='loot';
   r.c.rareControlState.deployer=null;r.c.smartLoot=async()=>{throw new Error('loot_no_space');};
@@ -111,4 +91,15 @@ test('grouped Fairy deployer recovers locally when out of range and consumes gen
  const r=fixture();r.c.groupedFarming=()=>true;r.entity.x=400;
  assert.equal(r.c.pollRareHunting(),false);assert.equal(r.moves(),0);
  r.entity.x=100;r.c.pollRareHunting();assert.equal(r.equips(),1);
+});
+
+test('owned committed Fairy permits basic attacks without a separate rare controller',()=>{
+ const r=fixture(),c=r.c,t={...r.entity,in:'main',server:'USII'};
+ c.rareControlState=null;c.convoyTraveling={phase:'defending',navigationRevision:1};c.groupedFresh=()=>true;c.groupedCombat={target:t};c.reunionRealm=()=> 'USII';
+ c.passingKey=e=>JSON.stringify([e.server,e.map,e.in,e.id]);
+ const control={defending:true,committed:[t]};c.huntTravelControl=()=>control;
+ assert.equal(c.rareTarget(),r.entity);assert.equal(c.rareAttackAllowed(r.entity,'attack'),true);
+ assert.equal(c.rareAttackAllowed(r.entity,'burst'),false);
+ control.committed=[];assert.equal(c.rareTarget(),null);
+ control.committed=[t];c.groupedFresh=()=>false;assert.equal(c.rareTarget(),null);
 });

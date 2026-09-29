@@ -1,4 +1,6 @@
+import { validSpawnPreferences } from './spawn-preferences.ts';
 export interface HuntSettings {
+  preferredSpawns?: Record<string, string>;
   relocateIfCompeting: boolean;
   blacklistDeaths: boolean;
   deathThreshold: number;
@@ -27,6 +29,7 @@ export interface HuntFailureState {
 export function validHuntSettings(value: unknown): value is Partial<HuntSettings> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   return Object.entries(value).every(([key, item]) => {
+    if (key === 'preferredSpawns') return validSpawnPreferences(item);
     if (["relocateIfCompeting", "blacklistDeaths", "blacklistExpirations"].includes(key))
       return typeof item === "boolean";
     return (

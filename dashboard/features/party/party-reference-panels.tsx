@@ -151,7 +151,7 @@ function PartyReferencePanelsConnected({ base }: { base: PartyConsoleModel }) {
           <DialogHeader>
             <DialogTitle>Donate gold for merchant XP</DialogTitle>
             <DialogDescription>
-              GoldMajesty will withdraw any shortage, travel to the XP frog, and donate this amount.
+              {state.merchantCharacter || "The merchant"} will withdraw any shortage, travel to the XP frog, and donate this amount.
             </DialogDescription>
           </DialogHeader>
           <Input

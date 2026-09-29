@@ -36,7 +36,7 @@ test('force stand retains durable work, clears execution fields, and resumes wit
  f.state.commands.M={type:'merchant-idle'};f.send('force',{enabled:false});assert.equal(f.state.commands.M,undefined);assert.equal(f.state.merchantQueue.length,1);assert.ok(f.calls.includes('dispatch'));
 });
 test('clear stops merchant gathering and removes current recipient command',()=>{
- const f=fixture();f.state.merchantCurrent={target:'F'};f.state.commands.F={type:'merchant-handoff'};f.send('clear');
+ const f=fixture();f.state.merchantCurrent={id:'job',target:'F'};f.state.commands.F={type:'merchant-handoff',jobId:'job'};f.send('clear');
  assert.equal(f.state.commands.F,undefined);assert.deepEqual(f.state.commands.M,{id:1,type:'merchant-gather',mode:null});assert.deepEqual(f.state.gatheringModes,[]);
 });
 test('donation, search and giveaway validate before queueing and retain their scheduling rules',()=>{

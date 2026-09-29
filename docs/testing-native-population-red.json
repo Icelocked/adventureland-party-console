@@ -1,0 +1,237 @@
+{
+  "source": ".build/hunt63-contamination-e2e-results/evidence/1a095c959b00fbdf0a7a-1f154a850876724d6501/retry-0/7-live-final-state.json",
+  "scenario": "native goldenbat interruption kills and loots before resuming the same Hunt",
+  "observedFailure": "Original Goo count stayed 495 for 90 seconds after native rare death and loot; clients had no eligible targets and no movement owner.",
+  "hunt": {
+    "cycleId": "hunt-1790622543148-1790622493466",
+    "stage": "farming",
+    "target": "goo",
+    "message": "Monster Hunt: goo"
+  },
+  "rareHuntState": {
+    "encounter": null,
+    "patrol": null,
+    "message": "Golden Bat defeated; loot checked"
+  },
+  "activeConvoy": null,
+  "characters": {
+    "E2EWarrior": {
+      "position": {
+        "map": "main",
+        "x": -62.69134848603687,
+        "y": 768.4926239334045,
+        "moving": false
+      },
+      "quest": {
+        "id": "goo",
+        "count": 495,
+        "remainingMs": 1664609,
+        "server": "US I"
+      },
+      "navigation": {
+        "location": {
+          "map": "main",
+          "mapName": "Mainland",
+          "x": -32,
+          "y": 787,
+          "boundary": [
+            -282,
+            702,
+            218,
+            872
+          ],
+          "shapes": [
+            {
+              "boundary": [
+                -282,
+                702,
+                218,
+                872
+              ]
+            }
+          ],
+          "monsterIds": [
+            "goo"
+          ],
+          "id": "[\"main\",[{\"boundary\":[-282,702,218,872]}]]"
+        },
+        "cancelled": false,
+        "occupied": false,
+        "combatOwner": null,
+        "followingLeader": false,
+        "departurePending": false,
+        "town": false,
+        "anniversary": false,
+        "event": false,
+        "forceTravel": false,
+        "stocking": false,
+        "upgrading": false
+      },
+      "combatPositioning": {
+        "at": 1790622677797,
+        "mode": "idle",
+        "movementOwner": null,
+        "target": null,
+        "reason": "no valid target or immediate threat"
+      },
+      "travelCandidates": [],
+      "sightings": [],
+      "deaths": [
+        {
+          "id": "578",
+          "map": "main",
+          "in": "main",
+          "server": "USI",
+          "at": 1790622550354
+        },
+        {
+          "id": "579",
+          "map": "main",
+          "in": "main",
+          "server": "USI",
+          "at": 1790622551695
+        },
+        {
+          "id": "583",
+          "map": "main",
+          "in": "main",
+          "server": "USI",
+          "at": 1790622553160
+        },
+        {
+          "id": "584",
+          "map": "main",
+          "in": "main",
+          "server": "USI",
+          "at": 1790622554453
+        },
+        {
+          "id": "585",
+          "map": "main",
+          "in": "main",
+          "server": "USI",
+          "at": 1790622556015
+        },
+        {
+          "id": "588",
+          "map": "main",
+          "in": "main",
+          "server": "USI",
+          "at": 1790622585246
+        }
+      ]
+    },
+    "E2EPriest": {
+      "position": {
+        "map": "main",
+        "x": -59.424871587234264,
+        "y": 716.3025329992716,
+        "moving": false
+      },
+      "quest": {
+        "id": "goo",
+        "count": 495,
+        "remainingMs": 1664756,
+        "server": "US I"
+      },
+      "navigation": {
+        "location": {
+          "map": "main",
+          "mapName": "Mainland",
+          "x": -32,
+          "y": 787,
+          "boundary": [
+            -282,
+            702,
+            218,
+            872
+          ],
+          "shapes": [
+            {
+              "boundary": [
+                -282,
+                702,
+                218,
+                872
+              ]
+            }
+          ],
+          "monsterIds": [
+            "goo"
+          ],
+          "id": "[\"main\",[{\"boundary\":[-282,702,218,872]}]]"
+        },
+        "cancelled": false,
+        "occupied": false,
+        "combatOwner": null,
+        "followingLeader": false,
+        "departurePending": false,
+        "town": false,
+        "anniversary": false,
+        "event": false,
+        "forceTravel": false,
+        "stocking": false,
+        "upgrading": false
+      },
+      "combatPositioning": {
+        "at": 1790622677725,
+        "mode": "idle",
+        "movementOwner": null,
+        "target": null,
+        "reason": "no valid target or immediate threat"
+      },
+      "travelCandidates": [],
+      "sightings": [],
+      "deaths": [
+        {
+          "id": "578",
+          "map": "main",
+          "in": "main",
+          "server": "USI",
+          "at": 1790622550344.5
+        },
+        {
+          "id": "579",
+          "map": "main",
+          "in": "main",
+          "server": "USI",
+          "at": 1790622551641.5
+        },
+        {
+          "id": "583",
+          "map": "main",
+          "in": "main",
+          "server": "USI",
+          "at": 1790622553156.5
+        },
+        {
+          "id": "584",
+          "map": "main",
+          "in": "main",
+          "server": "USI",
+          "at": 1790622554450.5
+        },
+        {
+          "id": "585",
+          "map": "main",
+          "in": "main",
+          "server": "USI",
+          "at": 1790622556014.5
+        },
+        {
+          "id": "588",
+          "map": "main",
+          "in": "main",
+          "server": "USI",
+          "at": 1790622585284.5
+        }
+      ]
+    }
+  },
+  "diagnosis": {
+    "kind": "fixture contamination",
+    "mechanism": "spawnRare(goo) held global respawn=-1 across asynchronous combat. Native remove_monster then omitted respawn queue entries for ordinary Goos killed during that window. Cleanup restored definitions but could not restore omitted queue entries.",
+    "evidenceLimit": "Artifact proves absent targets and released owners; contamination mechanism is established from fixture and pinned upstream source, not a captured complete server respawn queue.",
+    "fix": "Use temporary species definition only during synchronous native construction, restore exact original in finally, never override respawn; injected monster already has temp=1."
+  }
+}

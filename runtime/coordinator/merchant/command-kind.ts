@@ -29,6 +29,7 @@ export function ownCommandType(job: MerchantWork): string {
 
 const descriptions: Readonly<Record<string, string>> = {
   "auto upgrade": "Merchant dispatched for automatic upgrades",
+  "upgrade preview": "Merchant dispatched to refresh upgrade chances",
   "manual upgrades": "Merchant dispatched for manual upgrades",
   "bank unlock": "Merchant dispatched to unlock bank storage",
   "manual bank exchange": "Merchant dispatched for its own bank exchange",

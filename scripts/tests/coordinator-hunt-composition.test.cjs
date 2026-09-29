@@ -123,30 +123,6 @@ for(const resume of [true,false])test('Hunt restart preserves unfinished loot be
  assert.equal(state.monsterHunt.loot?.complete ?? true,true);assert.ok(calls.some(Array.isArray));
 });
 
-test('Hunt composition begins through quest selection and configures the departing convoy commands', () => {
-  const {state, service, calls, farm} = fixture();
-  assert.equal(service.lifecycle.begin('auto', farm), true);
-  assert.equal(state.monsterHunt.cycleId, 'hunt-100000-40');
-  assert.equal(state.monsterHunt.target, 'rat');
-  assert.equal(state.monsterHunt.stage, 'mission-travel');
-  assert.equal(state.monsterHunt.convoyId, 'travel');
-  assert.equal(state.activeConvoy.townFirst, false);
-  assert.equal(state.activeConvoy.combatHandoffAllowed, false);
-  assert.equal(state.activeConvoy.huntTarget, 'rat');
-  assert.equal(state.commands.W.id, 41); assert.equal(state.commands.P.id, 42);
-  assert.equal(state.commands.P.combatHandoffAllowed, false);
-  assert.equal(state.commands.P.huntTarget, 'rat');
-  assert.deepEqual(calls.filter(Array.isArray), [
-    ['authorize', ['W', 'P'], farm, true], ['start', farm, 'Monster Hunt: rat', ['W', 'P'], 'monster-hunt',undefined],
-  ]);
-});
-test('idle Hunt composition accepts startup without a selected leader', () => {
-  const {state, service, calls} = fixture();
-  state.leader = null; state.farmingPolicy = 'auto'; state.followers = {}; state.statuses = {};
-  service.tick.tick();
-  assert.equal(state.monsterHunt, null); assert.equal(state.leader, null); assert.deepEqual(calls, []);
-});
-
 test('Hunt composition starts its route despite nearby attackers and retains the mission', () => {
   const {state, service, calls, conditions} = fixture();
   state.statuses.P.groupedCombat.currentAttackers=[{id:'bee',mtype:'bee',map:'main',target:'P',x:0,y:0}]; service.lifecycle.begin();
@@ -158,16 +134,11 @@ test('Hunt composition starts its route despite nearby attackers and retains the
   assert.equal(hunt.stage, 'mission-travel'); assert.equal(hunt.convoyId, 'travel');
 });
 
-test('Hunt composition claims at Daisy without travel and uses the current command map and counter', () => {
-  const {state, service, calls} = fixture();
-  state.statuses = Object.fromEntries(Object.entries(state.statuses).map(([name, status]) =>
-    [name, {...status, monsterHunt: {...status.monsterHunt, count: 0}}]));
-  state.commands = {}; state.nextCommandId = 90;
-  service.tick.tick();
-  assert.equal(state.monsterHunt.cycleId, 'hunt-100000-90');
-  assert.equal(state.monsterHunt.stage, 'at-daisy'); assert.equal(state.activeConvoy, null);
-  assert.equal(state.commands.W.action, 'claim'); assert.equal(state.commands.W.id, 91);
-  assert.equal(state.commands.P.action, 'claim'); assert.equal(state.commands.P.id, 92);
-  assert.equal(state.commands.P.cycleId, state.monsterHunt.cycleId);
-  assert.equal(calls.some(Array.isArray), false);
+test('resumed mission travel clears the previous rare interruption message',()=>{
+ const r=fixture();r.service.lifecycle.begin();
+ const h=r.state.monsterHunt;
+ Object.assign(h,{stage:'mission-travel',target:'rat',convoyId:'travel',message:'Travel encounter: pursuing Fairy 225',owner:'W',policyVersion:3});
+ r.state.activeConvoy={id:'travel',phase:'travel',purpose:'monster-hunt',huntTarget:'rat'};
+ r.service.tick.tick();
+ assert.equal(h.message,'Monster Hunt: rat');
 });

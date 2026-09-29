@@ -5,6 +5,7 @@ import { authorizeBrowser, authorizeSteam } from "./authorize.ts";
 import type { Options } from "./setup-routes.ts";
 import { websocket } from "./websocket.ts";
 import { acceptTransfer } from './setup-transfer.ts';
+import { steamAction, isSteamAction } from '../steam/routes.ts';
 export { loaderCode } from "./setup-routes.ts";
 async function health(res: ServerResponse, options: Options) {
   const ready = options.healthy ? await options.healthy() : true;
@@ -26,6 +27,11 @@ async function continueSetup(req: import('node:http').IncomingMessage, res: Serv
   if (req.method === 'GET') { res.writeHead(303, { Location: '/setup' }); res.end(); return true; }
   if (req.method !== 'POST') return false;
   await acceptTransfer(req, res, options); return true;
+}
+async function forward(req: import('node:http').IncomingMessage, res: ServerResponse, url: URL, match: RegExpExecArray | null, options: Options) {
+  if (isSteamAction(url, req, match)) { await steamAction(req, res, options); return; }
+  const route = req.url || '';
+  proxy(req, res, upstreamPort(route, options), !/^\/(party-api|CODE)\//.test(route));
 }
 export function gateway(options: Options) {
   const server = createServer(async (req, res) => {
@@ -51,9 +57,7 @@ export function gateway(options: Options) {
         ? authorizeSteam(req, res, url, match, options)
         : await authorizeBrowser(req, res, url, options);
       if (permitted) {
-        const route = req.url || '';
-        const port = upstreamPort(route, options);
-        proxy(req, res, port, !/^\/(party-api|CODE)\//.test(route));
+        await forward(req, res, url, match, options);
       }
     } catch (error) {
       failure(res, error);

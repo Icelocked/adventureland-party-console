@@ -4,6 +4,25 @@ const load = require('./helpers/dashboard-query-module.cjs');
 const { QueryObserver } = require('../../dashboard/node_modules/@tanstack/react-query');
 const { createDashboardClient, domainOptions, key, transientRetry, ReadError } = load('query-cache.tsx');
 const { affectedDomains, performAction } = load('query-actions.ts');
+
+test('configuration polls slowly but successful actions refresh active configuration immediately', async () => {
+ const client=createDashboardClient(), original=global.fetch;
+ let reads=0, value=1;
+ const options=domainOptions(client,'config');
+ assert.equal(options.refetchInterval,15000);
+ assert.equal(domainOptions(client,'core').refetchInterval,1000);
+ client.setQueryData(key('config'),{threshold:1});
+ const observer=new QueryObserver(client,{...options,queryFn:async()=>{reads++;return {threshold:value};}});
+ const stop=observer.subscribe(()=>{});
+ global.fetch=async()=>{value=2;return {ok:true,status:200,json:async()=>({})};};
+ try {
+  await performAction(client,'/config',{threshold:2});
+  assert.equal(reads,1);
+  assert.equal(client.getQueryData(key('config')).threshold,2);
+  for(const path of ['/formation','/deconstruction/mark','/merchant/npc-sale'])
+   assert.ok(affectedDomains(path).includes('config'),path);
+ } finally {stop();client.clear();global.fetch=original;}
+});
 test('cache deduplicates concurrent reference reads and garbage collects unused entries', async () => {
   const client = createDashboardClient(); let calls = 0;
   const options = { queryKey: ['party', 'reference', 'r1', 'map', 'main'], staleTime: Infinity, gcTime: 20,
@@ -26,7 +45,7 @@ test('recurring reads do not retry, failed mutations preserve cache and never re
   assert.equal(transientRetry(1, new ReadError(503, 'outage')), false);
 });
 test('action domains are precise and inactive bank and market queries become stale without fetching', async () => {
-  assert.deepEqual(affectedDomains('/formation'), ['core']);
+  assert.deepEqual(affectedDomains('/formation'), ['core', 'config']);
   assert.deepEqual(affectedDomains('/combat-log/A/clear'), ['logs']);
   assert.throws(() => affectedDomains('/unmapped-action'), /Missing action/);
   const client = createDashboardClient(); let reads = 0;

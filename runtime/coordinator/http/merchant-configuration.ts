@@ -19,6 +19,7 @@ interface ConfigurationState extends BankSortState {
   merchantQueue: Parameters<typeof createRoutinePriorityRoute>[0]["queue"];
   threshold: number;
   itemCollectionThreshold: number;
+  buyUpgradeBatchSize?: number;
   transferSignatures: Record<string, unknown>;
 }
 type ConfigurationPorts = Omit<SettingsPorts, "nextCommand" | "command" | "currentJob"> &
@@ -105,6 +106,8 @@ export function createCoordinatorMerchantConfiguration(
   );
   const thresholds = createThresholdRoute(
     {
+      get buyUpgradeBatchSize() { return state.buyUpgradeBatchSize ?? 1; },
+      set buyUpgradeBatchSize(value) { state.buyUpgradeBatchSize = value; },
       get threshold() {
         return state.threshold;
       },

@@ -50,6 +50,60 @@ function giveawayPayload(
   };
 }
 
+/**
+ * Configuration, rules and marks the dashboard rarely needs fresher than a few
+ * seconds old — as opposed to 'core', which is live operational state (active
+ * convoy/combat/hunt/bank-job progress) polled roughly every second. Splitting
+ * these out means the dashboard's slow-changing majority no longer forces a
+ * full structural diff of the fast tier on every poll, and vice versa.
+ *
+ * Not to be confused with the persistence layer's own `settingsFields` /
+ * `settingsSnapshot` in persistence/snapshots.ts, which decide what survives a
+ * coordinator restart — a different axis (almost everything persists) from
+ * what the dashboard needs to poll quickly.
+ */
+const configFields = [
+  "characterAppearances", "merchantRules",
+  "bankboiPrefix", "anniversaryAutoChat", "farmingProfiles",
+  "passiveRareHunts", "passiveHunting", "phoenixRouteOrder",
+  "threshold", "itemCollectionThreshold", "buyUpgradeBatchSize",
+  "marked", "merchantMarked", "autoItemMarks", "merchantDeliveries",
+  "standListings", "npcSaleMarks", "deconstructionMarks", "autoDeconstruction",
+  "deconstructionCatalog", "autoNpcSales", "autoStandMarks",
+  "merchantRoutinePriorities", "merchantAutomations", "merchantBlacklist",
+  "standBids", "autoStandBuys", "autoBlacklistMerchants", "standSearch",
+  "upgrades", "statScrolls", "compounds", "autoCompounds", "autoExchanges", "goldTargets",
+  "leader", "followers", "eventsByCharacter", "eventSelectionsByCharacter",
+  "monsterFocus", "monsterFocusByCharacter", "monsterPrioritiesByCharacter",
+  "monsterSearchRadiusByCharacter", "scatterMonsterTypes",
+  "farmingPolicy",
+  "huntBlacklist", "huntSettings",
+  "restockPolicies", "merchantCharacter", "merchantForceStand", "merchantWeapon",
+] as const satisfies readonly (typeof publicStateFields)[number][];
+/** Keys present only in the assembled dashboard payload, not publicStateFields. */
+const configExtraKeys = [
+  "roster", "classChoices", "eventStrategy", "giveawayRealms", "autoUpgradeMarks",
+] as const;
+function configPayload(
+  state: Readonly<PublicState>,
+  ports: PublicStatePorts,
+): Record<string, unknown> {
+  return {
+    ...selectSnapshot(state, configFields),
+    roster: ports.roster(),
+    classChoices: ports.classes,
+    eventStrategy: state.abtestingStrategy,
+    autoUpgradeMarks: state.autoUpgradeMarks,
+    giveawayRealms: giveawayPayload(state, ports).giveawayRealms,
+  };
+}
+/** 'core' carries only live operational state; config fields have their own section. */
+function omitConfigFields<T extends Record<string, unknown>>(payload: T): T {
+  for (const key of configFields) delete payload[key];
+  for (const key of configExtraKeys) delete payload[key];
+  return payload;
+}
+
 function fullPayload(
   state: Readonly<PublicState>,
   ports: PublicStatePorts,
@@ -80,7 +134,8 @@ function fullPayload(
     roster: ports.roster(),
     activeSlots: ports.slots(),
     characterConnections: characterConnections(state, ports.now(), name =>
-      state.statuses[name]?.runtime === 'native' && state.statuses[name].seenAt > ports.now() - 5000),
+      (state.statuses[name]?.runtime === 'native' || state.statuses[name]?.runtime === 'headless') &&
+      state.statuses[name].seenAt > ports.now() - 5000),
     classChoices: ports.classes,
     steamSwitch,
     partyLocation: state.location,
@@ -196,10 +251,11 @@ export function createPublicStateRoute(state: Readonly<PublicState>, ports: Publ
         standPriceHistory: state.standPriceHistory,
       }),
       catalog: () => ({ ...catalogs(state), referenceRevision: referenceRevision() }),
+      config: () => configPayload(state, ports),
       core: () =>
         request.query?.dashboard !== "1"
           ? corePayload(fullPayload(state, ports, true))
-          : {
+          : omitConfigFields({
               ...fullPayload(state, ports, true, true),
               serverNow: ports.now(),
               accountId: accountId(state),
@@ -217,7 +273,7 @@ export function createPublicStateRoute(state: Readonly<PublicState>, ports: Publ
                 ]),
               ),
               referenceRevision: referenceRevision(),
-            },
+            }),
     };
     return response.json(
       Object.hasOwn(sections, section)

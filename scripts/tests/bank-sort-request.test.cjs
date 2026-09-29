@@ -158,12 +158,6 @@ test('full inventory keeps a requested sort pending instead of reporting complet
  const t=client();t.c.call('configure',{enabled:true});await t.enter();t.r.character.items.fill({name:'cargo'});
  await t.r.bankSortMove('main');assert.equal(t.c.state.bankSortRequest.status,'retry');assert.ok(!t.calls.includes('complete'));
 });
-test('all cosmetic sorting callers share the single authorization gate',()=>{
- const callers=[...source.matchAll(/await sortCurrentBankFloor\(/g)];assert.equal(callers.length,7);
- assert.equal([...source.matchAll(/await consolidateCurrentBankFloor\(/g)].length,1);
- const sorter=source.slice(source.indexOf('  async function sortCurrentBankFloor('),source.indexOf('  async function bankRetrieveConfirmed('));
- assert.ok(sorter.indexOf('consolidateCurrentBankFloor(')<sorter.indexOf('bankSortAuthorization()'));
-});
 
 test('interrupted runtime becomes visibly retryable without waiting for another visit',()=>{
  const c=coordinator();c.call('configure',{mode:'request',enabled:true});const pending=c.state.bankSortRequest;

@@ -80,3 +80,30 @@ test('partial progress does not match an unrelated item in the marked slot', () 
   r.character.items[0] = null;
   assert.equal(r.findUpgradeMarkSlot(command.upgrades[0], {}), -1);
 });
+
+for(const response of [{failed:true,success:false,num:0},undefined,{failed:true,success:false,num:1}])
+test('destruction needs a matching server failure: '+JSON.stringify(response),async()=>{
+ let now=0;const character={items:[{name:'coat',level:2}],q:{}};
+ const c=vm.createContext({character,activeUpgrade:null,fingerprint:i=>i&&({...i}),
+  Date:{now:()=>now},setTimeout:(cb,ms)=>{now+=ms;cb();},
+  upgrade:()=>{character.items[0]=null;return Promise.resolve(response);}});
+ vm.runInContext(require('./helpers/named-function.cjs').namedFunction(source,'upgradeAtSlotConfirmed'),c);
+ await assert.rejects(c.upgradeAtSlotConfirmed(0,1,'coat',3),e=>{
+  if(response?.num===0){assert.equal(e.reason,'upgrade_destroyed');assert.equal(e.confirmedDestroyed,true);}
+  else {assert.match(e.message,/uncertain/);assert.notEqual(e.confirmedDestroyed,true);}
+  return true;
+ });
+});
+
+test('upgrade preparation follows an item relocated during the protection checkpoint',async()=>{
+ const items=[{name:'coat',level:2},null,{name:'scroll0',q:2}],calls=[];
+ const c=vm.createContext({character:{ctype:'merchant',items},luckyUpgradeSlot:0,
+  verifyMerchantItemMarks:async()=>{items[5]=items[0];items[0]=null;},
+  findInventoryItemByName:name=>items.findIndex(i=>i?.name===name),
+  luckySlotTracking:()=>({begin(){}}),
+  merchantLuckyUpgrade:()=>({run:async(from,scroll,_selected,action)=>action(from,scroll)}),
+  upgradeAtSlotConfirmed:async(slot,scroll)=>{calls.push([slot,scroll]);return {slot,item:{name:'coat',level:3}};}});
+ vm.runInContext(require('./helpers/named-function.cjs').namedFunction(source,'observedUpgradeConfirmed'),c);
+ const result=await c.observedUpgradeConfirmed(0,2,'coat',3);
+ assert.deepEqual(calls,[[5,2]]);assert.equal(result.slot,5);
+});

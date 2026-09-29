@@ -9,6 +9,7 @@ import { trustHelper } from './trust.ts';
 import { requestOrigin } from './request-origin.ts';
 import { transfer } from './setup-transfer.ts';
 export interface Options {
+  steam?: import('../steam/service.ts').LocalSteam;
   tls?: LocalTLS;
   updates?: import('../update/hosting.ts').UpdateRoutes;
   access: Access;
@@ -21,6 +22,7 @@ export interface Options {
 }
 export const loaderCode = steamBootstrap;
 async function steamLoader(options: Options, input: Record<string, unknown>) {
+  if (options.steam && input.placement !== undefined) await options.steam.preferences.save(input);
   const address = new URL(text(input.origin));
   if (
     !["http:", "https:"].includes(address.protocol) ||
@@ -51,7 +53,7 @@ async function setupState(req: IncomingMessage, options: Options) {
   const secure = options.tls?.trusted(req);
   const origin = options.publicUrl || (secure ? requestOrigin(req, options) : undefined);
   const tls = options.tls ? { tls: await options.tls.status(), secure, httpPort: Number(process.env.AL_HTTP_PUBLIC_PORT || process.env.AL_PORT || 3010) } : {};
-  return { configured: options.configured(), requirePairing: options.access.required, canConfigureAccount: !!options.configure, serverAddress: setupAddress(req, origin), ...tls };
+  return { configured: options.configured(), requirePairing: options.access.required, canConfigureAccount: !!options.configure, serverAddress: setupAddress(req, origin), steamPreferences: await options.steam?.preferences.read(), ...tls };
 }
 async function readSetup(
   req: IncomingMessage,
@@ -85,6 +87,10 @@ export async function setupRoute(req: IncomingMessage, res: ServerResponse, path
     json(res, 401, { error: "Pair this browser before changing setup" }); return;
   }
   const handlers: Record<string, () => Promise<unknown>> = {
+    '/setup/client': async () => {
+      if (!options.steam) throw Error('Local Steam launcher is unavailable.');
+      return options.steam.preferences.save(input);
+    },
     '/setup/transfer': () => transfer(req, options, input),
     '/setup/https': async () => {
       if (!options.tls) throw Error('HTTPS is not installed');

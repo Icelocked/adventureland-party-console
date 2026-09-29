@@ -1,0 +1,114 @@
+{
+  "source": ".build\\e2e-results\\evidence\\1a095c959b00fbdf0a7a-1f154a850876724d6501\\6-live-final-state.json",
+  "failure": "defending command acknowledged without a locally installed convoy",
+  "convoy": {
+    "id": "convoy-1790611636947-1790611555471",
+    "epoch": 1790611555398,
+    "phase": "defending",
+    "purpose": "monster-hunt",
+    "expected": {
+      "E2EWarrior": {
+        "commandId": 1790611555476,
+        "revision": 4,
+        "phase": "defending",
+        "runtimeId": "1790611557821-4j8uhaa0g53"
+      },
+      "E2EPriest": {
+        "commandId": 1790611555477,
+        "revision": 4,
+        "phase": "defending",
+        "runtimeId": "1790611563827-chov8kzxzff"
+      }
+    },
+    "defenseReason": "Travel encounter: pursuing goldenbat 699"
+  },
+  "fighters": {
+    "E2EWarrior": {
+      "lastCommandId": 1790611555476,
+      "navigationState": "idle",
+      "convoyNavigation": null,
+      "huntDefense": false,
+      "selection": {
+        "id": null,
+        "map": null,
+        "revision": 45,
+        "runtimeId": "1790611557821-4j8uhaa0g53",
+        "target": null
+      },
+      "target": {
+        "id": "699",
+        "mtype": "goldenbat",
+        "map": "main",
+        "in": "main",
+        "x": 73.78074098676692,
+        "y": 697.8487228661243,
+        "hp": 24000,
+        "max_hp": 24000,
+        "target": null,
+        "server": "USI",
+        "fighter": "E2EWarrior",
+        "startedAt": 1790611637150,
+        "state": "engaged"
+      }
+    },
+    "E2EPriest": {
+      "lastCommandId": 1790611555477,
+      "navigationState": "convoy",
+      "convoyNavigation": {
+        "id": "convoy-1790611636947-1790611555471",
+        "epoch": 1790611555398,
+        "commandId": 1790611555477,
+        "runtimeId": "1790611563827-chov8kzxzff",
+        "phase": "defending",
+        "navigationRevision": 4
+      },
+      "huntDefense": true,
+      "selection": {
+        "id": null,
+        "revision": 0,
+        "map": null,
+        "runtimeId": "1790611563827-chov8kzxzff",
+        "target": null
+      },
+      "target": null
+    }
+  },
+  "history": [
+    {
+      "at": 1790611636189,
+      "message": "Rare sighting handed to combat"
+    },
+    {
+      "at": 1790611636231,
+      "message": "Rare pursuit ended"
+    },
+    {
+      "at": 1790611636946,
+      "message": "Hunt arrival recovery: fresh leader status remains outside the destination"
+    },
+    {
+      "at": 1790611636948,
+      "message": "Command ownership changed"
+    },
+    {
+      "at": 1790611636948,
+      "message": "Convoy started"
+    },
+    {
+      "at": 1790611636948,
+      "message": "Command ownership changed"
+    },
+    {
+      "at": 1790611636948,
+      "message": "Convoy route preparation"
+    },
+    {
+      "at": 1790611637107,
+      "message": "Command ownership changed"
+    },
+    {
+      "at": 1790611637107,
+      "message": "Travel encounter: pursuing goldenbat 699"
+    }
+  ]
+}

@@ -40,7 +40,7 @@ test('lost death-return assembly command is reissued without losing destination 
 test('Hunt mode does not authorize a new destination while fighting, and convoy startup waits',()=>{
  const {createHuntMode}=require('../../runtime/coordinator/hunt/mode.ts');const {createHuntConvoy}=require('../../runtime/coordinator/hunt/convoy.ts');
  const state={farmingPolicy:'auto',monsterHunt:null,leader:'W',statuses:{},monsterFocus:[],monsterFocusByCharacter:{}};let authorized=0,begun=0;
- const mode=createHuntMode(state,{participants:()=>['W'],cancelled:()=>false,fighting:()=>true,release(){},authorize(){authorized++;},begin(){begun++;}});
+ const mode=createHuntMode(state,{participants:()=>['W'],cancelled:()=>false,fighting:()=>true,release(){},clear(){},authorize(){authorized++;},begin(){begun++;}});
  mode.select('hunt',null,undefined,false);assert.equal(authorized,0);assert.equal(begun,1);assert.equal(state.farmingPolicy,'hunt');
  const h={participants:['W']},convoy=createHuntConvoy(state,{now:()=>1000,intent:()=>({})});
  assert.equal(convoy.start(h,{map:'main',x:0,y:0},'Daisy','daisy-sync-travel'),false);assert.equal(h.stage,'daisy-sync-travel');

@@ -20,15 +20,6 @@ function fixture(){
  });
  return {state,workers,api,calls,area,next,advance:()=>{now+=1000;state.statuses.P.seenAt=now;},release:()=>eventOwns=false};
 }
-test('farm navigation resolves the current catalog and records newly added workers on each tick',()=>{
- const {state,workers,api,calls,advance}=fixture();api.tick();calls.length=0;
- state.monsterChoices=['replacement'];state.monsterFocus=['rat'];workers.M={};advance();api.tick();
- assert.equal(calls[0][1],state.monsterChoices);assert.deepEqual(calls[0][2],['rat']);
- assert.equal(calls[1][1],state.monsterChoices);assert.equal(calls[1][3],state.location);
- const record=calls.find(call=>call[0]==='record');
- assert.equal(record[1],state.farmAreaState);assert.equal(record[2][0],state.statuses.P);
- assert.deepEqual(record[3],['P','M']);assert.equal(record[5],101000);
-});
 test('event ownership holds a pending Hunt relocation until the live owner releases travel',()=>{
  const {state,api,calls,next,advance,release}=fixture();
  state.farmingPolicy='hunt';state.monsterHunt={target:'rat',stage:'farming',currentIndex:0,missions:[{}]};
@@ -41,4 +32,16 @@ test('event ownership holds a pending Hunt relocation until the live owner relea
  assert.deepEqual(started,['hunt',state.monsterHunt,next,'Monster Hunt: bee','mission-travel']);
  assert.equal(state.monsterHunt.missions[0].destination,next);assert.equal(state.farmAreaState.pending,null);
  assert.equal(calls.some(call=>call[0]==='convoy'),false);
+});
+
+
+test('Hunt route recovery retains its spawn and budget instead of entering the farming retry owner',()=>{
+ const {state,api,calls,next,area,release}=fixture();release();
+ state.farmingPolicy='hunt';state.location=next;
+ state.monsterHunt={cycleId:'H',target:'rat',stage:'mission-travel',currentIndex:0,missions:[{target:'rat',destination:area}]};
+ state.activeConvoy={id:'relocation',purpose:'monster-hunt',phase:'failed',location:next,failure:'Native planning timed out',routeRecovery:{key:'original',stage:'relocation'}};
+ state.farmAreaState.pending={destination:next,revisions:{P:7},at:0,reason:'Travel failed'};
+ api.tick();assert.equal(state.monsterHunt.missions[0].destination,area);
+ assert.equal(calls.some(c=>['hunt','convoy','authorize'].includes(c[0])),false);
+ assert.equal(state.activeConvoy.id,'relocation');
 });

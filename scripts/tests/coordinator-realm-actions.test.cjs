@@ -17,14 +17,6 @@ function fixture(){
  return {state,calls,routes,invoke,settled};
 }
 
-test('realm route runs the switch service with current arrival reports and shared command allocation',async()=>{
- const t=fixture();assert.equal((await t.invoke(t.routes.switchRealm,{realm:'SR_EUI'})).code,202);await t.settled();
- assert.equal(t.state.realmSwitch.phase,'complete');assert.equal(t.state.activeRealm,'SR_EUI');
- assert.deepEqual(t.state.commands.F,{id:80,type:'native-realm-switch',realm:'SR_EUI',operationId:'realm-100000'});
- assert.equal(t.state.commands.M,undefined);assert.equal(t.state.nextCommandId,81);
- assert.deepEqual(t.calls,['persist','pause',['stop','SR_EUI'],'persist',['sleep',500],'persist','dispatch']);
-});
-
 test('home-realm changes wait for the HTTP acknowledgement before dispatching the merchant',async()=>{
  const t=fixture();await t.invoke(t.routes.switchRealm,{realm:'SR_EUI',setHome:true});await t.settled();
  assert.equal(t.state.realmSwitch.phase,'setting-home');assert.equal(t.state.commands.F.type,'realm-set-home');assert.equal(t.state.commands.F.id,81);

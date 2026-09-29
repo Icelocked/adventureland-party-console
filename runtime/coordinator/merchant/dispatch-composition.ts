@@ -35,6 +35,7 @@ interface DispatchCoordinatorState extends BankImprovementState, MerchantEventSt
   activeRealm: string;
   aldata: { key: string };
   threshold: number;
+  buyUpgradeBatchSize?: number;
   merchantCargo: unknown;
   deconstructionMarks?: DeconstructionMark[];
   npcSaleMarks?: Parameters<typeof readyNpcSales>[0];
@@ -90,6 +91,7 @@ function characterWork(state: DispatchCoordinatorState, name: string | null): Ch
 
 function commandInputs(state: DispatchCoordinatorState, ports: CompositionPorts): CommandInputs {
   return {
+    buyUpgradeBatchSize: state.buyUpgradeBatchSize ?? 1,
     craftProtection: craftProtection(state),
     bankUpgradeRules: state.merchantAutomations?.["auto upgrade"] === false ? [] : sharedUpgradeRules(state).filter(rule => rule.quantity !== 0 && !hasWaitingUpgrade(state, rule)),
     sharedAutoCompounds: state.merchantAutomations?.["auto compound"] === false ? [] : sharedCompoundRules(state).filter(rule => rule.quantity !== 0),

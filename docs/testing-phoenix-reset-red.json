@@ -1,0 +1,27 @@
+{
+  "scenario": "native phoenix interruption kills and loots before resuming the same Hunt",
+  "status": "failed-before-fix",
+  "assertion": "Native attacks must damage the spawned rare within 45 seconds",
+  "monster": {
+    "id": "580",
+    "type": "phoenix",
+    "initialHp": 119434
+  },
+  "nativeCombatEpochs": {
+    "E2EWarrior": 1790622390178,
+    "E2EPriest": 1790622390181
+  },
+  "coordinator": {
+    "blocker": "E2EPriest: awaiting target revision",
+    "selectedAt": 1790622438889,
+    "blockedAt": 1790622438967,
+    "releasedAt": 1790622468479
+  },
+  "nativePriest": {
+    "groupedCombat": null,
+    "combatSelectionRevision": 0
+  },
+  "cause": "Membership retirement advanced the joining follower personal epoch in its prior scope, but joining did not advance the destination group epoch. Native stale-snapshot rejection then blocked all grouped target acknowledgements.",
+  "boundary": "Sanitized observations from interrupted 63-case native run; not a passing result or replacement for original artifacts.",
+  "sourceArchive": ".build/hunt63-contamination-e2e-results/evidence/1a095c959b00fbdf0a7a-34affd22f90afc08ea7e/retry-0"
+}

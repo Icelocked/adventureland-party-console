@@ -1,4 +1,6 @@
+import { buyUpgradeOrder, commerceRouteFailure, commerceRetryDelay } from './commerce-progress.ts';
 import { requestText } from "../http/contracts.ts";
+import { communicationReason } from '../navigation/communication-failure.ts';
 import { failNpcSales } from "./npc-sales.ts";
 import type {
   CompletionState,
@@ -8,6 +10,8 @@ import type {
 } from "./completion-types.ts";
 
 interface RetryDecision {
+  movement: boolean;
+  movementOwned: boolean;
   realm: boolean;
   storageYield: boolean;
   anniversaryYield: boolean;
@@ -25,17 +29,25 @@ function classify(job: CompletionJob, body: CompletionReport): RetryDecision {
     error = requestText(body.error || "");
   const storageYield = failed && body.error === "bankboi_pending",
     anniversaryYield = failed && body.error === "merchant_anniversary_reserved";
-  const interrupted = failed && interruptedProduction(error);
+  const interrupted = failed && (interruptedProduction(error, body.failureKind));
   const rendezvous = failed && retryRendezvous(job, error);
-  const realm = realmFailure(body);
+  const realm = realmFailure(body), movement = commerceRouteFailure(job, body) ||
+    improvementCommunicationFailure(job, body);
   return {
+    movementOwned: failed && body.failureKind === "hunt_movement_owned",
+    movement,
     realm,
     storageYield,
     anniversaryYield,
     rendezvous,
     interruptedCommerce: interrupted && job.reason === "merchant commerce",
-    retry: realm || retryAllowed(job, storageYield || anniversaryYield || rendezvous, interrupted),
+    retry: retryDecision(job, {movementOwned: failed && body.failureKind === "hunt_movement_owned", movement, realm, storageYield, anniversaryYield, rendezvous}, interrupted),
   };
+}
+function improvementCommunicationFailure(job: CompletionJob, body: CompletionReport): boolean {
+  return !body.success &&
+    ['upgrades and compounds', 'manual upgrades', 'auto upgrade', 'manual compounds', 'auto compound'].includes(job.reason) &&
+    communicationReason(requestText(body.error || ''));
 }
 function realmFailure(body: CompletionReport): boolean {
   return !body.success && requestText(body.error || "").startsWith("merchant job failed: wrong realm");
@@ -43,7 +55,8 @@ function realmFailure(body: CompletionReport): boolean {
 function transientUpgradeInput(error: string): boolean {
   return error === "Couldn't use lucky slot: item or scroll unavailable";
 }
-function interruptedProduction(error: string): boolean {
+function interruptedProduction(error: string, kind?: string): boolean {
+  if (kind === 'commerce_recovery') return true;
   return error.toLowerCase() === "interrupted" || transientUpgradeInput(error);
 }
 function retryAllowed(job: CompletionJob, yielded: boolean, interrupted: boolean): boolean {
@@ -58,6 +71,8 @@ function completionMessage(
   body: CompletionReport,
   decision: RetryDecision,
 ): string {
+  if (decision.movementOwned) return "Merchant work deferred until Hunt releases movement";
+  if (decision.movement) return "Merchant work queued for movement retry; progress preserved";
   if (decision.anniversaryYield) return "Merchant paused for anniversary; preserving job";
   if (decision.realm) return "Merchant target changed realm; preserving unfinished work";
   if (decision.rendezvous) return "Merchant rendezvous stalled; retrying in ten seconds";
@@ -79,7 +94,7 @@ function resourceLimited(
   );
 }
 function retryIncrement(decision: RetryDecision): number {
-  return decision.storageYield || decision.anniversaryYield || decision.rendezvous ? 0 : 1;
+  return decision.movementOwned || decision.storageYield || decision.anniversaryYield || decision.rendezvous ? 0 : 1;
 }
 
 export function createCompletionRetries(state: CompletionState, ports: CompletionPorts) {
@@ -130,6 +145,7 @@ export function createCompletionRetries(state: CompletionState, ports: Completio
   function decide(job: CompletionJob, body: CompletionReport): RetryDecision {
     resourceBlock(job, body);
     const decision = classify(job, body);
+    if (decision.movement) job.lastMovementError = requestText(body.error);
     npcSales(job, body);
     const level =
       decision.interruptedCommerce || decision.retry ? "info" : body.success ? "success" : "error";
@@ -140,18 +156,17 @@ export function createCompletionRetries(state: CompletionState, ports: Completio
     if (!decision.retry) return;
     const retry: CompletionJob = {
       ...job,
-      id: "merchant-" + ports.now() + "-" + ports.nextCommand(),
+      id: decision.movementOwned ? job.id : "merchant-" + ports.now() + "-" + ports.nextCommand(),
       resumedFrom: job.id,
       retryCount: (Number(job.retryCount) || 0) + retryIncrement(decision),
       rendezvousRetryCount: (Number(job.rendezvousRetryCount) || 0) + (decision.rendezvous ? 1 : 0),
       retryAt: decision.rendezvous ? ports.now() + 10000 : 0,
-      queuedAt: ports.now(),
+      queuedAt: decision.movementOwned ? job.queuedAt : ports.now(),
     };
-    if (decision.realm) {
-      retry.realmAttempts = Number(job.realmAttempts || 0) + 1;
-      retry.realmRetryExhausted = retry.realmAttempts >= 3;
-      retry.retryAt = ports.now() + 10000;
-    }
+    retryRecoveryDelay(job, retry, decision, ports.now());
+    if (decision.realm) realmRetry(job, retry, ports.now());
+    delete retry.commandId;
+    delete retry.commandReport;
     delete retry.phase;
     delete retry.operationStage;
     delete retry.startedAt;
@@ -160,7 +175,10 @@ export function createCompletionRetries(state: CompletionState, ports: Completio
     delete retry.checkpointAt;
     delete retry.handoff;
     delete retry.itemMarksCleared;
-    state.merchantQueue.unshift(ports.stamp(retry));
+    if (!state.merchantQueue.some(queued => queued.id === retry.id)) state.merchantQueue.unshift(ports.stamp(retry));
+    logLuckRetry(job);
+  }
+  function logLuckRetry(job: CompletionJob): void {
     if (job.reason === "merchant luck")
       ports.log(
         "Retrying failed Merchant's Luck itinerary leg without returning to stand",
@@ -169,4 +187,25 @@ export function createCompletionRetries(state: CompletionState, ports: Completio
       );
   }
   return { decide, enqueue };
+}
+
+function retryDecision(job: CompletionJob, decision: Omit<RetryDecision, 'retry' | 'interruptedCommerce'>, interrupted: boolean): boolean {
+  return decision.movementOwned || decision.movement || decision.realm || retryAllowed(job,
+    decision.storageYield || decision.anniversaryYield || decision.rendezvous, interrupted);
+}
+function movementRetry(job: CompletionJob, retry: CompletionJob, now: number): void {
+  retry.movementRetryCount = Number(job.movementRetryCount || 0) + 1;
+  retry.retryAt = now + commerceRetryDelay(Number(retry.movementRetryCount));
+  retry.pauseReason = 'Movement retry: ' + requestText(job.lastMovementError || 'route unavailable');
+}
+
+function realmRetry(job: CompletionJob, retry: CompletionJob, now: number): void {
+  retry.realmAttempts = Number(job.realmAttempts || 0) + 1;
+  retry.realmRetryExhausted = retry.realmAttempts >= 3;
+  retry.retryAt = now + 10000;
+}
+
+function retryRecoveryDelay(job: CompletionJob, retry: CompletionJob, decision: RetryDecision, now: number): void {
+  if (decision.movement) movementRetry(job, retry, now);
+  else if (decision.interruptedCommerce && buyUpgradeOrder(job)) retry.retryAt = now + 1000;
 }

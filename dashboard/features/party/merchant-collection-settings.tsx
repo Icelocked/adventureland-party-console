@@ -1,5 +1,6 @@
 "use client";
 import { BankSortControl, type BankSortState } from "./bank-sort-control";
+import { BuyUpgradeBatchSetting } from "./buy-upgrade-batch-setting";
 import { DeliveryTripSetting } from "./delivery-trip-setting";
 import { useState } from "react";
 import { Settings } from "lucide-react";
@@ -7,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 export interface MerchantCollectionSettingsProps {
+  buyUpgradeBatchSize?: number;
   bankSortState?: BankSortState;
   deliveryTripsEnabled?: boolean;
   thresholdError?: string | null;
@@ -19,7 +21,7 @@ export interface MerchantCollectionSettingsProps {
   onItemCollectionThresholdChange(value: string): void;
   onItemCollectionThresholdSave(): Promise<void>;
 }
-export function MerchantCollectionSettings({deliveryTripsEnabled = true, thresholdError, itemCollectionThresholdError, onClearErrors, bankSortState = {},threshold,onThresholdChange,onThresholdSave,itemCollectionThreshold,onItemCollectionThresholdChange,onItemCollectionThresholdSave}: MerchantCollectionSettingsProps) {
+export function MerchantCollectionSettings({buyUpgradeBatchSize, deliveryTripsEnabled = true, thresholdError, itemCollectionThresholdError, onClearErrors, bankSortState = {},threshold,onThresholdChange,onThresholdSave,itemCollectionThreshold,onItemCollectionThresholdChange,onItemCollectionThresholdSave}: MerchantCollectionSettingsProps) {
  const [open,setOpen]=useState(false);
  return <>
   <Button variant="outline" onClick={()=>setOpen(true)} className="h-9 border-slate-600 bg-[#07100f] text-xs text-slate-100 hover:bg-slate-800 hover:text-white"><Settings className="mr-1.5 size-3.5" />Settings</Button>
@@ -27,6 +29,7 @@ export function MerchantCollectionSettings({deliveryTripsEnabled = true, thresho
    <DialogContent aria-describedby={undefined} className="max-h-[90vh] overflow-y-auto border-slate-600 bg-slate-950 text-slate-100 sm:max-w-2xl">
     <DialogHeader><DialogTitle>Merchant settings</DialogTitle></DialogHeader>
           <BankSortControl state={bankSortState} settings />
+          <BuyUpgradeBatchSetting value={buyUpgradeBatchSize} />
           <DeliveryTripSetting enabled={deliveryTripsEnabled} />
           <div className="grid gap-4 md:grid-cols-2">
           <section className="rounded-lg border border-emerald-900/80 bg-slate-900 p-4">

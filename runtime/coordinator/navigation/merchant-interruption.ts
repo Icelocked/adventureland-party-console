@@ -2,6 +2,7 @@ import { characterRuntime, reportMatches, type SharedCommand, type SharedConvoy,
 import { recordConvoyHistory } from "./convoy-history.ts";
 
 export interface MerchantInterruption {
+  kind?: "equipment";
   jobId: unknown;
   recipient: string;
   phase: "stopping" | "ready" | "collecting" | "resuming";
@@ -13,13 +14,14 @@ export interface MerchantInterruption {
 interface MerchantState extends SharedState { merchantCurrent?: { id: unknown } | null }
 
 /** Admission never replaces travel. The navigation tick first stops the whole party. */
-export function admitMerchantInterruption(input: unknown, name: string, jobId: unknown, now: number): boolean {
+export function admitMerchantInterruption(input: unknown, name: string, jobId: unknown, now: number, kind?: "equipment"): boolean {
   const state = input as SharedState, c = state.activeConvoy;
   if (!c?.participants.includes(name)) return !navigationCommand(state.commands[name]);
-  if (c.nonPreemptible || ["failed", "defending", "observing"].includes(c.phase) || c.routeProtocol !== 4) return false;
+  if (c.communicationHold) return false;
+  if (c.nonPreemptible || ["failed", "defending", "observing", "communication-hold"].includes(c.phase) || c.routeProtocol !== 4) return false;
   const pause = c.merchantInterruption;
   if (pause) return pause.jobId === jobId && pause.recipient === name && pause.phase === "ready";
-  c.merchantInterruption = { jobId, recipient: name, phase: "stopping", deadline: now + 60000,
+  c.merchantInterruption = { kind, jobId, recipient: name, phase: "stopping", deadline: now + 60000,
     resumePhase: c.phase, revisions: Object.fromEntries(c.participants.map(n => [n, state.navigationIntents?.[n]?.revision || 0])) };
   recordConvoyHistory(state, c, "merchant pause", now, { recipient: name, jobId });
   return false;
@@ -41,6 +43,17 @@ export function attachMerchantInterruption(input: unknown, name: string, command
 export function finishMerchantInterruption(input: unknown, name: string, commandId: unknown): void {
   const pause = (input as SharedState).activeConvoy?.merchantInterruption;
   if (pause?.recipient === name && pause.commandId === commandId) pause.phase = "resuming";
+}
+
+/** Release only the ending job's collection. Never erase a newer navigation command. */
+export function releaseMerchantInterruption(input: unknown, jobId: unknown): void {
+  const state = input as SharedState, pause = state.activeConvoy?.merchantInterruption;
+  if (jobId === undefined) return;
+  if (pause && pause.kind !== 'equipment' && pause.jobId === jobId) pause.phase = 'resuming';
+  for (const [name, command] of Object.entries(state.commands)) {
+    if (command?.jobId === jobId && ['merchant-handoff', 'merchant-order-handoff'].includes(command.type))
+      delete state.commands[name];
+  }
 }
 
 function owned(state: SharedState, c: SharedConvoy, name: string): boolean {
@@ -66,7 +79,7 @@ function hold(state: SharedState, c: SharedConvoy, make: (name: string) => Share
     if (command?.convoyId === c.id && command.phase === "shared-hold" && c.runtimes?.[name] === runtime) continue;
     (c.runtimes ||= {})[name] = runtime;
     state.commands[name] = make(name);
-    state.commands[name]!.reason = "Travel paused for " + c.merchantInterruption!.recipient + "'s merchant collection";
+    state.commands[name]!.reason = "Travel paused for " + c.merchantInterruption!.recipient + (c.merchantInterruption!.kind === 'equipment' ? "'s delivered equipment" : "'s merchant collection");
   }
 }
 
@@ -76,13 +89,15 @@ export function stepMerchantInterruption(input: SharedState, now: number, ports:
 }): boolean | null {
   const state = input as MerchantState, c = state.activeConvoy, pause = c?.merchantInterruption;
   if (!pause) return null;
+  // Job cleanup can remove its handoff before this tick. Release the pause before
+  // checking ownership, while still rejecting changed intents or newer commands.
+  if (expired(state, pause, now)) pause.phase = "resuming";
   if (!c.participants.every(n => c.completed.includes(n) || owned(state, c, n))) {
     delete c.merchantInterruption;
     return ports.fail("Merchant continuation superseded by newer navigation or command");
   }
   c.departAt = null;
   c.phase = "shared-hold";
-  if (expired(state, pause, now)) pause.phase = "resuming";
   if (pause.phase === "collecting") return false;
   hold(state, c, ports.hold);
   if (!stopped(state, c, now)) return true;
@@ -98,5 +113,5 @@ export function stepMerchantInterruption(input: SharedState, now: number, ports:
   return true;
 }
 function expired(state: MerchantState, pause: MerchantInterruption, now: number): boolean {
-  return now >= pause.deadline || state.merchantCurrent?.id !== pause.jobId;
+  return now >= pause.deadline || pause.kind !== 'equipment' && state.merchantCurrent?.id !== pause.jobId;
 }

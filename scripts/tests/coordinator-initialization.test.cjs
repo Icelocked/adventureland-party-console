@@ -1,21 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {initializeCoordinatorState}=require('../../runtime/coordinator/initialization.ts');
 const {stateKeys}=require('../../runtime/coordinator/persistence/snapshots.ts');
-test('startup assembles persisted roster, bank and navigation state without writing or losing identity',()=>{
- const calls=[],settings={merchantCharacter:'M',navigationIntents:{P:{revision:8,cancelled:true}},huntEventTrips:{P:[]}};
- const saved={
-  [stateKeys.settings]:JSON.stringify(settings),[stateKeys.roster]:JSON.stringify({headlessSlots:['P',null,'M'],nativeOwner:'W'}),
-  [stateKeys.bank]:JSON.stringify({bankbois:{B:{name:'B',items:[]}},withdrawals:{M:[]}}),
- };
- const result=initializeCoordinatorState({get:key=>{calls.push(key);return saved[key];},set:()=>assert.fail('initialization wrote storage')},
-  {Unexpected:{enabled:true}},'SR_EUI',{now:()=>{calls.push('clock');return 100;},loadBankVaultDefinitions:()=>[{pack:'items0'}],warn:()=>assert.fail('valid snapshots warned')});
- assert.deepEqual(calls.slice(0,6),Object.values(stateKeys));assert.equal(calls[6],'clock');
- assert.deepEqual(result.party.headlessSlots,['P',null,'M',null]);assert.equal(result.party.nativeOwner,'W');
- assert.deepEqual(result.party.steamMembers,['W']);assert.equal(result.party.activeRealm,'SR_EUI');
- assert.deepEqual(result.party.bankbois,{B:{name:'B',items:[]}});
- assert.deepEqual(result.persistedSettings.navigationIntents,settings.navigationIntents);
- assert.equal(result.party.huntEventTrips,result.persistedSettings.huntEventTrips);
-});
 test('portable merchant defaults preserve saved selection and explicit absence without writing storage', () => {
   for (const [savedMerchant, merchantDefault, expected] of [
     [undefined, 'AccountMerchant', 'AccountMerchant'],

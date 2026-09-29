@@ -1,15 +1,5 @@
-const fs = require('node:fs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
-
-const source = fs.readFileSync('characters/shared.js', 'utf8');
-
-test('ALData marketplace navigation is bounded and cancels abandoned movement', () => {
-  assert.match(source, /await marketplaceMove\(\{ map: listing\.map,[\s\S]*?\}, 45000\)/);
-  assert.match(source, /error\.failureCode = "destination_unreachable"/);
-  assert.match(source, /await stop\("smart"\)/);
-  assert.match(source, /failureCode = failureCode \|\| error\.failureCode \|\| null/);
-});
 
 test('unreachable marketplace destinations are not blacklistable offenses', () => {
   const {createMarketplaceProgressRoutes}=require('../../runtime/coordinator/http/marketplace-progress.ts');

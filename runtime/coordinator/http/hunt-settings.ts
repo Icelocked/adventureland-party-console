@@ -1,4 +1,6 @@
 import { requestObject, type HttpRequest, type HttpResponse } from "./contracts.ts";
+import { zones, type Catalog } from '../../../dashboard/lib/farming-zones.ts';
+import { huntSpawnKey } from '../hunt/spawn-preferences.ts';
 import {
   applyHuntThresholds,
   huntSettings,
@@ -6,7 +8,7 @@ import {
   type HuntFailureState,
 } from "../hunt/settings.ts";
 export function createHuntSettingsRoute(
-  state: HuntFailureState & { farmAreaState?: { pending?: unknown } | null },
+  state: HuntFailureState & { monsterChoices?: Catalog | null; farmAreaState?: { pending?: unknown } | null },
   ports: { now(): number; persist(): void },
 ) {
   return (req: HttpRequest, res: HttpResponse): unknown => {
@@ -14,8 +16,13 @@ export function createHuntSettingsRoute(
     if (!validHuntSettings(body))
       return res
         .status(400)
-        .json({ error: "Hunt settings require booleans and positive integer thresholds" });
-    state.huntSettings = { ...huntSettings(state), ...body };
+        .json({ error: "Invalid Hunt settings or spawn preferences" });
+    if (body.preferredSpawns && !Object.entries(body.preferredSpawns).every(([monster, key]) =>
+      !key || zones(state.monsterChoices || [], [monster]).some(location => huntSpawnKey(location) === key)))
+      return res.status(400).json({ error: 'Select an available Hunt spawn from the catalog' });
+    const previous = huntSettings(state);
+    state.huntSettings = { ...previous, ...body,
+      ...(body.preferredSpawns ? { preferredSpawns: { ...previous.preferredSpawns, ...body.preferredSpawns } } : {}) };
     if (
       !state.huntSettings.relocateIfCompeting &&
       (state.farmAreaState?.pending as { cause?: string } | undefined)?.cause === "farming-conflict"

@@ -59,7 +59,7 @@ export function installRosterRoutes(
   const group: SteamGroup = new SteamGroup(state, { ...ports, realmContext, steamSessionId: () => bridge.sessionId(), bridgeReady: (): boolean => bridge.ready(2), prepareSteam: name => ports.prepareSteam?.(name) || Promise.resolve() });
   const bridge: BridgeSession = new BridgeSession(state, service, ports, group);
   router.get("/party-api/steam/connection", (_request, response) => {
-    response.json({ connected: bridge.connected() });
+    response.json({ connected: bridge.connected(), ready: bridge.ready(2) });
   });
   if (state.handoff && !["complete", "awaiting-realm-choice"].includes(state.handoff.phase)) {
     state.handoff.phase = "failed";

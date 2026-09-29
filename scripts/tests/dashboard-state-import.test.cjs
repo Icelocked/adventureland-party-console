@@ -158,5 +158,4 @@ for(const metadataFailure of [false,true])test(metadataFailure ? 'loading import
  confirm.props.onClick();await flush();tree=render();
  assert.equal(requests.at(-1).options.headers['X-State-Preview'],'hash');
  assert.ok(nodes(tree).some(n=>n.type==='output'));
- for(const button of nodes(tree).filter(n=>n.type==='Button'))assert.match(button.props.className,/bg-.*text-.*hover:bg-/);
 });

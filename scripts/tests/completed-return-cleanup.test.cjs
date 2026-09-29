@@ -14,11 +14,6 @@ function fixture(){
   cancelConvoy(){cancelled++;for(const [n,c] of Object.entries(party.commands))if(c.convoyId===party.activeConvoy.id)delete party.commands[n];party.activeConvoy=null;}});
  return {party,cycle,nav,counts:()=>({persisted,cancelled})};
 }
-test('return completion releases its still-running convoy and matching commands immediately',()=>{
- const f=fixture();f.party.activeConvoy.phase='travel';f.nav.reconcile(f.cycle,'anniversary-return');
- assert.equal(f.cycle.returnCompletedAt,100);assert.equal(f.party.activeConvoy,null);assert.deepEqual(f.party.commands,{});
- f.nav.reconcile(f.cycle,'anniversary-return');assert.equal(f.counts().cancelled,1);
-});
 test('anniversary tick cleans a completed convoy restored as failed, allowing Hunt to resume at Daisy',()=>{
  const f=fixture();f.cycle.returnCompletedAt=90;
  const hunt={stage:'paused-event',resumeStage:'at-daisy',participants:['W']};

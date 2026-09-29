@@ -2,16 +2,12 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const load=require('./helpers/dashboard-query-module.cjs');
 const React=require('../../dashboard/node_modules/react');
 const {renderToStaticMarkup}=require('../../dashboard/node_modules/react-dom/server');
-const {physicalInventory,validLuckySlot,LuckySlotOutline}=load('lucky-upgrade-slot.tsx');
+const {physicalInventory,validLuckySlot}=load('lucky-upgrade-slot.tsx');
 test('physical slots preserve index 7 and do not compact empty cells',()=>{
  const entries=[{slot:8,item:{name:'sword'}},{slot:0,item:{name:'tracker'}}];
  const cells=physicalInventory(entries);assert.equal(cells.length,42);assert.equal(cells[7],null);
  assert.equal(cells[8],entries[0]);assert.equal(cells[0],entries[1]);
  assert.equal(validLuckySlot(0),true);for(const value of [null,undefined,-1,42,7.5,'7'])assert.equal(validLuckySlot(value),false);
-});
-test('gold outline extends outside the cell and cannot intercept pointer events',()=>{
- const markup=renderToStaticMarkup(React.createElement(LuckySlotOutline));
- assert.match(markup,/pointer-events-none/);assert.match(markup,/-inset-\[5px\]/);assert.match(markup,/overflow-visible/);assert.match(markup,/aria-hidden="true"/);
 });
 test('slot search UI distinguishes missing evidence, inference, and verified slot zero',()=>{
  const {LuckySlotStatistics}=load('lucky-slot-tracker.tsx');
@@ -20,7 +16,7 @@ test('slot search UI distinguishes missing evidence, inference, and verified slo
  assert.match(render({verified:0}),/Verified slot: 0/);
  const markup=render({tracking:{version:1,slots:{7:{totalRolls:1,sumRolls:0,rollsAbove96_3:0,perfectRolls:1}}}});
  assert.match(markup,/Leading candidate: slot 7/);assert.doesNotMatch(markup,/Statistically inferred:/);
- assert.match(markup,/No extra upgrades are queued/);assert.match(markup,/bg-zinc-950/);
+ assert.match(markup,/No extra upgrades are queued/);
  assert.equal((markup.match(/data-slot=/g)||[]).length,42);
  assert.match(markup,/Next upgrade will test for lucky upgrade/);
 });

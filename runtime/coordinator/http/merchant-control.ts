@@ -1,3 +1,4 @@
+import { releaseMerchantInterruption } from "../navigation/merchant-interruption.ts";
 import { requestObject, requestText, type HttpRequest, type HttpResponse } from "./contracts.ts";
 import type { MerchantWork } from "../merchant/work.ts";
 
@@ -80,7 +81,7 @@ export function createMerchantControlRoutes(state: ControlState, ports: ControlP
     return res.json({ ok: true });
   }
   function clear(_req: HttpRequest, res: HttpResponse): unknown {
-    if (state.merchantCurrent?.target) delete state.commands[state.merchantCurrent.target];
+    releaseMerchantInterruption(state, state.merchantCurrent?.id);
     if (state.merchantCharacter)
       state.commands[String(state.merchantCharacter)] = {
         id: ports.nextCommand(),
@@ -105,6 +106,7 @@ export function createMerchantControlRoutes(state: ControlState, ports: ControlP
     delete paused.heartbeatAt;
     delete paused.progressAt;
     delete paused.handoff;
+    releaseMerchantInterruption(state, paused.id);
     state.merchantQueue.unshift(ports.stamp(paused));
     state.merchantCurrent = null;
   }

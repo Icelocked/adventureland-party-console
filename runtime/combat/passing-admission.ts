@@ -32,7 +32,8 @@ export function passingControl(members: Member[], convoy: unknown, now: number, 
   const encounters = collectPassing(ordered, [], now);
   const hunt=huntConvoy ? updateHuntTravel(huntConvoy,ordered,now,scope,settings) : undefined;
   const admitted = ready ? encounters.filter(e => e.admission?.scope === scope &&
-    (!hunt || !hunt.reason && !passiveStopRequired(settings,e.mtype) && !hunt.defending && !!hunt.primary && passingIdentity(e)===passingIdentity(hunt.primary)) &&
+    (e.keepMoving && settings?.rules[e.mtype]?.enabled && settings.rules[e.mtype].keepMoving ||
+      !hunt || !hunt.reason && !passiveStopRequired(settings,e.mtype) && !hunt.defending && !!hunt.primary && passingIdentity(e)===passingIdentity(hunt.primary)) &&
     ordered.every(m => m.status?.groupedCombat?.passingAcknowledgement?.tokens.includes(e.admission!.token)))
     .map(e => e.admission!.token) : [];
   return { scope, ready, admitted, ...(hunt ? {hunt} : {}) };
@@ -55,7 +56,7 @@ export function createPassingAdmission(ports: {
   function prepare(target: PassingEncounter, present?: PassingEncounter[]): boolean {
     if (!control || !freshControl()) return false;
     const key = passingIdentity(target);
-    if(control.hunt && (control.hunt.defending || control.hunt.reason || control.hunt.primary && passingIdentity(control.hunt.primary)!==key))return false;
+    if(!target.keepMoving && control.hunt && (control.hunt.defending || control.hunt.reason || control.hunt.primary && passingIdentity(control.hunt.primary)!==key))return false;
     let proposal = proposals.get(key);
     const token=proposal?.token;
     if (!proposal || proposal.scope !== control.scope || present && !present.some(e=>e.admission?.token===token)) {

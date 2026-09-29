@@ -1,3 +1,4 @@
+import { releaseMerchantInterruption } from "../navigation/merchant-interruption.ts";
 interface PausedJob {
   [field: string]: unknown;
   queuedAt?: unknown;
@@ -20,6 +21,6 @@ export function pauseMerchantForRealm<T extends PausedJob>(
   for (const key of ["phase", "startedAt", "heartbeatAt", "progressAt", "handoff"])
     delete paused[key];
   state.merchantQueue.unshift(stamp(paused));
-  if (current.target) delete state.commands[current.target];
+  releaseMerchantInterruption(state, current.id);
   state.merchantCurrent = null;
 }

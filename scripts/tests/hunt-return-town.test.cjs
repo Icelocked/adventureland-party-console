@@ -13,7 +13,7 @@ function party(){
   location:{map:'main',x:126,y:-413},rally:{map:'main',x:500,y:1100},slowestSpeed:57,runtimes:{L:'L',F:'F',P:'P'}};
  const p={activeConvoy:c,nextCommandId:1,commands:{},navigationIntents:{},combatLogs:{},monsterHunt:{stage:'returning'},
   statuses:Object.fromEntries(names.map(name=>[name,{name,seenAt:1000,map:'main',in:'main',x:500,y:1100,hp:100,speed:57,server:'USII',
-   convoyProtocol:4,huntReturnProtocol:2,combatSelection:{runtimeId:name},groupedCombat:{currentAttackersAt:1000,currentAttackers:[]}}]))};
+   convoyProtocol:4,huntReturnProtocol:2,returnTownReady:true,combatSelection:{runtimeId:name},groupedCombat:{currentAttackersAt:1000,currentAttackers:[]}}]))};
  for(const name of names){const cmd=p.commands[name]=sharedCommand(p,c,c.phase,name);p.statuses[name].convoyNavigation={
   id:c.id,epoch:c.epoch,commandId:cmd.id,navigationRevision:0,runtimeId:name,phase:'route-ready'};}
  return p;
@@ -39,22 +39,8 @@ test('unavailable Town selects walking without counting a cast; superseded repor
  p.statuses.F.convoyNavigation={...p.statuses.F.convoyNavigation,commandId:999,townAttempt:{round:'99',map:'main',state:'interrupted'}};
  observeReturnTown(p,c,1000);assert.equal(c.returnTown.interruptions,0);
 });
-test('partial Town failure waits for other casts and regroups at the successful arrival instead of returning to the attackers',()=>{
- const p=party(),c=p.activeConvoy,engine=createSharedConvoyNavigation(legacy);
- const destination={map:'main',x:0,y:0},attempt={map:'main',round:'1:1:0',destination};
- p.statuses.L.convoyNavigation.townAttempt={...attempt,state:'casting'};
- p.statuses.F.convoyNavigation.townAttempt={...attempt,state:'interrupted'};
- engine.step(p,1000);assert.equal(c.phase,'shared-prepare');assert.equal(c.returnTown.interruptions,1);
- p.statuses.L.convoyNavigation.townAttempt.state='complete';p.statuses.L.x=0;p.statuses.L.y=0;
- for(const s of Object.values(p.statuses))s.seenAt=1100;
- engine.step(p,1100);assert.equal(c.phase,'assemble');assert.deepEqual(c.rally,destination);
- assert.deepEqual(p.commands.F.rally,destination);assert.equal(p.commands.F.disableTown,true);
- engine.step(p,1200);assert.equal(c.phase,'assemble','wait for failed members without sending successful ones back');
- for(const s of Object.values(p.statuses)){s.x=0;s.y=0;s.seenAt=1300;}
- engine.step(p,1300);assert.equal(c.phase,'shared-prepare');assert.equal(c.returnTownRally,undefined);
- const restored=JSON.parse(JSON.stringify(p));observeReturnTown(restored,restored.activeConvoy,1300);
- assert.equal(restored.monsterHunt.returnTown.interruptions,1);
-});
+
+
 test('continuous return ignores defense holds from hits instead of stopping for combat and loot',()=>{
  const p=party(),c=p.activeConvoy;p.statuses.F.convoyNavigation.phase='defending';
  assert.equal(defense.step(p,1000,sharedCommand),false);assert.equal(c.phase,'shared-prepare');
@@ -65,7 +51,7 @@ test('fresh attackers select walking immediately; stale reports cannot change th
  const p=party(),c=p.activeConvoy;
  p.statuses.F.groupedCombat.currentAttackers=[{id:'tortoise',mtype:'tortoise',map:'main',in:'main',hp:50,target:'F'}];
  observeReturnTown(p,c,5000);assert.equal(c.returnTown.walking,false);
- observeReturnTown(p,c,1000);assert.equal(c.returnTown.walking,true);assert.equal(c.townRetry,true);
+ observeReturnTown(p,c,1000);assert.equal(c.returnTown.walking,true);assert.equal(c.disableTown,true);
  assert.equal(c.returnTown.interruptions,0);assert.equal(defense.step(p,1000,sharedCommand),false);
 });
 test('walking fallback retains movement ownership under live attackers, but cancellation still wins',()=>{
@@ -89,4 +75,39 @@ test('real client preparation keeps its route and command when an attacker hits'
  assert.equal(handle.cancelled,false);assert.equal(handle.defensePaused,undefined);
  c.defendPartyHit({id:'F',hid:'bee'});await settle();assert.equal(c.convoyTraveling,handle);
  await r.cancel();await started.promise;assert.equal(c.convoyTraveling,null);
+});
+
+
+function rallyFixture() {
+ const p=party(),c=p.activeConvoy;
+ Object.assign(c,{phase:'assemble',returnTownRally:{map:'main',x:0,y:0},rally:{map:'main',x:0,y:0},
+  sharedStartedAt:1000,sharedProgressAt:70000,sharedWaitingAt:1000,sharedDistances:{L:100,F:0,P:0},
+  returnTown:{map:'main',interruptions:1,walking:true,blockedReadiness:'true:true:true'},disableTown:true});
+ for(const s of Object.values(p.statuses)){s.x=0;s.y=0;s.seenAt=71000;s.groupedCombat.currentAttackersAt=71000;}
+ p.statuses.L.y=50;p.statuses.L.moving=true;
+ return {p,c,engine:createSharedConvoyNavigation(legacy)};
+}
+test('overnight regression: late Town-rally arrival preserves its marker until the moving leader stops',()=>{
+ const {p,c,engine}=rallyFixture();
+ engine.step(p,71000);
+ assert.equal(c.phase,'assemble');assert.ok(c.returnTownRally);assert.equal(c.sharedWaitingAt,undefined);
+ p.statuses.L.moving=false;p.statuses.L.y=0;
+ engine.step(p,71200);
+ assert.equal(c.phase,'shared-prepare');assert.equal(c.returnTownRally,undefined);
+ assert.deepEqual(c.location,{map:'main',x:126,y:-413});assert.equal(c.recoveryAttempts,undefined);
+ assert.equal(p.commands.L.phase,'shared-prepare');assert.equal(p.commands.L.disableTown,true);
+});
+test('leader stuck moving within the rally radius consumes bounded route recovery, not a runtime failure',()=>{
+ const {p,c,engine}=rallyFixture();c.sharedDistances.L=50;c.sharedProgressAt=1000;c.recoveryAttempts=1;
+ engine.step(p,71000);
+ assert.equal(c.phase,'failed');assert.equal(c.failureCode,'route-failed');
+ assert.match(c.failure,/leader moving or transporting/);assert.equal(c.retryExhausted,true);
+});
+test('runtime incompatibility gets a fresh continuous deadline after compatible rally progress',()=>{
+ const {p,c,engine}=rallyFixture();engine.step(p,71000);
+ p.statuses.F.convoyProtocol=3;
+ engine.step(p,71200);assert.equal(c.sharedWaitingAt,71200);assert.equal(c.phase,'assemble');
+ for(const s of Object.values(p.statuses)){s.seenAt=101201;s.groupedCombat.currentAttackersAt=101201;}
+ engine.step(p,101201);
+ assert.equal(c.failureCode,'runtime-lost');assert.match(c.failure,/party runtimes: F/);
 });

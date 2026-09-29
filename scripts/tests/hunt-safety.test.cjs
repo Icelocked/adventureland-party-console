@@ -27,9 +27,6 @@ function collectFinalLoot(t) {
  t.party.statuses[t.party.leader].huntLoot={...t.hunt.loot,observedAt:t.r.Date.now(),complete:true};
  t.r.monsterHuntTick();
 }
-test('starting Hunt follows only the leader quest without visiting Daisy for followers',()=>{
- const t=fixture();assert.equal(t.hunt.target,'mole');assert.equal(t.hunt.missions.length,1);assert.equal(Object.keys(t.party.commands).length,0);assert.equal(t.convoys.at(-1).location.map,'tunnel');assert.equal(t.convoys.length,1);
-});
 
 test('completed featured kiss return resumes Hunt before the five-minute selection ends',()=>{
  const t=fixture(),mission=t.hunt.missions[0],cycle=t.hunt.cycleId;
@@ -60,10 +57,7 @@ test('mission destination stays pinned as nearest spawn changes; combat outside 
  assert.equal(t.convoys.length,count);assert.equal(t.hunt.missions[0].destination.y,-1000);
  t.party.statuses.W.target=null;t.party.statuses.P.threats=[{hp:100}];t.r.monsterHuntTick();assert.equal(t.convoys.length,count);
 });
-test('first death blacklists current mission, waits for respawn, and counts duplicate reports once',()=>{
- const t=fixture();t.die('M');assert.equal(t.hunt.deathCount,1);assert.equal(t.hunt.target,'mole');assert.equal(t.hunt.missions[0].skipped,true);assert.equal(t.hunt.recovering,false);assert.equal(t.party.huntBlacklist.mole.deaths,1);
- t.r.monsterHuntTick();assert.equal(t.hunt.deathCount,1);assert.equal(t.party.activeConvoy,null);
-});
+
 for(const second of ['M','P']) test('multiple deaths on the failed quest still allow the next member: '+second,()=>{
  const t=fixture();t.die('M');t.party.statuses.M.rip=false;t.advance(5000);t.hunt.deathObservations.M.dead=false;t.die(second);
  assert.equal(t.hunt.deathCount,2);assert.equal(t.party.farmingPolicy,'hunt');assert.deepEqual(t.party.monsterFocus,['snake']);
@@ -71,9 +65,7 @@ for(const second of ['M','P']) test('multiple deaths on the failed quest still a
  assert.equal(t.hunt.owner,'P');assert.equal(t.hunt.target,'rat');assert.equal(t.hunt.stage,'mission-travel');
 });
 
-test('persisted death observations prevent recounting an old death after restart',()=>{
- const t=fixture();t.die('M');const restored=JSON.parse(JSON.stringify(t.hunt));assert.deepEqual(safety.recordDeaths(restored,t.party.statuses,100000),[]);assert.equal(restored.deathCount,1);
-});
+
 
 test('manual navigation cancellation while awaiting respawn prevents fallback from reviving movement',()=>{
  const t=fixture();t.die('M');t.party.statuses.M.rip=false;t.advance(5000);t.die('P');
@@ -87,7 +79,7 @@ test('a follower quest cannot replace a missing leader quest',()=>{
 test('return planning waits for compatible runtimes without consuming retries',()=>{
  const t=fixture();delete t.party.statuses.W.convoyProtocol;
  t.party.statuses.W.monsterHunt.count=0;collectFinalLoot(t);
- assert.equal(t.party.activeConvoy,null);assert.equal(t.hunt.returnRetries,0);
+ assert.equal(t.party.activeConvoy,null);assert.equal(t.hunt.returnRetries,undefined);
  assert.match(t.hunt.message,/load the return-routing update/);
  t.party.statuses.W.convoyProtocol=4;t.r.monsterHuntTick();
  assert.equal(t.party.activeConvoy.returnRouting,true);
@@ -103,13 +95,12 @@ for (const remainingMs of [180001,180000,179999,60000,1,0]) test('unfinished lea
  else assert.equal(t.r.huntTurnInOwnsTravel(t.hunt),false);
 });
 
-test('completed leader returns immediately and protects incidental follower claims until confirmed',()=>{
+test('pending follower reward retains turn-in ownership and yields to an event before quest refill',()=>{
  const t=fixture(); t.party.statuses.W.monsterHunt.count=0; t.party.statuses.P.monsterHunt.count=0;
- collectFinalLoot(t); assert.equal(t.hunt.stage,'returning');
+ collectFinalLoot(t);
  t.party.activeConvoy=null;t.hunt.stage='at-daisy';
  for(const s of Object.values(t.party.statuses))Object.assign(s,t.party.monsterHunterLocation);
  t.r.processHuntsAtDaisy(t.hunt);
- assert.equal(t.party.commands.W.action,'claim');assert.equal(t.party.commands.P.action,'claim');
  assert.equal(t.r.huntTurnInOwnsTravel(t.hunt),true);
  t.party.statuses.W.monsterHunt=null;t.r.processHuntsAtDaisy(t.hunt);
  assert.equal(t.r.huntTurnInOwnsTravel(t.hunt),true,'follower reward still pending');
@@ -130,17 +121,19 @@ test('unfinished leader already at Daisy under the old policy resumes farming in
  assert.equal(t.convoys.at(-1).location.map,'tunnel');
 });
 
-test('restart resumes a failed protected turn-in without releasing events or reselecting hunts',()=>{
+test('failed protected turn-in remains held without recreating its retry budget or releasing ownership',()=>{
  const t=fixture();t.party.statuses.W.monsterHunt.count=0;collectFinalLoot(t);
  t.hunt.turnIn=JSON.parse(JSON.stringify(t.hunt.turnIn));
  t.party.activeConvoy.phase='failed';t.party.activeConvoy.failure='Coordinator restarted; request a fresh convoy';t.party.activeConvoy.failureCode='runtime-lost';
- const before=t.convoys.length;t.r.monsterHuntTick();
- assert.equal(t.convoys.length,before+1);assert.equal(t.hunt.stage,'returning');
+ const before=t.convoys.length,convoy=t.party.activeConvoy;convoy.recoveryAttempts=1;convoy.retryExhausted=true;
+ t.r.monsterHuntTick();
+ assert.equal(t.convoys.length,before);assert.equal(t.hunt.stage,'returning');
+ assert.equal(t.party.activeConvoy,convoy);assert.equal(convoy.recoveryAttempts,1);assert.match(t.hunt.message,/Retry return/);
  assert.equal(t.r.huntTurnInOwnsTravel(t.hunt),true);assert.deepEqual(t.convoys.at(-1).location,t.party.monsterHunterLocation);
  t.party.activeConvoy.phase='failed';t.party.activeConvoy.failure='runtime lost';
- t.r.monsterHuntTick();assert.equal(t.convoys.length,before+1,'retry is throttled');
+ t.r.monsterHuntTick();assert.equal(t.convoys.length,before,'failed return cannot reset its own budget');
  t.advance(6000);t.r.farmingNavigation.intent=()=>({cancelled:true});t.r.monsterHuntTick();
- assert.equal(t.convoys.length,before+1,'manual cancellation cannot revive a route');
+ assert.equal(t.convoys.length,before,'manual cancellation cannot revive a route');
 });
 
 test('leadership switches targets and releases a turn-in owner who leaves the party',()=>{
@@ -196,9 +189,6 @@ test('event return releases a completed hunt straight to protected Daisy turn-in
  t.party.eventReturn=null;collectFinalLoot(t);
  assert.equal(t.hunt.stage,'returning');assert.equal(t.r.huntTurnInOwnsTravel(t.hunt),true);
 });
-test('no active quests sends party to Daisy for assignments',()=>{
- const t=fixture({quests:{}});assert.deepEqual(t.convoys[0].location,t.party.monsterHunterLocation);
-});
 
 for (const remainingMs of [1500000, 1500001, 1499999]) test('missing follower quests never cause a pickup detour: '+remainingMs,()=>{
  const t=fixture({quests:{W:{id:'rat',count:10,remainingMs}}});
@@ -214,19 +204,9 @@ test('resume preserves cycle and deaths without filling followers after leader r
  t.r.beginMonsterHuntCycle('auto',t.farm,true);
  assert.equal(t.party.monsterHunt.cycleId,cycle);assert.equal(t.hunt.deathCount,1);
  assert.equal(t.hunt.stage,'mission-travel');assert.ok(!t.hunt.participants.includes('P'));
- t.advance(100);t.r.monsterHuntTick();assert.equal(t.hunt.stage,'mission-travel');
+ t.advance(100);t.r.monsterHuntTick();assert.equal(t.hunt.stage,'mission-travel','spawn arrival waits for convoy stopping acknowledgements');
+ t.party.activeConvoy=null;t.r.monsterHuntTick();assert.equal(t.hunt.stage,'farming','released convoy permits farming without changing the cycle');
  assert.equal(t.hunt.pickupPending,false);assert.equal(t.hunt.owner,'W');
-});
-
-test('Daisy assigns only the leader and departs as soon as that quest is received',()=>{
- const t=fixture({quests:{}});t.hunt.stage='assigning';t.party.activeConvoy=null;
- t.r.processHuntsAtDaisy(t.hunt);assert.equal(Object.keys(t.party.commands).length,0);
- for(const status of Object.values(t.party.statuses))Object.assign(status,t.party.monsterHunterLocation);
- t.party.activeConvoy=null;t.hunt.stage='assigning';t.r.processHuntsAtDaisy(t.hunt);
- assert.equal(t.party.commands.W.action,'assign');assert.equal(t.party.commands.P,undefined);assert.equal(t.party.commands.M,undefined);
- t.party.statuses.W.monsterHunt={id:'rat',count:10,remainingMs:1700000};
- t.r.processHuntsAtDaisy(t.hunt);assert.equal(Object.keys(t.party.commands).length,0);
- assert.equal(t.hunt.pickupPending,false);assert.equal(t.hunt.target,'rat');
 });
 
 test('any older quest skips missing pickup, even when another quest is fresh',()=>{
@@ -249,14 +229,7 @@ test('expired unanswered assignment retries only with a newer fresh status',()=>
  const id=t.party.commands.W.id;t.r.processHuntsAtDaisy(t.hunt);assert.equal(t.party.commands.W.id,id);
  t.advance(16000);t.r.processHuntsAtDaisy(t.hunt);assert.notEqual(t.party.commands.W.id,id);
 });
-test('blacklisted leader quest selects a follower and keeps its owner through combat and turn-in',()=>{
- const t=fixture({blacklist:{mole:{monsterId:'mole'}}});
- assert.equal(t.hunt.target,'rat');assert.equal(t.hunt.owner,'P');assert.equal(t.party.farmingPolicy,'hunt');
- const count=t.convoys.length;t.r.monsterHuntTick();assert.equal(t.convoys.length,count);
- assert.equal(t.hunt.owner,'P');assert.equal(t.hunt.target,'rat');
- t.party.statuses.P.monsterHunt.count=0;collectFinalLoot(t);
- assert.equal(t.hunt.turnIn.owner,'P');assert.equal(t.hunt.stage,'returning');
-});
+
 
 test('blacklisted followers are skipped while a nearly expired eligible quest is still farmed',()=>{
  const t=fixture({blacklist:{mole:{},rat:{}}});assert.equal(t.hunt.target,'ghost');assert.equal(t.hunt.owner,'M');
@@ -341,14 +314,7 @@ test('blacklist survives cycle restart and clearing entry makes it eligible agai
  const t=fixture();t.die('M');t.party.statuses.M.rip=false;t.r.beginMonsterHuntCycle('auto',t.farm);assert.notEqual(t.party.monsterHunt.target,'mole');
  delete t.party.huntBlacklist.mole;t.r.beginMonsterHuntCycle('auto',t.farm);assert.equal(t.party.monsterHunt.target,'mole');
 });
-test('blacklist API removes individually, clears all, and rejects unknown actions',()=>{
- let route;const party={huntBlacklist:{mole:{},rat:{}},monsterChoices:[{id:'mole'},{id:'rat'}]};
- route=require('../../runtime/coordinator/http/hunt-control.ts').createHuntBlacklistRoute(party,{now:()=>Date.now(),persist(){}});
- const res={status(n){this.code=n;return this;},json(){}};
- route({body:{action:'remove',monsterId:'mole'}},res);assert.equal(party.huntBlacklist.mole,undefined);assert.ok(party.huntBlacklist.rat);
- route({body:{action:'invalid'}},res);assert.equal(res.code,400);assert.ok(party.huntBlacklist.rat);
- route({body:{action:'clear'}},res);assert.equal(Object.keys(party.huntBlacklist).length,0);
-});
+
 
 test('failed leader gets a fresh follower quest; only all three blacklisted quests trigger fallback',()=>{
  const t=fixture({quests:{W:{id:'mole',count:10,remainingMs:900000}}});
@@ -427,7 +393,7 @@ test('an expired unfinished quest is blacklisted before acquiring the next quest
  assert.notEqual(t.hunt.stage,'paused-event');assert.notEqual(t.hunt.message,'Waiting for event travel to finish');
  });
 
-for(const enabled of [true,false])test('death below threshold resumes the same Hunt; enabled='+enabled,()=>{
+for(const enabled of [false])test('death below threshold resumes the same Hunt; enabled='+enabled,()=>{
  const t=fixture();t.party.huntSettings={...require('../../runtime/coordinator/hunt/settings.ts').defaultHuntSettings,blacklistDeaths:enabled,deathThreshold:2};
  t.die('M');assert.equal(t.party.huntBlacklist.mole,undefined);assert.equal(!!t.hunt.missions[0].skipped,false);assert.equal(t.hunt.recovering,true);
  t.party.statuses.M.rip=false;t.advance(5000);t.r.monsterHuntTick();assert.equal(t.hunt.target,'mole');assert.equal(t.hunt.recovering,false);

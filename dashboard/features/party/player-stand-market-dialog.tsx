@@ -18,6 +18,7 @@ import { StandSearchState } from "./stand-search-state";
 
 export function PlayerStandMarketDialog({
   open,
+  merchant,
   onClose,
   catalog,
   searchState,
@@ -25,6 +26,7 @@ export function PlayerStandMarketDialog({
   onBuy,
 }: {
   open: boolean;
+  merchant?: string | null;
   onClose: () => void;
   catalog: MerchantCatalogItem[];
   searchState: StandSearchState;
@@ -89,7 +91,7 @@ export function PlayerStandMarketDialog({
         <DialogHeader>
           <DialogTitle>Buy from player stands</DialogTitle>
           <DialogDescription>
-            Choose any game item, send GoldMajesty to the US II merchant market to scan visible open
+            Choose any game item, send {merchant || "the merchant"} to the US II merchant market to scan visible open
             stands, then select a live listing.
           </DialogDescription>
         </DialogHeader>

@@ -81,6 +81,7 @@ export interface CharacterWork {
 }
 
 export interface CommandInputs {
+  buyUpgradeBatchSize?: number;
   craftProtection?: import("../../craft-reservations.ts").CraftProtection;
   bankUpgradeRules?: BankUpgradeRule[];
   sharedAutoCompounds?: (CompoundRule & {existingTargetQuantity?: number})[];

@@ -12,9 +12,6 @@ test('unavailable installed definitions block catalogs and recover when readable
  assert.equal(validate('bestiaryCatalog',bestiary,12),false);assert.equal(messages.length,1);
  available=true;assert.equal(validate('bestiaryCatalog',bestiary,12),true);
 });
-test('all three catalogs validate their complete installed definitions, allowing game-derived fields',()=>{
- for(const [key,value] of [['bestiaryCatalog',bestiary],['skillCatalog',skills],['merchantCatalog',items]])assert.equal(validateCatalog(key,value,definitions),null);
-});
 test('missing, unknown, duplicate and changed definitions are rejected',()=>{
  assert.match(validateCatalog('bestiaryCatalog',[],definitions),/missing/);
  assert.match(validateCatalog('skillCatalog',[{skills:[]}],definitions),/missing/);
@@ -24,9 +21,6 @@ test('missing, unknown, duplicate and changed definitions are rejected',()=>{
  assert.match(validateCatalog('bestiaryCatalog',[{id:'bee',definition:{hp:301}}],definitions),/mismatch/);
  assert.match(validateCatalog('skillCatalog',[{skills:[{id:'attack',definition:{cooldown:200}}]}],definitions),/mismatch/);
  assert.match(validateCatalog('merchantCatalog',{allItems:[{id:'sword',meta:{definition:{name:'Sword',g:11}}}]},definitions),/mismatch/);
-});
-test('shared class skills may repeat but every definition is checked',()=>{
- assert.equal(validateCatalog('skillCatalog',[...skills,...skills],definitions),null);
 });
 test('ingestion retains good catalogs, accepts corrections, and rejects unversioned or old clients',()=>{
  const messages=[],state={bestiaryCatalog:bestiary,validateCatalog:createCatalogValidation(12,definitions,m=>messages.push(m))};

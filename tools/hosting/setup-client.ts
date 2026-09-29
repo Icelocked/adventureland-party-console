@@ -19,6 +19,7 @@ function selection(){
  el('success').hidden=true;el('linkStatus').textContent='';el('instructions').hidden=true;el('tlsSteps').hidden=true;el('loaderArea').hidden=true;
  el('httpsStatus').textContent='';
  const p=preferences();if(!p.placement||!p.client)return;
+ void call('client',p).catch(e=>{el('error').textContent=e.message});
  const https=forceHttps||p.placement==='remote'||p.client==='linux-steam';
  el('instructions').hidden=false;el('fallback').hidden=https;
  if(https){
@@ -52,7 +53,7 @@ async function watchConnection(generation){
 async function generateLoader(){
  if(!loaderOrigin)throw Error('Choose your setup and check HTTPS first');stopLinking();const generation=linkGeneration;
  el('linkStatus').textContent='Preparing your client code…';
- let r;try{r=await call('steam',{origin:loaderOrigin})}catch(e){if(generation!==linkGeneration)return;el('linkStatus').textContent='Could not prepare client code. Choose your setup again to retry.';throw e}if(generation!==linkGeneration)return;
+ let r;try{r=await call('steam',{origin:loaderOrigin,...preferences()})}catch(e){if(generation!==linkGeneration)return;el('linkStatus').textContent='Could not prepare client code. Choose your setup again to retry.';throw e}if(generation!==linkGeneration)return;
  el('code').value=r.code;el('copy').disabled=false;linkReady=true;el('linkStatus').textContent='Waiting for your client to connect…';void watchConnection(generation);
 }
 async function refresh(){

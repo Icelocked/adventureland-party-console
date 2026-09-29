@@ -35,7 +35,7 @@ export const selectionFields = [
 ] as const;
 
 export const settingsFields = [
-  "merchantRules", "production", "upgradeOfferingRules",
+  "merchantRules", "production", "upgradeOfferingRules", "upgradePreviewResults",
   "bankboiPrefix", "anniversaryAutoChat",
   "farmingProfiles",
   "combatRecovery",
@@ -51,9 +51,11 @@ export const settingsFields = [
   "phoenixPatrolActive",
   "phoenixPatrolCheckpoint",
   "rareHuntReturn",
+  "rareRetryEvidence",
+  "rarePursuitProgress",
   "escape",
   "threshold",
-  "itemCollectionThreshold",
+  "itemCollectionThreshold", "buyUpgradeBatchSize",
   "merchantDeliveries",
   "standListings",
   "npcSaleMarks",

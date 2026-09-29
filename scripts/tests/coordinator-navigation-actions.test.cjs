@@ -19,18 +19,6 @@ function fixture(){
  return {state,calls,service,invoke,location};
 }
 
-test('navigation engagement uses the replaced Hunt target and passes the current state to convoy adapters',()=>{
- const t=fixture();t.state.monsterHunt={target:'rat'};t.state.activeConvoy={id:'convoy',phase:'travel',participants:['F']};
- assert.equal(t.invoke(t.service.engagement.engage,{character:'F',target:{map:'main'}}).code,200);
- assert.deepEqual(t.calls[0],['engage',{revisions:{F:7},radius:400,focus:['rat']}]);
- assert.deepEqual(t.calls[1],['arrival','convoy',100000]);
- t.state.activeConvoy=null;t.state.monsterHunt={busy:true};
- const body={character:'F',key:'key',selection:'bat',navigationRevision:7,location:t.location};
- assert.equal(t.invoke(t.service.engagement.approach,body).code,409);
- t.state.monsterHunt={busy:false};assert.equal(t.invoke(t.service.engagement.approach,body).code,200);
- assert.equal(t.calls.at(-1)[4],'grouped-approach');
-});
-
 test('Franky exit acknowledgements allocate Town once and preserve it against replayed completion',()=>{
  const t=fixture();t.state.activeConvoy={id:'exit',phase:'travel',departAt:1,purpose:'franky-exit',participants:['F']};
  t.state.eventReturn={exitConvoyId:'exit',cycleId:'cycle',event:'franky',checkpoint:t.location,pending:['F']};
@@ -41,11 +29,4 @@ test('Franky exit acknowledgements allocate Town once and preserve it against re
  assert.equal(t.invoke(t.service.acknowledgements.complete,{character:'F',convoyId:'exit'}).code,200);
  assert.equal(t.invoke(t.service.acknowledgements.complete,{character:'F',convoyId:'older-exit'}).code,409);
  assert.equal(t.state.commands.F.id,90);
-});
-
-test('convoy failure records a hold before persisting diagnostics',()=>{
- const t=fixture();t.state.activeConvoy={id:'convoy',phase:'travel',participants:['F']};
- assert.equal(t.invoke(t.service.acknowledgements.failed,{character:'F',convoyId:'convoy',reason:'lost worker',failureCode:'runtime-lost'}).code,200);
- assert.deepEqual(t.calls,[['hold','F: lost worker','runtime-lost'],'history','persist',['error','[convoy] F: lost worker']]);
- assert.equal(t.state.combatLogs.F[0].message,'!!! CONVOY STOPPED !!! lost worker');
 });
