@@ -64,3 +64,7 @@ Full-suite follow-up failure modes (recorded before the recovery change):
   injects its follower-only interruption. Seed peaceful Bees for this navigation
   scenario, recording and restoring their aggression settings; native casting,
   interruption, walking, collision and reward handling remain under test.
+- A successful native fallback arrival can leave its recovery ledger in phase
+  `native`. Dispatching that entry while already farming creates endless new
+  convoys and repeatedly revokes combat ownership. Retain the ledger/budget, but
+  do not dispatch it after confirmed arrival unless a new owned route fails.

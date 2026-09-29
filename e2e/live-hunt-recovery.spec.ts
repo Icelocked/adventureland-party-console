@@ -1,6 +1,29 @@
 import { test, expect } from './live-fixtures';
 import { warrior as W, priest as P, fighters, world, tokens, profile, party, quests, start, artifact } from './game/hunt-lifecycle';
 
+test('native Hunt fallback arrival releases farming instead of repeatedly restarting travel',async({live},info)=>{
+  test.setTimeout(240_000);
+  await party(live);
+  await quests(live,info,{[W]:{count:100},[P]:{count:100}});
+  await start(live);
+  await expect.poll(async()=> (await live.state()).activeConvoy?.phase==='travel' &&
+    await live.clients[W].run('!!character.moving && smart.moving && !character.c?.town'),
+    {timeout:90_000,message:'Interrupt a genuine native Hunt walking route'}).toBe(true);
+  const interrupted=await live.clients[W].run('(()=>{const before={at:Date.now(),map:character.map,x:character.x,y:character.y};stop("smart");return before})()');
+  await expect.poll(async()=>Object.values(profile(await live.state()).monsterHunt?.routeRecovery||{}).some((entry:any)=>entry.phase==='native'),
+    {timeout:30_000,message:'The real route interruption must activate the bounded native fallback'}).toBe(true);
+  const recovering=profile(await live.state()).monsterHunt;
+  await expect.poll(async()=>(await world(live))[W].quest?.c,
+    {timeout:120_000,message:'Successful fallback arrival must release actual Hunt combat'}).toBeLessThan(100);
+  const firstKills=await world(live);
+  await expect.poll(async()=>(await world(live))[W].quest?.c,
+    {timeout:30_000,message:'Farming must continue after the first kills without restarting the completed route'}).toBeLessThan(firstKills[W].quest.c);
+  const finalState=await live.state(), finalHunt=profile(finalState).monsterHunt;
+  expect(finalHunt.cycleId).toBe(recovering.cycleId);
+  expect(finalHunt.routeRecovery,'Successful arrival must retain the spent retry budget').toEqual(recovering.routeRecovery);
+  await artifact(live,info,'native-fallback-arrival-and-continuing-kills',{interrupted,recovering,firstKills});
+});
+
 // Faults exercise the actual browser transport; no status, route or acknowledgement is fabricated.
 for (const fault of ['completion-request', 'completion-response', 'follower-reconnect'] as const) {
   test(`native Hunt survives ${fault} loss and both owners receive exactly one Daisy reward`, async ({ live }, info) => {

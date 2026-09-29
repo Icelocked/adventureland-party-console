@@ -59,6 +59,8 @@ export async function reward(live:LiveGame,before:Record<string,any>,timeout=240
   await live.post('/farming-mode',{character:W,mode:'default'});
 }
 export async function spawnGoo(live:LiveGame,name=W,observableCombatSeconds=0,ahead=0) {
+  let seeded: any;
+  const seed = async () => {
   // Native temp suppresses this encounter's respawn without changing species rules.
   // A newly introduced encounter is setup; no existing monster health or death is changed.
   // Native paths can split one straight corridor into short waypoints. Read the
@@ -70,16 +72,34 @@ export async function spawnGoo(live:LiveGame,name=W,observableCombatSeconds=0,ah
       .sort((a,b)=>Math.hypot(character.real_x-b.x,character.real_y-b.y)-Math.hypot(character.real_x-a.x,character.real_y-a.y))[0]||null;
   })()`):null;
   return live.admin(`output=(()=>{const p=get_player(${JSON.stringify(name)}),goal=${JSON.stringify(goal)},distance=goal?Math.hypot(goal.x-p.x,goal.y-p.y):0,ahead=${ahead}?Math.min(${ahead},distance-35):0;
-    if(${ahead}&&(!p.moving||ahead<35))throw Error('Passing encounter requires an ongoing native walking leg');
+    if(${ahead}&&(!p.moving||ahead<35))return null;
     const offsets=ahead?[[ahead*(goal.x-p.x)/distance,ahead*(goal.y-p.y)/distance]]:[[35,0],[-35,0],[0,35],[0,-35]];
     for(const [dx,dy] of offsets){const x=p.x+dx,y=p.y+dy;if(can_move({map:p.map,x:p.x,y:p.y,going_x:x,going_y:y,base:p.base})){const m=new_monster(p.in,{type:'goo',position:[x,y],radius:0,count:1},{temp:1});m.e2eHunt=true;${observableCombatSeconds ? `m.hp=m.max_hp=Math.ceil(${JSON.stringify(fighters)}.map(get_player).reduce((sum,p)=>sum+Math.max(1,p.attack)*Math.max(0.1,p.frequency),0)*${observableCombatSeconds});` : ''}return {id:m.id,map:m.map,x:m.x,y:m.y,hp:m.hp,ahead,origin:{x:p.x,y:p.y},observableCombatSeconds:${observableCombatSeconds}};}}throw Error('No reachable encounter seed')})()`);
+  };
+  if(!ahead)return seed();
+  // A client walking sample can precede a Town step or the server's next move
+  // packet. Seed atomically only when the server is also walking with room ahead.
+  await expect.poll(async()=>!!(seeded=await seed()),{timeout:30_000,intervals:[100,250],
+    message:'Introduce one passing encounter on an actual native walking leg'}).toBe(true);
+  return seeded;
 }
 export async function killedByParty(live:LiveGame,id:string,timeout=45000) {
   let matched:{hit:unknown;death:unknown}|undefined;
   await expect.poll(async()=>{
-    const events=(await Promise.all(fighters.map(async name=>(await live.clients[name].events()).map((event:any)=>({observer:name,...event}))))).flat();
-    const hit=events.find((e:any)=>e.event==='hit'&&String(e.data?.id)===id&&fighters.includes(String(e.data?.hid)));
-    const death=events.find((e:any)=>e.event==='death'&&String(e.data?.id)===id);
+    // Keep polling observational and small. Copying both full player-event
+    // ledgers through CDP repeatedly can delay the very admission traffic being
+    // tested on a loaded runner. The complete ledgers remain final artifacts.
+    const receipts=await Promise.all(fighters.map(async observer=>({observer,
+      ...await live.clients[observer].frame.evaluate(({id,fighters})=>{
+        const events=(window as any).__e2eEvents||[];
+        return {
+          hit:events.find((e:any)=>e.event==='hit'&&String(e.data?.id)===id&&fighters.includes(String(e.data?.hid))),
+          death:events.find((e:any)=>e.event==='death'&&String(e.data?.id)===id),
+        };
+      },{id,fighters})})));
+    const hitReceipt=receipts.find(receipt=>receipt.hit), deathReceipt=receipts.find(receipt=>receipt.death);
+    const hit=hitReceipt&&{observer:hitReceipt.observer,...hitReceipt.hit};
+    const death=deathReceipt&&{observer:deathReceipt.observer,...deathReceipt.death};
     if(!hit||!death)return false;
     matched={hit,death};return true;
   },{timeout,intervals:[200,500],message:`Native party attacks must kill encounter ${id}`}).toBe(true);

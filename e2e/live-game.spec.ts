@@ -208,8 +208,11 @@ test.describe('real server, native clients, maintained character runtime', () =>
       await live.post('/formation', { character: W, eventSelections: ['goobrawl'] });
       await live.admin(`events.goobrawl=true;delete timers.goobrawl;output=true`);
       await expect.poll(async () => { const state=await observed(live);return [W,P].every(name=>state[name].map==='goobrawl'); }, { timeout: 90_000 }).toBe(true);
-      const survivors = await live.admin(`output=Object.values(instances.goobrawl.monsters).map(m=>({id:m.id,type:m.type,hp:m.hp}))`);
-      expect(survivors.length, 'The event must contain a real combat encounter').toBeGreaterThan(0);
+      let survivors: {id:string;type:string;hp:number}[]=[];
+      await expect.poll(async()=>{
+        survivors=await live.admin(`output=Object.values(instances.goobrawl.monsters).map(m=>({id:m.id,type:m.type,hp:m.hp}))`);
+        return survivors.length;
+      },{timeout:30_000,intervals:[100,250],message:'Native arena spawning must provide a real combat encounter after entry'}).toBeGreaterThan(0);
       await evidence(live, info, 'inside-live-goobrawl');
       if (restart) await live.restartCoordinator();
       await live.admin(`timers.goobrawl=new Date(0);output=true`);
