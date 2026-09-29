@@ -20,10 +20,17 @@ export function createHuntResume(state: HuntReturnState, ports: Ports) {
     if (c.nonPreemptible || c.merchantInterruption) return false;
     return c.id === r.convoyId || isRecoveryWalk(r, { ...c, participants: c.participants || [] });
   }
+  function townAcknowledged(name: string, r: EventRecovery): boolean {
+    // Town acknowledgements are validated against command, runtime and revision.
+    // An earlier member may move to another ordinary map before handoff;
+    // preserve that completed barrier. Franky exit-only receipts remain pending.
+    return !!r.exited?.includes(name) && !r.pending.includes(name);
+  }
   function observedExit(name: string, r: EventRecovery): boolean {
     const s = state.statuses[name];
     if (!s || ports.now() - Number(s.seenAt) > 3000 || s.rip || !s.map || s.mapEvent) return false;
-    return !!r.returnDispatchedAt || (s.map === "main" && Math.hypot(Number(s.x), Number(s.y)) <= 90);
+    return !!r.returnDispatchedAt || townAcknowledged(name, r) ||
+      (s.map === "main" && Math.hypot(Number(s.x), Number(s.y)) <= 90);
   }
   function ownsCommand(name: string, r: EventRecovery): boolean {
     const command = state.commands[name];

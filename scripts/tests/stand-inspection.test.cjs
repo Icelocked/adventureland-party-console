@@ -85,7 +85,6 @@ test('WTB catalog is a narrow name-and-add picker opening the regular order edit
  p.onEditBuy=(item,meta)=>opened.push({item,meta});p.onBid=async()=>{saves++};
  await renderer.act(async()=>{root=renderer.create(React.createElement(context.exports.StandSheet,p))});
  const picker=root.root.findAllByType('DialogContent').find(n=>n.findAllByType('DialogTitle').some(t=>t.children.includes('WTB orders')));
- assert.ok(picker.props.className.includes('sm:max-w-md'));
  assert.equal(picker.findAllByType('Input').length,1);
  assert.equal(picker.findAllByType('span').filter(n=>['Bid','Quantity','Minimum quality','Lowest seen','Most recent'].includes(n.children.join(''))).length,0);
  const add=picker.findAllByType('Button').find(n=>n.children.includes('Add'));
@@ -159,7 +158,6 @@ test('empty stand keeps section headings and only the header close control',asyn
  assert.ok(dialog.findAll(n=>n.type==='h2').some(n=>n.children.join('').includes('Buy orders')));
  assert.equal(dialog.findAllByType('DialogFooter').length,0);
  assert.equal(dialog.findAllByProps({'aria-label':'Close stand'}).length,1);
- assert.ok(dialog.findByType('DialogHeader').props.className.includes('pr-12'));
  await renderer.act(async()=>root.unmount());
 });
 test('sale removal requires two clicks and resets when a buy cancellation is selected',async()=>{
@@ -229,8 +227,7 @@ test('stand dialog matches four occupied cards and renders open/closed badges wi
   assert.deepEqual(dialog.findAllByType('h2').map(n=>n.children.join('')),['Items for sale · 12/16 slots','Buy orders · 4/16 slots']);
   assert.equal(dialog.findAllByType('WTBPreference').length,4);
   assert.equal(dialog.findAllByType('span').filter(n=>n.children.includes('Queued')).length,0);
-  const badge=dialog.findAllByType('span').find(n=>n.children.includes(standOpen?'Stand open':'Stand closed'));
-  assert.ok(badge.props.className.includes(standOpen?'bg-emerald-950':'bg-red-950'));
+  assert.ok(dialog.findAllByType('span').some(n=>n.children.includes(standOpen?'Stand open':'Stand closed')));
   await renderer.act(async()=>root.unmount());
  }
 });

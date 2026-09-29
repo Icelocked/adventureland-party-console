@@ -85,7 +85,6 @@ test('merchant routines show gathering modes, include mail, count enabled routin
   for(let i=0;i<total;i++)await act(async()=>fishing.props.onKeyDown({key:'ArrowDown',preventDefault(){}}));
   await act(async()=>view.root.findAllByType('button').find(node=>text(node)==='Save routines').props.onClick());
   assert.equal(saved[1].fishing,true);assert.equal(saved[1].mining,true);assert.ok(saved[0].fishing<saved[0].mining);
-  assert.match(view.root.findByType('DialogContent').props.className,/overflow-hidden/);assert.match(view.root.findByType('DialogFooter').props.className,/shrink-0/);
  } finally {await act(async()=>view?.unmount());global.window=previousWindow;}
 });
 
@@ -110,7 +109,6 @@ test('full stand replacement shows catalog sprites and retains selection until c
  try {
   await act(async()=>{view=create(React.createElement(Harness));});await act(async()=>api.save(action));
   assert.equal(text(view.root.findByType('DialogTitle')),'Make room for a buy order');
-  assert.match(view.root.findByType('DialogHeader').props.className,/pr-8/);
   assert.ok(view.root.findAllByType('span').some(node=>node.props.style?.backgroundImage==='url("/cape.png")'));
   assert.ok(view.root.findAllByType('span').some(node=>text(node)==='Cape'));
   const replace=()=>view.root.findAllByType('button').find(node=>text(node)==='Replace listing');

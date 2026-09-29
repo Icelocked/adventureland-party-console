@@ -1,6 +1,10 @@
 import type { PrioritizedJob } from './priority.ts';
 
 const automaticPickups = new Set(['auto upgrade', 'auto compound', 'auto npc sale pickup']);
+/** Manual party visits and queued automatic pickups share the same item handoff. */
+export function collectsPartyItems(reason: string): boolean {
+  return ['party collection', 'marked items', 'inventory cleanout'].includes(reason);
+}
 export function pickupReason(reason: string, target: string | null | undefined, merchant: string | null | undefined): string {
   return target && target !== merchant && (automaticPickups.has(reason) || reason === 'deconstruction pickup') ? 'marked items' : reason;
 }

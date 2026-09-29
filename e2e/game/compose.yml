@@ -1,0 +1,28 @@
+name: al-e2e-pr21
+services:
+  database:
+    image: mongo:7.0.16
+    command: ["mongod", "--replSet", "e2e", "--bind_ip", "127.0.0.1"]
+    ports:
+      - "127.0.0.1:8083:8090"
+      - "127.0.0.1:9003:7192"
+    volumes:
+      - database:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "try { rs.status() } catch(e) { rs.initiate({_id:'e2e',members:[{_id:0,host:'127.0.0.1:27017'}]}) }; if (!db.hello().isWritablePrimary) quit(1)"]
+      interval: 2s
+      timeout: 10s
+      retries: 60
+  game:
+    build: .
+    network_mode: "service:database"
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "Promise.all([fetch('http://127.0.0.1:8090/'),fetch('http://127.0.0.1:7192/server.api/eval',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({spass:'al-e2e-disposable-admin',code:'output=!!(server.live&&G.maps.main)'})})]).then(async r=>{if(!r[0].ok||await r[1].text()!=='true')process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 10s
+      retries: 60
+volumes:
+  database:

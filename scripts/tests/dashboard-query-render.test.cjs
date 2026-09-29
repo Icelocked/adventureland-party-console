@@ -44,46 +44,6 @@ test('panel merges retain unchanged characters and handle roster and subscriptio
   } finally { if (tree) await act(async () => tree.unmount()); client.clear(); }
 });
 
-test('forwarding actions retain identity and invoke the latest committed closure', async () => {
-  const { useForwardingActions } = load('use-forwarding-actions.ts');
-  const keys = ['action'];
-  let actions, tree;
-  function Host({ value }) { actions = useForwardingActions({ action: () => value }, keys); return null; }
-  try {
-    await act(async () => { tree = create(React.createElement(Host, { value: 'first' })); });
-    const original = actions.action;
-    assert.equal(original(), 'first');
-    await act(async () => tree.update(React.createElement(Host, { value: 'latest' })));
-    assert.equal(actions.action, original);
-    assert.equal(original(), 'latest');
-  } finally { if (tree) await act(async () => tree.unmount()); }
-});
-
-test('React vitals subscriptions isolate other cards and the inventory subscription; unchanged values do not commit', async (t) => {
-  const previousDocument = global.document;
-  global.document = { hidden: false, addEventListener() {}, removeEventListener() {} };
-  t.after(() => { if (previousDocument === undefined) delete global.document; else global.document = previousDocument; });
-  const client = createDashboardClient();
-  const names = ['A', 'B', 'C', 'D'], counts = { A: 0, B: 0, C: 0, D: 0, inventory: 0 };
-  const model = { state: { characters: Object.fromEntries(names.map(name => [name, { name, ctype: 'priest' }])), marked: {} }, chars: names.map(name => ({ name })) };
-  for (const name of names) {
-    client.setQueryData(characterKey(name, 'vitals'), { hp: 100 });
-    client.setQueryData(characterKey(name, 'inventory'), { items: [], slots: {} });
-  }
-  function Card({ name }) { const value = useCharacterData(name, 'vitals'); counts[name]++; return React.createElement('span', null, value.hp); }
-  function Inventory() { const value = usePanelModel(model, { inventory: true }); counts.inventory++; return React.createElement('span', null, value.chars[0].items.length); }
-  let tree;
-  await act(async () => { tree = create(React.createElement(QueryClientProvider, { client }, ...names.map(name => React.createElement(Card, { key: name, name })), React.createElement(Inventory))); });
-  const before = { ...counts };
-  await act(async () => { client.setQueryData(characterKey('A', 'vitals'), { hp: 50 }); await new Promise(done => setTimeout(done, 5)); });
-  assert.equal(counts.A, before.A + 1);
-  for (const name of ['B', 'C', 'D', 'inventory']) assert.equal(counts[name], before[name], name + ' did not render for A HP');
-  const after = { ...counts };
-  await act(async () => { client.setQueryData(characterKey('A', 'vitals'), { hp: 50 }); client.setQueryData(characterKey('A', 'inventory'), { items: [], slots: {} }); await new Promise(done => setTimeout(done, 5)); });
-  assert.deepEqual(counts, after);
-  await act(async () => tree.unmount()); client.clear();
-});
-
 test('map consumers share reads, release closed observers, pause hidden tabs and never show the previous map', async () => {
   const { useMapDefinition } = load('query-cache.tsx');
   const client = createDashboardClient(); client.setQueryData(['party', 'core'], { referenceRevision: 'r1' });

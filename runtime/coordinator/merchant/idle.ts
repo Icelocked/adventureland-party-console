@@ -7,6 +7,10 @@ interface IdleStatus extends ServiceStatus {
   gatheringCooldowns?: Record<string, number>;
   banking?: boolean;
   standOpen?: boolean;
+  lastCommandId?: number;
+  navigationState?: string;
+  moving?: boolean;
+  smartNavigation?: { moving?: boolean; searching?: boolean } | null;
 }
 interface StandListing {
   state?: string;
@@ -36,6 +40,43 @@ interface IdlePorts {
 
 /** Returns to the stand only when no active work owns merchant movement. */
 export function createMerchantIdle(ports: IdlePorts) {
+  const travelCommands = new Set(["character-travel", "travel", "force-travel", "return-leader",
+    "party-monster-travel", "event-resume-travel"]);
+  let manualTravel: { id: number; until: number; observedMoving: boolean } | null = null;
+
+  function navigating(status: IdleStatus): boolean {
+    return status.navigationState === "departing" || !!status.moving ||
+      !!status.smartNavigation?.moving || !!status.smartNavigation?.searching;
+  }
+
+  function manualTravelPending(): boolean {
+    const command = ports.command(ports.merchant());
+    if (!command || !travelCommands.has(command.type)) return false;
+    if (manualTravel?.id !== command.id)
+      manualTravel = { id: command.id, until: ports.now() + 10_000, observedMoving: false };
+    return true;
+  }
+
+  function navigationOwnsMovement(status: IdleStatus | undefined): boolean {
+    // A heartbeat can consume a one-shot command before its next report shows
+    // movement. Other party heartbeats must not replace it with stand return.
+    if (manualTravelPending()) return true;
+    if (!status || status.seenAt < ports.now() - 10_000) return false;
+    if (navigating(status)) {
+      if (manualTravel && status.lastCommandId === manualTravel.id) manualTravel.observedMoving = true;
+      return true;
+    }
+    return admissionPending(status);
+  }
+
+  function admissionPending(status: IdleStatus): boolean {
+    if (!manualTravel) return false;
+    const superseded = (status.lastCommandId || 0) > manualTravel.id;
+    if (!superseded && !manualTravel.observedMoving && ports.now() < manualTravel.until) return true;
+    manualTravel = null;
+    return false;
+  }
+
   function gatheringReady(status: IdleStatus | undefined): boolean {
     return ports
       .modes()
@@ -98,7 +139,8 @@ export function createMerchantIdle(ports: IdlePorts) {
   }
 
   function reserved(): boolean {
-    return !!ports.eventReserved?.() || ports.storagePending();
+    return !!ports.eventReserved?.() || ports.storagePending() ||
+      navigationOwnsMovement(ports.status(ports.merchant()));
   }
   function idle(): void {
     if (reserved()) return;

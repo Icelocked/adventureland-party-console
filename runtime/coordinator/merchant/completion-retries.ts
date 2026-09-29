@@ -176,6 +176,9 @@ export function createCompletionRetries(state: CompletionState, ports: Completio
     delete retry.handoff;
     delete retry.itemMarksCleared;
     if (!state.merchantQueue.some(queued => queued.id === retry.id)) state.merchantQueue.unshift(ports.stamp(retry));
+    logLuckRetry(job);
+  }
+  function logLuckRetry(job: CompletionJob): void {
     if (job.reason === "merchant luck")
       ports.log(
         "Retrying failed Merchant's Luck itinerary leg without returning to stand",

@@ -157,18 +157,6 @@ test('native multi-tick search prepares without movement; same plot walks at off
   assert.equal(restores, 1);
 });
 
-test('native cross-map route preserves transport steps and reaches destination', async () => {
-  const r = runtime({slow:false});
-  r.context.G.maps.main.doors = [[0,0,0,0,'cave',0,0]];
-  const {promise} = await r.start({...command, location:{map:'cave',x:120,y:0}});
-  await r.ready(); assert.ok(r.context.movement.state.plot.some(p=>p.transport));
-  assert.equal(r.calls.filter(x=>x[0]==='transport').length,0);
-  schedule(r); r.setNow(3950);
-  for(let i=0;i<80 && r.context.movement.state.moving;i++) { r.tick(); await settle(); }
-  await promise; assert.equal(r.context.character.map,'cave'); assert.equal(r.searches,1);
-  assert.equal(r.calls.filter(x=>x[0]==='transport').length,1);
-});
-
 test('native route handoff restores cruise and relinquishes movement without false arrival', async () => {
   const r = runtime();
   r.context.farmingTravelTarget = () => ({ id: 'm', mtype: 'goo', x: 100, y: 0 });

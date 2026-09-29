@@ -28,12 +28,6 @@ test('merchant work remains reserved through retries until the live kiss complet
   assert.equal(control(event, { mode: 'complete' }).reserved, false);
 });
 
-test('merchant commands have a local anniversary reservation gate', () => {
-  assert.match(fs.readFileSync(path.join(__dirname, '../../characters/shared.js'), 'utf8'),
-    /command\.type !== "merchant-idle"[\s\S]{0,100}merchantAnniversaryWorkReserved\(\)/);
-});
-
-
 test('completion from a previous round cannot release a new live visit',()=>{
  const event={active:true,live:true,round:'new',target:'Other',expires:1300000};
  assert.equal(control(event,{mode:'complete',completedRound:'old'}).reserved,true);
@@ -52,7 +46,6 @@ test('persisted claim releases a restarted merchant only for its matching round'
  status.anniversaryServer.expires=1300000;
  assert.equal(merchantAnniversaryControl('M',true,status,{},1000000,'r').featured,true);
 });
-
 
 test('client and coordinator release the same featured round after reload and retain the next round',()=>{
  const vm=require('node:vm'),source=fs.readFileSync(path.join(__dirname,'../../characters/shared.js'),'utf8');

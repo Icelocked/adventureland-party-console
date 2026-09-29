@@ -1,0 +1,18 @@
+{
+  "scenario": "partial native Town failure reunites the Hunt party and claims both rewards across coordinator restart",
+  "archive": ".build/recovery11-diagnostic-e2e-report/manifest.json",
+  "outcome": "Both native rewards completed, but a false preparation timeout consumed one recovery attempt.",
+  "observed": {
+    "preparationStartedAt": 1790637770576,
+    "falseTimeoutAt": 1790637831703,
+    "elapsedIncludingRendezvousMs": 61127,
+    "reason": "Shared route preparation timed out",
+    "recoveryAttempts": 1
+  },
+  "failureModesRecordedBeforeFix": [
+    "Arrival after a valid long walk immediately inherits an expired route-preparation deadline.",
+    "A stationary planner that never finishes must still time out within its own 60-second budget.",
+    "Moving or repeatedly assembling must not bypass the 30-second no-progress and 120-second absolute assembly limits.",
+    "Restart and reassembly must not reuse a settled-preparation clock from an earlier route."
+  ]
+}

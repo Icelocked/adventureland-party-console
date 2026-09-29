@@ -12,6 +12,7 @@ import { sharedCompoundRules, type BankImprovementState } from "../merchant/bank
 import { itemRuleConflicts } from "../inventory/shared-rules.ts";
 import { operationStage } from '../merchant/activity.ts';
 import { collectionPickups, type PickupState } from '../merchant/collection-pickups.ts';
+import { collectsPartyItems } from '../merchant/pickup-jobs.ts';
 
 interface ProgressState extends CraftReservationState, PickupState, OfferingRulesState, MerchantEventState {
   autoCompounds?: BankImprovementState['autoCompounds'];
@@ -57,7 +58,7 @@ export function createMerchantProgressRoutes(state: ProgressState, ports: Progre
       targetStatus: state.statuses[String(target)] || null,
       nextCollectionTarget: nextTarget(current),
       craftProtection: craftProtection(state),
-      ...(['marked items', 'inventory cleanout'].includes(current.reason) ? {collectionPickups: collectionPickups(state, String(target))} : {}),
+      ...(collectsPartyItems(current.reason) ? {collectionPickups: collectionPickups(state, String(target))} : {}),
     });
   }
   function heartbeat(req: HttpRequest, res: HttpResponse): unknown {

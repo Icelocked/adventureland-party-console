@@ -1,0 +1,131 @@
+{
+  "provenance": "Sanitized durable recovery captured from the reported live failure on 2026-09-28; historical setup, not newly emitted HTTP receipts.",
+  "eventReturn": {
+    "phase": "evacuating",
+    "event": "franky",
+    "participants": [
+      "E2EWarrior"
+    ],
+    "pending": [],
+    "exited": [
+      "E2EWarrior"
+    ],
+    "deferred": [],
+    "checkpoint": {
+      "map": "desertland",
+      "x": 391,
+      "y": -1422,
+      "label": "the saved party checkpoint"
+    }
+  },
+  "monsterHunt": {
+    "version": 2,
+    "stage": "paused-event",
+    "resumeStage": "farming",
+    "participants": [
+      "E2EWarrior"
+    ],
+    "missions": [
+      {
+        "target": "gscorpion",
+        "owners": [
+          "E2EWarrior"
+        ],
+        "skipped": false,
+        "destination": {
+          "map": "desertland",
+          "mapName": "Desertland",
+          "x": 391,
+          "y": -1422,
+          "boundary": [
+            220.31,
+            -1569.2,
+            561.04,
+            -1275.72
+          ],
+          "shapes": [
+            {
+              "boundary": [
+                220.31,
+                -1569.2,
+                561.04,
+                -1275.72
+              ]
+            }
+          ],
+          "monsterIds": [
+            "gscorpion"
+          ],
+          "id": "[\"desertland\",[{\"boundary\":[220.31,-1569.2,561.04,-1275.72]}]]"
+        },
+        "destinationVersion": 1
+      }
+    ],
+    "currentIndex": 0,
+    "target": "gscorpion",
+    "returnPolicy": "auto",
+    "returnLocation": {
+      "map": "desertland",
+      "mapName": "Desertland",
+      "x": 391,
+      "y": -1422,
+      "boundary": [
+        220.31,
+        -1569.2,
+        561.04,
+        -1275.72
+      ],
+      "shapes": [
+        {
+          "boundary": [
+            220.31,
+            -1569.2,
+            561.04,
+            -1275.72
+          ]
+        }
+      ],
+      "monsterIds": [
+        "gscorpion"
+      ],
+      "id": "[\"desertland\",[{\"boundary\":[220.31,-1569.2,561.04,-1275.72]}]]"
+    },
+    "returnFocus": "[\"gscorpion\"]",
+    "owner": "E2EWarrior",
+    "selectionLeader": "E2EWarrior",
+    "policyVersion": 3,
+    "pickupPending": false,
+    "missionRevision": 3,
+    "convoyId": null,
+    "deathCount": 0,
+    "deathObservations": {},
+    "expiryAttempts": {},
+    "eventTrips": {}
+  },
+  "location": {
+    "map": "desertland",
+    "mapName": "Desertland",
+    "x": 391,
+    "y": -1422,
+    "boundary": [
+      220.31,
+      -1569.2,
+      561.04,
+      -1275.72
+    ],
+    "shapes": [
+      {
+        "boundary": [
+          220.31,
+          -1569.2,
+          561.04,
+          -1275.72
+        ]
+      }
+    ],
+    "monsterIds": [
+      "gscorpion"
+    ],
+    "id": "[\"desertland\",[{\"boundary\":[220.31,-1569.2,561.04,-1275.72]}]]"
+  }
+}

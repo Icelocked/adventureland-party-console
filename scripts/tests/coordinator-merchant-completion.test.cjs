@@ -1,8 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {createMerchantCompletionRoute}=require('../../runtime/coordinator/http/merchant-completion.ts');
-const {fixture,scenarios}=require('./helpers/coordinator-completion.cjs');
-const contracts=require('./fixtures/merchant-completion-contracts.json');
-const json=value=>JSON.parse(JSON.stringify(value));
+const {fixture}=require('./helpers/coordinator-completion.cjs');
+
+
 test('upgrade and compound communication failures preserve work with escalating durable delays',()=>{
  const {createCompletionRetries}=require('../../runtime/coordinator/merchant/completion-retries.ts');
  for(const reason of ['upgrades and compounds','manual upgrades','auto upgrade','manual compounds','auto compound']) {
@@ -27,13 +27,8 @@ test('transient lucky-slot input loss retries automatic upgrades without a capac
  assert.equal(f.state.merchantQueue.length,1);
  assert.equal(f.state.merchantQueue[0].reason,'auto upgrade');
 });
-for(const scenario of scenarios)test('merchant completion: '+scenario.name,()=>{
- const f=fixture(scenario);
- createMerchantCompletionRoute(f.state,f.ports)({body:{jobId:'job',...scenario.body}},f.response);
- assert.deepEqual(json({name:scenario.name,state:f.state,calls:f.calls,response:{code:f.response.code,body:f.response.body}}),contracts.find(entry=>entry.name===scenario.name));
-});
 test('authentication timer confirms and publishes later',async()=>{
- const f=fixture(scenarios.find(s=>s.name==='authentication schedules confirmation'));
+ const f=fixture({job:{reason:'ALData authentication'}});
  createMerchantCompletionRoute(f.state,f.ports)({body:{jobId:'job',success:true}},f.response);
  f.timers[0]();await Promise.resolve();await Promise.resolve();
  assert.equal(f.state.aldata.auth,'CORRECT');

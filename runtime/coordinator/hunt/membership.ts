@@ -8,6 +8,7 @@ interface MembershipState {
   navigationIntents: Record<string, {revision: number; cancelled: boolean} | undefined>;
   characterLocations: Record<string, ReturnLocation | undefined>;
   combatResetByCharacter: Record<string, number | undefined>; groupedCombatResetAt: number;
+  groupedCombat?: unknown;
   activeConvoy: {id: string; participants: string[]} | null;
   monsterHunt: HuntCycle | null; combatRecovery: unknown;
   location: ReturnLocation | null; nextCommandId: number;
@@ -58,6 +59,12 @@ export function reconcileFarmingMembership<T extends MembershipState>(party: T, 
     }
     function joinFarmingMembership(name: string) {
       const owner = farmingScopes.owner(name), state = farmingScopes.view(owner);
+      // A joining client already discarded queues older than its personal reset.
+      // Carry that boundary into its new controller, preserving stale rejection.
+      const previousReset = state.groupedCombatResetAt || 0;
+      const resetAt = Math.max(previousReset, party.combatResetByCharacter[name] || 0);
+      if (resetAt > previousReset) state.groupedCombat = null;
+      state.groupedCombatResetAt = resetAt;
       if (owner === name) return;
       const hunt = state.monsterHunt;
       if (hunt && !hunt.participants.includes(name)) hunt.participants.push(name);

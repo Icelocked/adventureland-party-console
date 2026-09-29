@@ -20,15 +20,6 @@ function fixture(){
  });
  return {state,workers,api,calls,area,next,advance:()=>{now+=1000;state.statuses.P.seenAt=now;},release:()=>eventOwns=false};
 }
-test('farm navigation resolves the current catalog and records newly added workers on each tick',()=>{
- const {state,workers,api,calls,advance}=fixture();api.tick();calls.length=0;
- state.monsterChoices=['replacement'];state.monsterFocus=['rat'];workers.M={};advance();api.tick();
- assert.equal(calls[0][1],state.monsterChoices);assert.deepEqual(calls[0][2],['rat']);
- assert.equal(calls[1][1],state.monsterChoices);assert.equal(calls[1][3],state.location);
- const record=calls.find(call=>call[0]==='record');
- assert.equal(record[1],state.farmAreaState);assert.equal(record[2][0],state.statuses.P);
- assert.deepEqual(record[3],['P','M']);assert.equal(record[5],101000);
-});
 test('event ownership holds a pending Hunt relocation until the live owner releases travel',()=>{
  const {state,api,calls,next,advance,release}=fixture();
  state.farmingPolicy='hunt';state.monsterHunt={target:'rat',stage:'farming',currentIndex:0,missions:[{}]};

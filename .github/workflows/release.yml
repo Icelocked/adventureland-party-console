@@ -12,7 +12,7 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,15 +25,30 @@ jobs:
       - run: node tools/hosting/install-caddy.mts
       - run: npm --prefix .caracal ci
       - run: node scripts/ci/restore-game-fixtures.cjs
-      - name: Full regression suite
+      - run: npx playwright install --with-deps chromium
+      - name: Console E2E
+        run: npm run test:e2e:console && npm run test:e2e:verify
+      - name: Retained isolated regression exceptions
         shell: bash
         run: |
           set -o pipefail
           mkdir -p .build/ci
-          npm run test:ci 2>&1 | tee .build/ci/regression.tap
+          npm run test:unit:ci 2>&1 | tee .build/ci/regression.tap
           node scripts/ci/check-regression.cjs .build/ci/regression.tap
       - run: node node_modules/oxlint/bin/oxlint --config runtime/.oxlintrc.json runtime/coordinator
       - run: npm run build
+      - name: Preserve verifiable E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: console-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .build/e2e-report/
+            .build/e2e-results/
+            .build/ci/regression.tap
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
   version:
     needs: validate
     if: github.event_name != 'pull_request'

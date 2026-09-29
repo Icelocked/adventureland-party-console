@@ -1,0 +1,93 @@
+{
+  "boundary": "Pinned native game; configured field generator remained in real inventory while actual Tinyp attacks triggered native avoidance and teleportation.",
+  "failure": "No native field generator deployed within 45 seconds",
+  "seed": {
+    "id": "493",
+    "type": "tinyp",
+    "map": "main",
+    "x": 56.55336430065908,
+    "y": 665.7904616963061,
+    "requestedHp": 12000,
+    "partyDps": 23886.656975416183,
+    "observableCombatSeconds": 5,
+    "initialHp": 119434,
+    "originalHp": 5600,
+    "initialDrops": [
+      [
+        1000000,
+        "gem0",
+        1
+      ]
+    ]
+  },
+  "inventory": [
+    {
+      "slot": 4,
+      "item": {
+        "name": "fieldgen0"
+      }
+    }
+  ],
+  "deployment": null,
+  "rare": {
+    "encounter": null,
+    "patrol": null,
+    "message": "Rare pursuit cancelled: selection released"
+  },
+  "native": [
+    {
+      "at": 1790618127695,
+      "event": "hit",
+      "data": {
+        "pid": "ACCAc3",
+        "hid": "E2EPriest",
+        "id": "493",
+        "damage": 0,
+        "avoid": true,
+        "source": "attack",
+        "x": 57.55736428057908,
+        "y": 665.7904616963061,
+        "map": "main",
+        "in": "main"
+      }
+    },
+    {
+      "at": 1790618127836,
+      "event": "hit",
+      "data": {
+        "pid": "zrZUaI",
+        "hid": "E2EWarrior",
+        "id": "493",
+        "damage": 0,
+        "avoid": true,
+        "source": "attack",
+        "x": 57.55736428057908,
+        "y": 665.7904616963061,
+        "map": "main",
+        "in": "main"
+      }
+    },
+    {
+      "at": 1790618128084,
+      "event": "disappear",
+      "data": {
+        "id": "493",
+        "effect": "magiport",
+        "to": "main",
+        "s": 0,
+        "reason": "magiport"
+      }
+    },
+    {
+      "at": 1790618129032,
+      "event": "disappear",
+      "data": {
+        "id": "493",
+        "effect": "magiport",
+        "to": "main",
+        "s": 0,
+        "reason": "magiport"
+      }
+    }
+  ]
+}

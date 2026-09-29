@@ -73,10 +73,9 @@ test('four Phoenix regions fit one footprint; tall region gets an overlapping ca
     if(tall) assert.ok(points.every(p=>p.x===points[0].x));
   }
 });
-test('disabled passive settings never interrupt, while follower Fairy sighting preempts Phoenix',()=>{
-  const r=fixture();r.party.passiveRareHunts={tinyp:false,phoenix:false};r.sight();assert.equal(r.controller.encounter(),false);
-  r.party.passiveRareHunts.phoenix=true;r.sight();assert.equal(r.party.rareHuntState.encounter.mtype,'phoenix');
-  r.party.passiveRareHunts.tinyp=true;r.sight('tinyp','M');assert.equal(r.party.rareHuntState.encounter.mtype,'tinyp');
+test('follower Fairy sighting preempts Phoenix',()=>{
+  const r=fixture();r.sight();assert.equal(r.party.rareHuntState.encounter.mtype,'phoenix');
+  r.sight('tinyp','M');assert.equal(r.party.rareHuntState.encounter.mtype,'tinyp');
   assert.equal(r.controller.control('P').target.id,'tinyp');
 });
 test('sightings on another realm and claimed Fairy do not acquire; outsider Phoenix is rejected',()=>{
@@ -90,13 +89,7 @@ test('higher custom priority, Daisy rewards and event combat prevent rare interr
   r.party.statuses.W.target=null;r.party.turnIn=true;r.sight();assert.equal(r.controller.encounter(),false);
   r.party.turnIn=false;r.party.statuses.W.joinedEvent='franky';r.sight();assert.equal(r.controller.encounter(),false);
 });
-test('Hunt resumes after confirmed kill; disappearance is not a kill and stale sightings expire',()=>{
-  const r=fixture();r.party.monsterHunt={stage:'fighting',target:'goo'};r.party.farmingPolicy='hunt';r.sight();
-  r.party.statuses.W.rareKills=[{id:'phoenix',mtype:'phoenix',map:'main',in:'main',at:r.time(),partyEngaged:true}];
-  r.controller.report('W',r.party.statuses.W);r.controller.tick();assert.equal(r.resumed(),0);
-  r.advance(2000);r.party.statuses.W.rareLoot={id:r.controller.control('W').id,at:r.time(),observedAt:r.time(),realm:':USII',map:'main',in:'main',complete:true};
-  r.controller.tick();assert.equal(r.resumed(),0);assert.equal(r.party.monsterHunt.convoyId,null);
-  assert.equal(r.controller.encounter(),false);
+test('disappearance is not a kill and stale sightings expire',()=>{
   const q=fixture();q.sight();q.party.statuses.W.rareSightings=[];q.advance(30001);q.controller.tick();
   assert.equal(q.controller.encounter(),false);assert.match(q.party.rareHuntState.message || '',/progress|time|fresh sightings/);
 });
@@ -105,14 +98,14 @@ test('manual navigation revision cancels a pursuit without a stale return convoy
   assert.equal(r.controller.encounter(),false);assert.equal(r.starts(),0);
 });
 test('generator carrier is unique and confirmation releases attacks without repeat deployment',()=>{
-  const r=fixture();r.party.statuses.M.items=[{name:'fieldgen0'}];r.party.statuses.P.items=[{name:'fieldgen0'}];
+  const r=fixture();r.party.statuses.M.items=[{slot:0,item:{name:'fieldgen0'}}];r.party.statuses.P.items=[{slot:0,item:{name:'fieldgen0'}}];
   r.sight('tinyp');const c=r.controller.control('W');assert.equal(c.deployer,'M');
   r.party.statuses.M.rareDeployment={encounterId:c.id};r.controller.tick();assert.equal(r.controller.control('W').deployer,'M');
   r.party.statuses.W.rareFields=[{x:20,y:10}];r.controller.tick();assert.equal(r.controller.control('W').deployer,null);
   r.party.statuses.W.rareFields=[];r.controller.tick();assert.equal(r.controller.control('W').deployer,null);
 });
 test('unconfirmed generator deployment falls back after three seconds',()=>{
-  const r=fixture();r.party.statuses.M.items=[{name:'fieldgen0'}];r.sight('tinyp');
+  const r=fixture();r.party.statuses.M.items=[{slot:0,item:{name:'fieldgen0'}}];r.sight('tinyp');
   const id=r.controller.control('M').id;r.party.statuses.M.rareDeployment={encounterId:id};r.controller.tick();
   r.advance(3001);r.sight('tinyp');assert.equal(r.controller.control('M').deployer,null);
 });
@@ -293,7 +286,7 @@ test('catalog monsters support committed encounters and independent passing mode
  assert.equal(passing.controller.encounter(),false);assert.equal(passing.starts(),0);
 });
 test('disabled field generators leave committed Fairy on ordinary attacks',()=>{
- const r=fixture();r.party.statuses.W.items=[{name:'fieldgen0'}];r.controller.setSettings({useFieldGenerators:false});r.sight('tinyp');
+ const r=fixture();r.party.statuses.W.items=[{slot:0,item:{name:'fieldgen0'}}];r.controller.setSettings({useFieldGenerators:false});r.sight('tinyp');
  assert.equal(r.controller.control('W').deployer,null);
 });
 

@@ -1,5 +1,40 @@
 # Character coordinator
 
+A stop-required rare encountered during Hunt travel retains its convoy loot owner.
+The native passive-Goo journey exposed two competing loot barriers: the convoy
+finished its leader loot pass and resumed, but rare hunting kept waiting for a
+separate receipt at the departed kill location. Rare completion now also accepts
+a fresh leader receipt for the exact captured convoy ID and epoch, in the same
+realm/map/instance, only when its barrier began after this encounter died.
+Standalone rare encounters still require their own matching receipt. Validate
+HC-STOP through actual Goo death and both Daisy rewards; see the minimized red
+evidence in docs/testing-hunt-stop-loot-red.json. Activate via the supported
+coordinator-only restart after building; rebuilding alone does not reload it.
+
+Aborting an anniversary round during staging releases its return immediately,
+including before the scheduled start. A cancelled round cannot hold Hunt until
+the old start time. Scheduled rounds that have not been aborted retain their
+normal start and featured-character holds. The native anniversary deselection
+journey reproduced a paused Hunt after real kiss rewards and supplies the E2E
+regression. Build and use the supported coordinator-only restart to activate;
+building alone does not reload live behavior.
+
+Manual Send to party visits collect authorized bank and merchant marks through the
+same handoff selection as automatic item collection. The native Hunt interruption
+E2E exposed a reason-name mismatch: party collection jobs collected gold and
+reported success while silently stripping their marked item payload. Handoff,
+live pickup revalidation and command processing now recognize that collection
+reason consistently. Validate native merchant restart/death interruption journeys
+and real cargo conservation. Activate with the supported coordinator-only restart;
+the build alone does not update a live coordinator.
+
+Merchant idle dispatch preserves pending manual travel and fresh active navigation.
+A bounded ten-second admission window covers delivery before the first movement
+report; completion or a newer command releases the hold. Real-game E2E caught
+stand return replacing a manual order before the native merchant received it.
+Validate the real manual-walking and merchant travel journeys. This change needs
+the supported coordinator-only restart; a build does not reload a live process.
+
 Merchant interruption cleanup releases only matching handoff commands and transitions
 the convoy pause to resuming before ownership checks. Failure, worker expiry, clear,
 force-stand, priority yield and realm pause retain the original travel destination;
@@ -9,6 +44,36 @@ completion/control/progress and realm-pause tests. Preview results distinguish
 complete, partial and unavailable; bank borrowing waits for mounted pack data.
 Validate upgrade-preview and upgrade-offerings-ui; activate with the full restart.
 
+
+## Defense delivered before convoy preparation
+
+A heartbeat may receive a defending command before the preceding preparation
+command. The character now installs the complete authorized convoy owner first,
+using the same local handle as ordinary travel, then stops for combat and
+acknowledges defense. Missing, stale or protected ownership cannot create a
+handle. Native goldenbat and cutebee Hunts exposed the former acknowledged-but-
+missing owner, which blocked the leader and stranded the follower. Validate
+actual rare damage, death, loot and resumed Hunt progress. This character change
+requires the full supported restart and verified new character generations.
+
+## Walking recovery after a partial Town return
+
+A failed Town cast can leave one Hunt participant beyond terrain that requires
+walking away from the Town rally before approaching it. The planner now honors
+`town: false`: alpathfinder 0.6 has no Town exclusion option, so the adapter uses
+a high finite walking-cost speed and rejects any remaining Town edge. This is a
+planning estimate, not a character speed change. Normal authorized Town routes
+and the existing Halloween shortcut remain available.
+
+Rendezvous progress includes fresh physical displacement under the matching
+convoy, epoch, command, navigation revision and runtime. Necessary obstacle
+detours therefore do not consume the thirty-second no-progress budget merely
+because straight-line distance increases. The two-minute absolute deadline and
+terminal recovery budget remain unchanged. Native Town-recovery E2Es cancel one
+actual cast while peers arrive and require reunion plus both Daisy rewards.
+The native red-plan excerpt is in `docs/testing-town-return-red.json`.
+Use the full supported restart for planner/coordinator deployment; builds do not
+activate running processes. Private live diagnostic captures stay uncommitted.
 
 ## Town rally and merchant movement ownership
 
@@ -259,12 +324,14 @@ remain external dependencies with explicit consumer contracts.
 these artifacts before starting the game. The launcher template lives at
 `tools/caracal/CharacterCoordinator.cjs`; the installer copies it into caracAL.
 
-Run `npm run typecheck`, `npm test`, and the coordinator lint check:
+Run `npm run typecheck`, `npm test` (browser E2E), `npm run test:unit`
+(retained failure-mode exceptions), and the coordinator lint check:
 
 `node node_modules/oxlint/bin/oxlint --config runtime/.oxlintrc.json runtime/coordinator`
 
-The complexity limit is 10. Prefer direct module tests and HTTP integration
-fixtures. Remaining named-function fixtures derive their source from maintained
+The complexity limit is 10. Prefer E2E through the real gateway and coordinator,
+with repeatable artifacts; see [the testing guide](../../docs/testing.md).
+Write failure modes before any necessary isolated test. Remaining named-function fixtures derive their source from maintained
 TypeScript, never the installed host. Full-host tests cover both source and bundle;
 launcher tests execute the bundle with Windows and Linux directory inputs.
 
@@ -296,6 +363,22 @@ to current Hunt policy after combat/loot and fresh ownership checks.
 Validate `encounter-recovery`, rare hunting/client/retry tests, Hunt travel,
 communication, shared convoy, event returns, combat queues, and markers. Publish
 character and coordinator assets together using the full restart below.
+
+Turning Hunt off during an authorized event departure preserves that departure
+and combat. It clears Hunt without dispatching a competing backup convoy, even
+when the leader entered before its follower. Event evacuation later resumes the
+current normal farming policy.
+
+Disabling an inherited combat event collects all now-disabled participants from
+their individual event sessions before starting evacuation. Each retains its own
+captured waypoint; still-enabled members, other events and globally advertised
+but unjoined events do not become evacuation participants.
+
+Event recovery retains each validated Main-town acknowledgement while waiting for
+companions. A member moving to another ordinary map after its acknowledgement
+must not strand Hunt in paused-event, even while a deselected boss remains globally
+live. Handoff still requires fresh, alive non-event-map reports and unchanged
+navigation ownership; a Franky map-exit receipt alone does not satisfy Town.
 
 Event evacuation hands directly to current Hunt policy after fresh Main town
 observations, without requiring the historical farming checkpoint. Normal farming
@@ -1053,3 +1136,58 @@ Manual monster selection opts out. Existing missions keep their assigned destina
 The scoped settings endpoint merges per-monster patches and validates catalog membership;
 an empty key restores Automatic. Settings use the existing persistence/export path.
 Validate hunt-spawn-preferences and hunt-settings; activate with coordinator-only restart.
+
+## Event entry and follower movement
+
+A follower that reaches a selected live event before its leader stays in that
+event map instead of following the leader's older outside position. Same-map
+following remains available. After an awaited event join, follower walking
+rechecks navigation revision, cancellation, leader identity/map and competing
+movement owners. Native Goobrawl exposed the previous early exit through the
+transporter. This client change requires publishing character assets with the
+supported full restart; a coordinator-only build does not activate it.
+
+Anniversary return reconciliation continues after event deselection removes all
+visitors from the enabled roster. The periodic tick reconciles an already
+dispatched return through its saved ownership checks, so completed travel can
+release the cycle even when Hunt has been turned off. Validate the native
+anniversary Hunt-off journey; activate with the coordinator-only restart.
+
+Rare acquisition from scatter farming switches to grouped mode before capturing
+its selection-admission state. This lets formation acknowledge the rare during
+the existing bounded window instead of treating the first regroup tick as a
+released selection. Native Hen and Golden Bat journeys exposed the failure.
+Rare retry stores now resolve the selected leader's current farming-profile
+dictionary, preserving rejection isolation when leadership changes after startup.
+Validate native rare damage/death/chest/Hunt journeys, plus retained retry-evidence
+checks. Build and use the supported coordinator restart to activate these changes.
+Rare field-generator carrier selection reads normalized heartbeat inventory
+entries (`slot` plus `item`), using the observed-status inventory type. The native
+Tiny P regression caught the previous raw-item assumption: the real generator
+remained unused while the Fairy avoided attacks and teleported. Validate actual
+runtime deployment/consumption, native damage/death/chest opening and the same
+Hunt's continuation. Build and restart the coordinator to activate this fix.
+Membership combat reset boundaries: a joining character carries its authoritative
+personal reset epoch into the destination farming controller. Invalidate that
+controller's older group before publishing fresh queues; do not weaken native
+stale-queue rejection or reset unrelated profiles. The native Phoenix Follow
+off/on journey covers convergence and subsequent rare combat/Hunt continuation.
+
+Franky deselection: the maintained character Franky-exit assemble handler must
+install protected convoy ownership immediately after clearing voluntary targeting.
+Do not wrap it in afterCombat: a surviving boss can otherwise prevent exit forever.
+Existing convoy defensive behavior and ordinary travel combat waits remain intact.
+
+A local convoy publishes its issued routeVersion at creation, before awaiting
+rendezvous. Otherwise fresh fast movement leases are rejected against version
+zero while a separated follower walks, causing repeated communication holds.
+The native Hunt follower-reconnect regression observes rendezvous identity and
+requires both actual Daisy rewards. Stale epoch, command, revision and runtime
+checks remain unchanged. This character-runtime fix requires publishing assets
+and the supported full restart; a coordinator-only build does not activate it.
+Route preparation gets a separate 60-second clock after the party finishes
+assembling. A long valid rendezvous must not consume that deadline before route
+installation begins. Assembly still has its 30-second no-progress and 120-second
+absolute limits; departure readiness keeps its independent deadline. The native
+partial-Town restart case rejects false preparation retries as well as stranded
+characters.

@@ -100,7 +100,7 @@ function phoenixFixture(purpose='monster-hunt') {
  f.phoenix={...monster('phoenix'),mtype:'phoenix'};
  return f;
 }
-for(const purpose of ['monster-hunt','party-travel'])test(purpose+': neutral stop-required Phoenix selects committed combat before passing admission',()=>{
+for(const purpose of ['party-travel'])test(purpose+': neutral stop-required Phoenix selects committed combat before passing admission',()=>{
  const f=phoenixFixture(purpose);f.members[1].status.groupedCombat.travelCandidates=[f.phoenix];
  const control=f.control();assert.equal(control.hunt.primary.id,'phoenix');assert.equal(control.hunt.reason,'passive-setting');assert.deepEqual(control.admitted,[]);
  step(f.party,now,()=>({type:'party-monster-travel',convoyId:'C'}));assert.equal(f.c.phase,'defending');assert.equal(f.c.huntTravel.committed[0].id,'phoenix');

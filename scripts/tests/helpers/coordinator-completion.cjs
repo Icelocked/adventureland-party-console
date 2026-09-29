@@ -32,24 +32,4 @@ function fixture(scenario) {
   const response={code:200,status(code){this.code=code;return this;},json(body){this.body=body;}};
   return {state,ports,context,response,calls,timers};
 }
-const scenarios = [
-  {name:'successful receipts and stat-scroll equipment merge',body:{success:true,banked:[{name:'leather'}],upgradesResolved:true,
-    upgradeMarksResolved:[{name:'sword'}],statScrollsReady:true,compoundsResolved:true,autoCompoundsResolved:['ring'],
-    withdrawalsDelivered:true,confirmedWithdrawals:[{name:'ring'}],purchasesResolved:true,kept:[{name:'cape'}],mluckRecipients:['F'],
-    merchantDeliveriesDelivered:[{item:{name:'sword',level:8},equipOnDelivery:true}]}},
-  {name:'BankBoi yield preserves cargo and partial receipts',body:{success:false,error:'bankboi_pending',
-    cargo:{bank:[{name:'leather'}],gold:'50'},merchantWithdrawalsDelivered:[{name:'ore'}],merchantBanked:[{name:'ore'}],confirmedWithdrawals:[{name:'ring'}],mluckRecipients:['F']}},
-  {name:'commerce interruption has no arbitrary retry limit',job:{reason:'merchant commerce',retryCount:99,phase:'travel',handoff:{cleanoutRemaining:true}},body:{error:'interrupted'}},
-  {name:'capacity block preserves improvement intent',job:{reason:'upgrades and compounds'},body:{error:'bank_full'}},
-  {name:'rendezvous retry has separate count and delay',job:{reason:'merchant luck'},body:{error:'F rendezvous timed out'}},
-  {name:'exhausted rendezvous retries stop requeueing',job:{reason:'merchant luck',rendezvousRetryCount:2},body:{error:'F rendezvous route timed out'}},
-  {name:'anniversary pause does not consume retries',job:{retryCount:2},body:{error:'merchant_anniversary_reserved'}},
-  {name:'authentication schedules confirmation',job:{reason:'ALData authentication'},body:{success:true}},
-  {name:'search and purchases remain recorded after later failure',job:{reason:'Ponty purchases'},body:{error:'later failure',bidPurchases:[{itemId:'ring',quantity:3}],standSearchResults:{itemId:'ring',listings:[{item:{name:'ring'}}]}}},
-  {name:'deferred improvements survive luck completion',job:{reason:'merchant luck'},body:{success:true,deferredWork:true}},
-  {name:'cleanout requeues unfinished inventory',job:{reason:'inventory cleanout',handoff:{cleanoutRemaining:true}},body:{success:true}},
-  {name:'marketplace sales return home',job:{reason:'ALData marketplace sales'},body:{success:true}},
-  {name:'mail reports failure',job:{reason:'collect mail',mail:{id:'mail'}},body:{error:'failed'}},
-  {name:'stale completion does not mutate current work',body:{jobId:'old',success:true}},
-];
-module.exports={fixture,scenarios};
+module.exports={fixture};

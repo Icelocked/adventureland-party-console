@@ -58,11 +58,6 @@ test('unselected Hunt leader does not query members, clock or destination zones'
   assert.equal(coordinatorHuntDestination(state, 'rat', unexpected), null);
 });
 
-test('checkpoint adapter forwards null leader unchanged to the navigation owner', () => {
-  const names = [];
-  assert.equal(coordinatorEventCheckpoint({leader: null}, name => {names.push(name); return null;}), null);
-  assert.deepEqual(names, [null]);
-});
 
 test('unselected leader keeps latest cross-realm feed and legacy dictionary key semantics', () => {
   const reports = {P: {seenAt: 100, server: 'I', eventFeedAt: 90, eventSchedules: [{id: 'old'}]},

@@ -1,5 +1,6 @@
 import type { Area, Catalog } from "../../../dashboard/lib/farming-zones.ts";
 import type { Point } from "../../navigation/contracts.ts";
+import type { ObservedCharacterStatus } from "../status/observed-status.ts";
 export type { Area, Catalog, Point };
 export interface Owner {
   leader: string;
@@ -23,6 +24,7 @@ export interface Sight extends Point {
 }
 export interface Encounter extends Owner {
   convoyId?: string;
+  convoyEpoch?: number;
   id: string;
   target: Sight;
   start: number;
@@ -83,7 +85,7 @@ export interface Status extends Point {
   joinedEvent?: string;
   movement?: { event?: unknown };
   eventTraveling?: boolean;
-  items?: ({ name: string } | null)[];
+  items?: ObservedCharacterStatus['items'];
   target?: { mtype: string } | null;
   rareSightings?: Sight[];
   groupedCombat?: {approach?: import('../../combat/pursuit.ts').ApproachReport;currentAttackersAt?:number;currentAttackers?:import('./travel-defense.ts').CurrentAttacker[]};
@@ -102,6 +104,7 @@ export interface Status extends Point {
     in: string;
     complete: boolean;
   };
+  convoyLoot?: Status['rareLoot'];
 }
 export interface Party {
   combatLogs?: Record<string, {at:number;type:string;message:string;details?:unknown}[]>;

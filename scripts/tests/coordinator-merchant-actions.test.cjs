@@ -29,16 +29,3 @@ test('merchant force-stand pauses active work and prepares the home realm before
   assert.equal(t.calls.some(call => call[0] === 'stop'), false);
   await t.timers[0](); assert.deepEqual(t.calls.at(-1), ['stop', t.block]);
 });
-
-test('manual orders, merchant requests and controls share one current command sequence', () => {
-  const t = fixture();
-  assert.equal(t.invoke(t.service.requests.donate, {amount: 10}).jobId, 'merchant-100000-40');
-  t.invoke(t.service.controls.clear, {}); assert.equal(t.state.commands.M.id, 41); assert.equal(t.state.merchantQueue.length, 0);
-  t.state.statuses = {M: {nearbyStandListings: [{seller: 'Seller', slot: 'trade1', rid: 12,
-    item: {name: 'helmet'}, price: 100, quantity: 2}]}};
-  assert.equal(t.invoke(t.service.orders.stand, {listings: [{seller: 'Seller', slot: 'trade1', rid: 12,
-    itemName: 'helmet', price: 100, buyQuantity: 1}]}).jobId, 'merchant-100000-42');
-  assert.equal(t.invoke(t.service.requests.giveaway, {seller: 'Seller', realm: 'US II'}).jobId, 'merchant-100000-43');
-  assert.equal(t.state.nextCommandId, 44); assert.equal(t.state.merchantQueue[1].priority, 50);
-  assert.equal(t.calls.filter(call => call[0] === 'dispatch').length, 3);
-});

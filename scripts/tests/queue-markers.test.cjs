@@ -107,12 +107,12 @@ test('dashboard event with no selected marker does not resurrect the old game ta
 });
 
 test('scatter publishes every fresh visible party target as red and drops stale or wrong-instance reports',()=>{
- const source=fs.readFileSync('characters/shared.js','utf8'),now=Date.now();
+ const source=fs.readFileSync('characters/shared.js','utf8'),now=10000;
  const entities={A:{id:'A',type:'monster',visible:true,hp:100},B:{id:'B',type:'monster',visible:true,hp:100}};
  const t=id=>({id,map:'main',in:'main',server:'USII'});
  const c=require('./helpers/client-dependencies.cjs').passingContext({root:{partyCombatState:{selectedTarget:'A'}},character:{map:'main',in:'main'},
  get_entity:id=>entities[id],reunionRealm:()=> 'USII',groupedFarming:()=>false,farmingMode:'scatter',navigationIntent:{},
- coordinatorClockOffset:0,eventTargetTypes:[],partyPositions:[{seenAt:now,activeCombatTarget:t('B')},{seenAt:now-5000,activeCombatTarget:t('stale')},{seenAt:now,activeCombatTarget:{...t('wrong'),in:'other'}}]});
+ Date:{now:()=>now},coordinatorClockOffset:0,eventTargetTypes:[],partyPositions:[{seenAt:now,activeCombatTarget:t('B')},{seenAt:now-5000,activeCombatTarget:t('stale')},{seenAt:now,activeCombatTarget:{...t('wrong'),in:'other'}}]});
  vm.runInContext(source.slice(source.indexOf('  function activeCombatTarget('),source.indexOf('  function acceptQueue(')),c);
  const markers=Array.from(c.queueMarkers());assert.deepEqual(markers.map(t=>t.id),['A','B']);
  assert.ok(markers.every((t,i)=>markerStyle(t,i).css==='#ef4444'));

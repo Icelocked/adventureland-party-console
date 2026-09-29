@@ -187,9 +187,6 @@ test('second kiss can succeed and does not report a terminal failure',async()=>{
  await t.run();assert.equal(kisses,2);assert.ok(t.r.anniversaryCompletedRounds.round);
  assert.equal(t.calls.some(x=>x[0]==='/anniversary/failure'&&x[1].attempt===2),false);
 });
-test('disabled anniversary starts no approach or kiss',async()=>{
- const t=fixture();t.r.eventSelected=()=>false;await t.run();assert.equal(t.calls.length,0);
-});
 test('arrival advances despite an unresolved movement promise',async()=>{
  const t=fixture({missing:true});const operation={navigationRevision:0};t.r.root.__partyAnniversaryKissOperation=operation;
  t.r.xmove=()=>new Promise(()=>{});

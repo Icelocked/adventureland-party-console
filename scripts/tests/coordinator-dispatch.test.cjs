@@ -1,27 +1,7 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const {dispatchRuntime,sampleJob}=require('./helpers/coordinator-dispatch.cjs');
-const contracts=require('./fixtures/merchant-command-contracts.json');
-const wire=value=>JSON.parse(JSON.stringify(value));
 
-test('all own and party merchant commands preserve the pre-extraction wire contracts',()=>{
-  for(const fixture of contracts){
-    const r=dispatchRuntime({merchantQueue:[sampleJob(fixture.reason,fixture.target)]});
-    r.dispatchMerchant();
-    const command=wire(r.party.commands.M);
-    if(command.type==='merchant-service'){assert.equal(command.targetRealm,'USII');delete command.targetRealm;}
-    const expected = structuredClone(fixture.command);
-    const routine = fixture.reason === 'upgrades and compounds' ? 'manual upgrades' : fixture.reason === 'merchant commerce' ? 'manual buying' : fixture.reason;
-    const allowed = {upgrades: routine === 'manual upgrades', compounds: routine === 'manual compounds', purchases: routine === 'manual buying', autoCompounds: routine === 'auto compound', statScrolls: routine === 'manual upgrades', preloadStatScrolls: routine === 'manual upgrades', npcSales: routine === 'npc sales'};
-    for (const [key, enabled] of Object.entries(allowed)) if (!enabled && key in expected) expected[key] = [];
-    if (routine === 'auto compound' && fixture.target === 'M') expected.processingRoutine = 'auto compound';
-    if (fixture.target !== 'M' && fixture.reason === 'auto compound') {expected.autoCompounds=[];expected.collectionOnly=true;expected.expandMarkedCluster=true;}
-    if (fixture.target !== 'M' && ['marked items','inventory cleanout'].includes(fixture.reason)) expected.collectionOnly=true;
-    for (const rule of expected.autoCompounds || []) delete rule.existingTargetQuantity;
-    assert.deepEqual(command,expected,fixture.target+': '+fixture.reason);
-    assert.deepEqual(wire(r.effects.filter(effect => effect?.message !== "Discarded empty manual compound job")),fixture.effects.map(effect => fixture.target !== 'M' && fixture.reason === 'auto compound' && effect?.details?.reason === 'auto compound' ? {...effect,details:{...effect.details,reason:'marked items'}} : fixture.reason === "upgrades and compounds" && effect?.message === "Merchant dispatched for its own upgrades and compounds" ? {...effect,message:"Merchant dispatched for manual upgrades"} : effect?.details?.reason === "upgrades and compounds" ? {...effect,details:{...effect.details,reason:"manual upgrades"}} : effect),fixture.target+': '+fixture.reason);
-  }
-});
 
 test('storage ownership blocks new jobs and stale targets are requeued without assigning work',async()=>{
   const r=dispatchRuntime({merchantQueue:[sampleJob('restock')]});

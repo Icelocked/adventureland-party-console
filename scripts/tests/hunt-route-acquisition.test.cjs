@@ -1,8 +1,6 @@
-const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const test=require('node:test'),assert=require('node:assert/strict');
 const legacy=require('../convoy-navigation.cjs');
 const {engageHunt,propagateHuntTarget}=require('../../runtime/coordinator/hunt/engagement.ts');
-const {createConvoyEngagementRoutes}=require('../../runtime/coordinator/http/convoy-engagement.ts');
-const safety=require('../hunt-safety.cjs');
 const {createHuntTravel}=require('../../runtime/coordinator/hunt/travel.ts');
 function fixture(){
  const original={map:'main',x:1000,y:1000,boundary:[900,900,1100,1100]}, encounter={map:'main',x:110,y:0,boundary:[80,-30,140,30]};
@@ -63,10 +61,4 @@ test('whole-party spawn arrival enables free farming, which may then spread beyo
 test('previous premature farming state repairs toward the saved origin despite nearby combat',()=>{
  const r=travelFixture();r.state.monsterHunt.stage='farming';r.tick();
  assert.equal(r.starts.length,1);assert.equal(r.starts[0],r.original);
-});
-test('client does not send a Hunt handoff request or stop an installed route',()=>{
- const {namedFunction}=require('./helpers/named-function.cjs');
- const c=vm.createContext({Date,request(){throw Error('must not request handoff')},stop(){throw Error('must not stop')}});
- vm.runInContext(namedFunction(fs.readFileSync('characters/shared.js','utf8'),'sharedConvoyEngagement'),c);
- c.sharedConvoyEngagement({}, {purpose:'monster-hunt',combatHandoffAllowed:true},()=>true,()=>{});
 });

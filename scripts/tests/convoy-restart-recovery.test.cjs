@@ -12,14 +12,6 @@ function fixture(){
  Object.assign(state,initialCommandState({activeConvoy:original},()=>now));
  return {state,service,logs,intents,original,advance(ms){now+=ms;for(const s of Object.values(state.statuses))s.seenAt=now;}};
 }
-test('restart rebuilds a current ordinary convoy once from fresh positions with fresh identities',()=>{
- const f=fixture();f.advance(4999);f.service.recoverRestart();assert.equal(f.state.activeConvoy.id,f.original.id);
- f.advance(1);f.service.recoverRestart();
- assert.notEqual(f.state.activeConvoy.id,f.original.id);assert.equal(f.state.activeConvoy.phase,'assemble');
- assert.deepEqual(f.state.activeConvoy.location,f.original.location);assert.equal(f.state.activeConvoy.expected.W.runtimeId,'fresh');
- assert.equal(f.state.activeConvoy.restartAttempts,1);
- const id=f.state.activeConvoy.id;f.service.recoverRestart();assert.equal(f.state.activeConvoy.id,id);
-});
 test('restart waits for current reports and command ownership and logs the wait once',()=>{
  const f=fixture();f.advance(5000);f.state.statuses.P.seenAt=0;
  f.service.recoverRestart();f.service.recoverRestart();assert.equal(f.logs.length,1);

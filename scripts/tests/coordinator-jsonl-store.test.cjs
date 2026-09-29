@@ -34,7 +34,7 @@ test('recovers a completed replacement only if the main file is absent',t=>{
  const [main,rotation]=fixture(t);fs.writeFileSync(rotation,'{"keep":7}\n');const s=new Store(main,rotation);assert.equal(s.get('keep'),7);s.close();
 });
 
-for(const code of ['EPERM','EACCES','EBUSY'])test('temporary '+code+' during rotation retains writes and defers compaction',t=>{
+for(const code of ['EPERM','EACCES','EBUSY'])test('temporary '+code+' during rotation retains writes and defers compaction',async t=>{
  const [main,rotation]=fixture(t),s=new Store(main,rotation);t.after(()=>s.close());
  s.set('keep',1);s.set('remove',2);let now=1000,calls=0;
  const rename=fs.renameSync;t.mock.method(Date,'now',()=>now);
@@ -44,7 +44,16 @@ for(const code of ['EPERM','EACCES','EBUSY'])test('temporary '+code+' during rot
  s.set('keep',3);s.delete('remove');s.refactor();assert.equal(calls,1,'no tight compaction retry loop');
  const replay=()=>Object.assign({},...fs.readFileSync(main,'utf8').trim().split('\n').map(JSON.parse));
  assert.deepEqual(replay(),{keep:3,remove:null},'original journal contains writes after failed rename');
- now+=30000;s.refactor();assert.equal(calls,2);assert.deepEqual(replay(),{keep:3});
+ now+=30000;s.refactor();assert.equal(calls,2);
+ // Windows scanners can also deny the real rename after our injected failure.
+ // Each additional retry still waits the full logical backoff and preserves data.
+ for(let attempt=0;Object.hasOwn(replay(),'remove')&&attempt<20;attempt++) {
+  assert.deepEqual(replay(),{keep:3,remove:null});
+  const previousCalls=calls;s.refactor();assert.equal(calls,previousCalls);
+  await new Promise(resolve=>setTimeout(resolve,25));
+  now+=30000;s.refactor();assert.equal(calls,previousCalls+1);
+ }
+ assert.deepEqual(replay(),{keep:3});
  s.close();const restored=new Store(main,rotation);try{assert.equal(restored.get('keep'),3);assert.equal(restored.get('remove'),undefined);}finally{restored.close();}
 });
 

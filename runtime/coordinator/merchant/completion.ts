@@ -81,15 +81,18 @@ export function createMerchantCompletion(state: CompletionState, ports: Completi
     const deferred = body.success && body.deferredWork;
     releaseMerchantInterruption(state, job.id);
     delete state.commands[String(state.merchantCharacter)];
-    const recipient = state.commands[String(name)];
-    if (!body.success && recipient?.type === "merchant-handoff" &&
-        (recipient.jobId === undefined || recipient.jobId === job.id)) delete state.commands[String(name)];
+    releaseFailedRecipient(name, job, body);
     state.merchantCurrent = null;
     authenticate(job, body);
     retries.enqueue(job, decision);
     if (deferred) deferredImprovements(job);
     if (repeatCleanout) ports.queue([name], "inventory cleanout");
     finish(job);
+  }
+  function releaseFailedRecipient(name: CompletionJob['target'], job: CompletionJob, body: CompletionReport): void {
+    const recipient = state.commands[String(name)];
+    if (!body.success && recipient?.type === "merchant-handoff" &&
+        (recipient.jobId === undefined || recipient.jobId === job.id)) delete state.commands[String(name)];
   }
   return { complete };
 }

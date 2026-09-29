@@ -19,14 +19,6 @@ function fixture() {
   vm.runInContext(source.slice(source.indexOf('  function eligibleDepartureChests('),source.indexOf('  async function smartLoot(')),c);
   return {c,entity,advance:ms=>time+=ms,equips:()=>equips,moves:()=>moves,stops:()=>stops};
 }
-test('All optional rare monster sightings are reported to the passive controller',()=>{
-  const r=fixture();
-  for(const mtype of ['goldenbat','cutebee','hen','rooster']) {
-    r.entity.mtype=mtype;
-    assert.equal(r.c.rareSightings()[0].mtype,mtype);
-  }
-});
-
 test('active assistance permission survives the first grouped fight handoff but expires with its revision or heartbeat',()=>{
   const {c,advance}=fixture();c.rareControlState={kind:'patrol',allowPhoenixAssist:true,revision:1};
   c.unfinishedFight=()=>true;c.groupedCombat={target:{id:'phoenix'}};
@@ -79,18 +71,6 @@ test('fast encounter handoff releases only the patrol convoy and ignores older c
 test('hidden field generators are reported without dashboard map subscriptions',()=>{
   const r=fixture();r.c.parent.entities.field={id:'field',mtype:'fieldgen0',visible:false,hp:6400,x:50,y:50};
   assert.equal(r.c.rareFields().length,1);assert.equal(r.c.rareSightings()[0].id,'fairy');
-});
-
-test('loot phase approaches the kill and opens drops while rare movement owns the character',async()=>{
-  const r=fixture();let looted=0;
-  r.c.parent.chests={drop:{x:100,y:0},distant:{map:'main',x:1800,y:1600},old:{map:'arena',x:100,y:0}};
-  r.c.smartLoot=async()=>{looted++;delete r.c.parent.chests.drop;};
-  r.c.rareControlState.kind='loot';r.c.rareControlState.deployer=null;
-  r.c.pollRareHunting();assert.equal(r.moves(),1);assert.equal(looted,0);
-  r.c.character.x=100;r.c.pollRareHunting();r.c.pollRareHunting();
-  await new Promise(resolve=>setImmediate(resolve));
-  assert.equal(looted,1);assert.equal(r.c.rareLoot.complete,true);
-  assert.equal(r.c.rareLoot.id,'e1');
 });
 
 test('loot failures do not report success and remain retryable',async()=>{

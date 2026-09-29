@@ -45,7 +45,7 @@ function reassembleReturn(state: SharedState, c: SharedConvoy): void {
   delete c.returnLegs; c.townFirst = false; c.completed = [];
   c.rally = c.returnTownRally || point(state.statuses[c.leader]!);
   c.failure = undefined; c.failureCode = undefined;
-  delete c.sharedStartedAt; delete c.sharedProgressAt; delete c.sharedWaitingAt; delete c.sharedDistances;
+  delete c.sharedStartedAt; delete c.sharedProgressAt; delete c.sharedPreparationStartedAt; delete c.sharedWaitingAt; delete c.sharedDistances; delete c.sharedPositions;
   clearSharedRoute(c);
   issue(state, c, "assemble");
 }
@@ -75,7 +75,7 @@ function begin(state: SharedState, c: SharedConvoy, now: number): boolean {
   c.rally = c.returnTownRally || point(leader); c.departAt = null; c.sharedReadySince = 0;
 
   c.routeServer = leader.server;
-  c.sharedStartedAt = now; c.sharedProgressAt = now; c.sharedDistances = {};
+  c.sharedStartedAt = now; c.sharedProgressAt = now; c.sharedPreparationStartedAt = now; c.sharedDistances = {}; c.sharedPositions = {};
   delete c.sharedWaitingAt;
   delete c.routePublishedAt;
   c.runtimes = Object.fromEntries(members(c).map(n => [n, characterRuntime(state.statuses[n])!]));
@@ -127,12 +127,41 @@ function acknowledgementReason(state:SharedState,c:SharedConvoy,name:string):str
 function observeProgress(state: SharedState, c: SharedConvoy, now: number): void {
   const distances = c.sharedDistances ||= {};
   for (const name of members(c)) {
-    const d = distance(state.statuses[name]!, c.rally);
+    const status = state.statuses[name];
+    if (!fresh(status,now) || status.seenAt > now + 500) continue;
+    const d = distance(status, c.rally);
     if (distances[name] === undefined || d < distances[name]! - 5) { distances[name] = d; c.sharedProgressAt = now; }
+    observeRendezvousMovement(state,c,name,status,now);
   }
+}
+function rendezvousOwner(state: SharedState, c: SharedConvoy, name: string, status: SharedStatus): string | null {
+  const command=state.commands[name], report=status.convoyNavigation;
+  if (!command || !report || lostOwner(state,c,name)) return null;
+  if (command.epoch!==c.epoch) return null;
+  if (command.convoyId!==report.id || command.epoch!==report.epoch || command.id!==report.commandId) return null;
+  if (command.navigationRevision!==report.navigationRevision || characterRuntime(status)!==report.runtimeId) return null;
+  return JSON.stringify([command.id,command.epoch,command.navigationRevision,report.runtimeId]);
+}
+function observeRendezvousMovement(state: SharedState,c: SharedConvoy,name: string,status: SharedStatus,now: number): void {
+  const owner=rendezvousOwner(state,c,name,status);
+  if (!owner) return;
+  const samples=c.sharedPositions ||= {}, previous=samples[name];
+  if (!previous || previous.owner!==owner) {
+    samples[name]={...point(status),observedAt:status.seenAt,owner}; return;
+  }
+  if (status.seenAt<=previous.observedAt || distance(status,previous)<5) return;
+  // Obstacle detours can move away from the rally. Fresh owned displacement is
+  // progress too; the absolute two-minute assembly ceiling still bounds loops.
+  samples[name]={...point(status),observedAt:status.seenAt,owner};
+  c.sharedProgressAt=now;
 }
 function assemblyTimeout(c: SharedConvoy, now: number): boolean {
   return now - c.sharedStartedAt! >= 120000 || now - c.sharedProgressAt! >= 30000;
+}
+function preparationTimeout(c: SharedConvoy, assembling: boolean, now: number): boolean {
+  if (assembling) { c.sharedPreparationStartedAt = null; return false; }
+  if (c.sharedPreparationStartedAt === null) c.sharedPreparationStartedAt = now;
+  return now - (c.sharedPreparationStartedAt ?? c.sharedStartedAt!) >= 60000;
 }
 function authorizedHold(state: SharedState, c: SharedConvoy, name: string): boolean {
   const intent = state.navigationIntents?.[name], command = state.commands[name];
@@ -270,7 +299,7 @@ export function createSharedConvoyNavigation(legacy: ConvoyNavigationPlatform,
       c.sharedReadySince = 0;
       const assembling = members(c).some(n => distance(state.statuses[n]!, c.rally) > 55 || state.statuses[n]!.moving);
       if (assembling && assemblyTimeout(c, now)) return recover(state, "Rendezvous made no progress", now);
-      if (!assembling && now - c.sharedStartedAt! >= 60000) return recover(state, "Shared route preparation timed out", now);
+      if (preparationTimeout(c, assembling, now)) return recover(state, "Shared route preparation timed out", now);
       return false;
     }
     if (!c.sharedReadySince) { c.sharedReadySince = now; return true; }
@@ -339,7 +368,7 @@ export function createSharedConvoyNavigation(legacy: ConvoyNavigationPlatform,
     return changed;
   }
   function bootstrapWalking(state: SharedState, c: SharedConvoy, now: number): boolean {
-    c.sharedStartedAt ??= now; c.sharedProgressAt ??= now; c.sharedDistances ||= {};
+    initializeWalkingProgress(c, now);
     if (!compatible(state,c,now)) {
       c.sharedWaitingAt ??= now;
       if (now-c.sharedWaitingAt>30000) return terminal(state,
@@ -355,6 +384,9 @@ export function createSharedConvoyNavigation(legacy: ConvoyNavigationPlatform,
     observeProgress(state,c,now);
     if(assemblyTimeout(c,now))return recover(state,'Rendezvous readiness timed out: leader moving, transporting, or assembly acknowledgement pending',now);
     return false;
+  }
+  function initializeWalkingProgress(c: SharedConvoy, now: number): void {
+    c.sharedStartedAt ??= now; c.sharedProgressAt ??= now; c.sharedDistances ||= {};
   }
   function awaitTownRally(state:SharedState,c:SharedConvoy,now:number):boolean {
     observeProgress(state,c,now);

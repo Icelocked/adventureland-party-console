@@ -30,8 +30,8 @@ export function createAnniversaryReturns(
 
   function waiting(cycle: AnniversaryCycle, names: string[], force: boolean): boolean {
     if (
-      ports.now() < Number(cycle.startsAt) ||
-      (!cycle.abortedAt && names.includes(cycle.target || "") && ports.now() < deadline(cycle))
+      !cycle.abortedAt && (ports.now() < Number(cycle.startsAt) ||
+        (names.includes(cycle.target || "") && ports.now() < deadline(cycle)))
     )
       return true;
     const ready = Object.keys(state.returnReady || {});
@@ -141,13 +141,14 @@ export function createAnniversaryReturns(
 
   function tick(): void {
     const cycle = state.eventCycle;
-    if (cycle && (cycle.returnCompletedAt || cycle.supersededAt)) {
+    // Deselection removes visitors from status-based observation. Their already
+    // dispatched return still needs arrival/ownership reconciliation each tick.
+    if (cycle && (cycle.returnDispatchedAt || cycle.returnCompletedAt || cycle.supersededAt)) {
       ports.reconcile(cycle);
       return;
     }
     if (
       !cycle ||
-      cycle.returnDispatchedAt ||
       !Number.isFinite(Number(cycle.endsAt))
     )
       return;

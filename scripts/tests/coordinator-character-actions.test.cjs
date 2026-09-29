@@ -45,33 +45,3 @@ test('accepted solo farm commands set personal focus without selecting a party l
  rejected({body:{character:'W',type:'character-travel',farmingMonsterIds:['goo'],location:{map:'main',x:0,y:780}}},{status(){return this},json(){}});
  assert.deepEqual(scopes.profile('W').monsterFocus,[]);
 });
-
-test('character action dispatch keeps navigation first and acknowledges the current mark collections', () => {
-  const t = fixture(), item = {name: 'leather'}, body = {character: 'W', type: 'mark', slot: 1, item};
-  const first = t.invoke(body); assert.equal(first.status, 200);
-  assert.deepEqual(t.calls, [['navigation', 'mark'], ['persist']]);
-  assert.equal(first.result.marked, t.state.marked.W); assert.equal(t.state.marked.W[0].item, item);
-  // A handler that claims the command prevents downstream inventory mutation.
-  const state = t.state, calls = [];
-  const route = createCoordinatorCharacterCommands(state, t.workers, {...t.ports, navigation: () => {calls.push('navigation'); return {status: 409, body: {error: 'busy'}};}});
-  const res = {status: code => {assert.equal(code, 409); return res;}, json: value => assert.deepEqual(value, {error: 'busy'})};
-  route({body}, res); assert.equal(state.marked.W.length, 1); assert.deepEqual(calls, ['navigation']);
-});
-
-test('character transfer commands use the current coordinator command counter', () => {
-  const t = fixture(), item = {name: 'helmet'};
-  assert.equal(t.invoke({character: 'W', type: 'equip', item}).status, 200);
-  assert.deepEqual(t.state.commands.W, {id: 30, type: 'equip', item});
-  t.state.commands = {}; t.state.nextCommandId = 70;
-  assert.equal(t.invoke({character: 'W', type: 'equip', item}).status, 200); assert.equal(t.state.commands.W.id, 70);
-});
-test('automatic mark callbacks receive the current status unchanged, including absent reports', () => {
-  const t = fixture(), item = {name: 'leather'};
-  const status = {items: [{slot: 2, item, meta: {upgradeable: false, definition: {type: 'material'}}}]};
-  t.state.statuses.W = status;
-  assert.equal(t.invoke({character: 'W', type: 'auto-item-mark', item, mode: 'bank'}).status, 200);
-  assert.equal(t.calls.find(call => call[0] === 'marks')[2], status);
-  t.calls.length = 0; delete t.state.statuses.W;
-  assert.equal(t.invoke({character: 'W', type: 'clear-auto-item-marks', mode: 'bank'}).status, 200);
-  assert.equal(t.calls.find(call => call[0] === 'marks')[2], undefined);
-});

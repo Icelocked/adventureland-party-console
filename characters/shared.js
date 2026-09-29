@@ -9384,7 +9384,12 @@
       if (command.purpose === "franky-exit" && command.phase === "assemble") {
         joinedEvent = root.__partyJoinedEvent = null;
         partyLocation = null;
-        return afterCombat(function () { return coordinatedMonsterTravel(command); }, "leaving Franky with the party");
+        // The authorized protected exit supersedes voluntary boss combat.
+        // Waiting for Franky's death here prevents the exit owner from installing.
+        combatTargetId = null;
+        publishCombatSelection(null, true);
+        if (root.partyRoleRunner) root.partyRoleRunner.resetTargeting();
+        return coordinatedMonsterTravel(command);
       }
       if(command.purpose === "party-travel" && command.phase === "assemble")
         return afterCombat(function(){return coordinatedMonsterTravel(command);},"party travel");
@@ -11110,6 +11115,12 @@
     return true;
   }
 
+  function followLeavesCurrentEvent(destination) {
+    var event = activeCombatEvent();
+    return !!(event && destination && destination.map !== character.map &&
+      G.maps[character.map] && G.maps[character.map].event === event.name);
+  }
+
   var goobrawlEvidenceCache = { at: 0, map: null, live: false };
   function hasGoobrawlCombat() {
     if (character.map !== "goobrawl") return false;
@@ -12139,13 +12150,28 @@
     if(navigationIntent.cancelled || Number(command.navigationRevision||0)!==Number(navigationIntent.revision||0))return false;
     var c=convoyTraveling;
     if(c && (c.id!==command.convoyId || c.epoch>Number(command.epoch) || c.commandId>=command.id))return false;
+    if(c && Number(c.navigationRevision||0)!==Number(command.navigationRevision||0))return false;
+    if(!c) {
+      // Preparation and defense may be coalesced between heartbeats. Install
+      // the complete authorized owner before acknowledging this stopped route.
+      if(!coldConvoyDefenseAllowed(command))return false;
+      c=createLocalConvoy(command);
+    }
     if(c) {
       c.commandId=command.id;c.epoch=Number(command.epoch);c.holdRequested=false;
       delete c.communication;delete c.failure;
       if(c.phase==='held' || c.phase==='communication-hold')c.phase='stopped';
     }
     interruptConvoyForDefense(command.convoyId,command.epoch);
-    return true;
+    return !!(convoyTraveling===c && c.defensePaused);
+  }
+  function coldConvoyDefenseAllowed(command) {
+    if(!runtimeCurrent() || command.phase!=='defending' || command.routeProtocol!==4)return false;
+    if(typeof command.convoyId!=='string' || !command.convoyId || !Number.isFinite(command.epoch) || !Number.isFinite(command.id))return false;
+    if(!command.location || typeof command.location.map!=='string' || !Number.isFinite(command.location.x) || !Number.isFinite(command.location.y))return false;
+    if(!Array.isArray(command.participants) || command.participants.indexOf(character.name)<0)return false;
+    if(command.continuousReturn===1 || command.returnWalking || command.navigationExempt && command.purpose!=='anniversary-return')return false;
+    return ['escape-recovery','franky-exit','event-return','rare-hunt','phoenix-patrol'].indexOf(command.purpose)<0;
   }
   function interruptConvoyForDefense(id, epoch, aggressor) {
     var c=convoyTraveling;
@@ -13671,9 +13697,12 @@
     return legs;
   }
 
-  async function coordinatedMonsterTravel(command) {
+  function createLocalConvoy(command) {
     var convoy = { id: command.convoyId, epoch: Number(command.epoch), commandId: command.id,
       routeProtocol: command.routeProtocol, holdRequested: command.phase === 'shared-hold',
+      // Fast lease responses arrive during rendezvous, before route preparation
+      // finishes. Publish the issued identity before awaiting any native travel.
+      routeVersion: command.routeVersion || 0,
       navigationRevision: Number(command.navigationRevision) || 0,
       generation: runtimeGeneration, destination: command.location, cancelled: false,
       phase: "taking-control", routeStarts: 0, replanStarts: 0,
@@ -13683,6 +13712,11 @@
     if(command.purpose === "party-force-travel")forceTraveling=true;
     if (command.purpose !== "grouped-approach" && !/^shared-walk/.test(command.purpose||""))
       partyLocation = command.purpose === "franky-exit" ? null : command.location;
+    followingLeader=false;
+    return convoy;
+  }
+  async function coordinatedMonsterTravel(command) {
+    var convoy=createLocalConvoy(command);
     function ownsConvoy() {
       return runtimeCurrent() && !convoy.cancelled && !convoy.defensePaused && convoyTraveling === convoy &&
         (!navigationIntent.cancelled || command.navigationExempt) && Number(command.navigationRevision || 0) === Number(navigationIntent.revision);
@@ -15283,6 +15317,9 @@
     followLeaderIfFar: async function (maximumDistance) {
       if (farmApproach.route || farmingMode === "scatter") return false;
       if (partyTownActive || partyConvoyActive || convoyTraveling || departurePending || bankQueued || !this.shouldFollowLeader() || !leaderLocation) return false;
+      // A follower can arrive before its leader. Event combat owns that map;
+      // an older leader position must not send the follower back out of it.
+      if (followLeavesCurrentEvent(leaderLocation)) return false;
       // Movement belonging to an active kite must not be mistaken for leader-following.
       if (kiteState.targetId) return false;
       maximumDistance = maximumDistance || 150;
@@ -15291,9 +15328,20 @@
       var dy = leaderLocation.y - character.y;
       var distance = Math.sqrt(dx * dx + dy * dy);
       if (character.map === leaderLocation.map && distance <= maximumDistance) return false;
+      var followRevision = Number(navigationIntent.revision) || 0;
+      var followedName = leader;
+      var followDestination = Object.assign({}, leaderLocation);
       followingLeader = true;
       try {
-        await joinEventDestination(leaderLocation);
+        await joinEventDestination(followDestination);
+        // Joining awaits native teleportation. Recheck ownership and the latest
+        // leader report before any walking continuation can take movement.
+        if (!runtimeCurrent() || character.rip || navigationIntent.cancelled || escapeOwns() ||
+            (Number(navigationIntent.revision) || 0) !== followRevision || leader !== followedName ||
+            !this.shouldFollowLeader() || !leaderLocation || leaderLocation.map !== followDestination.map ||
+            followLeavesCurrentEvent(leaderLocation) || partyTownActive || partyConvoyActive ||
+            convoyTraveling || departurePending || bankQueued || eventTraveling || eventExitOwnsMovement() ||
+            anniversaryBusy || anniversaryStaging) return false;
         await smart_move(leaderLocation);
         return true;
       } catch (error) {

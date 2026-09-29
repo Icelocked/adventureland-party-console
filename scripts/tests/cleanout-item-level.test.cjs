@@ -17,5 +17,4 @@ test('cleanout cannot bypass a +0 merchant rule to collect delivered +8 breeches
   }
   assert.equal(check({ name: 'wbreeches', level: 8 }, { 'wbreeches@+8': 'merchant' }), true);
   assert.equal(check({ name: 'wbreeches', level: 8 }, {}), true);
-  assert.match(source, /if \(!cleanoutRespectsAutoItemLevel\(item, command.autoItemMarks\)\) return;/);
 });

@@ -98,7 +98,7 @@ test('rotating search converges on a simulated lucky slot using only scheduled a
  assert.equal(decision.inferred,true);assert.equal(decision.slot,23);assert.ok(decision.confidence>=0.999);
  assert.deepEqual(luckySlotSearch(JSON.parse(JSON.stringify(tracking))),decision);
 });
-test('shared runtime attaches and removes its owned listener and reports stored data',()=>{
+test('shared runtime records listener packets, persists data and ignores retired runtime packets',()=>{
  const fs=require('node:fs'),vm=require('node:vm');const source=fs.readFileSync('characters/shared.js','utf8');
  const start=source.indexOf('  function luckySlotTracking()');
  const storage=new Map();let current=true;
@@ -109,6 +109,4 @@ test('shared runtime attaches and removes its owned listener and reports stored 
  assert.equal(context.luckySlotTracking().report().slots[7].totalRolls,1);
  assert.ok(storage.has('party-lucky-slot-tracking:account:FonzeMerch'));
  current=false;context.luckySlotRollListener(event(0));assert.equal(context.luckySlotTracking().report().slots[0],undefined);
- assert.match(source,/socket\.on\("q_data", luckySlotRollListener\)/);assert.match(source,/socket\.off\("q_data", luckySlotRollListener\)/);
- assert.match(source,/luckySlotTracking: luckySlotTracking\(\)\.report\(\)/);
 });

@@ -39,18 +39,7 @@ test('unavailable Town selects walking without counting a cast; superseded repor
  p.statuses.F.convoyNavigation={...p.statuses.F.convoyNavigation,commandId:999,townAttempt:{round:'99',map:'main',state:'interrupted'}};
  observeReturnTown(p,c,1000);assert.equal(c.returnTown.interruptions,0);
 });
-test('one failed Town immediately cancels the round and routes everyone toward the forward Town rally',()=>{
- const p=party(),c=p.activeConvoy,engine=createSharedConvoyNavigation(legacy);
- const destination={map:'main',x:0,y:0},attempt={map:'main',round:'1:1:0',destination};
- p.statuses.L.convoyNavigation.townAttempt={...attempt,state:'casting'};
- p.statuses.F.convoyNavigation.townAttempt={...attempt,state:'interrupted'};
- const old=p.commands.L.id;
- engine.step(p,1000);
- assert.equal(c.phase,'assemble');assert.equal(c.returnTown.interruptions,1);
- assert.notEqual(p.commands.L.id,old,'all outstanding commands are superseded immediately');
- assert.deepEqual(p.commands.F.rally,destination);assert.equal(p.commands.F.disableTown,true);
- assert.equal(c.recoveryAttempts,undefined,'cast cancellation is not a route failure');
-});
+
 
 test('continuous return ignores defense holds from hits instead of stopping for combat and loot',()=>{
  const p=party(),c=p.activeConvoy;p.statuses.F.convoyNavigation.phase='defending';

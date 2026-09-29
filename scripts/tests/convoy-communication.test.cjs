@@ -136,7 +136,8 @@ function client(){
  const convoy={phase:'arrived'},cmd={id:1,convoyId:'c',epoch:2,navigationRevision:3,routeVersion:4};
  return {r,convoy,logs,timers,calls,start:()=>r.acknowledgeConvoyArrival(convoy,cmd,()=>owns),cancel(){owns=false;},async advance(){const t=timers.shift();if(t){now+=t.ms;t.fn();}await new Promise(setImmediate);}};
 }
-for(const failure of [{kind:'network',status:0},{kind:'timeout',status:0},{kind:'http',status:408},{kind:'http',status:429},{kind:'http',status:503}])
+// Native completion-request and completion-response loss journeys cover network recovery.
+for(const failure of [{kind:'timeout',status:0},{kind:'http',status:408},{kind:'http',status:429},{kind:'http',status:503}])
 test('arrival survives '+JSON.stringify(failure)+' and retries only the acknowledgement',async()=>{
  const f=client();let requests=0;
  f.r.request=async(path,options)=>{assert.equal(path,'/convoy-complete');assert.equal(options.timeout,5000);requests++;

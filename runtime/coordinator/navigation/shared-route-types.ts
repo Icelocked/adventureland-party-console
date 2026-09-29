@@ -71,6 +71,9 @@ export interface SharedConvoy extends PartyConvoy {
   returnRuntimeRetries?: number;
   routeProtocol?: number; routeVersion?: number; recoveryAttempts?: number;
   sharedStartedAt?: number; sharedProgressAt?: number; sharedDistances?: Record<string, number>;
+  // null while assembling; route preparation receives its own budget once settled.
+  sharedPreparationStartedAt?: number | null;
+  sharedPositions?: Record<string, RoutePoint & { observedAt: number; owner: string }>;
   sharedReadySince?: number; routePublishedAt?: number; sharedStoppedAt?: number;
   sharedWaitingAt?: number;
   readinessStartedAt?: number;

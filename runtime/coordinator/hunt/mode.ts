@@ -1,7 +1,8 @@
 import type { HuntCycle, HuntStatus } from "./contracts.ts";
 import type { ReturnLocation } from "../events/return-types.ts";
+import type { HuntEventTrips } from "../events/hunt-trip.ts";
 
-export interface HuntModeState {
+export interface HuntModeState extends HuntEventTrips {
   eventReturn?: import("../events/return-types.ts").EventRecovery | null;
   farmingPolicy: string;
   monsterHunt: HuntCycle | null;
@@ -48,8 +49,16 @@ export function createHuntMode(state: HuntModeState, ports: HuntModePorts) {
     }
   }
   function exit(): void {
+      // Event permission owns departure before the next heartbeat reports the
+      // new map. Turning Hunt off must not replace that entry/combat with a
+      // backup convoy; event recovery will select the current normal policy.
+      const eventOwnsDeparture = ports.participants().some(name => {
+        const trip = state.huntEventTrips?.[name]?.at(-1);
+        return !!trip && !trip.endedAt;
+      });
       ports.release();
       reset();
+      if (eventOwnsDeparture) return;
       const destination = ports.selectedDestination(state.leader);
       if (destination)
         ports.convoy(

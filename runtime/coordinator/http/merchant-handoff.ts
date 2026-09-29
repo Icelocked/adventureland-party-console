@@ -3,6 +3,7 @@ import { collectionPickups, type PickupState } from "../merchant/collection-pick
 import { ruleOwner } from "../inventory/shared-rules.ts";
 import { craftProtection } from "../merchant/craft-reservations.ts";
 import { scopeWork } from '../merchant/command-scope.ts';
+import { collectsPartyItems } from '../merchant/pickup-jobs.ts';
 import { receiveDeconstruction, type DeconstructionMark } from "../merchant/deconstruction.ts";
 import { receivePlayerSales } from "../merchant/player-npc-sales.ts";
 import type { NpcSale } from "../merchant/npc-sales.ts";
@@ -76,11 +77,12 @@ export function createMerchantHandoffRoutes(state: HandoffState, ports: HandoffP
   }
   function scopeHandoff(name: string, job: HandoffJob, command: NonNullable<HandoffState["commands"][string]>) {
     const scoped = scopeWork(job, command);
-    if (!['marked items', 'inventory cleanout'].includes(job.reason)) scoped.marked = [];
+    const collection = collectsPartyItems(job.reason);
+    if (!collection) scoped.marked = [];
     if (job.reason === 'npc sale pickup' || job.reason === 'auto npc sale pickup') {
       scoped.merchantMarked = (state.npcSaleMarks || []).filter(mark => mark.character === name && mark.source === 'character' && Boolean(mark.auto) === (job.reason === 'auto npc sale pickup')).map(mark => ({slot: mark.slot, item: mark.item}));
-    } else if (job.reason !== 'marked items' && job.reason !== 'inventory cleanout' && job.reason !== 'deconstruction pickup') scoped.merchantMarked = [];
-    if (['marked items', 'inventory cleanout'].includes(job.reason)) {
+    } else if (!collection && job.reason !== 'deconstruction pickup') scoped.merchantMarked = [];
+    if (collection) {
       const pickups = collectionPickups(state, name);
       scoped.marked = pickups.bank;
       scoped.merchantMarked = pickups.keep;

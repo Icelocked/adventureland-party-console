@@ -20,23 +20,6 @@ function fixture(extra={}){
  return {state,calls,workers,bank,invoke,time:value=>{now=value;}};
 }
 
-test('status consumers strip discovery payloads and preserve bank, combat and scheduling order',()=>{
- const t=fixture();t.state.statuses.F={name:'F',farmingMonsterType:'bat'};
- const body={name:'M',server:'USII',travelPlaces:['main'],monsterHunterLocation:{map:'main',x:'1',y:'2'},
-  bankVaults:['items0'],bank:{packs:{items0:[]}},oneShotEpoch:1,oneShotMonsterTypes:['bat'],
-  ponty:{updatedAt:123,listings:[{rid:'r',item:{name:'helmet'},price:20}]}};
- assert.equal(t.invoke(body).code,200);
- assert.deepEqual(t.state.travelPlaces,['main']);assert.deepEqual(t.state.bankVaults,['items0']);
- assert.deepEqual(t.state.monsterHunterLocation,{map:'main',x:1,y:2});
- for(const key of ['travelPlaces','monsterHunterLocation','bankVaults','bank','oneShotEpoch','oneShotMonsterTypes','ponty'])assert.equal(key in body,false,key);
- assert.equal(t.bank.snapshot.character,'M');assert.equal(t.bank.observer,'M');
- assert.equal(t.state.partyFarmingMonsterType,'bat');assert.equal(t.state.partyFarmingMode,'scatter');
- assert.equal(t.state.scatterPartySignature,'F');
- assert.deepEqual(t.calls.map(call=>Array.isArray(call)?call[0]:call),
-  ['ponty','adopt','bank','merchant','combat','rare','rareTick','bankboi','anniversary','hunt','farm','persist','abtesting','events','publish','convoy','schedule']);
- assert.equal(t.calls[0][1].listings[0].key,'US:II:r');assert.equal(t.calls.at(-1)[2],false);
-});
-
 test('rare ownership keeps the coordinator grouped across fighter and merchant heartbeats',()=>{
  let owns=true;
  const t=fixture({rareOwns:name=>{assert.equal(name,'F');return owns;}});

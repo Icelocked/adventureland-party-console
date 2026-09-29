@@ -11,9 +11,8 @@ function fixture(){
  return {state,calls,ports,send};
 }
 
-test('clearing ordinary backup focus during Hunt does not cancel quest navigation',()=>{
+test('clearing merchant focus during another character Hunt invalidates merchant navigation',()=>{
  const t=fixture();t.state.farmingPolicy='hunt';t.state.monsterHunt={participants:['L','F']};
- t.send('focus',{character:'L',monsterFocus:[]});assert.deepEqual(t.calls,['persist']);
  t.send('focus',{character:'M',monsterFocus:[]});assert.ok(t.calls.some(c=>Array.isArray(c)&&c[1]==='monster focus cleared'));
 });
 test('leader selection clears follower overrides and resets scatter only when focus changes',()=>{

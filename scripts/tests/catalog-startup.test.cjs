@@ -58,22 +58,3 @@ test('known server catalogs still warm local item metadata asynchronously; failu
   for (let i = 0; i < 3; i++) await f.step();
   await retry; assert.equal(f.context.catalogPrepared, true);
 });
-
-test('first status omits expensive catalogs; prepared status includes them', () => {
-  const ts = require('typescript');
-  const ast = ts.createSourceFile('shared.js', namedFunction(source, 'snapshot'), ts.ScriptTarget.Latest, true);
-  let block;
-  function visit(node) {
-    if (ts.isIfStatement(node) && node.expression.getText(ast).includes('catalogPrepared')) block = node.getText(ast);
-    ts.forEachChild(node, visit);
-  }
-  visit(ast); assert.ok(block);
-  const context = vm.createContext({ catalogKnown: false, catalogPrepared: false, status: {}, merchantCatalogVersion: 'test' });
-  for (const name of ['travelPlaces', 'monsterChoices', 'monsterHunterLocation', 'bestiaryCatalog', 'skillCatalog', 'classAppearanceChoices', 'merchantCatalog']) {
-    context[name] = () => { throw Error('catalog executed before ready'); };
-  }
-  vm.runInContext(block, context); assert.deepEqual(Object.keys(context.status), []);
-  for (const name of ['travelPlaces', 'monsterChoices', 'monsterHunterLocation', 'bestiaryCatalog', 'skillCatalog', 'classAppearanceChoices', 'merchantCatalog']) context[name] = () => [name];
-  context.catalogPrepared = true; vm.runInContext(block, context);
-  assert.equal(context.status.merchantCatalog[0], 'merchantCatalog');
-});

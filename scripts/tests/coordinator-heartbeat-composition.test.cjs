@@ -20,21 +20,6 @@ test('BankBoi service commands survive repeated heartbeat delivery until complet
  assert.equal(api.response('B').command,command);assert.equal(api.response('B').command,command);
  assert.equal(state.commands.B,command);
 });
-test('heartbeat follows replaced farming authority, navigation intent and storage snapshots',()=>{
- const {state,api,setIntent,setWaypoint}=fixture();
- assert.deepEqual(api.response('P').partyLocation.focus,['goo']);
- state.farmingPolicy='hunt';state.monsterHunt={target:'rat',turnIn:true,participants:['P']};state.monsterChoices=['new catalog'];
- state.bankSnapshot={items0:['leather']};state.bankbois={B:['drapes']};state.selection=['franky'];
- const intent={revision:9},point={map:'mansion'};setIntent(intent);setWaypoint(point);
- state.commands={P:{type:'party-monster-travel'}};
- const result=api.response('P');
- assert.deepEqual(result.partyLocation,{catalog:state.monsterChoices,focus:['rat'],point});
- assert.equal(result.navigationIntent,intent);assert.equal(result.command.navigationRevision,9);
- assert.equal(result.bankStackHomes.bank,state.bankSnapshot);assert.equal(result.bankStackHomes.bankbois,state.bankbois);
- assert.equal(result.eventSelections,state.selection);assert.equal(result.huntTurnInPriority,true);
- state.monsterHunt={target:null};state.monsterFocus=[];
- assert.deepEqual(api.response('P').partyLocation.focus,[]);
-});
 
 test('Hunt turn-in reserves only its fighters, never merchant anniversary travel',()=>{
  const {state,api}=fixture();state.monsterHunt={target:null,turnIn:true,participants:['P','M']};

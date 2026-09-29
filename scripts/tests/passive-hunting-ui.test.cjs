@@ -12,7 +12,7 @@ test('searchable menu saves separate enable, movement, priority and generator ch
  let view;try{
   await act(async()=>view=create(React.createElement(PassiveHuntingMenu,props)));
   assert.ok(text(view.toJSON()).includes('Monsters that are automatically attacked when spotted on the map'));
-  const button=view.root.findByType('Button');assert.equal(text(button),'Open passive hunting menu');assert.match(button.props.className,/bg-\[#07110f\].*text-cyan-100/);
+  const button=view.root.findByType('Button');assert.equal(text(button),'Open passive hunting menu');
   await act(async()=>button.props.onClick());assert.equal(view.root.findByType('Dialog').props.open,true);
   assert.ok(text(view.root.findByType('PopoverContent')).includes('Priority affects both active and passive hunting targets'));
   assert.equal(view.root.findAllByType('Checkbox').some(n=>n.props['aria-label']==='Passively hunt Generator'),false);

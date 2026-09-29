@@ -76,9 +76,17 @@ export function createRareHunting(input: unknown, hooks: Hooks) {
     serial = 0,
     lastMessage: string | null = null;
   const farmingReturn = createRareReturn(party, { ...hooks, realm });
-  const retryEvidence = createRareRetryEvidence(party.rareRetryEvidence ||= {});
+  const retryStores = new WeakMap<NonNullable<Party['rareRetryEvidence']>, ReturnType<typeof createRareRetryEvidence>>();
+  function retryEvidence() {
+    // Farming scopes change this dictionary when the selected leader changes.
+    const saved = party.rareRetryEvidence ||= {};
+    let store = retryStores.get(saved);
+    if (!store) { store = createRareRetryEvidence(saved); retryStores.set(saved, store); }
+    return store;
+  }
+  retryEvidence();
   const combat = createRareCombat(party, members, realm);
-  for (const failed of Object.values(party.rareRetryEvidence)) combat.release(failed.sight, Number.MAX_SAFE_INTEGER, now());
+  for (const failed of Object.values(party.rareRetryEvidence || {})) combat.release(failed.sight, Number.MAX_SAFE_INTEGER, now());
   const diagnostics = new Map<string, number>();
   function diagnostic(message: string, detail: {id?: string; [key: string]: unknown}) {
     const id = message + ':' + (detail.id || '');
@@ -255,7 +263,7 @@ export function createRareHunting(input: unknown, hooks: Hooks) {
     if(killed || party.rareRetryEvidence?.[key(e.target)])delete party.rarePursuitProgress?.[key(e.target)];
   }
   function rejectUnproductive(e: Encounter, killed: boolean, reason: string): void {
-    if (!killed && /selection released|no progress|time limit/i.test(reason)) retryEvidence.reject(key(e.target),e.target,leader());
+    if (!killed && /selection released|no progress|time limit/i.test(reason)) retryEvidence().reject(key(e.target),e.target,leader());
   }
   function stop(reason = "Rare hunting cancelled") {
     if (encounter) {
@@ -352,7 +360,7 @@ export function createRareHunting(input: unknown, hooks: Hooks) {
     if (party.passiveHunting?.useFieldGenerators === false) return null;
     return (
       members()
-        .filter((n) => (party.statuses[n]?.items || []).some((i) => i?.name === "fieldgen0"))
+        .filter((n) => (party.statuses[n]?.items || []).some((i) => i?.item?.name === "fieldgen0"))
         .sort(
           (a, b) => distance(party.statuses[a], target) - distance(party.statuses[b], target),
         )[0] || null
@@ -378,6 +386,9 @@ export function createRareHunting(input: unknown, hooks: Hooks) {
   function retainRareReturn(e: Encounter): void {
     party.rareHuntReturn=e.convoyId ? null : {...capture(),returnLocation:e.returnLocation,hunt:!!e.hunt,cycleId:e.hunt?.cycleId};
   }
+  function retainedConvoyEpoch(convoyId: string | undefined): number | undefined {
+    return convoyId ? party.activeConvoy?.epoch : undefined;
+  }
   function begin(target: Sight) {
     hooks.reconcileHuntArrival?.();
     recordHuntInterruption(target);
@@ -386,9 +397,13 @@ export function createRareHunting(input: unknown, hooks: Hooks) {
     if (old) cooldowns.set(key(old.target), now() + 3000);
     const convoyId=retainTravelConvoy(target);
     if (patrol) patrol.progressPosition = undefined;
+    // Scatter farming becomes grouped for the rare. Capture selection admission
+    // after that switch, before formation has had a chance to select its target.
+    party.partyFarmingMode = "default";
     encounter = {
       ...capture(),
       convoyId,
+      convoyEpoch: retainedConvoyEpoch(convoyId),
       id: `rare-${now()}-${++serial}`,
       target,
       start: now(),
@@ -405,7 +420,6 @@ export function createRareHunting(input: unknown, hooks: Hooks) {
     restorePursuit(encounter);
     retainRareReturn(encounter);
     hooks.persist();
-    party.partyFarmingMode = "default";
     party.scatterBreakTarget = null;
     if (target.mtype === "tinyp") {
       const carrier = deployer(target);
@@ -561,14 +575,39 @@ export function createRareHunting(input: unknown, hooks: Hooks) {
   function collected(e: Encounter): boolean {
     const lead = leader(),
       result = lead?.rareLoot;
-    if (!lead || lead.seenAt < now() - FRESH || !result || !result.complete) return false;
+    if (!lead || lead.seenAt < now() - FRESH) return false;
+    // The retained convoy owns the departure barrier. Its leader may finish that
+    // pass and resume travel before the separate rare receipt is sampled.
+    if (collectedByConvoy(e, lead.convoyLoot)) return true;
+    if (!result || !result.complete) return false;
     return (
       result.id === e.id &&
       result.observedAt > e.killedAt! &&
-      result.realm === e.target.realm &&
-      result.map === e.target.map &&
-      String(result.in) === e.target.in
+      lootPlaceMatches(e, result)
     );
+  }
+  function lootPlaceMatches(e: Encounter, result: NonNullable<Status['rareLoot']>): boolean {
+    return result.realm === e.target.realm && result.map === e.target.map && String(result.in) === e.target.in;
+  }
+  function convoyLootIdentity(id: string): unknown[] | null {
+    let identity: unknown;
+    try { identity = JSON.parse(id); } catch { return null; }
+    return Array.isArray(identity) && identity.length === 4 ? identity : null;
+  }
+  function postDeathLootPass(after: unknown, deathAt: number, observedAt: number): boolean {
+    return typeof after === 'number' && Number.isFinite(after) && after >= deathAt && observedAt > after;
+  }
+  function retainedConvoyDied(e: Encounter): boolean {
+    return !!e.convoyId && e.convoyEpoch !== undefined && !!e.deathAt;
+  }
+  function collectedByConvoy(e: Encounter, result: Status['convoyLoot']): boolean {
+    if (!retainedConvoyDied(e) || !result?.complete ||
+        !lootPlaceMatches(e, result)) return false;
+    const identity = convoyLootIdentity(result.id);
+    if (!identity) return false;
+    const [kind, convoyId, epoch, after] = identity;
+    return kind === 'convoy' && convoyId === e.convoyId && epoch === e.convoyEpoch &&
+      postDeathLootPass(after, e.deathAt!, result.observedAt);
   }
   function tickLoot(e: Encounter) {
     if (!e.killedAt) {
@@ -703,7 +742,7 @@ export function createRareHunting(input: unknown, hooks: Hooks) {
       return m && now()-m.seenAt<=FRESH && realm(m)===s.realm && instance(m)===s.in &&
         distance(m,s)<=Number(m.range||0) && Number(m.range)>0;
     });
-    if(!retryEvidence.eligible(key(s),s,leader(),reachable))return false;
+    if(!retryEvidence().eligible(key(s),s,leader(),reachable))return false;
     if(rejected){combat.allow(s);hooks.persist();}
     return true;
   }

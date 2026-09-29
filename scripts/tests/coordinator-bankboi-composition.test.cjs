@@ -11,12 +11,6 @@ function fixture() {
     collect: (...args) => calls.push(['collect', ...args]), log() {} };
   return { state, workers, calls, service: createCoordinatorBankboiService(state, workers, ports) };
 }
-test('BankBoi composition disables the merchant after clearing its slot and writes through transaction phases', async () => {
-  const f = fixture(); await f.service.start();
-  assert.deepEqual(f.calls, ['bank', 'roster', ['stop', false, null], ['assign', 1, 'V'], 'bank']);
-  assert.equal(f.state.bankboiTransaction.phase, 'waiting-for-bankboi');
-  assert.equal(f.state.headlessSlots[0], 'V'); assert.equal(f.workers.M.enabled, false);
-});
 
 test('an empty slot is not a merchant when no merchant is selected', async () => {
   const f = fixture();

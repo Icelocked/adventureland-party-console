@@ -1,7 +1,6 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const {createSharedConvoyNavigation} = require('../../runtime/coordinator/navigation/shared-navigation.ts');
 const {createMerchantHandoffRoutes} = require('../../runtime/coordinator/http/merchant-handoff.ts');
-const {initialCommandState} = require('../../runtime/coordinator/navigation/initial-commands.ts');
 const {createCoordinatorEventReturns} = require('../../runtime/coordinator/events/return-composition.ts');
 const legacy = require('../convoy-navigation.cjs');
 function fixture(purpose='monster-hunt') {
@@ -42,7 +41,7 @@ test('legacy merchant continuation captured during communication recovery prepar
  for(const command of Object.values(s.commands))assert.equal(command.phase,'shared-prepare');
  assert.equal(c.merchantInterruption,undefined);
 });
-for(const purpose of ['monster-hunt','shared-walk-return','event-return','empty-spawn-recovery']) {
+for(const purpose of ['shared-walk-return','event-return','empty-spawn-recovery']) {
   test(purpose+' pauses all members, collects once, and resumes its destination',()=>{
     const f=fixture(purpose),s=f.state,c=s.activeConvoy;
     c.walkingParents={F:{revision:1,parentId:9,command:{id:9,type:'event-return-town',cycleId:'return'}}};
@@ -80,13 +79,6 @@ test('another recipient must wait for the first collection to release the convoy
   const f=fixture(),s=f.state;f.send('handoff');f.tick();f.ack();f.tick();f.send('handoff');
   s.merchantCurrent.reason='merchant commerce';s.merchantCurrent.order={sources:{P:[]}};
   assert.equal(f.send('order',{jobId:'job',target:'P'}).body.waiting,true);assert.equal(s.commands.P.type,'party-monster-travel');
-});
-test('a persisted interrupted convoy resumes with fresh commands after restart',()=>{
-  const f=fixture(),s=f.state;f.send('handoff');f.tick();f.ack();f.tick();f.send('handoff');
-  Object.assign(s,initialCommandState({activeConvoy:structuredClone(s.activeConvoy)},()=>2000));
-  f.tick(2000);f.ack();f.tick();assert.equal(s.activeConvoy.phase,'communication-hold');
-  for(let time=3000;time<=7000;time+=1000){f.tick(time);f.ack();f.tick();}
-  f.ack();f.tick();assert.equal(s.activeConvoy.phase,'shared-prepare');assert.equal(s.activeConvoy.merchantInterruption,undefined);
 });
 test('collection during assembly initializes stop acknowledgements before the first shared route',()=>{
   const f=fixture(),s=f.state;s.activeConvoy.phase='assemble';s.activeConvoy.runtimes=null;

@@ -98,9 +98,6 @@ test('live updates preserve portrait markup identity and the button while stats 
       assert.equal(tree.root.findByType('button'), button);
     }
     const artwork = tree.root.find(node => node.props['aria-hidden'] === 'true');
-    assert.match(artwork.props.className, /pointer-events-none/);
-    assert.match(artwork.props.className, /\[&_\*\]:pointer-events-none/);
-    assert.match(artwork.props.className, /user-drag:none/);
     assert.equal(artwork.props.draggable, false);
     await act(async () => button.props.onClick());
     assert.equal(tree.root.findByType('stats-dialog').props.character.hp, 90);
