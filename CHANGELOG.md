@@ -26,6 +26,9 @@ from the commits merged into `main`.
 
 ### Fixed
 
+- Preserve ALData marketplace sale commands across realm-switch worker restarts until completion (#26).
+- Treat movement planner rejections as native-pathfinding fallback results instead of communication outages. Distinguish fallback, terminal movement failures, and temporary communication holds, and avoid duplicate command-failure logs for already reported movement outcomes (#29).
+
 - Market search now matches item display names in WTS, WTB, and Classifieds while preserving searches by internal item ID, trader, and server (#32).
 
 - Keep a solo ranger (or any single fighter) attacking in Group mode by creating its coordinator combat group and target authorization. Leadership is supported; Scatter remains unchanged.

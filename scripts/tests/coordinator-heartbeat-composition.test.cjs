@@ -21,6 +21,22 @@ test('BankBoi service commands survive repeated heartbeat delivery until complet
  assert.equal(state.commands.B,command);
 });
 
+test('ALData sales remain deliverable after a realm-switch worker restart until completion',()=>{
+ const {state,api}=fixture();
+ const command={id:8,type:'merchant-aldata-sell',jobId:'sale-8',server:'EUI',buyer:'Buyer',item:{name:'upgrade4',level:0},quantity:1};
+ state.commands.M=command;
+ state.statuses.M={name:'M',runtimeId:'before-switch',server:'USII'};
+ assert.deepEqual(api.response('M').command,command);
+ state.statuses.M={name:'M',runtimeId:'after-switch',server:'EUI'};
+ assert.deepEqual(api.response('M').command,command);
+ assert.equal(state.commands.M,command);
+ delete state.commands.M;
+ assert.equal(api.response('M').command,null);
+ state.commands.M={id:9,type:'character-travel'};
+ assert.equal(api.response('M').command.id,9);
+ assert.equal(api.response('M').command,null);
+});
+
 test('Hunt turn-in reserves only its fighters, never merchant anniversary travel',()=>{
  const {state,api}=fixture();state.monsterHunt={target:null,turnIn:true,participants:['P','M']};
  assert.equal(api.response('P').huntTurnInPriority,true);

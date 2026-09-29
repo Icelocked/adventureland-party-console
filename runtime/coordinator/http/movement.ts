@@ -12,6 +12,7 @@ export function installMovementRoutes(router: HttpRouter, planner: ReturnType<ty
     if (!validOptions(b) || (b.avoidLeave !== undefined && typeof b.avoidLeave !== "boolean"))
       return res.status(400).json({ error: 'Invalid movement identity or options' });
     try { return res.json({ ...(await planner.plan(b as unknown as PlanRequest)), mode: planner.mode }); }
-    catch (error) { return res.status(503).json({ error: String(error) }); }
+    // A completed planner rejection permits native fallback; it is not a transport outage.
+    catch (error) { return res.json({ error: error instanceof Error ? error.message : String(error), mode: planner.mode }); }
   });
 }

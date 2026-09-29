@@ -66,7 +66,7 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
   }
   function engine(j: Journey) { return j.importedEngine || (j.native ? 'native' : 'alclient'); }
   function outcome(done: boolean, reason?: string, cause?: Record<string,unknown>): string {
-    if (cause?.code === 'convoy-communication-hold') return 'Movement paused';
+    if (cause?.code === 'convoy-communication-hold') return 'Movement paused: coordinator communication unavailable';
     if (cause?.code === 'convoy-failure') return 'Movement failed';
     if (done) return 'Native fallback succeeded';
     if (reason === 'Combat handoff') return 'Travel paused for combat';
@@ -75,7 +75,7 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
   function fallback(j: Journey, issue: Issue) {
     if (!current(j)) return;
     if (j.options.owner?.recoveryStage === 'post-relocation') { finish(false, 'ALClient retry failed after relocation: ' + issue.reason); return; }
-    report(j.id, state, j.native ? 'Native movement recovery' : 'ALClient route rejected', issue, 'falling back to native smart_move');
+    report(j.id, state, j.native ? 'Native movement recovery' : 'Trying native pathfinding', issue, 'falling back to native smart_move');
     j.firstIssue ||= issue;
     delete j.repair;
     j.fallback = true; j.native = true; j.pending = false; j.planningAt = ports.now();
@@ -151,7 +151,7 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
     planning.then(value => {
       if (!current(j)) return;
       const result = value as PlanResult & { mode?: string; error?: string };
-      if (result.error) throw Error(result.error);
+      if (result.error) { fallback(j, { reason: result.error, from, to: destination }); return; }
       if (result.id !== j.id || result.version !== version || result.fingerprint !== fingerprint) throw Error('Planner response identity mismatch');
       if (distance(position(), from) > 1) {
         replanDrift(j);
@@ -228,7 +228,7 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
     if (host.character.moving) void Promise.resolve(host.move(host.character.real_x, host.character.real_y)).catch(() => {});
     executor.reset(); const context = ports.context();
     journey = { id: `${host.character.name}:${context.runtime}:${++sequence}`, context, options, native: !!options.native, pending: false, searches: 0, retries: 0, started: ports.now(), planningAt: ports.now(), fallback: !!options.native };
-    return new Promise((resolve, reject) => { state.on_done = (done, reason, failure) => { callback?.(done); if (done) resolve({ success: true }); else reject(movementError(failure || reason)); }; });
+    return new Promise((resolve, reject) => { state.on_done = (done, reason, failure) => { callback?.(done); if (done) resolve({ success: true }); else reject(Object.assign(movementError(failure || reason), {movementReported: true})); }; });
   }
   function refreshGeometry() {
     const nextVersion = Number(host.parent.__partyClientVersion || host.G.version), nextFingerprint = geometryFingerprint(host.G);

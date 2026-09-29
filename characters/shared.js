@@ -22,7 +22,7 @@
     transitionReady: function() { return eligibleDepartureChests().length === 0; },
     metrics: function(event) { queueCombatEvent('navigation', 'Movement '+(event.phase || (event.done?'completed':'stopped'))+' · '+(event.engine || 'ALClient comparison'), event, 'movement-metrics:'+event.id+':'+(event.phase || 'done')); },
     diagnostic: function(event, message) {
-      game_log(message, event.phase === 'Native fallback succeeded' ? '#94a3b8' : '#fbbf24');
+      game_log(message, event.phase === 'Movement failed' ? 'red' : event.phase === 'Native fallback succeeded' ? '#94a3b8' : '#fbbf24');
       queueCombatEvent('navigation', message, event, 'movement:'+event.id+':'+event.phase+':'+event.at);
     }
   });
@@ -9868,7 +9868,7 @@
           lastCommand = Math.min(lastCommand, Number(state.command.id) - 1);
           root.__partyLastCommand = lastCommand;
         }
-        game_log("Party command failed: " + (error.reason || error.message || error), "red");
+        if (!error.movementReported) game_log("Party command failed: " + (error.reason || error.message || error), "red");
       });
       if (character.ctype === "merchant" && !state.command && !root.__merchantActiveJob && !root.__merchantInventoryTidy &&
           !merchantEventWorkReserved() &&

@@ -133,6 +133,39 @@ test('planner transport errors do not silently switch to native pathfinding',asy
  const r=fixture({offline:true}),p=r.service.move({map:'main',x:100,y:0}),failed=assert.rejects(p,/offline/);
  await r.ticks();await failed;assert.equal(r.searches,0);r.dispose();
 });
+
+for(const reason of ['ALClient found no route','Native-only movement mode enabled','Planner worker exited'])
+test('movement HTTP planner rejection starts native fallback: '+reason,async()=>{
+ const {installMovementRoutes}=require('../../runtime/coordinator/http/movement.ts');
+ let handler, responseStatus, responseBody;
+ installMovementRoutes({post:(_path,callback)=>handler=callback},{mode:'alclient',plan:async()=>{throw Error(reason);}},()=>true);
+ const r=fixture();
+ r.ports.request=async(_path,{body})=>{
+  responseStatus=200;
+  await handler({body},{status(code){responseStatus=code;return this;},json(value){responseBody=value;}});
+  if(responseStatus>=400)throw Object.assign(Error(responseBody.error),{partyRequest:{kind:'http',status:responseStatus}});
+  return responseBody;
+ };
+ const p=r.service.move({map:'main',x:100,y:0});
+ const outcome=p.then(()=>null,error=>error);
+ await r.ticks(12);
+ assert.equal(await outcome,null);
+ assert.equal(responseStatus,200);assert.equal(responseBody.mode,'alclient');
+ assert.equal(r.searches,1);assert.equal(r.c.real_x,100);
+ assert.ok(r.logs.some(log=>log.phase==='Trying native pathfinding' && log.issue.reason===reason));
+ assert.equal(r.logs.at(-1).phase,'Native fallback succeeded');r.dispose();
+});
+
+for(const request of [{kind:'network',status:0},{kind:'timeout',status:0},{kind:'http',status:503}])
+test('movement communication hold remains distinct from route failure: '+request.kind,async()=>{
+ const r=fixture(),error=Object.assign(Error('Coordinator unavailable'),{partyRequest:request});
+ r.ports.request=async()=>{throw error;};
+ const p=r.service.move({map:'main',x:100,y:0});
+ const rejected=assert.rejects(p,e=>e===error && e.movementReported===true);
+ await r.ticks();await rejected;
+ assert.equal(r.searches,0);assert.equal(r.service.last().failureContext.code,'convoy-communication-hold');
+ assert.equal(r.logs.at(-1).phase,'Movement paused: coordinator communication unavailable');r.dispose();
+});
 test('planning-origin drift retries ALClient without native fallback',async()=>{
  const r=fixture({pending:true}),p=r.service.move({map:'main',x:100,y:0});
  await r.ticks(1);const first=r.request;Object.assign(r.c,{x:10,real_x:10});
@@ -197,7 +230,7 @@ test('collision produces actionable coordinates and native fallback outcome',asy
  const r=fixture({collision:true,plot:[{map:'main',x:50,y:0},{map:'main',x:100,y:0}]});
  const p=r.service.move({map:'main',x:100,y:0});await r.ticks(12);await p;
  assert.equal(r.searches,2);assert.equal(r.calls.some(c=>c[1]===50),false);
- assert.match(r.logs.find(l=>l.phase==='ALClient route rejected').message,/collisions detected between main \(0, 0\) and main \(50, 0\).*falling back to native smart_move/);
+ assert.match(r.logs.find(l=>l.phase==='Trying native pathfinding').message,/collisions detected between main \(0, 0\) and main \(50, 0\).*falling back to native smart_move/);
  assert.equal(r.logs.at(-1).phase,'Native fallback succeeded');r.dispose();
 });
 test('late plan cannot restart cancelled or superseded navigation',async()=>{
@@ -210,8 +243,10 @@ test('late plan cannot restart cancelled or superseded navigation',async()=>{
 });
 test('native fallback also rejects collisions and exposes terminal failure',async()=>{
  const r=fixture({offline:true,planError:'Path not found',collision:true,nativePlot:[{map:'main',x:50,y:0},{map:'main',x:100,y:0}]});
- const p=r.service.move({map:'main',x:100,y:0}),failed=assert.rejects(p,/Native route rejected/);
- await r.ticks();await failed;assert.equal(r.calls.length,0);assert.equal(r.logs.at(-1).phase,'Movement failed');r.dispose();
+ const p=r.service.move({map:'main',x:100,y:0}),failed=assert.rejects(p,e=>/Native route rejected/.test(e.message) && e.movementReported===true);
+ await r.ticks();await failed;assert.equal(r.calls.length,0);assert.equal(r.logs.at(-1).phase,'Movement failed');
+ assert.match(r.service.last().failureContext.firstIssue.reason,/Path not found/);
+ assert.equal(r.service.last().failureContext.code,'route-failed');r.dispose();
 });
 test('execution stalls have exactly two bounded native recovery attempts',async()=>{
  const r=fixture({stall:true}),p=r.service.move({map:'main',x:100,y:0}),failed=assert.rejects(p,/Stalled/);

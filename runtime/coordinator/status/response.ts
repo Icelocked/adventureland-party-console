@@ -31,6 +31,7 @@ const retainedCommands = new Set([
   "merchant-stand-buy",
   "merchant-ponty-buy",
   "merchant-aldata-buy",
+  "merchant-aldata-sell",
   "merchant-aldata-auth",
   "merchant-order-handoff",
   "merchant-mluck",
