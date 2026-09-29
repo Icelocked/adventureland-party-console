@@ -9,6 +9,7 @@ import { PartyWorkspace } from "./party-workspace";
 import { usePartyConsole } from "./use-party-console";
 import { DashboardLive } from "./dashboard-live";
 import { DashboardQueries } from "./query-cache";
+import { DebugBrowserBanner } from './debug-browser';
 
 export function Home() {
   return <DashboardQueries><DashboardLive /><PartyConsole /></DashboardQueries>;
@@ -20,6 +21,7 @@ function PartyConsole() {
     <>
       <main style={{marginRight:logsOpen?`min(${logsWidth}px,75vw)`:0}} data-party-console-root className="@container min-h-screen bg-[#07100f] text-[#e9f3e8]">
         <PartyHeader model={model} onLogs={() => setLogsOpen(v=>!v)} />
+        <DebugBrowserBanner />
         <PartyWorkspace model={model} />
       </main>
       {logsOpen && <LogSidebar state={model.state} width={logsWidth} onWidth={setLogsWidth} onClose={() => setLogsOpen(false)} />}

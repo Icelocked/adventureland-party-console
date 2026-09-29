@@ -1,5 +1,11 @@
 # Character coordinator
 
+Map previews now transmit NPC cosmetic layers and include the native dreams_gate
+composition. This follow-up changes character telemetry as well as the dashboard;
+use the full supported restart to publish character assets. Recreate a debug
+instance to pick up its browser viewer, fonts and map-rendering changes; restarting
+the parent console preserves an already-running disposable instance.
+
 Disposable Cave debugging is managed by tools/debug from the Settings gateway.
 It runs the maintained coordinator and real native clients against an isolated
 upstream game/database with a god loadout and native development admission.

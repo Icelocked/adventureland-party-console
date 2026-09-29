@@ -7,6 +7,7 @@ import { croppedTile } from "./cropped-tile";
 import { dollLayers } from "./doll-layers";
 import { MapDefinition } from "./map-definition";
 import { MapFrame } from "./map-frame";
+import { drawDreamsGate } from './dreams-gate';
 import { drawDue, prepareMap, visibleTiles, type PreparedPlacement, type MapRenderBuffer } from "./map-render-buffer";
 
 export function MapCanvas({
@@ -169,6 +170,10 @@ export function MapCanvas({
       }
       prepared!.placements.forEach(drawPlacement);
       const layers: { y: number; draw: () => void }[] = [];
+      p.definition.decorations?.forEach(decoration => layers.push({ y: decoration.y, draw: () => {
+        ctx.save(); ctx.translate(decoration.x, decoration.y);
+        drawDreamsGate(ctx, p.definition!.tilesets, Date.now()); ctx.restore();
+      } }));
       prepared!.groups.forEach(group => layers.push({ y: group.y, draw: () => group.placements.forEach(drawPlacement) }));
       const priorEntities = new Map((old.entities || []).map((entity) => [entity.id, entity]));
       p.frame.entities.forEach((entity) => {
@@ -221,7 +226,7 @@ export function MapCanvas({
             const drawY =
               y + (attackTarget ? ((attackTarget.y - y) / attackLength) * attackAmount : 0);
             let drewDoll = false;
-            if (entity.type === "character" && entity.dollHtml) {
+            if (entity.dollHtml) {
               const layers = dollLayers(entity.dollHtml),
                 outerLeft = drawX - 13.5,
                 outerTop = drawY - 38;

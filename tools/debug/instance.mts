@@ -8,6 +8,7 @@ import { Access } from '../hosting/access.ts';
 import { configureDashboardGateway } from '../dashboard/gateway-access.ts';
 import { seedLoadout } from '../../e2e/game/loadouts.ts';
 import { launchGameClient } from '../../e2e/live-game-client.ts';
+import { startDesktop } from './desktop.ts';
 
 if (process.env.AL_DEBUG_INSTANCE !== '1') throw Error('Disposable debug container only');
 const token = process.env.AL_DEBUG_TOKEN || '';
@@ -33,7 +34,12 @@ async function wait(check: () => Promise<boolean>, timeout = 180000) {
 }
 function child(file: string, env: NodeJS.ProcessEnv, args: string[] = []) {
   const process = fork(path.join(root, file), args, { env, stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
-  children.push(process); process.on('exit', code => { if (!stopping) void stop(code || 1); }); return process;
+  own(process); return process;
+}
+function own(process: ChildProcess) {
+  children.push(process);
+  process.on('error', error => { console.error(error); void stop(1); });
+  process.on('exit', code => { if (!stopping) void stop(code || 1); });
 }
 let stopping = false;
 async function stop(code: number) {
@@ -66,8 +72,9 @@ try {
   for (const name of ['E2EWarrior', 'E2EPriest', 'E2EMerchant']) await post('/formation', { character: name, follow: false, eventSelections: [] });
   await post('/formation', { leader: 'E2EWarrior' });
   await post('/formation', { character: 'E2EPriest', follow: true });
-  browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
-  const context = await browser.newContext();
+  await startDesktop(own);
+  browser = await chromium.launch({ headless: false, env: { ...process.env, DISPLAY: ':99' }, args: ['--no-sandbox', '--disable-dev-shm-usage', '--window-position=0,0', '--window-size=1440,1000'] });
+  const context = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   await context.route('**/*', route => ['127.0.0.1', 'localhost'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
   await context.addCookies([{ name: 'auth', value: manifest.auth, url: manifest.webUrl }]);
   const primary = await launchGameClient(context, { webUrl: manifest.webUrl, coordinatorUrl: 'http://127.0.0.1:924', name: 'E2EWarrior', region: 'US', server: 'I' });

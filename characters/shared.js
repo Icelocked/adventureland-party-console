@@ -2112,7 +2112,7 @@
   }
 
   function mapDollHtml(entity, direction) {
-    if (!entity || entity.type !== "character") return null;
+    if (!entity || ["character", "npc"].indexOf(entity.type) < 0) return null;
     var renderSprite = typeof sprite === "function" ? sprite : parent && typeof parent.sprite === "function" ? parent.sprite : null;
     if (!renderSprite) return null;
     try {
@@ -3123,7 +3123,7 @@
       angle: Number(entity.angle) || 0, direction: Number(entity.direction) || 0,
       going_x: Number(entity.going_x) || 0, going_y: Number(entity.going_y) || 0,
       sprite: skin ? spriteDefinition(skin) : null,
-      dollHtml: type === "character" ? mapDollHtml(entity, entity.direction) : null,
+      dollHtml: type === "character" || type === "npc" && entity.cx ? mapDollHtml(entity, entity.direction) : null,
       stand: entity.stand || null,
       standSprite: entity.stand ? (spriteDefinition(typeof entity.stand === "string" ? entity.stand : "stand0") || spriteDefinition("stand0")) : null,
     };

@@ -61,6 +61,7 @@ CMD ["node", "tools/hosting/docker-production.mts"]
 
 FROM node:24.14.0-bookworm-slim AS debug-browser
 RUN npm install --prefix /opt/browser @playwright/test@1.63.0 && /opt/browser/node_modules/.bin/playwright install --with-deps chromium
+RUN apt-get update && apt-get install -y --no-install-recommends xvfb x11vnc novnc websockify && rm -rf /var/lib/apt/lists/*
 
 FROM debug-browser AS debug
 WORKDIR /app

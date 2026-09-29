@@ -12,6 +12,9 @@ from the commits merged into `main`.
 
 ### Added
 
+- Debug consoles can open and control their actual game browser through a private
+  viewer on the same port, with Debug browser labels instead of Steam.
+
 - Settings can launch a disposable Cave of Many Dreams debug server and separate
   Party Console with a god-equipped party and unlimited visits. Startup shows
   progress; Stop running cancels startup or destroys the instance and saved data.
@@ -37,6 +40,12 @@ from the commits merged into `main`.
   Persisted action receipts prevent blind retries after lost entry or spending replies.
 
 ### Fixed
+
+- Map viewers include NPC cosmetic layers (including Dorr's head) and the Cave
+  entrance's native stonework, animated flames and starry portal.
+
+- Docker builds regenerate the font cache instead of copying machine-specific paths,
+  fixing fallback fonts and changed text layout in debug consoles.
 
 - Cave choices, descriptions and objectives keep their server-provided text when
   a headless client cannot translate localization objects.

@@ -1,3 +1,5 @@
+import type { GData } from 'typed-adventureland';
+type Animatable = NonNullable<NonNullable<GData['maps']['main']['animatables']>['the_door']>;
 export interface MapGeometry {
   min_x?: number;
   min_y?: number;
@@ -10,6 +12,9 @@ export interface MapGeometry {
 }
 
 export interface MapCatalog {
+  // typed-adventureland 0.0.57 names only door/lever; native maps also contain
+  // dreams_gate. Keep the upstream entry shape while allowing new identifiers.
+  maps?: Readonly<Record<string, { animatables?: Readonly<Record<string, Animatable>> }>>;
   geometry?: Readonly<Record<string, MapGeometry | undefined>>;
   tilesets?: Readonly<Record<string, { file?: string } | undefined>>;
 }
@@ -25,10 +30,11 @@ export interface MapDefinition {
   placements: readonly unknown[];
   groups: readonly unknown[];
   tilesets: Record<string, { file: string }>;
+  decorations?: { kind: 'dreams_gate'; x: number; y: number }[];
 }
 
-function tilesetsFor(geometry: MapGeometry, catalog: MapCatalog): MapDefinition["tilesets"] {
-  const used = new Set((geometry.tiles || []).map((tile) => tile?.[0]).filter(Boolean));
+function tilesetsFor(geometry: MapGeometry, catalog: MapCatalog, extra: string[]): MapDefinition["tilesets"] {
+  const used = new Set([...extra, ...(geometry.tiles || []).map((tile) => tile?.[0]).filter(Boolean)]);
   const tilesets: MapDefinition["tilesets"] = {};
   for (const id of used) {
     const definition = catalog.tilesets?.[String(id)];
@@ -39,6 +45,7 @@ function tilesetsFor(geometry: MapGeometry, catalog: MapCatalog): MapDefinition[
 }
 
 function describeMap(name: string, geometry: MapGeometry, catalog: MapCatalog): MapDefinition {
+  const gate = catalog.maps?.[name]?.animatables?.dreams_gate;
   return {
     name,
     min_x: geometry.min_x,
@@ -49,7 +56,8 @@ function describeMap(name: string, geometry: MapGeometry, catalog: MapCatalog): 
     tiles: geometry.tiles || [],
     placements: geometry.placements || [],
     groups: geometry.groups || [],
-    tilesets: tilesetsFor(geometry, catalog),
+    tilesets: tilesetsFor(geometry, catalog, gate ? ['dungeon', 'outside', 'custom_a'] : []),
+    decorations: gate ? [{ kind: 'dreams_gate', x: gate.x, y: gate.y }] : [],
   };
 }
 

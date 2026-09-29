@@ -13,6 +13,15 @@ events start disabled. Upstream's native `Dev && !Prod` Cave admission permits
 unlimited entries without consuming daily reservations. Use the normal Cave
 controls in the debug console. No production login or saved data is copied.
 
+**Open game client** in the debug console shows the actual running browser in a
+separate tab. You can interact with the game there; it does not create a second
+login. The characters are labeled **Debug browser**, rather than Steam. Closing
+the viewer leaves the game running. Its private display traffic uses the same
+authenticated console port; VNC and game/admin ports are not exposed directly.
+
+Map previews include Dorr's cosmetic layers and the native Cave entrance's
+atlas pieces, flames and stars. Debug map images come from its local game server.
+
 **Stop running** works during startup or while running. It cancels startup and
 removes this instance's containers, database and console volumes, network and
 image tags. Shared Docker download/build caches remain reusable; no debug account
@@ -64,6 +73,8 @@ Docker resource inventories. It also checks duplicate starts, private access,
 and startup cancellation. A second E2E launches from an unprivileged Linux
 console container using the Docker socket without host source mounts, restarts
 that parent, and tears down the recovered sibling instance.
+The Settings journey also loads the actual fonts, opens the game viewer, checks
+private and cross-origin access, and captures the expanded map near Dorr.
 Screenshots, Cave observations and teardown
 evidence are retained under `.build/e2e-results/` with a checksummed report in
 `.build/e2e-report/`. Failure cases are documented before implementation in

@@ -20,3 +20,15 @@ Before implementation, validate these boundaries:
 - Browser or child-process failure must not leave a false running state.
 - New starts after teardown get fresh state. Tests retain screenshots, native
   observations and resource inventories as repeatable evidence.
+
+Before implementing the visual/client follow-up:
+- Machine-specific font caches must not enter Linux images; both actual font
+  families must load in the opened debug console.
+- NPC cosmetic layers must survive map telemetry, including Dorr's head.
+- Native animated map decorations must be present in the expanded viewer and
+  use their real atlas frames, positions and anchoring.
+- The game viewer must show and control the already-running client, without
+  creating duplicate logins. Closing/reopening it must preserve the session.
+- Remote display HTTP and WebSocket access require the debug private cookie
+  and same-origin WebSocket requests. No display ports may be published.
+- Stopping the debug instance must also remove its display and browser processes.
