@@ -1,5 +1,9 @@
 # Character coordinator
 
+Failed delivery equips wait for a full merchant inventory received after the failure. Missing stock retires the mark; retained stock retries delivery under a fresh identity so late receipts cannot consume the new attempt. Combat heartbeats do not refresh inventory age. Pending reconciliation persists across restart without issuing more equip commands. Validate the two failed delivery equip native E2Es and activate with the supported coordinator-only restart below.
+
+SIGINT, SIGTERM and SIGQUIT already share the coordinator shutdown handler. It stops managed characters and closes storage; each worker gets a bounded 500 ms closing notification before forced termination. This is not a transaction drain and does not guarantee completion of an in-flight game transfer. Durable recovery remains required. The Windows E2E restart uses IPC to invoke that same handler; it does not claim POSIX signal delivery or container-wide draining coverage.
+
 A fresh installation designates its first owned, connected merchant when that
 character belongs to a headless slot or the native group. Identification precedes
 catalog/market/job ingestion, persists once, excludes bankboi workers, and never

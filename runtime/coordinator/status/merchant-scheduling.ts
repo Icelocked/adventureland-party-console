@@ -222,7 +222,7 @@ export function createMerchantScheduling(state: SchedulingState, ports: Scheduli
   }
 
   function pendingEquipment(name: string): DeliveryRequest[] {
-    return (state.merchantDeliveries?.[name] || []).filter(mark => mark.awaitingEquip && mark.item);
+    return (state.merchantDeliveries?.[name] || []).filter(mark => mark.awaitingEquip && mark.item && mark.equipFailedAt === undefined);
   }
   const equipRetries = new Map<string, number>();
   function resumeDeliveryEquip(name: string): void {

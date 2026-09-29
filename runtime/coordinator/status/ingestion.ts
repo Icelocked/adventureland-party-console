@@ -108,7 +108,8 @@ export function createStatusIngestion<Report extends StatusReport>(
     const learned = consume(body);
     const previous = state.statuses[body.name];
     if (body.name === state.merchantCharacter) ports.merchant(body, previous);
-    state.statuses[body.name] = preserveNewerCombat({ ...body, seenAt: receivedAt }, previous, receivedAt);
+    state.statuses[body.name] = preserveNewerCombat({ ...body, seenAt: receivedAt,
+      inventorySeenAt: Array.isArray(raw.items) ? receivedAt : undefined }, previous, receivedAt);
     combat(body, previous, learned);
     channel.flush();
     measureStatusStage('publishMarket', () => ports.publishMarket(body.name));

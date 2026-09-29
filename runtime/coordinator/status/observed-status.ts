@@ -20,6 +20,8 @@ export interface ObservedCharacterStatus extends HeartbeatStatus, AnniversaryMer
   upgradePreviewRevision?: string;
   upgradeInventoryBusy?: boolean;
   seenAt: number;
+  /** Full inventory receipt time; fast combat reports must not refresh it. */
+  inventorySeenAt?: number;
   clientVersion?: number;
   clientInstance?: string;
   map: string;

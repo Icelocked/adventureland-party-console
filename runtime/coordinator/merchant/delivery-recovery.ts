@@ -7,6 +7,8 @@ export interface DeliveryRequest {
   item?: Item;
   equipOnDelivery?: boolean;
   awaitingEquip?: boolean;
+  /** Failed native equip receipt; wait for a later full merchant inventory. */
+  equipFailedAt?: number;
   blocked?: string;
   legacy?: boolean;
 }
@@ -16,6 +18,7 @@ export function deliveryReady(mark: DeliveryRequest): boolean {
 }
 interface InventoryStatus {
   seenAt?: number;
+  inventorySeenAt?: number;
   items?: (InventoryEntry | null)[];
   slots?: Record<string, {item?: Item} | null>;
 }
@@ -31,7 +34,7 @@ function allocateStock(marks: DeliveryRequest[], merchant: InventoryStatus): Map
   const remaining = new Map(stock.map(entry => [entry, Number(entry.item?.q || 1)]));
   const assigned = new Map<DeliveryRequest, InventoryEntry>();
   function assign(mark: DeliveryRequest, originalSlot: boolean): void {
-    if (mark.awaitingEquip || assigned.has(mark)) return;
+    if ((mark.awaitingEquip && mark.equipFailedAt === undefined) || assigned.has(mark)) return;
     const quantity = Number(mark.item?.q || 1);
     const entry = stock.find(entry => (!originalSlot || entry.slot === mark.slot) &&
       deliveryMatches(entry.item, mark.item) && (remaining.get(entry) || 0) >= quantity);
@@ -67,18 +70,41 @@ function reconcileOne(mark: DeliveryRequest, marks: DeliveryRequest[], allocated
   mark.blocked = 'Reserved delivery item missing';
   return 'Delivery blocked: missing stock; other work can continue';
 }
+function reconcileFailedEquip(mark: DeliveryRequest, marks: DeliveryRequest[], allocated: boolean): string {
+  if (!allocated) {
+    marks.splice(marks.indexOf(mark), 1);
+    return 'Removed failed equip delivery: item no longer in merchant inventory';
+  }
+  // A new transfer attempt must not accept a delayed receipt for the old send.
+  mark.id = randomUUID();
+  delete mark.awaitingEquip;
+  delete mark.equipFailedAt;
+  delete mark.blocked;
+  return 'Retrying delivery after failed equip: item still in merchant inventory';
+}
+function relocateDelivery(mark: DeliveryRequest, entry: InventoryEntry | undefined): boolean {
+  if (entry?.slot === undefined || mark.slot === entry.slot) return false;
+  mark.slot = entry.slot;
+  return true;
+}
+function needsNewInventory(mark: DeliveryRequest, inventorySeenAt: number, now: number): boolean {
+  return mark.equipFailedAt !== undefined &&
+    (inventorySeenAt <= mark.equipFailedAt || now - inventorySeenAt > 10000);
+}
 function reconcileRecipient(name: string, marks: DeliveryRequest[],
-  assignments: Map<DeliveryRequest, InventoryEntry> | null, recipient: InventoryStatus | undefined, now: number): string[] {
+  assignments: Map<DeliveryRequest, InventoryEntry> | null, recipient: InventoryStatus | undefined, now: number,
+  inventorySeenAt: number): string[] {
   const changes: string[] = [];
   for (const mark of marks.slice()) {
     if (!mark.id) { mark.id = randomUUID(); mark.legacy = true; changes.push('Assigned delivery identity for ' + name); }
     if (!assignments) continue;
+    if (needsNewInventory(mark, inventorySeenAt, now)) continue;
     const entry = assignments.get(mark);
-    if (entry?.slot !== undefined && mark.slot !== entry.slot) {
-      mark.slot = entry.slot;
+    if (relocateDelivery(mark, entry)) {
       changes.push('Relocated delivery: ' + mark.item?.name + ' for ' + name);
     }
-    const result = reconcileOne(mark, marks, !!entry, recipient, now);
+    const result = mark.equipFailedAt !== undefined
+      ? reconcileFailedEquip(mark, marks, !!entry) : reconcileOne(mark, marks, !!entry, recipient, now);
     if (result) changes.push(result + ': ' + mark.item?.name + ' for ' + name);
   }
   return changes;
@@ -90,7 +116,7 @@ export function reconcileDeliveries(deliveries: Record<string, DeliveryRequest[]
   const assignments = fresh(merchant, now)
     ? allocateStock(Object.values(deliveries).flatMap(marks => marks || []), merchant) : null;
   return Object.entries(deliveries).flatMap(([name, marks]) =>
-    reconcileRecipient(name, marks || [], assignments, statuses[name], now));
+    reconcileRecipient(name, marks || [], assignments, statuses[name], now, merchant?.inventorySeenAt || 0));
 }
 
 /** A repeated receipt cannot resurrect a completed request or consume a newer one. */

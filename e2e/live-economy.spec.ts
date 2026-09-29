@@ -78,6 +78,79 @@ async function leaveBank(live: LiveGame) {
 test.describe('real merchant economy and durable work', () => {
   test.setTimeout(420_000);
 
+  for (const retained of [false, true]) {
+    test(`failed delivery equip reconciles ${retained ? 'retained merchant stock' : 'missing stock'} across restart`, async ({ live }, info) => {
+      // Failure modes: an orphan loops forever; retained stock is discarded; stale
+      // inventory removes intent; recovery replays after restart or duplicates cargo.
+      const recipient = 'E2EWarrior';
+      const item = { name: 'helmet', level: 0 };
+      const id = 'interrupted-delivery-equip';
+      let holdInventory = false, withheldReports = 0;
+      const context = live.clients[recipient].page.context();
+      await context.route('**/party-api/status', async route => {
+        const body = route.request().postDataJSON();
+        if (holdInventory && body.name === merchant && Array.isArray(body.items)) {
+          withheldReports++;
+          return route.abort('connectionfailed');
+        }
+        return route.fallback();
+      });
+      const receipts: { character: string; results: { deliveryId?: string; success: boolean; error?: string }[] }[] = [];
+      live.clients[recipient].page.on('request', request => {
+        if (new URL(request.url()).pathname.endsWith('/equip-delivery-complete')) {
+          const receipt = request.postDataJSON();
+          receipts.push(receipt);
+          if (receipt.results.some((result: { success: boolean }) => !result.success)) holdInventory = true;
+        }
+      });
+      await live.post('/merchant/force-stand', { enabled: true });
+      if (retained) await seed(live, { 10: item });
+      const before = await economy(live);
+      const cargo = () => live.admin(`output=${JSON.stringify(names)}.map(name=>{
+        const p=get_player(name);return {name,items:p.items,slots:p.slots};
+      })`);
+      const countCargo = (players: { items: Items; slots: Record<string, Item | null> }[]) => players.reduce((sum, p) =>
+        sum + [...p.items, ...Object.values(p.slots)].filter(value => value?.name === item.name && value.level === item.level).length, 0);
+      expect(countCargo(await cargo())).toBe(retained ? 1 : 0);
+      // Declare the interrupted historical intent only. Native clients perform the
+      // actual failed equip, subsequent transfer and equip; no receipts are fabricated.
+      await live.restoreHistoricalSettings(() => ({ merchantDeliveries: {
+        [recipient]: [{ id, item, slot: 10, equipOnDelivery: true, awaitingEquip: true }],
+      } }));
+      await expect.poll(() => receipts.some(receipt => receipt.character === recipient &&
+        receipt.results.some(result => result.deliveryId === id && !result.success)),
+      { timeout: 45_000, message: 'Native recipient must fail to equip the absent delivery' }).toBe(true);
+      await expect.poll(async () => (await live.state()).merchantDeliveries?.[recipient]?.[0]?.equipFailedAt).toBeGreaterThan(0);
+      await live.clients[recipient].page.waitForTimeout(12_000);
+      expect(withheldReports).toBeGreaterThan(0);
+      expect((await live.state()).merchantDeliveries[recipient]).toMatchObject([{ id, awaitingEquip: true }]);
+      await live.restartCoordinator();
+      expect((await live.state()).merchantDeliveries[recipient]).toMatchObject([{ id, awaitingEquip: true }]);
+      holdInventory = false;
+      await expect.poll(async () => {
+        const marks = (await live.state()).merchantDeliveries?.[recipient] || [];
+        return retained ? marks.length === 1 && !marks[0].awaitingEquip && marks[0].id !== id : marks.length === 0;
+      }, { timeout: 20_000, message: 'Failed equip must reconcile against merchant stock' }).toBe(true);
+      await record(live, info, 'failed-equip-reconciled', before, { retained, receipts, cargo: await cargo() });
+      await live.restartCoordinator();
+      if (retained) {
+        await live.post('/merchant/routine-priorities', { priorities: {}, enabled: { deliveries: true } });
+        await live.post('/merchant/force-stand', { enabled: false });
+        await expect.poll(async () => (await cargo()).find((p: { name: string }) => p.name === recipient)?.slots.helmet,
+          { timeout: 150_000, message: 'Retained cargo must be delivered and equipped by native clients' }).toMatchObject(item);
+        await expect.poll(async () => (await live.state()).merchantDeliveries?.[recipient] || [], { timeout: 30_000 }).toEqual([]);
+      }
+      await restartAndObserve(live);
+      const failures = receipts.filter(receipt => receipt.results.some(result => !result.success)).length;
+      await live.clients[recipient].page.waitForTimeout(35_000);
+      expect(receipts.filter(receipt => receipt.results.some(result => !result.success)).length).toBe(failures);
+      expect((await live.state()).merchantDeliveries?.[recipient] || []).toEqual([]);
+      expect(countCargo(await cargo())).toBe(retained ? 1 : 0);
+      await info.attach('failed-equip-native-screen', { body: await live.clients[recipient].page.screenshot(), contentType: 'image/png' });
+      await record(live, info, 'failed-equip-no-replay', before, { retained, withheldReports, receipts, cargo: await cargo() });
+    });
+  }
+
   test('duplicate queued NPC buys execute once and remain complete after coordinator restart', async ({ live }, info) => {
     await catalog(live, 'helmet');
     await live.post('/merchant/force-stand', { enabled: true });

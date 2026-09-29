@@ -12,7 +12,7 @@ not attach to the running Party Console or read its credentials.
 The harness pins Express 4.18.3 to match the repository's pinned caracAL host;
 review that pin alongside future caracAL upgrades.
 
-The current inventory contains **67 scenarios: five console and 62 native-game
+The current inventory contains **69 scenarios: five console and 64 native-game
 journeys**. The merchant follow-up adds two dialog journeys and one fresh native-login journey.
 Earlier validation is split across separate runs below; those 63 unique scenario contracts have passing latest outcomes.
 This is aggregate evidence from separate runs and source snapshots, not one
@@ -35,6 +35,29 @@ isolated assertion that a one-fighter group must disappear was removed; its
 surrounding Scatter, merchant-exclusion and disengagement checks remain.
 
 ## Run locally
+
+Issue #20 recovery can be repeated with:
+
+```sh
+npm test -- -- --grep "failed delivery equip"
+npm run test:e2e:verify
+```
+
+These two native journeys explicitly restore interrupted `merchantDeliveries`
+settings, then observe actual failed equip receipts. One has no matching cargo;
+the other seeds one helmet in the merchant inventory. Full merchant inventory
+requests are temporarily dropped to verify that stale inventory cannot settle
+the mark, including across coordinator restart. After communication resumes,
+missing stock must clear and retained stock must be delivered and equipped by
+the real clients. Both verify cargo conservation and no failed-equip replay past
+the 30-second retry window after another restart. The historical seed is an
+explicit recovery fixture, not a fabricated transfer receipt or equip result.
+Screenshots, native cargo, receipts, traces, state journals and the checksummed
+manifest are retained in `.build/e2e-results/` and `.build/e2e-report/`.
+The original two cases failed because the awaiting-equip marks never reconciled;
+their local evidence is preserved in `.build/issue20-red-{report,results}/`.
+This focused run does not claim a full suite rerun or transaction draining on
+SIGINT/SIGTERM; restart invokes the existing shutdown handler through IPC.
 
 Merchant autoconfiguration and issue #30 can be repeated with:
 

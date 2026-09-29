@@ -26,6 +26,8 @@ from the commits merged into `main`.
 
 ### Fixed
 
+- Fixed interrupted deliver-and-equip recovery (#20): after a failed equip, wait for a fresh merchant inventory, remove marks for missing stock, or retry retained stock with a new delivery identity. Persist reconciliation across restarts and prevent stale inventory or delayed receipts from reviving the retry loop. Added two native E2E journeys covering missing/retained cargo, interrupted inventory reports, restart, real redelivery/equip and no replay. Documented the existing bounded shutdown behavior for SIGINT/SIGTERM.
+
 - Restore coordinator lint compliance by extracting travel-attacker collection, assembly runtime lookup, and merchant eligibility helpers without changing behavior.
 
 - Handle movement-barrier ownership rejections without reporting a new route failure: superseded walks retire quietly, early departures wait, and completed transitions are not repeated. Preserve genuine route errors and communication recovery (#27).
