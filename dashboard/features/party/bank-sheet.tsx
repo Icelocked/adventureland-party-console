@@ -1197,9 +1197,9 @@ export const BankSheet = memo(function BankSheet({
 
                 ? unlockKind === "key"
 
-                  ? `GoldMajesty will retrieve and consume ${unlocking.key?.name || "the required key"} to unlock ${floorNames[unlocking.floor] || unlocking.floor}.`
+                  ? `${merchant || "The merchant"} will retrieve and consume ${unlocking.key?.name || "the required key"} to unlock ${floorNames[unlocking.floor] || unlocking.floor}.`
 
-                  : `GoldMajesty will spend ${unlocking.gold.toLocaleString()} gold to permanently unlock ${unlocking.pack}.`
+                  : `${merchant || "The merchant"} will spend ${unlocking.gold.toLocaleString()} gold to permanently unlock ${unlocking.pack}.`
 
                 : ""}
 

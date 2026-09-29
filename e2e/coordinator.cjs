@@ -64,7 +64,7 @@ const logger = {
   error: (...args) => { startupError = new Error(args.map(String).join(' ')); console.error(...args); },
 };
 const adapters = {
-  '../config': { characters: {}, merchant: 'M', watch_CODE: false, enable_TYPECODE: false,
+  '../config': { characters: {}, merchant: process.env.E2E_MERCHANT_CONNECTED === 'false' ? null : 'M', watch_CODE: false, enable_TYPECODE: false,
     web_app: { party_dashboard: true, port } },
   '../account_info': async () => account,
   '../game_files': { ensure_latest: async () => version, cull_versions: async () => {},

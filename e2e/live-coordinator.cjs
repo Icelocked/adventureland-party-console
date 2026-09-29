@@ -82,7 +82,7 @@ async function main() {
   const configuredCharacters = Object.fromEntries(account.response.characters.map(character =>
     [character.name, { enabled: false, realm: realm.key, version }]));
   const adapters = {
-    '../config': { characters: configuredCharacters, merchant: 'E2EMerchant', watch_CODE: false, enable_TYPECODE: false,
+    '../config': { characters: configuredCharacters, merchant: JSON.parse(process.env.E2E_MERCHANT_DEFAULT || '"E2EMerchant"'), watch_CODE: false, enable_TYPECODE: false,
       web_app: { party_dashboard: true, expose_CODE: true, port } },
     '../account_info': async () => account,
     '../game_files': { ensure_latest: async () => version, cull_versions: async () => {},

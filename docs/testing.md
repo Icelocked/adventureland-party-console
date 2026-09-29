@@ -3,7 +3,7 @@
 `npm test` runs console and real-game E2E through the dashboard, hosting gateway,
 built coordinator, maintained character runtime and a disposable upstream game
 server backed by MongoDB. Use `npx playwright test --list` for the current scenario
-inventory, including three console journeys and the native-game suites. The inventory is not a passing
+inventory, including five console journeys and the native-game suites. The inventory is not a passing
 result. Playwright starts its console services on ephemeral loopback ports and
 creates fresh coordinator data under `.build/e2e/`. The game uses fixed loopback
 ports 8083 and 9003 in the disposable Docker project `al-e2e-pr21`; run one native
@@ -12,8 +12,8 @@ not attach to the running Party Console or read its credentials.
 The harness pins Express 4.18.3 to match the repository's pinned caracAL host;
 review that pin alongside future caracAL upgrades.
 
-The current inventory contains **64 scenarios: three console and 61 native-game
-journeys**. The solo-ranger scenario extends the previous 63-case inventory.
+The current inventory contains **67 scenarios: five console and 62 native-game
+journeys**. The merchant follow-up adds two dialog journeys and one fresh native-login journey.
 Earlier validation is split across separate runs below; those 63 unique scenario contracts have passing latest outcomes.
 This is aggregate evidence from separate runs and source snapshots, not one
 clean 63-case execution at the final snapshot.
@@ -35,6 +35,22 @@ isolated assertion that a one-fighter group must disappear was removed; its
 surrounding Scatter, merchant-exclusion and disengagement checks remain.
 
 ## Run locally
+
+Merchant autoconfiguration and issue #30 can be repeated with:
+
+```sh
+npm run test:e2e -- --grep "fresh merchant|configured merchant|generic merchant|account preference|context.menu"
+node e2e/verify-artifacts.cjs
+```
+
+The five selected journeys passed together. The native regression starts with no
+merchant assignment, logs in real clients, checks the merchant controls, restarts
+the coordinator, and executes a native bank visit. Its original red run retained
+a null assignment. Dialog tests cover the configured name and generic fallback,
+including donation, Ponty and both bank unlock confirmations without submitting
+economic work. Screenshots, traces, state, native observations and source snapshots
+are retained under `.build/e2e-results`; the checksummed manifest and HTML report
+are under `.build/e2e-report`. This follow-up does not claim a full 67-case rerun.
 
 Use Node 24 (CI pins 24.14.0), Docker with Compose and a running Linux container
 engine, then run from this checkout. The first game image build downloads the
@@ -62,7 +78,7 @@ For one scenario after preparation:
 npm run test:e2e -- --project=console --grep "account preference"
 ```
 
-Use `npm run test:e2e:console` for the three focused console scenarios without
+Use `npm run test:e2e:console` for the five focused console scenarios without
 Docker, or `npm run test:e2e:live` for native gameplay only. Normal game runs
 collect server logs and remove the disposable containers/database at completion.
 

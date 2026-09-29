@@ -26,6 +26,11 @@ from the commits merged into `main`.
 
 ### Fixed
 
+- Keep a solo ranger (or any single fighter) attacking in Group mode by creating its coordinator combat group and target authorization. Leadership is supported; Scatter remains unchanged.
+
+- Automatically designate the first connected, managed merchant on fresh installs so merchant controls and logistics work without editing configuration. Preserve saved assignments and exclude bankboi workers.
+- Show the configured merchant's name in market, Ponty, bank-unlock and donation dialogs, with a generic fallback when no merchant is assigned (#30).
+
 - Keep every right-click menu, submenu, and embedded upgrade preview white with black text, including focus and hover states.
 
 - Correct preview text encoding. Distinguish unavailable and partial chances from successful previews, and wait for bank data before borrowing supplies.

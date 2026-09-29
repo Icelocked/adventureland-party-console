@@ -5,6 +5,9 @@ test.beforeEach(async ({ page }) => {
   const errors: string[] = [];
   pageErrors.set(page, errors);
   page.on('pageerror', error => errors.push(error.stack || error.message));
+  page.on('console', message => {
+    if (message.type() === 'error' && message.text().includes('Party Console render failed')) errors.push(message.text());
+  });
 });
 test.afterEach(async ({ page }, testInfo) => {
   const errors = pageErrors.get(page) || [];
@@ -124,4 +127,55 @@ test('inventory context menu and upgrade preview stay readable without queueing 
   await expect(preview).not.toBeVisible();
   await page.keyboard.press('Escape');
   await expect(rootMenu).not.toBeVisible();
+});
+
+
+test.describe('configured merchant dialog names', () => {
+  test.use({merchantDialogs:true});
+  test('market, bank and donation confirmations name the configured merchant without submitting work', async ({page,app}, info) => {
+    const submitted: string[] = [];
+    page.on('request', request => { if(request.method()==='POST') submitted.push(new URL(request.url()).pathname); });
+    await page.goto('/');
+    const card=page.locator('article').filter({has:page.getByRole('heading',{name:'M',exact:true})});
+    await card.getByRole('button',{name:'Donate gold',exact:true}).click();
+    const donation=page.getByRole('dialog',{name:'Donate gold for merchant XP'});
+    await expect(donation).toContainText('M will withdraw any shortage');
+    await donation.getByRole('button',{name:'Cancel',exact:true}).click();
+    await page.getByRole('button',{name:'View market',exact:true}).click();
+    await page.getByRole('button',{name:/^Live WTB/}).click();
+    await expect(page.getByText(/match exact items currently held by M or recorded/)).toBeVisible();
+    await page.getByRole('button',{name:/^Ponty \(/}).click();
+    await page.getByRole('button',{name:'Buy',exact:true}).click();
+    const purchase=page.getByRole('dialog',{name:'Confirm Ponty purchase'});
+    await expect(purchase).toContainText('M will travel as needed');
+    await info.attach('configured-merchant-ponty',{body:await page.screenshot(),contentType:'image/png'});
+    await purchase.getByRole('button',{name:'Cancel',exact:true}).click();
+    await page.keyboard.press('Escape');
+    await page.getByRole('button',{name:'Inspect bank',exact:true}).click();
+    const bank=page.getByRole('dialog',{name:'Bank',exact:true});
+    await bank.getByRole('button',{name:/^Unlock items1/}).click();
+    const vault=page.getByRole('dialog',{name:'Unlock bank vault?'});
+    await expect(vault).toContainText('M will spend 10,000 gold');
+    await vault.getByRole('button',{name:'Cancel',exact:true}).click();
+    await bank.getByRole('button',{name:/^Unlock with The Bank Key/}).click();
+    const floor=page.getByRole('dialog',{name:'Unlock bank floor?'});
+    await expect(floor).toContainText('M will retrieve and consume The Bank Key');
+    await info.attach('configured-merchant-bank',{body:await page.screenshot(),contentType:'image/png'});
+    await floor.getByRole('button',{name:'Cancel',exact:true}).click();
+    expect(submitted.filter(path=>/\/(donate|ponty-order|bank-unlock)$/.test(path))).toEqual([]);
+    await info.attach('merchant-dialog-http-state',{body:JSON.stringify({submitted,state:await app.state()}),contentType:'application/json'});
+  });
+});
+
+test.describe('unassigned merchant dialog names', () => {
+  test.use({merchantConnected:false});
+  test('market uses a generic merchant label before any merchant connects', async ({page,app}, info) => {
+    expect((await app.state()).merchantCharacter).toBeNull();
+    await page.goto('/');
+    await expect(page.getByRole('heading', {name:'W',exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'View market',exact:true}).click();
+    await page.getByRole('button',{name:/^Live WTB/}).click();
+    await expect(page.getByText(/match exact items currently held by the merchant or recorded/)).toBeVisible();
+    await info.attach('unassigned-merchant-market',{body:await page.screenshot(),contentType:'image/png'});
+  });
 });

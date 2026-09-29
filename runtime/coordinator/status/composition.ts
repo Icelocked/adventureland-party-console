@@ -22,11 +22,13 @@ type ObservationState<R extends Report> = Parameters<typeof createStatusIngestio
   CatalogState &
   ScatterState & {
     leader: string | null;
+    bankbois?: Record<string, unknown>;
     monsterHunt: unknown;
     aldata: { auth: unknown; publishedAt?: number };
   };
 type ComposedConsumers =
   | "known"
+  | "identifyMerchant"
   | "catalogs"
   | "ponty"
   | "bankVaults"
@@ -67,6 +69,16 @@ export function createCoordinatorStatusIngestion<R extends Report>(
   return createStatusIngestion(state, {
     ...ports,
     known: (name) => Object.prototype.hasOwnProperty.call(workers, name) || !!ports.owned(name),
+    identifyMerchant: (body) => {
+      // The first connected, managed merchant owns logistics until explicitly changed.
+      // Roster discovery alone must not pick an offline merchant or a storage worker.
+      if (state.merchantCharacter || body.ctype !== "merchant" || state.bankbois?.[body.name] ||
+          !state.headlessSlots.includes(body.name) && !state.steamMembers.includes(body.name)) return;
+      const owned = ports.owned(body.name);
+      if (!owned || typeof owned !== "object" || !("type" in owned) || owned.type !== "merchant") return;
+      state.merchantCharacter = body.name;
+      ports.persist();
+    },
     catalogs: (body) => { if (ports.acceptCatalogs?.(body) !== false) consumeStatusCatalogs(body, state); },
     ponty: (body) => {
       const observation = consumePontyReport(body, state.merchantCharacter, ports.itemKey);

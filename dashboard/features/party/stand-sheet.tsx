@@ -2773,7 +2773,7 @@ export const StandSheet = memo(function StandSheet({
 
                     {bankWTB.length} offer{bankWTB.length === 1 ? '' : 's'}{' '}
 
-                    match exact items currently held by GoldMajesty or recorded
+                    match exact items currently held by {merchant?.name || "the merchant"} or recorded
 
                     in the bank.
 
@@ -3585,7 +3585,7 @@ export const StandSheet = memo(function StandSheet({
 
               {pontyPurchaseConfirmation
 
-                ? `Buy ${pontyPurchaseConfirmation.quantity.toLocaleString()} ${catalogById.get(pontyPurchaseConfirmation.item.name)?.name || pontyPurchaseConfirmation.item.name} for up to ${pontyPurchaseConfirmation.price.toLocaleString()}g? ${pontyPurchaseConfirmation.realmLabel || ''}. One purchase job will be queued per realm. GoldMajesty will travel as needed and verify each listing. Any matching WTB quantity will be decremented.`
+                ? `Buy ${pontyPurchaseConfirmation.quantity.toLocaleString()} ${catalogById.get(pontyPurchaseConfirmation.item.name)?.name || pontyPurchaseConfirmation.item.name} for up to ${pontyPurchaseConfirmation.price.toLocaleString()}g? ${pontyPurchaseConfirmation.realmLabel || ''}. One purchase job will be queued per realm. ${merchant?.name || "The merchant"} will travel as needed and verify each listing. Any matching WTB quantity will be decremented.`
 
                 : ''}
 

@@ -28,13 +28,13 @@ function createGameFixture(directory) {
   const spawnRecords = [{ ...location, sourceMap: 'main', count: gooSpawn.count, restrictions: [] }];
   const monsterChoices = [{ id: 'goo', name: game.monsters.goo.name || 'goo', locations: [location], spawnRecords }];
   const bestiaryCatalog = Object.entries(game.monsters).map(([id, definition]) => ({
-    ...definition, id, name: definition.name || id, definition, drops: [], spawnRecords: id === 'goo' ? spawnRecords : [],
+    ...definition, id, name: definition.name || id, definition, threat: 0, drops: [], spawnRecords: id === 'goo' ? spawnRecords : [],
   }));
   const hunter = game.maps.main.npcs.find(npc => npc.id === 'monsterhunter');
   let sequence = 0;
   function reports(catalogs = false) {
     const sample = ++sequence;
-    return [['W', 'warrior'], ['P', 'priest'], ['M', 'merchant']].map(([name, ctype]) => ({
+    return [['W', 'warrior'], ['P', 'priest'], ['M', 'merchant']].filter(([name]) => name !== 'M' || process.env.E2E_MERCHANT_CONNECTED !== 'false').map(([name, ctype]) => ({
       name, ctype, level: 80, runtime: 'native', steamPrimary: name === 'W',
       clientVersion: version, runtimeId: 'e2e-' + name, clientInstance: 'e2e-' + name,
       statusSequence: sample, connected: true, map: 'main', in: 'main', server: 'USII',
@@ -45,7 +45,16 @@ function createGameFixture(directory) {
       navigationState: 'idle', standOpen: name === 'M',
       items: Array.from({ length: 42 }, (_, slot) => name === 'M' && slot === 0
         ? { slot, item: { name: 'sword', level: 0 }, meta: itemMeta('sword') } : null),
-      ...(catalogs && name === 'M' ? { merchantCatalog, merchantCatalogVersion: merchantCatalog.version,
+      ...(process.env.E2E_MERCHANT_DIALOGS === 'true' && name === 'M' ? {
+        bank: {gold:1000000,packs:{items0:[{slot:0,item:{name:'bkey'},meta:itemMeta('bkey')}]}},
+        bankVaults: [
+          {pack:'items0',floor:'bank',gold:0,shells:0,key:null},
+          {pack:'items1',floor:'bank',gold:10000,shells:0,key:null},
+          {pack:'items8',floor:'bank_b',gold:0,shells:0,key:{id:'bkey',name:'The Bank Key'}},
+        ],
+        ponty: {updatedAt:Date.now(),listings:[{rid:'e2e-ponty-sword',item:{name:'sword',level:0},price:1000,quantity:1,unitPrice:1000}]},
+      } : {}),
+      ...(catalogs && name === (process.env.E2E_MERCHANT_CONNECTED === 'false' ? 'W' : 'M') ? { merchantCatalog, merchantCatalogVersion: merchantCatalog.version,
         bestiaryCatalog, monsterChoices, monsterLocationsVersion: 3,
         monsterHunterLocation: { map: 'main', x: hunter.position[0], y: hunter.position[1] } } : {}),
     }));

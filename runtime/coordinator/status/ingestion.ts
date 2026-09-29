@@ -24,6 +24,7 @@ interface IngestionPorts<Report extends StatusReport> {
   now(): number;
   known(name: string): boolean;
   persistRoster(): void;
+  identifyMerchant?(body: Report): void;
   catalogs(body: Report): void;
   ponty(body: Report): void;
   bankVaults(body: Report): void;
@@ -68,6 +69,7 @@ export function createStatusIngestion<Report extends StatusReport>(
 
   function consume(body: Report): string[] {
     nativeOwnership(body);
+    ports.identifyMerchant?.(body);
     measureStatusStage('catalogs', () => ports.catalogs(body));
     measureStatusStage('ponty', () => ports.ponty(body));
     measureStatusStage('bankVaults', () => ports.bankVaults(body));

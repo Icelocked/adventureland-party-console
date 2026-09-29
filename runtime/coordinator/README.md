@@ -1,5 +1,13 @@
 # Character coordinator
 
+A fresh installation designates its first owned, connected merchant when that
+character belongs to a headless slot or the native group. Identification precedes
+catalog/market/job ingestion, persists once, excludes bankboi workers, and never
+replaces an existing assignment. `merchant/config` remains the explicit override.
+Validate `live-merchant-config.spec.ts` plus merchant dialog console journeys.
+Coordinator/dashboard changes can use the supported coordinator-only restart;
+a full restart also publishes the current character assets.
+
 A stop-required rare encountered during Hunt travel retains its convoy loot owner.
 The native passive-Goo journey exposed two competing loot barriers: the convoy
 finished its leader loot pass and resumed, but rare hunting kept waiting for a

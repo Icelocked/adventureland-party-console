@@ -25,10 +25,11 @@ export type LiveGame = {
   reconnectClient(name: string): Promise<void>;
 };
 
-export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primaryClass: 'warrior' | 'ranger' }>({
+export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primaryClass: 'warrior' | 'ranger'; merchantDefault: string | null }>({
   loadout: ['god', {option:true}],
   primaryClass: ['warrior', {option:true}],
-  live: [async ({ browser, dashboard, loadout, primaryClass }, use, testInfo) => {
+  merchantDefault: ['E2EMerchant', {option:true}],
+  live: [async ({ browser, dashboard, loadout, primaryClass, merchantDefault }, use, testInfo) => {
     const directory = path.join(root, '.build/e2e', `live-${randomUUID()}`);
     mkdirSync(directory, { recursive: true });
     const manifest = await game.reset();
@@ -62,7 +63,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
     async function start() {
       coordinator = child(path.join(root, 'e2e/live-coordinator.cjs'), [], root,
         environment({ E2E_COORDINATOR_PORT: String(port), E2E_DATA_DIR: directory,
-          E2E_GAME_WEB_URL: manifest.webUrl, E2E_GAME_AUTH: manifest.auth }), log);
+          E2E_GAME_WEB_URL: manifest.webUrl, E2E_GAME_AUTH: manifest.auth, E2E_MERCHANT_DEFAULT: JSON.stringify(merchantDefault) }), log);
       const current = coordinator;
       await new Promise<void>((resolve, reject) => {
         const details = () => existsSync(log) ? readFileSync(log, 'utf8').slice(-16000) : 'No coordinator output';
@@ -136,6 +137,8 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
       for (const name of ['E2EWarrior', 'E2EPriest', 'E2EMerchant'])
         await live.post('/formation', { character: name, follow: false, eventSelections: [] });
       const initial = await live.state();
+      await testInfo.attach('merchant-before-native-login', {body: JSON.stringify({merchantDefault, merchantCharacter: initial.merchantCharacter}), contentType: 'application/json'});
+      expect(initial.merchantCharacter).toBe(merchantDefault);
       await live.post('/merchant/routine-priorities', { priorities: {},
         enabled: Object.fromEntries(Object.keys(initial.merchantAutomations || {}).map(key => [key, false])) });
       // Keep this serial: failures retain the already connected clients for teardown and evidence.

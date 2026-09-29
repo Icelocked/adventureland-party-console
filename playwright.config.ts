@@ -6,7 +6,7 @@ export default defineConfig({
   globalSetup: './e2e/game/setup.mjs',
   projects: [
     { name: 'console', testMatch: ['**/console.spec.ts', '**/hunt.spec.ts'] },
-    { name: 'live', testMatch: ['**/live-game.spec.ts', '**/live-economy.spec.ts', '**/live-catalog.spec.ts', '**/live-franky.spec.ts', '**/live-franky-party.spec.ts', '**/live-hunt-*.spec.ts', '**/live-solo-ranger.spec.ts'],
+    { name: 'live', testMatch: ['**/live-game.spec.ts', '**/live-economy.spec.ts', '**/live-catalog.spec.ts', '**/live-franky.spec.ts', '**/live-franky-party.spec.ts', '**/live-hunt-*.spec.ts', '**/live-solo-ranger.spec.ts', '**/live-merchant-config.spec.ts'],
       use: { trace: { mode: 'on', snapshots: false, screenshots: false, sources: true } } },
   ],
   fullyParallel: false,
