@@ -133,7 +133,7 @@ test.describe('native Hunt lifecycle', () => {
     await party(live);
     await location(live, 'bee');
     const initial = (await world(live))[W];
-    const choices = zones((await live.state()).monsterChoices, ['bee']).filter(area => area.map === initial.map)
+    const choices = zones((await live.state(true)).monsterChoices, ['bee']).filter(area => area.map === initial.map)
       .sort((a, b) => Math.hypot(a.x-initial.x, a.y-initial.y)-Math.hypot(b.x-initial.x, b.y-initial.y));
     expect(choices.length, 'Preference must override the default nearest spawn').toBeGreaterThan(1);
     const destination = choices[choices.length-1], key = JSON.stringify([destination.map, destination.x, destination.y]);
@@ -160,7 +160,7 @@ test.describe('native Hunt lifecycle', () => {
     await start(live);
     await expect.poll(async () => profile(await live.state()).monsterHunt?.cycleId).toBeTruthy();
     const cycle = profile(await live.state()).monsterHunt.cycleId;
-    const catalog = (await live.state()).monsterChoices;
+    const catalog = (await live.state(true)).monsterChoices;
     const spawnKey = (monster: string) => { const area = zones(catalog, [monster])[0]; expect(area).toBeTruthy(); return JSON.stringify([area.map, area.x, area.y]); };
     const beeKey = spawnKey('bee'), gooKey = spawnKey('goo');
     await live.post('/hunt-settings', { character: W, preferredSpawns: { bee: beeKey } });

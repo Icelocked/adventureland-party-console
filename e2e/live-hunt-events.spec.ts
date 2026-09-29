@@ -86,7 +86,9 @@ for(const type of ['phoenix','goldenbat','cutebee','hen','rooster','tinyp']) tes
       expect(quantity((await world(live)).players[W].items,'fieldgen0')).toBe(0);
       await info.attach('native-field-generator-deployment',{body:JSON.stringify(await fields()),contentType:'application/json'});
     }
-    await expect.poll(async()=>live.admin(`output=(()=>{const m=instances[${JSON.stringify(spawn.map)}]?.monsters[${JSON.stringify(spawn.id)}];return !!m&&m.hp<${spawn.initialHp}})()`),{timeout:45_000,intervals:[100],message:'Native attacks must damage the spawned rare'}).toBe(true);
+    await expect.poll(async()=>(await Promise.all([W,P].map(name=>live.clients[name].events()))).flat()
+      .some((event:any)=>event.event==='hit'&&String(event.data?.id)===String(spawn.id)&&[W,P].includes(event.data?.hid)&&event.data?.damage>0),
+    {timeout:45_000,message:'A native party hit receipt must prove damage to the spawned rare, including a killing blow'}).toBe(true);
     if(type==='phoenix')await expect.poll(async()=>{
       const state=await live.state(),epoch=state.farmingProfiles[W].groupedCombatResetAt;
       return [W,P].every(name=>state.characters[name]?.groupedCombat?.epoch===epoch);

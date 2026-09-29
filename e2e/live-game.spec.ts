@@ -38,9 +38,9 @@ async function seedQuest(live: Live, count: number) {
   await expect.poll(async () => (await live.state()).characters[W]?.monsterHunt?.count, { timeout: 20_000 }).toBe(count);
 }
 async function startHunt(live: Live) {
-  await expect.poll(async () => (await live.state()).monsterChoices?.some((entry: any) => entry.id === 'goo'),
+  await expect.poll(async () => (await live.state(true)).monsterChoices?.some((entry: any) => entry.id === 'goo'),
     { timeout: 120_000, message: 'Native catalog discovery must publish Hunt destinations' }).toBe(true);
-  const state = await live.state();
+  const state = await live.state(true);
   const location = state.monsterChoices.find((entry: any) => entry.id === 'goo')?.locations.find((area: Location) => area.map === 'main');
   expect(location, 'The real client must publish a Goo spawn catalog').toBeTruthy();
   await live.post('/farming-mode', { character: W, mode: 'hunt', backup: { monsterFocus: ['goo'], location } });
@@ -256,7 +256,8 @@ test.describe('real server, native clients, maintained character runtime', () =>
     const fault = await killNativeCharacter(live, W);
     await expect.poll(async () => (await observed(live))[W].rip, { timeout: 15_000 }).toBe(true);
     await expect.poll(async () => { const p=(await observed(live))[W];return !p.rip&&p.hp>0; }, { timeout: 120_000 }).toBe(true);
-    expect((await live.clients[W].snapshot()).rip).toBeFalsy();
+    await expect.poll(async () => (await live.clients[W].snapshot()).rip,
+      {timeout:15_000,message:'The real revival must propagate from the server to the native client'}).toBeFalsy();
     await evidence(live, info, 'real-death-and-respawn', { fault });
   });
   });

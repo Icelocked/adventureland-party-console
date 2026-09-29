@@ -25,3 +25,19 @@ The narrowly retained renderer regression uses the pinned native `set_texture`
 implementation because the disposable server is client 15555, while the incident
 was on 17397. Its purpose is native missing-frame behavior and host lifecycle,
 not proving public-server gameplay. Live account diagnostic captures stay private.
+
+Full-suite follow-up failure modes (recorded before the recovery change):
+
+- A native merchant death during rendezvous returns an explicit failure receipt
+  before revival. Retiring this job loses the user's collection intent; immediately
+  dispatching the next job while dead loses that work too. Preserve unfinished
+  work with the existing bounded interruption retries, keep confirmed receipts,
+  and require a fresh living merchant before dispatch. Validate the existing native
+  queued/active death and restart collection scenarios with cargo conservation.
+- External polling can miss short native Town casting windows on loaded runners.
+  Fault injection must observe the actual native cast packet and issue the real
+  stop in the client, retaining evidence of leader arrival and follower position.
+- A rare killed by another party member can leave the leader outside loot range.
+  Rejecting the loot control because of distance prevents the very movement that
+  would reach it. Preserve current-place ownership while approaching; completion
+  must still require proximity, a real loot pass and a subsequent observation.

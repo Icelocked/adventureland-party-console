@@ -26,7 +26,7 @@ for (const restart of [false, true]) {
     expect(equipmentStats.speed).toBeGreaterThan(0);
     await info.attach('town-native-iceskates-equipment', { body: JSON.stringify({ equipmentSeed, equipReceipt, equipmentStats,
       rationale: 'Native Ice Skates extend the obstacle detour beyond30s; the pinned2561-unit full walk at40speed takes about64s, under120s absolute bound.' }), contentType: 'application/json' });
-    const candidates = zones((await live.state()).monsterChoices, ['bee']).filter(area => area.map === 'main');
+    const candidates = zones((await live.state(true)).monsterChoices, ['bee']).filter(area => area.map === 'main');
     // Native 15555 Bee boundary [448,694,592,812] contains the incident's
     // Main(520,710) origin. Returning on foot must detour southeast first.
     const destination = candidates.find(area => contains(area, { map: 'main', x: 520, y: 710 }, 0));
@@ -58,6 +58,7 @@ for (const restart of [false, true]) {
       let timer;
       fault.release = reason => {
         if (fault.released) return;
+        fault.armed = reason === 'authoritative-leader-town-arrival';
         fault.released = true; clearTimeout(timer);
         for (const packet of pending.splice(0)) {
           fault.events.push({ event: 'town-request-forwarded', reason, at: Date.now() });
@@ -75,7 +76,16 @@ for (const restart of [false, true]) {
         if (event === 'town') fault.events.push({ event: 'native-town-request', at: Date.now() });
         return emit.apply(socket, [event, ...args]);
       };
-      fault.restore = () => { fault.release('fixture-cleanup'); socket.emit = emit; };
+      // Observe the real server cast in the client: an external round trip can
+      // miss the entire window if normal healing interrupts it first.
+      const onPlayer = data => {
+        if (!fault.armed || fault.interruption || !data.c?.town) return;
+        fault.interruption = {map:data.map || character.map,x:data.x,y:data.y,casting:true,nativeTown:data.c.town,at:Date.now()};
+        stop('town');
+        fault.events.push({event:'native-stop-town',...fault.interruption});
+      };
+      socket.on('player', onPlayer);
+      fault.restore = () => { fault.release('fixture-cleanup'); socket.off('player', onPlayer); socket.emit = emit; };
       return true;
     })()`);
     const plans: unknown[] = [];
@@ -97,7 +107,7 @@ for (const restart of [false, true]) {
     context.on('request', observePlan);
     context.on('response', observeResponse);
     let split: Awaited<ReturnType<typeof world>>;
-    let interruption: unknown;
+    let interruption: {at:number;map:string;x:number;y:number;casting:boolean};
     const recoveryPositions: { at: number; map: string; x: number; y: number; distanceFromTown: number; ownedWalking: boolean }[] = [];
     let ownedWalking = false;
     const recoveryStates: { at: number; id?: string; phase?: string; attempts: number; failure?: string; code?: string; message?: string }[] = [];
@@ -120,30 +130,18 @@ for (const restart of [false, true]) {
       await expect.poll(async () => {
         const current = await world(live);
         if (!fighters.every(name => current[name].quest?.id === 'bee' && current[name].quest.c === 0) ||
-          current[W].map !== 'main' || Math.hypot(current[W].x, current[W].y) >= 90) return false;
+          current[W].map !== 'main' || Math.hypot(current[W].x, current[W].y) >= 90 ||
+          current[P].map !== 'main' || Math.hypot(current[P].x, current[P].y) <= 250) return false;
+        split = current;
         return live.clients[P].run(`(() => {
           const fault = globalThis.__e2eTownFault;
           if (!fault.delayed || fault.released) return false;
           fault.release('authoritative-leader-town-arrival'); return true;
         })()`);
       }, { timeout: 180_000, intervals: [50, 100], message: 'Release the genuine follower Town request only after actual leader Town arrival' }).toBe(true);
-      await expect.poll(async () => {
-        const current = await world(live);
-        if (fighters.every(name => current[name].quest?.id === 'bee' && current[name].quest.c === 0) &&
-          current[W].map === 'main' && Math.hypot(current[W].x, current[W].y) < 90 &&
-          current[P].map === 'main' && Math.hypot(current[P].x, current[P].y) > 250 &&
-          await live.clients[P].run('!!(character.c && character.c.town)')) {
-          split = current;
-          return true;
-        }
-        return false;
-      }, { timeout: 8_000, intervals: [50, 100], message: 'Observe actual leader Town arrival while follower is still casting outside town' }).toBe(true);
-      interruption = await live.clients[P].run(`(() => {
-        const before = { map: character.map, x: character.x, y: character.y, casting: !!character.c.town, at: Date.now() };
-        stop('town');
-        globalThis.__e2eTownFault.events.push({ event: 'native-stop-town', ...before });
-        return before;
-      })()`);
+      await expect.poll(() => live.clients[P].run('!!globalThis.__e2eTownFault.interruption'),
+        {timeout:8_000,message:'The client must observe and stop the actual native Town cast'}).toBe(true);
+      interruption = await live.clients[P].run('globalThis.__e2eTownFault.interruption');
       recordRecovery(await world(live));
       await info.attach('partial-town-native-fault', { body: JSON.stringify({ split, interruption, restart }), contentType: 'application/json' });
       // Native melee/follow positioning can finish just outside the spawn edge.
@@ -204,15 +202,14 @@ for (const restart of [false, true]) {
       const nativeTownRequests = await live.clients[P].run('globalThis.__e2eTownFault.events.filter(event => event.event === "native-town-request")');
       const townEligibility = recoveryHistory.filter((entry: any) => entry.message === 'Convoy Aggro clear; Town eligible');
       if (nativeTownRequests.length) {
-        expect(restart, 'Uninterrupted walking case must exercise the full detour').toBe(true);
-        expect(townEligibility.some((entry: any) => entry.at >= restartAt! && entry.at <= nativeTownRequests[0].at),
-          'A real post-restart Town request requires an explicit coordinator eligibility transition').toBe(true);
+        expect(townEligibility.some((entry: any) => entry.at >= interruption.at && entry.at <= nativeTownRequests[0].at),
+          'A later native Town request requires an explicit coordinator eligibility transition after the interruption').toBe(true);
       }
       // Upstream sets last.town only when the real cast finishes and transports.
       const nativeTownCompletedAt = await live.admin(`output=Number(get_player(${JSON.stringify(P)}).last.town)||null`);
-      const completedRestartTown = restartAt !== null && nativeTownCompletedAt >= restartAt;
-      if (completedRestartTown) expect(nativeTownRequests.length, 'A completed native Town must have its genuine socket request in the ledger').toBeGreaterThan(0);
-      const recoveryMethod = completedRestartTown ? 'walking followed by explicitly eligible native Town' : 'walking';
+      const completedRecoveryTown = nativeTownCompletedAt >= interruption.at;
+      if (completedRecoveryTown) expect(nativeTownRequests.length, 'A completed native Town must have its genuine socket request in the ledger').toBeGreaterThan(0);
+      const recoveryMethod = completedRecoveryTown ? 'walking followed by explicitly eligible native Town' : 'walking';
       await Promise.all(pendingResponses);
       const walkingRallies = planResponses.filter(result => result.request?.character === P &&
         result.request.town === false && result.request.to.map === 'main' &&

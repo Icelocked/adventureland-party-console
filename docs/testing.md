@@ -364,11 +364,13 @@ Native gameplay runs only when explicitly requested through the separate
 
 1. Open GitHub **Actions → Native game E2E (manual) → Run workflow**.
 2. Select the branch to test and start the run.
-3. Inspect all three `native-game` shards and download their `native-game-e2e-…-shard-…` artifacts.
+3. Inspect all six `native-game` shards and download their `native-game-e2e-…-shard-…` artifacts.
 
 Each shard installs the game/client dependencies, builds the maintained assets via
-`npm run test:e2e:live`, and runs one third of the complete `live` Playwright project
-on its own Ubuntu runner and native game stack. Each has a 180-minute limit;
+`npm run test:e2e:live`, and runs one sixth of the complete `live` Playwright project
+on its own Ubuntu runner and native game stack. Test-level sharding distributes
+large spec files across runners; `--workers=1` still serializes access to each
+runner's disposable game. Each has a 180-minute limit;
 fail-fast is disabled so one failure does not cancel the other evidence. Each verifies
 the evidence even after a test failure, and always attempts to upload the report,
 traces and server log. Failed or incomplete manifests still fail verification.

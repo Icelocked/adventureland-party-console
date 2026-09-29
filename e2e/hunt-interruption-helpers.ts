@@ -37,13 +37,13 @@ export async function evidence(live:LiveGame,info:TestInfo,label:string,detail:u
 }
 export async function prepareHunt(live:LiveGame,id='armadillo',count=1) {
   await live.post('/formation',{leader:W});await live.post('/formation',{character:P,follow:true});
-  await expect.poll(async()=>!!(await live.state()).monsterChoices?.find((m:any)=>m.id===id),{timeout:120000}).toBe(true);
+  await expect.poll(async()=>!!(await live.state(true)).monsterChoices?.find((m:any)=>m.id===id),{timeout:120000}).toBe(true);
   await live.admin(`output=${JSON.stringify(fighters)}.map(name=>{const p=get_player(name);p.s.monsterhunt={sn:region+' '+server_name,id:${JSON.stringify(id)},c:${count},ms:1800000};resend(p,'u+cid+reopen');return p.s.monsterhunt})`);
   await expect.poll(async()=>{
     const state=await live.state();
     return fighters.every(name=>state.characters[name]?.monsterHunt?.id===id&&state.characters[name]?.monsterHunt?.count===count);
   },{timeout:30000,message:'Both native quest observations must arrive before Hunt selects its owners'}).toBe(true);
-  const state=await live.state(),choice=state.monsterChoices.find((m:any)=>m.id===id);
+  const state=await live.state(true),choice=state.monsterChoices.find((m:any)=>m.id===id);
   const location=choice.locations.find((l:any)=>l.map==='main')||choice.locations[0];
   expect(location).toBeTruthy();
   return {id,location,before:await observed(live)};

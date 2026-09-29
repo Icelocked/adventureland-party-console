@@ -7,7 +7,11 @@ test.describe('native Hunt travel combat and death ownership',()=>{
     const setup=await prepareHunt(live);
     await live.post('/rare-hunting',{rules:{goo:{enabled:true,keepMoving:true,priority:100}},useFieldGenerators:false});
     await beginHunt(live,setup);
-    await expect.poll(async()=>{const s=await live.state();return hunt(s)?.stage==='mission-travel'&&s.activeConvoy?.phase==='travel';},{timeout:90000,intervals:[100,250]}).toBe(true);
+    await expect.poll(async()=>{
+      const s=await live.state();
+      return hunt(s)?.stage==='mission-travel'&&s.activeConvoy?.phase==='travel'&&
+        await live.clients[W].run('!!character.moving && !(character.c && character.c.town)');
+    },{timeout:90000,intervals:[100,250],message:'Introduce the outbound Goo during native walking, after any Town cast'}).toBe(true);
     const outbound=await spawnGoo(live);
     const outboundKill=await killedByParty(live,String(outbound.id));
     expect((await observed(live))[W].quest?.id).toBe('armadillo');
