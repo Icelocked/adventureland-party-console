@@ -61,9 +61,17 @@ export async function reward(live:LiveGame,before:Record<string,any>,timeout=240
 export async function spawnGoo(live:LiveGame,name=W,observableCombatSeconds=0,ahead=0) {
   // Native temp suppresses this encounter's respawn without changing species rules.
   // A newly introduced encounter is setup; no existing monster health or death is changed.
-  return live.admin(`output=(()=>{const p=get_player(${JSON.stringify(name)}),distance=Math.hypot(p.going_x-p.x,p.going_y-p.y),ahead=${ahead}?Math.min(${ahead},distance-35):0;
+  // Native paths can split one straight corridor into short waypoints. Read the
+  // already planned route to place the encounter ahead without needing a long
+  // individual move packet or changing any route/character movement.
+  const goal=ahead?await live.clients[name].run(`(()=>{
+    const points=[{map:character.map,x:character.going_x,y:character.going_y},...(smart.plot||[])];
+    return points.filter(p=>p.map===character.map&&!p.town&&!p.transport&&p.method!=='leave'&&can_move_to(p.x,p.y))
+      .sort((a,b)=>Math.hypot(character.real_x-b.x,character.real_y-b.y)-Math.hypot(character.real_x-a.x,character.real_y-a.y))[0]||null;
+  })()`):null;
+  return live.admin(`output=(()=>{const p=get_player(${JSON.stringify(name)}),goal=${JSON.stringify(goal)},distance=goal?Math.hypot(goal.x-p.x,goal.y-p.y):0,ahead=${ahead}?Math.min(${ahead},distance-35):0;
     if(${ahead}&&(!p.moving||ahead<35))throw Error('Passing encounter requires an ongoing native walking leg');
-    const offsets=ahead?[[ahead*(p.going_x-p.x)/distance,ahead*(p.going_y-p.y)/distance]]:[[35,0],[-35,0],[0,35],[0,-35]];
+    const offsets=ahead?[[ahead*(goal.x-p.x)/distance,ahead*(goal.y-p.y)/distance]]:[[35,0],[-35,0],[0,35],[0,-35]];
     for(const [dx,dy] of offsets){const x=p.x+dx,y=p.y+dy;if(can_move({map:p.map,x:p.x,y:p.y,going_x:x,going_y:y,base:p.base})){const m=new_monster(p.in,{type:'goo',position:[x,y],radius:0,count:1},{temp:1});m.e2eHunt=true;${observableCombatSeconds ? `m.hp=m.max_hp=Math.ceil(${JSON.stringify(fighters)}.map(get_player).reduce((sum,p)=>sum+Math.max(1,p.attack)*Math.max(0.1,p.frequency),0)*${observableCombatSeconds});` : ''}return {id:m.id,map:m.map,x:m.x,y:m.y,hp:m.hp,ahead,origin:{x:p.x,y:p.y},observableCombatSeconds:${observableCombatSeconds}};}}throw Error('No reachable encounter seed')})()`);
 }
 export async function killedByParty(live:LiveGame,id:string,timeout=45000) {
