@@ -21,7 +21,7 @@ export const loadouts = {
 } as const;
 
 /** Runs after reset, before native login: no connected character is modified. */
-export async function seedLoadout(admin: (code: string) => Promise<unknown>, profile: NativeLoadout) {
+export async function seedLoadout(admin: (code: string) => Promise<unknown>, profile: NativeLoadout, primaryClass: 'warrior' | 'ranger' = 'warrior') {
   const selected=loadouts[profile];
   if(!selected)throw Error('Unknown native loadout: '+profile);
   const result = await admin(`output=(async()=>{
@@ -30,11 +30,14 @@ export async function seedLoadout(admin: (code: string) => Promise<unknown>, pro
     for(const name of ['E2EWarrior','E2EPriest','E2EMerchant']) {
       const c=await db.collection('character').findOne({name:name.toLowerCase()});
       if(!c)throw Error('Missing loadout character: '+name);
+      // Keep the fixture account name stable; native login and account discovery
+      // both receive the requested class before equipment is calculated.
+      if(name==='E2EWarrior')c.type=${JSON.stringify(primaryClass)};
       const slots=structuredClone(G.classes[c.type].base_slots||{});
       for(const value of Object.values(slots))if(value&&value.name)value.level=definition.weaponLevel;
       Object.assign(slots,structuredClone(definition.armor));
       if(profile==='god') {
-        const stat=c.type==='warrior'?'str':'int';
+        const stat=c.type==='warrior'?'str':c.type==='ranger'?'dex':'int';
         slots.amulet={name:stat+'amulet',level:20};slots.belt={name:stat+'belt',level:20};
       }
       for(const [slot,value] of Object.entries(slots))if(value&&value.name&&!G.items[value.name])throw Error('Unknown native gear '+slot+': '+value.name);

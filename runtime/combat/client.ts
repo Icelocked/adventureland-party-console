@@ -124,7 +124,8 @@ export function installQueueClient(root:any, shared:any) {
     if(target.type!=='monster')return false;
     if(shared.convoyHoldDefenseTarget?.()?.id===target.id)return true;
     const report=shared.queueReport();
-    const identity={...target,map:report.map,in:report.in,server:report.server,at:Date.now()+shared.queueClockOffset()};
+    const identity={...target,map:report.map,in:report.in,server:report.server,at:Date.now()+shared.queueClockOffset(),
+      keepMoving:shared.getWalkingPassiveTarget?.()?.id===target.id};
     if(!passing.prepare(identity,report.groupedCombat.passingEncounters))return false;
     shared.beginPassingAttack(target);
     return true;

@@ -495,7 +495,7 @@ export function createSharedConvoyNavigation(legacy: ConvoyNavigationPlatform,
     const state = input as SharedState, c = state.activeConvoy;
     const result = legacy.signal(state, name, now) as Record<string, unknown> | null;
     if (!result || c?.routeProtocol !== 4) return result;
-    return { ...result, navigationRevision: state.commands[name]?.navigationRevision, geometryReload: geometryReloadSignal(state,c,name), returnWalking: returnWalking(c), immediateDeparture: !!c.continuousReturn || immediateTownDeparture(c), farmingEngagement: c.farmingEngagement || null, routeProtocol: 4, routeVersion: c.routeVersion || 0, routeAvailable: !!sharedRoute(c) };
+    return { ...result, runtimeId: result.runtimeId || (c.phase === 'assemble' ? state.statuses[name]?.combatSelection?.runtimeId : undefined), navigationRevision: state.commands[name]?.navigationRevision, geometryReload: geometryReloadSignal(state,c,name), returnWalking: returnWalking(c), immediateDeparture: !!c.continuousReturn || immediateTownDeparture(c), farmingEngagement: c.farmingEngagement || null, routeProtocol: 4, routeVersion: c.routeVersion || 0, routeAvailable: !!sharedRoute(c) };
   }
   const engage: ConvoyNavigationPlatform["engage"] = (state, body, options) =>
     ["", "party-travel", "farm-relocation"].includes((state as SharedState).activeConvoy?.purpose || "")

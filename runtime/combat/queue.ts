@@ -16,7 +16,7 @@ export function reconcileQueue(old: Group | undefined | null, members: Member[],
   // A farming Hunt takes ownership of its target, including attacks made en route.
   // Drop cached peer reports too: their normal expiry can otherwise block the pull.
   const passingEncounters=collectPassing(members,old?.passingEncounters||[],now)
-    .filter(t=>!huntDefense && t.mtype!==huntTarget && !defending.has(passingIdentity(t)));
+    .filter(t=>(t.keepMoving || !huntDefense) && t.mtype!==huntTarget && (t.keepMoving || !defending.has(passingIdentity(t))));
   const passing=new Set(passingEncounters.map(passingIdentity));
   const failedRecovery=old?.formationRecovery;
   if(old && failedRecovery?.phase==='failed' && members.every(m=>m.status && now-m.status.seenAt<=3000 && m.status.groupedCombat?.formationRecovery?.ack===failedRecovery.id))

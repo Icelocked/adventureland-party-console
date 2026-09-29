@@ -25,13 +25,14 @@ export type LiveGame = {
   reconnectClient(name: string): Promise<void>;
 };
 
-export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout }>({
+export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primaryClass: 'warrior' | 'ranger' }>({
   loadout: ['god', {option:true}],
-  live: [async ({ browser, dashboard, loadout }, use, testInfo) => {
+  primaryClass: ['warrior', {option:true}],
+  live: [async ({ browser, dashboard, loadout, primaryClass }, use, testInfo) => {
     const directory = path.join(root, '.build/e2e', `live-${randomUUID()}`);
     mkdirSync(directory, { recursive: true });
     const manifest = await game.reset();
-    const equipment = await seedLoadout(game.admin, loadout);
+    const equipment = await seedLoadout(game.admin, loadout, primaryClass);
     await testInfo.attach('native-loadout-seed', {body:JSON.stringify(equipment,null,2),contentType:'application/json'});
     await testInfo.attach('live-seed', { body: JSON.stringify({ ...manifest, auth: '[disposable credential omitted]' }, null, 2), contentType: 'application/json' });
     const port = await unusedPort(), log = path.join(directory, 'coordinator.log');

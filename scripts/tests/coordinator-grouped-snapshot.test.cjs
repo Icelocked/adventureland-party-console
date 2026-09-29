@@ -49,8 +49,6 @@ test('scatter only evaluates during disengagement or convoy defense, excluding m
   f.state.activeConvoy = null; f.ports.disengagementActive = () => true;
   assert.equal(f.run(), f.group);
   assert.equal(f.calls.filter(call => Array.isArray(call) && call[0] === 'evaluate').at(-1)[1][5], true);
-  f.state.followers.P = false;
-  assert.equal(f.run(), null); assert.equal(f.state.groupedCombat, null);
 });
 
 test('formation logs change only on meaningful transitions and retain the latest 200 entries', () => {

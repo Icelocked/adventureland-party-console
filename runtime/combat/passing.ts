@@ -1,6 +1,9 @@
 import type { Member, Target } from './grouped.ts';
 
-export interface PassingEncounter extends Target { server?: string; at: number; startedAt?: number; reserved?: boolean; admission?: {scope: string; token: string} }
+export interface PassingEncounter extends Target { server?: string; at: number; startedAt?: number; reserved?: boolean;
+  /** Explicit passive keep-moving reservation; retaliation cannot acquire travel ownership. */
+  keepMoving?: boolean;
+  admission?: {scope: string; token: string} }
 export const passingIdentity = (t: {server?:string;map:string;in?:string|number;id:string}) =>
   JSON.stringify([t.server,t.map,String(t.in ?? t.map),String(t.id)]);
 

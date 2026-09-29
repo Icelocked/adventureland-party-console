@@ -56,7 +56,8 @@ function townUsable(state:SharedState,c:SharedConvoy,name:string):boolean {
 }
 function updateTownPolicy(state:SharedState,c:SharedConvoy,now:number):void {
   const policy=c.returnTown!, lead=state.statuses[c.leader]!;
-  const observed=classifyTravelDefense(state,c.participants,now);
+  // Optional passing attacks must not stop walking, but their aggro still makes Town unsafe.
+  const observed=classifyTravelDefense(state,c.participants,now,true);
   if(observed.state==='waiting-for-observations')return;
   const changedMap=newMapReady(state,c,lead.map,lead.server,now);
   if(changedMap){policy.map=lead.map;policy.interruptions=0;}

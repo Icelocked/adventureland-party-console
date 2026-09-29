@@ -12,12 +12,27 @@ not attach to the running Party Console or read its credentials.
 The harness pins Express 4.18.3 to match the repository's pinned caracAL host;
 review that pin alongside future caracAL upgrades.
 
-The current inventory contains **63 scenarios: three console and 60 native-game
-journeys**. It extends the 60-scenario diagnostic inventory with two partial-Town
-recovery variants and one lost-preparation/cold-defense journey. Validation is split
-across separate runs below; all 63 unique scenario contracts now have passing latest outcomes.
+The current inventory contains **64 scenarios: three console and 61 native-game
+journeys**. The solo-ranger scenario extends the previous 63-case inventory.
+Earlier validation is split across separate runs below; those 63 unique scenario contracts have passing latest outcomes.
 This is aggregate evidence from separate runs and source snapshots, not one
 clean 63-case execution at the final snapshot.
+
+The solo-ranger regression runs with `npx playwright test e2e/live-solo-ranger.spec.ts`.
+It uses `primaryClass: 'ranger'` to seed the existing primary fixture account as a
+native ranger before login and equipment calculation. The account name remains
+`E2EWarrior`; actual native class and class-specific equipment are verified.
+It selects Group mode with no following fighters, requires a singleton combat
+group and committed Goo target, then observes native quest kills continuing at
+least ten seconds beyond the first kills. No attacks, authorizations or deaths
+are synthesized. The unfixed coordinator failed to provide a group within 25
+seconds; allowing one fighter fixes that mismatch. Other suites are not rerun
+for this follow-up; the full app build includes typechecking.
+The combined-code rerun passed with 33 verified evidence files in
+`.build/solo-ranger-integrated-e2e-{report,results}`: eight native Goo kills,
+including five more over 10.726 seconds after the first three. The obsolete
+isolated assertion that a one-fighter group must disappear was removed; its
+surrounding Scatter, merchant-exclusion and disengagement checks remain.
 
 ## Run locally
 

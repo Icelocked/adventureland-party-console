@@ -18,7 +18,7 @@ function fixture() {
   character:{name:m.name,map:'main',in:'main'},parent:{entities:{snake1:monster}},root:{},
   passingEncounters:{},peerPassingEncounters:[],groupedCombat:null,coordinatorClockOffset:0,
   reunionRealm:()=> 'USII',get_entity:id=>id===monster.id?monster:null,
-  passiveHunting:{useFieldGenerators:false},currentPartyList:()=>['W','P'],partyPositions:[{name:'W',map:'main'},{name:'P',map:'main'}],
+  passiveHunting:{rules:{},useFieldGenerators:false},currentPartyList:()=>['W','P'],partyPositions:[{name:'W',map:'main'},{name:'P',map:'main'}],
   joinedEvent:false,eventTargetTypes:[],sameEventTeamMember:()=>true,stop(){stops++;},
   convoyTraveling:{id:'C',epoch:1,commandId:m.name==='W'?1:2,navigationRevision:1,routeProtocol:4,phase:'travelling',purpose:'anniversary-return'}}));
  contexts.forEach(c=>vm.runInContext(functions,c));
@@ -113,7 +113,7 @@ test('three real convoy executors reach the endpoint through successive passing 
   const members=names.map(name=>({name,ctype:'warrior',revision:0,status:{seenAt:5600,hp:100,map:'main',in:'main',server:'USII',
    combatSelection:{runtimeId:name},groupedCombat:{}}}));
   runners.forEach((r,i)=>{
-   Object.assign(r.context,{passingEncounters:{},peerPassingEncounters:[],groupedCombat:null,passiveHunting:{useFieldGenerators:false},
+   Object.assign(r.context,{passingEncounters:{},peerPassingEncounters:[],groupedCombat:null,passiveHunting:{rules:{},useFieldGenerators:false},
     reunionRealm:()=> 'USII',currentPartyList:()=>names,joinedEvent:false,eventTargetTypes:[],
     get_entity:id=>r.context.parent.entities[id]});
    r.context.parent.entities={};vm.runInContext(functions,r.context);
@@ -157,6 +157,24 @@ test('fresh heartbeats cannot renew an acknowledgement from a lost response chan
 test('unused reservations expire even while the un-attacked monster remains visible',()=>{
  const f=fixture();f.clients[0].prepare(f.target());assert.equal(f.contexts[0].passingEncounterReport().length,1);
  f.advance(60001);assert.equal(f.contexts[0].passingEncounterReport().length,0);
+});
+
+test('explicit keep-moving reservations get acknowledged without becoming a Hunt primary',()=>{
+ const f=fixture(),settings={rules:{snake:{enabled:true,keepMoving:true,priority:100}}};
+ const convoy={id:'C',epoch:1,purpose:'monster-hunt',huntTarget:'mole',phase:'travel'};
+ f.contexts.forEach(c=>{c.passiveHunting=settings;});
+ const target={...f.target(),keepMoving:true};
+ assert.equal(f.clients[0].prepare(target),false);f.report(0);
+ for(let round=0;round<4;round++) {
+  const control=passingControl(f.members,['C',1],f.now(),convoy,settings);
+  for(let i=0;i<2;i++){f.deliver(i,control);f.report(i);}
+ }
+ const control=passingControl(f.members,['C',1],f.now(),convoy,settings);
+ assert.equal(control.hunt.primary,null,'optional attacks never reserve the route or Hunt primary');
+ assert.equal(control.admitted.length,1);f.deliver(0,control);assert.equal(f.clients[0].prepare(target),true);
+ f.members[0].status.groupedCombat.currentAttackers=[{...f.monster,target:'W'}];
+ assert.equal(passingControl(f.members,['C',1],f.now(),convoy,settings).hunt.primary,null);
+ f.advance(1001);assert.equal(f.clients[0].prepare(target),false,'still requires fresh authorization');
 });
 
 function stopped() {

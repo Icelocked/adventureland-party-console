@@ -84,7 +84,7 @@ test('client counts raw passing aggro, pauses locally, and releases passing supp
  const a=monster('a','W'),b=monster('b','P');let stops=0;
  const c=vm.createContext({Date:{now:()=>now},Math,Object,String,Number,Promise,character:{name:'W',map:'tunnel',in:'tunnel'},
  parent:{entities:{a,b}},root:{__partyHuntTravel:{id:'C',epoch:1,primary:a}},convoyTraveling:{id:'C',epoch:1,purpose:'monster-hunt',huntTarget:'mole',phase:'travelling',routeProtocol:4},
- fightDeaths:[],groupedCombat:null,passingEncounters:{},peerPassingEncounters:[],coordinatorClockOffset:0,
+ passiveHunting:{rules:{}},fightDeaths:[],groupedCombat:null,passingEncounters:{},peerPassingEncounters:[],coordinatorClockOffset:0,
  reunionRealm:()=> 'USII',get_entity:id=>({a,b}[id]),currentPartyList:()=>['W','P'],stop:()=>{stops++;},committedHuntEncounter:()=>false});
  const names=['passiveStopRequired','passiveTravelInterruptible','travelStopCandidates','outboundHuntTravel','huntTravelDefense','huntTravelControl','huntTravelExtraAggro','currentTravelAttackers','passingKey','isPassingEncounter','interruptConvoyForDefense','groupedEntityReport'];
  vm.runInContext(names.map(n=>namedFunction(source,n)).join('\n'),c);

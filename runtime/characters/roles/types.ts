@@ -73,6 +73,7 @@ export interface SharedCombat {
   usesGroupedCombat?(): boolean;
   getCloserHuntTarget?(current: Target): Target | null;
   returnCombatActive?(): boolean;
+  getWalkingPassiveTarget?(): Target | null;
   returnDefenseTarget?(): Target | null;
   returnAttacker?(target: Target): boolean;
   returnMovementTick?(): void;

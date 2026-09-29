@@ -41,7 +41,7 @@ test('one fresh planning retry then durable hold, without losing the original ca
 });
 function client(phase){
  const entities={passive:{id:'passive',type:'monster',hp:100,visible:true,target:null},boo:{...boo,type:'monster',visible:true},far:{...boo,id:'far',type:'monster',visible:true}};
- const c=vm.createContext({root:{},character:{name:'L',map:'spookytown',in:'spookytown'},navigationIntent:{revision:0},escapeOwns:()=>false,combatRecoveryActive:()=>false,convoyTraveling:{continuousReturn:1,phase},parent:{entities},isAttackingPartyMember:t=>['L','F'].includes(t.target),is_in_range:t=>t.id==='boo',reunionRealm:()=> 'USII'});
+ const c=vm.createContext({root:{},character:{name:'L',map:'spookytown',in:'spookytown'},currentPartyList:()=>['L','F'],navigationIntent:{revision:0},escapeOwns:()=>false,combatRecoveryActive:()=>false,convoyTraveling:{continuousReturn:1,phase},parent:{entities},isAttackingPartyMember:t=>['L','F'].includes(t.target),is_in_range:t=>t.id==='boo',reunionRealm:()=> 'USII'});
  vm.runInContext(['returnCombatActive','returnAttacker','returnDefenseTarget','cancelReturnTownUnderAttack','queueMarkers'].map(n=>namedFunction(source,n)).join('\n'),c);
  return {c,entities};
 }
@@ -55,4 +55,18 @@ test('local aggro cancels an active Town cast immediately, not ordinary walking'
  const {c}=client('travelling');let failed=0;c.convoyTraveling.fail=()=>failed++;
  c.cancelReturnTownUnderAttack();assert.equal(failed,0);
  c.convoyTraveling.townAttempt={state:'casting'};c.cancelReturnTownUnderAttack();assert.equal(failed,1);assert.equal(c.convoyTraveling.townAttempt.state,'interrupted');
+});
+
+test('keep-moving retaliation leaves return walking alone but still rules out a Town cast',()=>{
+ const p=party(),c=p.activeConvoy,s=p.statuses.F;
+ s.groupedCombat.currentAttackers=[boo];
+ s.groupedCombat.passingEncounters=[{...boo,server:'USII',at:1000,keepMoving:true}];
+ assert.equal(require('../../runtime/coordinator/navigation/travel-defense.ts').classifyTravelDefense(p,c.participants,1000).state,'clear');
+ assert.equal(observeReturnTown(p,c,1000),true);assert.equal(c.disableTown,true);
+ assert.equal(c.phase,'shared-prepare');assert.equal(c.recoveryAttempts,undefined);
+ const local=client('travelling');let interrupted=0;
+ local.c.isAttackingPartyMember=()=>false;local.c.convoyTraveling.fail=()=>interrupted++;
+ local.c.cancelReturnTownUnderAttack();assert.equal(interrupted,0);
+ local.c.convoyTraveling.townAttempt={state:'casting'};
+ local.c.cancelReturnTownUnderAttack();assert.equal(interrupted,1);
 });

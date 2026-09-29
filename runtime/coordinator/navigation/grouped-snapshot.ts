@@ -127,7 +127,7 @@ function evaluateParticipants(
   leader: string,
 ): Group | null {
   const names = participantNames(state, leader);
-  if (names.length < 2) {
+  if (!names.length) {
     state.groupedCombat = null;
     return null;
   }

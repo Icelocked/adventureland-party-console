@@ -43,18 +43,19 @@ function confirmedDeaths(party: DefenseState): Set<string> {
   return new Set(deaths.map(identity));
 }
 function passingForDefense(party: DefenseState, names: string[], now: number) {
-  return new Set(collectPassing(names.map(name=>({name,ctype:"",revision:0,status:party.statuses[name] as Member["status"]})),
-    (party.groupedCombat as Group | undefined)?.passingEncounters || [], now).map(passingIdentity));
+  return new Map(collectPassing(names.map(name=>({name,ctype:"",revision:0,status:party.statuses[name] as Member["status"]})),
+    (party.groupedCombat as Group | undefined)?.passingEncounters || [], now).map(t=>[passingIdentity(t),t]));
 }
-function includeAttacker(party:DefenseState,passing:Set<string>,attacker:CurrentAttacker,departure?:boolean):boolean {
+function includeAttacker(party:DefenseState,passing:Map<string,PassingEncounter>,attacker:CurrentAttacker,departure?:boolean):boolean {
   const c=party.activeConvoy;
+  if(passing.get(passingIdentity(attacker))?.keepMoving && !passiveStopRequired(party.passiveHunting,attacker.mtype))return false;
   return passiveStopRequired(party.passiveHunting,attacker.mtype) || outboundHunt(c) || !!departure || !!c?.continuousReturn || !passing.has(passingIdentity(attacker));
 }
 /** Travel consults live targeting, never retained engagements or recent outgoing hits. */
-export function classifyTravelDefense(party: DefenseState, names: string[], now = Date.now()): DefenseResult {
+export function classifyTravelDefense(party: DefenseState, names: string[], now = Date.now(), includePassingAttackers = false): DefenseResult {
   const waiting: string[] = [], found = new Map<string, CurrentAttacker>();
   const dead = confirmedDeaths(party);
-  const passing = passingForDefense(party,names,now);
+  const passing = includePassingAttackers ? new Map<string,PassingEncounter>() : passingForDefense(party,names,now);
   for (const name of names) {
     const status = party.statuses[name] as Observation | undefined;
     if (!ready(status, now)) { waiting.push(name); continue; }

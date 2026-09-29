@@ -61,7 +61,7 @@ class ArtifactReporter {
     const outcome = { title: test.titlePath().join(' > '), status: result.status,
       boundary: /live-franky\.spec\.ts$/.test(test.location.file)
         ? 'Native game clients, maintained runtime and upstream server; initial acknowledged event-return history is a sanitized production-state fixture, followed by real restart, travel and reward claim'
-        : /live-(game|economy|catalog|franky-party|hunt-[a-z-]+)\.spec\.ts$/.test(test.location.file)
+        : /live-(game|economy|catalog|franky-party|hunt-[a-z-]+|solo-ranger)\.spec\.ts$/.test(test.location.file)
         ? 'Native authenticated game clients and maintained runtime against disposable upstream game server and MongoDB; administrative scenario setup'
         : 'Real console/gateway/coordinator/storage; simulated external account and game observations',
       durationMs: result.duration, retry: result.retry,

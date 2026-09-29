@@ -35,6 +35,19 @@ stand return replacing a manual order before the native merchant received it.
 Validate the real manual-walking and merchant travel journeys. This change needs
 the supported coordinator-only restart; a build does not reload a live process.
 
+## Passive attacks while walking
+
+Enabled passive monsters with Keep moving on remain eligible for in-range basic
+attacks during walking, including Daisy/anniversary returns, staging, event travel,
+and recovery travel. Passing reservations carry their keep-moving intent through
+party acknowledgements so retaliation cannot acquire a Hunt primary, defensive
+stop, or loot hold. These attacks never chase or change the route. Town casts,
+transport transitions, stale authorization and superseding navigation still block
+optional attacks; Keep moving off and stationary activity policies are unchanged.
+Validate passive-hunting, passing-admission, Hunt travel-defense, continuous-return,
+unified-return and shared-convoy tests. Publish character and coordinator assets
+through the full restart and verify fresh generations and attacks while walking.
+
 Merchant interruption cleanup releases only matching handoff commands and transitions
 the convoy pause to resuming before ownership checks. Failure, worker expiry, clear,
 force-stand, priority yield and realm pause retain the original travel destination;
@@ -1191,3 +1204,8 @@ installation begins. Assembly still has its 30-second no-progress and 120-second
 absolute limits; departure readiness keeps its independent deadline. The native
 partial-Town restart case rejects false preparation retries as well as stranded
 characters.
+
+A single non-merchant fighter in Group mode receives the same coordinator combat
+group and target authorization as larger parties. Empty groups remain excluded.
+The native solo-ranger Goo scenario verifies singleton membership, committed Goo
+selection and continued kills after initial attacks. Explicit Scatter is unchanged.

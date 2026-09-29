@@ -1916,7 +1916,7 @@
     function prepare(target, present) {
       if (!control || !freshControl()) return false;
       const key = passingIdentity(target);
-      if (control.hunt && (control.hunt.defending || control.hunt.reason || control.hunt.primary && passingIdentity(control.hunt.primary) !== key)) return false;
+      if (!target.keepMoving && control.hunt && (control.hunt.defending || control.hunt.reason || control.hunt.primary && passingIdentity(control.hunt.primary) !== key)) return false;
       let proposal = proposals.get(key);
       const token = proposal?.token;
       if (!proposal || proposal.scope !== control.scope || present && !present.some((e) => e.admission?.token === token)) {
@@ -2167,7 +2167,14 @@
       if (target.type !== "monster") return false;
       if (shared.convoyHoldDefenseTarget?.()?.id === target.id) return true;
       const report = shared.queueReport();
-      const identity = { ...target, map: report.map, in: report.in, server: report.server, at: Date.now() + shared.queueClockOffset() };
+      const identity = {
+        ...target,
+        map: report.map,
+        in: report.in,
+        server: report.server,
+        at: Date.now() + shared.queueClockOffset(),
+        keepMoving: shared.getWalkingPassiveTarget?.()?.id === target.id
+      };
       if (!passing.prepare(identity, report.groupedCombat.passingEncounters)) return false;
       shared.beginPassingAttack(target);
       return true;
@@ -2592,8 +2599,8 @@
       return active && !character.rip && resolvedRole().combat && (character.ctype !== "merchant" || !!sharedRoutine.merchantEventCombatActive?.()) && !sharedRoutine.isOccupied() && ["pending", "feed"].indexOf(sharedRoutine.getAbtestingMode()) < 0;
     }
     function passingTarget() {
-      if (sharedRoutine.frankyCombatActive?.()) return null;
       if (character.ctype === "merchant" || !active || character.rip || !resolvedRole().combat || ["pending", "feed"].includes(sharedRoutine.getAbtestingMode())) return null;
+      if (sharedRoutine.frankyCombatActive?.()) return sharedRoutine.getWalkingPassiveTarget?.() || null;
       return sharedRoutine.getPassingTarget?.() || null;
     }
     function attackTarget() {

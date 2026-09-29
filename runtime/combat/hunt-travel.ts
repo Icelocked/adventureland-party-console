@@ -54,7 +54,8 @@ function deaths(members: Member[]): string[] {
 }
 export function huntAttackers(members: Member[], now: number): Fight[] {
   const fresh=observations(members,now), names=members.map(m=>m.name), dead=new Set(deaths(fresh));
-  return unique(fresh.filter(m=>sampled(m,now)).flatMap(m=>observedAttackers(m,names,now))).filter(t=>!dead.has(passingIdentity(t)));
+  const passing=new Set(collectPassing(fresh,[],now).filter(t=>t.keepMoving).map(passingIdentity));
+  return unique(fresh.filter(m=>sampled(m,now)).flatMap(m=>observedAttackers(m,names,now))).filter(t=>!dead.has(passingIdentity(t)) && !passing.has(passingIdentity(t)));
 }
 type TravelState = NonNullable<HuntTravelConvoy['huntTravel']>;
 export function freshAttackerObservations(members: Member[], now: number): boolean {
@@ -108,7 +109,7 @@ function commitStop(state: TravelState, stops: Fight[], settings: PassiveTravelS
 }
 function passingProposal(state: TravelState, members: Member[], now: number, scope?: string): Fight | null {
   if(!scope)return null;
-  const proposals=collectPassing(members,[],now).filter(t=>t.admission?.scope===scope && liveAfterRelease({...t,server:t.server},state,members))
+  const proposals=collectPassing(members,[],now).filter(t=>!t.keepMoving && t.admission?.scope===scope && liveAfterRelease({...t,server:t.server},state,members))
     .sort((a,b)=>(a.startedAt??a.at)-(b.startedAt??b.at)||passingIdentity(a).localeCompare(passingIdentity(b)));
   const first=proposals[0];
   return first ? {...first,server:first.server,fighter:members[0]?.name||'',startedAt:first.startedAt||now,state:'engaged'} : null;

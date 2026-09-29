@@ -853,7 +853,8 @@
     if (convoyTraveling && convoyTraveling.continuousReturn === 1) return;
     if(data && currentPartyList().indexOf(String(data.id))>=0) {
       var aggressor=get_entity(data.hid || data.actor);
-      if(aggressor && aggressor.type==='monster' && (!isPassingEncounter(aggressor) || returnDepartureDefense()) && !joinedEvent && !eventTargetTypes.length) {
+      var passingRule=aggressor && passiveHunting.rules[aggressor.mtype];
+      if(aggressor && aggressor.type==='monster' && (!isPassingEncounter(aggressor) || returnDepartureDefense() && !(passingRule && passingRule.enabled && passingRule.keepMoving)) && !joinedEvent && !eventTargetTypes.length) {
         root.__partyDefensiveHit={target:groupedEntityReport(aggressor),at:Date.now()};
         interruptConvoyForDefense(null, null, aggressor);
         if(root.partyQueueClient)root.partyQueueClient.evidence(aggressor,'engaged');
@@ -2668,7 +2669,8 @@
   function isPassingEncounter(target) {
     if (!target) return false;
     if (typeof passiveTravelInterruptible==='function' && passiveTravelInterruptible() && passiveStopRequired(target))return false;
-    if (committedHuntEncounter(target) || typeof huntTravelDefense === "function" && huntTravelDefense()) return false;
+    var rule=passiveHunting.rules[target.mtype];
+    if (committedHuntEncounter(target) || typeof huntTravelDefense === "function" && huntTravelDefense() && !(rule && rule.enabled && rule.keepMoving)) return false;
     var key = passingKey(target), now = Date.now() + coordinatorClockOffset;
     if (target.dead || target.hp === 0) return false;
     var passingDeaths = (typeof fightDeaths !== 'undefined' ? fightDeaths : []).concat(groupedCombat && groupedCombat.deaths || []);
@@ -2681,10 +2683,12 @@
     if (character.c && character.c.town || typeof movement !== 'undefined' && movement.transition && movement.transition()) return false;
     var convoy = typeof convoyTraveling !== 'undefined' && convoyTraveling;
     var pending = root.partyLootClient && root.partyLootClient.huntPending();
+    if (!convoy && character.moving) return true;
     if (!pending && !(convoy && (convoy.routeProtocol === 4 || convoy.purpose === 'monster-hunt' && (convoy.nonPreemptible || convoy.huntTarget)))) return true;
     var signal = typeof convoySignal !== 'undefined' && convoySignal;
     return !!(convoy && !convoy.cancelled && (convoy.routeProtocol === 4 || convoy.purpose === 'monster-hunt' && (convoy.nonPreemptible || convoy.huntTarget)) &&
-      convoy.phase === 'travelling' && signal && signal.phase === 'travel' &&
+      signal && (convoy.phase === 'travelling' && signal.phase === 'travel' ||
+        character.moving && convoy.phase === 'assembling' && signal.phase === 'assemble') &&
       signal.id === convoy.id && Number(signal.epoch) === convoy.epoch && Number(signal.commandId) === convoy.commandId &&
       signal.runtimeId === convoyRuntimeId && !convoySignalExpired(signal) &&
       convoy.navigationRevision === Number(navigationIntent.revision || 0));
@@ -2719,7 +2723,9 @@
   function huntTravelExtraAggro() {
     if(!outboundHuntTravel() || huntTravelDefense())return false;
     if(typeof navigationIntent!=='undefined' && navigationIntent.cancelled || typeof escapeOwns==='function' && escapeOwns() || typeof combatRecoveryActive==='function' && combatRecoveryActive())return false;
-    var control=huntTravelControl(), targets=currentTravelAttackers(), keys={};
+    var control=huntTravelControl(), targets=currentTravelAttackers().filter(function(t){
+      var rule=passiveHunting.rules[t.mtype];return !(rule && rule.enabled && rule.keepMoving && isPassingEncounter(t));
+    }), keys={};
     if(targets.some(passiveStopRequired))return true;
     targets.forEach(function(t){keys[passingKey(t)]=true;});
     if(control && control.primary && !fightDeaths.some(function(d){return passingKey(d)===passingKey(control.primary);}))keys[passingKey(control.primary)]=true;
@@ -2749,11 +2755,16 @@
   }
   function cancelReturnTownUnderAttack() {
     var c=convoyTraveling;
-    if(!c || c.continuousReturn!==1 || !c.townAttempt || c.townAttempt.state!=='casting' || !returnDefenseTarget())return;
+    if(!c || c.continuousReturn!==1 || !c.townAttempt || c.townAttempt.state!=='casting')return;
+    // Passing retaliation never stops walking, but still interrupts a Town cast.
+    if(!Object.values(parent.entities||{}).some(function(e){return e && e.type==='monster' && e.visible!==false && !e.dead && e.hp>0 &&
+      (!e.map || e.map===character.map) && (e.in==null || e.in===character.in) && currentPartyList().indexOf(e.target)>=0;}))return;
     c.townAttempt.state='interrupted';
     c.fail('Town interrupted by party attacker; continuing home on foot');
   }
   function passingTarget() {
+    var walkingPassive = walkingPassiveTarget();
+    if (walkingPassive) return walkingPassive;
     if(typeof returnCombatActive==='function' && returnCombatActive())return null;
     if(typeof convoyHoldDefenseTarget==='function') {
       var heldTarget=convoyHoldDefenseTarget();
@@ -2785,9 +2796,27 @@
     candidates.sort(function(a,b) {return Number(currentPartyList().indexOf(b.target)>=0)-Number(currentPartyList().indexOf(a.target)>=0) || monsterPriority(b)-monsterPriority(a) || Math.hypot(character.x-a.x,character.y-a.y)-Math.hypot(character.x-b.x,character.y-b.y) || String(a.id).localeCompare(String(b.id));});
     return candidates[0] || null;
   }
+  function walkingPassiveTarget() {
+    var convoy = typeof convoyTraveling !== 'undefined' && convoyTraveling;
+    if (!(character.moving || convoy && convoy.phase === 'travelling') ||
+        character.rip || character.ctype === 'merchant' || navigationIntent.cancelled ||
+        root.__partyConsoleMaintenance || root.__partyUpgradePreviewInFlight ||
+        convoy && (convoy.cancelled || convoy.defensePaused || convoy.holdRequested || convoy.communication) ||
+        !passingTravelAllowed()) return null;
+    return Object.values(parent.entities || {}).filter(function(e) {
+      var rule = e && passiveHunting.rules[e.mtype];
+      return rule && rule.enabled && rule.keepMoving && e.type === 'monster' && e.visible && !e.dead && e.hp > 0 &&
+        (!e.map || e.map === character.map) && (e.in == null || e.in === character.in) &&
+        e.mtype !== 'fieldgen0' && !committedHuntEncounter(e) && is_in_range(e) && !isExternallyClaimedMonster(e) &&
+        (isPassingEncounter(e) || currentPartyList().indexOf(e.target) < 0) &&
+        !(root.partyRoleRunner && root.partyRoleRunner.isKnownDead(e.id));
+    }).sort(function(a,b) { return monsterPriority(b)-monsterPriority(a) ||
+      Math.hypot(character.x-a.x,character.y-a.y)-Math.hypot(character.x-b.x,character.y-b.y) || String(a.id).localeCompare(String(b.id)); })[0] || null;
+  }
   function beginPassingAttack(target, admission, reserveOnly) {
     var previous = passingEncounters[passingKey(target)];
-    var entry = Object.assign(groupedEntityReport(target), {server:reunionRealm(),at:Date.now()+coordinatorClockOffset,startedAt:previous && previous.startedAt || Date.now()+coordinatorClockOffset,admission:admission || previous && previous.admission,reserved:!!reserveOnly});
+    var rule = passiveHunting.rules[target.mtype];
+    var entry = Object.assign(groupedEntityReport(target), {server:reunionRealm(),at:Date.now()+coordinatorClockOffset,startedAt:previous && previous.startedAt || Date.now()+coordinatorClockOffset,admission:admission || previous && previous.admission,reserved:!!reserveOnly,keepMoving:!!(rule && rule.enabled && rule.keepMoving)});
     passingEncounters[passingKey(entry)] = entry;
     if (root.partyQueueClient) root.partyQueueClient.flush();
     if (reserveOnly) return;
@@ -12088,8 +12117,10 @@
   }
 
   function isAttackingPartyMember(target) {
-    if (!target || target.type !== "monster" || isPassingEncounter(target) && !returnDepartureDefense() &&
-        !(typeof convoyTraveling !== 'undefined' && convoyTraveling && convoyTraveling.continuousReturn === 1)) return false;
+    var rule = target && passiveHunting.rules[target.mtype];
+    if (!target || target.type !== "monster" || isPassingEncounter(target) &&
+        (rule && rule.enabled && rule.keepMoving || !returnDepartureDefense() &&
+        !(typeof convoyTraveling !== 'undefined' && convoyTraveling && convoyTraveling.continuousReturn === 1))) return false;
     target = get_entity(target.id) || target;
     if (target.target === character.name) return true;
     if (!target.target || currentPartyList().indexOf(target.target) < 0)
@@ -12237,7 +12268,7 @@
   function groupedEntityReport(e) { return {id:e.id,mtype:e.mtype,map:character.map,in:character.in,x:e.x,y:e.y,hp:e.hp,max_hp:e.max_hp}; }
   function currentTravelAttackers() {
     return Object.values(parent.entities || {}).filter(function(e) {
-      if(typeof outboundHuntTravel === 'function' && outboundHuntTravel())return e && e.type==='monster' && e.visible && !e.dead && e.hp>0 &&
+      if(typeof outboundHuntTravel === 'function' && outboundHuntTravel() || typeof convoyTraveling!=='undefined' && convoyTraveling && convoyTraveling.continuousReturn===1)return e && e.type==='monster' && e.visible && !e.dead && e.hp>0 &&
         currentPartyList().indexOf(e.target)>=0 && !fightDeaths.some(function(d){return passingKey(d)===passingKey(e);});
       return e && e.type === "monster" && departureTargetEngaged(e);
     }).map(function(e) { return Object.assign({}, groupedEntityReport(e), { target: e.target, server: reunionRealm() }); });
@@ -15106,6 +15137,7 @@
       return false;
     },
     isConvoyTraveling: function () { return !!convoyTraveling; },
+    getWalkingPassiveTarget: walkingPassiveTarget,
     isStocking: function () { return stocking; },
     isUpgrading: function () { return upgrading; },
     stockUp: stockUp,
