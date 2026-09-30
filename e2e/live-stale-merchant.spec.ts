@@ -5,6 +5,35 @@ const merchant = 'E2EMerchant';
 test.describe('stale merchant recovery', () => {
   test.setTimeout(300_000);
 
+  for (const localJournal of [false, true]) test(`production recovery ${localJournal ? 'reconciles an admitted prepared journal before bank work' : 'holds orphaned receipts without repeated bank trips'}`, async ({ live }, info) => {
+    // Failure modes: an orphan is ignored without a local journal; dispatch or
+    // storage starts before recovery; a held receipt blocks its own recovery;
+    // restart loses the hold; recovery invents success or replays production.
+    const id = 'historical-compound-receipt';
+    await live.clients[merchant].run(`localStorage.removeItem('party-production:'+character.name)`);
+    if (localJournal) await live.clients[merchant].run(`localStorage.setItem('party-production:'+character.name,JSON.stringify({id:'${id}',phase:'prepared',slots:[20],item:{name:'ringsj',level:0},request:{id:'${id}',kind:'compound',item:{name:'ringsj',level:0}}}))`);
+    await live.restoreHistoricalSettings(() => ({
+      production: { attempts: { [id]: { name: 'ringsj', level: 1, kind: 'compound', rules: [] } } },
+      merchantCurrent: { id: 'held-bank-job', target: merchant, reason: 'manual bank exchange', phase: 'assigned', startedAt: Date.now() },
+    }));
+    if (localJournal) {
+      await expect.poll(() => live.clients[merchant].run(`localStorage.getItem('party-production:'+character.name)`)).toBeNull();
+      await expect.poll(async () => (await live.clients[merchant].snapshot()).map, { timeout: 90_000 }).toBe('bank');
+    } else {
+      await expect.poll(async () => (await live.state()).merchantActivity.some((entry: {message: string}) => entry.message.includes('Production recovery pending'))).toBe(true);
+      const before = await live.clients[merchant].snapshot();
+      await expect.poll(async () => (await live.state()).merchantQueue.some((job: {id: string}) => job.id === 'held-bank-job')).toBe(true);
+      await live.restartCoordinator();
+      await expect.poll(async () => (await live.state()).merchantActivity.filter((entry: {message: string}) => entry.message.includes('Production recovery pending')).length).toBeGreaterThan(1);
+      const after = await live.clients[merchant].snapshot();
+      expect(after.map).toBe(before.map);
+      expect(after.items).toEqual(before.items);
+      expect((await live.state()).merchantCurrent).toBeNull();
+      expect((await live.state()).merchantActivity.some((entry: {message: string}) => entry.message.includes('Merchant dispatched'))).toBe(false);
+    }
+    await info.attach('production-recovery-observations', { body: JSON.stringify({ client: await live.clients[merchant].snapshot(), state: await live.state(), events: await live.clients[merchant].events() }), contentType: 'application/json' });
+  });
+
   test('automatic missing sale marks expire while manual and locked marks survive restart', async ({ live }, info) => {
     // Failure modes: unchanged-inventory cache prevents GC; manual intent is
     // discarded; locked stock expires; restart resets the original blocked clock.

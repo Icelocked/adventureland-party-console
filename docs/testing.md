@@ -1,5 +1,18 @@
 # Testing
 
+Production receipt recovery uses `npm test -- -- --project=live --grep "production recovery"`
+and `npm run test:e2e:verify`. Two native journeys restore a declared unfinished
+compound receipt with queued bank work. Without a local journal, the receipt
+holds dispatch across restart without movement or inventory changes. With an
+admitted prepared journal, the recovery-only command reconciles it before native
+bank travel resumes. Recovery does not infer success or replay production.
+The focused run retains native observations and checksummed evidence under
+`.build/e2e-results/` and `.build/e2e-report/`; it does not claim a full-suite run.
+This fix changes both coordinator and character code: activate it with the
+supported ordinary full restart when requested, rather than CoordinatorOnly.
+Orphans still require explicit review through the documented production
+`resolve-unknown` operation; the fix never automatically clears their receipts.
+
 Issue #40 uses `npm test -- -- --project=console --grep "startup realm"` and
 `npm run test:e2e:verify`. The setup browser journeys use the real gateway and
 startup JSON parser against a loopback public-page/account-service fixture.

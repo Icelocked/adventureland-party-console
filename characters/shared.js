@@ -4165,7 +4165,15 @@
   }
   async function recoverProductionJournalWork() {
     var journal = JSON.parse(root.localStorage.getItem(productionJournalKey()) || "null");
-    if (!journal) return;
+    if (!journal) {
+      var pending = await request("/merchant/production", {method:"POST",body:{character:character.name,action:"pending"}});
+      if (!pending || !Array.isArray(pending.pending)) throw Error("Production recovery inspection unavailable");
+      if (pending.pending.length) {
+        var orphaned = pending.pending[0];
+        throw Error("Production recovery needs review: " + orphaned.id + " (" + orphaned.kind + " " + orphaned.name + " +" + orphaned.level + "); no local journal");
+      }
+      return;
+    }
     if (journal.phase === "complete") return finishProductionJournal(journal);
     if (character.q && (character.q.upgrade || character.q.compound)) throw Error("Production recovery waiting for game operation");
     var inspection = await request("/merchant/production", {method:"POST",body:Object.assign({},journal.request,{character:character.name,action:"inspect"})});
@@ -9141,6 +9149,14 @@
       return;
     }
     if(command.type==='party-monster-travel')root.__partyConvoyDefense=null;
+    if (command.type === "merchant-production-recover") {
+      if (root.__merchantActiveJob) return;
+      try { await recoverProductionJournal(); }
+      catch (error) { reportMerchantCommand(command, "deferred", error.message || String(error)); return; }
+      lastCommand = command.id; root.__partyLastCommand = lastCommand;
+      reportMerchantCommand(command, "accepted");
+      return;
+    }
     // Stand return can travel safely before checking inventory recovery. Its
     // own guard runs before any listing, consolidation, or tidy mutation.
     var returningToStand = command.type === "merchant-idle" && !command.inPlace;
