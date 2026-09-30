@@ -1936,10 +1936,15 @@
     var generation = catalogGeneration;
     try {
       var items = Object.keys(G.items || {});
-      for (var index = 0; index < items.length; index++) {
+      var index = 0;
+      while (index < items.length) {
         await new Promise(function (resolve) { setTimeout(resolve, 0); });
         if (!runtimeCurrent() || generation !== catalogGeneration) return;
-        itemWorldInfo(items[index]);
+        // Bound work by elapsed time, not one timer per item. Hidden/loaded
+        // clients can delay each timer substantially even for already cached data.
+        var sliceStarted = Date.now();
+        do { itemWorldInfo(items[index++]); }
+        while (index < items.length && Date.now() - sliceStarted < 8);
       }
       catalogPrepared = true;
     } catch (error) {
@@ -2797,7 +2802,7 @@
     candidates.sort(function(a,b) {return Number(currentPartyList().indexOf(b.target)>=0)-Number(currentPartyList().indexOf(a.target)>=0) || monsterPriority(b)-monsterPriority(a) || Math.hypot(character.x-a.x,character.y-a.y)-Math.hypot(character.x-b.x,character.y-b.y) || String(a.id).localeCompare(String(b.id));});
     return candidates[0] || null;
   }
-  function walkingPassiveTarget() {
+  function walkingPassiveTarget(reserveAhead) {
     var convoy = typeof convoyTraveling !== 'undefined' && convoyTraveling;
     if (!(character.moving || convoy && convoy.phase === 'travelling') ||
         character.rip || character.ctype === 'merchant' || navigationIntent.cancelled ||
@@ -2808,7 +2813,11 @@
       var rule = e && passiveHunting.rules[e.mtype];
       return rule && rule.enabled && rule.keepMoving && e.type === 'monster' && e.visible && !e.dead && e.hp > 0 &&
         (!e.map || e.map === character.map) && (e.in == null || e.in === character.in) &&
-        e.mtype !== 'fieldgen0' && !committedHuntEncounter(e) && is_in_range(e) && !isExternallyClaimedMonster(e) &&
+        e.mtype !== 'fieldgen0' && !committedHuntEncounter(e) &&
+        (is_in_range(e) || reserveAhead && character.moving &&
+          (e.x-character.x)*(character.going_x-character.x)+(e.y-character.y)*(character.going_y-character.y)>0 &&
+          Math.hypot(e.x-character.x,e.y-character.y)<=Math.min(400,Number(character.range)+Number(character.speed)*4)) &&
+        !isExternallyClaimedMonster(e) &&
         (isPassingEncounter(e) || currentPartyList().indexOf(e.target) < 0) &&
         !(root.partyRoleRunner && root.partyRoleRunner.isKnownDead(e.id));
     }).sort(function(a,b) { return monsterPriority(b)-monsterPriority(a) ||
@@ -13506,7 +13515,10 @@
         if(convoy.scheduledAt!==Number(signal.departAt))throw new Error("Departure changed");
         phase("waiting-for-departure");
         if(now<convoy.scheduledAt)return;
-        if(!signal.immediateDeparture && now-convoy.scheduledAt>500)throw new Error("Missed convoy departure window");
+        // Native browser timers can coalesce beyond 500 ms on loaded hosts.
+        // Only an already accepted schedule gets this bounded tolerance; the
+        // matching, unexpired lease and unchanged origin above remain required.
+        if(!signal.immediateDeparture && now-convoy.scheduledAt>1500)throw new Error("Missed convoy departure window");
         released=true;convoy.departedAt=now;phase("travelling");
         if (root.partyPorcupineEquipment) root.partyPorcupineEquipment.depart(command.purpose);
         return walk();
@@ -13646,7 +13658,7 @@
           if (convoy.scheduledAt !== Number(signal.departAt)) throw new Error("Departure signal changed");
           phase("waiting-for-departure");
           if (now < convoy.scheduledAt) return;
-          if (now - convoy.scheduledAt > 500) throw new Error("Missed convoy departure window");
+          if (now - convoy.scheduledAt > 1500) throw new Error("Missed convoy departure window");
           released = true;
           convoy.departedAt = now;
           phase("travelling");

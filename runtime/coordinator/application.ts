@@ -1610,7 +1610,6 @@ export function startCoordinatorApplication(
       const party = farmingScopes.view(name);
       const activeNames = () => Object.keys(party.statuses).filter(n => n === name && Date.now() - party.statuses[n]!.seenAt < 10000);
       const rareControl = { owns: () => false, encounter: () => null, control: (_name: string) => null };
-      const groupedCombatSnapshot = () => null;
       const huntParticipants = () => coordinatorPolicies.coordinatorHuntParticipants(party, Date.now, activeNames);
       const selectedMonsterDestination = (character: string | null) => coordinatorPolicies.selectCoordinatorMonsterDestination(party, character);
       const monsterDestination = (type: string | null | undefined) => coordinatorPolicies.coordinatorHuntDestination(party, type, (choices, focus) => farmZones.zones(choices, focus));
@@ -1634,6 +1633,23 @@ export function startCoordinatorApplication(
 
       const startPartyMonsterConvoy = partyConvoys.start;
       const cancelActiveConvoy = partyConvoys.cancel;
+
+      function groupedCombatSnapshot() {
+        // The scoped leader also uses the native group target lock. A null group
+        // only appears to work when a travel encounter finishes its quest first.
+        // Independent controllers do not own shared party disengagement or rares.
+        return coordinatorPolicies.coordinatorGroupedSnapshot(party, {
+          now: Date.now,
+          tickDisengagement: () => {},
+          disengagementActive: () => false,
+          intent: character => farmingNavigation.intent(character),
+          owned: ownedCharacter,
+          prepare: members => members,
+          evaluate: evaluateGroup,
+          finalize: group => group,
+          blocksPulls: () => false,
+        });
+      }
 
     const {
       lifecycle: huntLifecycle,
