@@ -1,5 +1,15 @@
 # Testing
 
+Issue #40 uses `npm test -- -- --project=console --grep "startup realm"` and
+`npm run test:e2e:verify`. The setup browser journeys use the real gateway and
+startup JSON parser against a loopback public-page/account-service fixture.
+They verify new/PVP realm options, account-specific rejection, connection on US V,
+one discovery per startup, fresh discovery after restart, and a visible startup
+failure with disabled connection controls. Screenshots and state evidence are
+retained in `.build/e2e-results/` with the checksummed `.build/e2e-report/` manifest.
+Production discovery reads the public game's `X.servers` JSON without credentials;
+account connection still validates against the authenticated server list.
+
 Issues #41/#42 use `npm test -- -- --grep "stale merchant recovery"` followed by
 `npm run test:e2e:verify`. The native scenarios restore declared historical sale
 intent, verify expiry against unchanged inventory and retention of manual/locked

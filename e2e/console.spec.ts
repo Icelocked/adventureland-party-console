@@ -1,4 +1,90 @@
 import { test, expect } from './fixtures';
+import { createServer } from 'node:http';
+import { mkdirSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import path from 'node:path';
+import { gateway } from '../tools/hosting/gateway';
+import { Access } from '../tools/hosting/access';
+import { startupRealms } from '../tools/hosting/realms';
+import { accountConfig, sessionValue } from '../tools/hosting/account';
+
+test('setup calculates startup realms and validates account availability', async ({ browser }, info) => {
+  // Failure modes: static options omit new/PVP realms; Roman-numeral validation
+  // rejects live keys; every page load refetches; unavailable account realms pass;
+  // a subsequent startup retains the previous list instead of discovering anew.
+  let keys = ['SR_USV', 'SR_EUPVP', 'SR_ASIAV'], discoveries = 0;
+  const configuredRealms: string[] = [];
+  const upstream = createServer((req, res) => {
+    res.setHeader('Content-Type', req.url === '/' ? 'text/html' : 'application/json');
+    if (req.url === '/') { discoveries++; res.end(`<script>X.servers=${JSON.stringify(keys.map(key => ({ key })))};</script>`); }
+    else res.end(JSON.stringify({ characters: [{ name: 'SetupMerchant', type: 'merchant' }], servers: keys.filter(key => key !== 'SR_ASIAV').map(key => ({ key })) }));
+  });
+  await new Promise<void>(resolve => upstream.listen(0, '127.0.0.1', resolve));
+  const upstreamUrl = `http://127.0.0.1:${(upstream.address() as { port: number }).port}`;
+  const directory = path.resolve('.build/e2e', `setup-${randomUUID()}`);
+  mkdirSync(directory, { recursive: true });
+  const access = new Access(path.join(directory, 'access.json')); await access.load();
+  let configured = false;
+  const start = async () => {
+    const server = gateway({ access, configured: () => configured, dashboardPort: 1,
+      realms: startupRealms(upstreamUrl), configure: async (raw, realm) => {
+        const config = await accountConfig(sessionValue(raw), realm, (_url, init) => fetch(upstreamUrl + '/account', init));
+        configuredRealms.push(config.characters.SetupMerchant.realm); configured = true;
+      } });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    return server;
+  };
+  let server = await start();
+  const page = await browser.newPage();
+  try {
+    const url = () => `http://127.0.0.1:${(server.address() as { port: number }).port}/setup`;
+    await page.goto(url());
+    const realm = page.getByLabel('Realm', { exact: true });
+    await expect(realm).toContainText('SR_USV'); await expect(realm).toContainText('SR_EUPVP'); await expect(realm).toContainText('SR_ASIAV');
+    keys = [...keys, 'SR_EUVII'];
+    await page.reload();
+    await expect(realm).toContainText('SR_USV');
+    expect(discoveries).toBe(1);
+    await page.getByLabel('Game session', { exact: true }).fill('US_E2E-token');
+    await realm.selectOption('SR_ASIAV'); await page.getByRole('button', { name: 'Connect account', exact: true }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'That realm is not available' })).toBeVisible();
+    expect(configuredRealms).toEqual([]);
+    await realm.selectOption('SR_USV'); await page.getByRole('button', { name: 'Connect account', exact: true }).click();
+    await expect(page.getByText('Account connected. Choose how to run your characters below.')).toBeVisible();
+    expect(configuredRealms).toEqual(['SR_USV']);
+    await info.attach('startup-realm-account-connection', { body: await page.screenshot(), contentType: 'image/png' });
+    server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
+    configured = false; server = await start();
+    await page.goto(url()); await expect(realm).toContainText('SR_EUVII');
+    expect(discoveries).toBe(2);
+    await info.attach('startup-realm-discovery', { body: JSON.stringify({ keys, discoveries, configuredRealms, state: await (await fetch(url().replace('/setup', '/setup/state'))).json() }), contentType: 'application/json' });
+  } finally {
+    await page.close(); server.closeAllConnections(); upstream.closeAllConnections();
+    await Promise.all([new Promise<void>(resolve => server.close(() => resolve())), new Promise<void>(resolve => upstream.close(() => resolve()))]);
+  }
+});
+
+test('setup reports failed startup realm discovery without offering stale realms', async ({ browser }, info) => {
+  // Failure modes: startup outage crashes the gateway; stale fallback realms are
+  // offered; connecting is enabled with no valid selection; the failure is hidden.
+  const upstream = createServer((_req, res) => { res.writeHead(503); res.end('Unavailable'); });
+  await new Promise<void>(resolve => upstream.listen(0, '127.0.0.1', resolve));
+  const access = new Access(path.resolve('.build/e2e', `setup-access-${randomUUID()}.json`)); await access.load();
+  const server = gateway({ access, configured: () => false, dashboardPort: 1,
+    realms: startupRealms(`http://127.0.0.1:${(upstream.address() as { port: number }).port}`), configure: async () => { throw Error('No realm available'); } });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const page = await browser.newPage();
+  try {
+    await page.goto(`http://127.0.0.1:${(server.address() as { port: number }).port}/setup`);
+    await expect(page.getByRole('status').filter({ hasText: 'Could not load game realms' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Connect account', exact: true })).toBeDisabled();
+    await expect(page.getByLabel('Realm', { exact: true })).toBeDisabled();
+    await info.attach('startup-realm-discovery-unavailable', { body: await page.screenshot(), contentType: 'image/png' });
+  } finally {
+    await page.close(); server.closeAllConnections(); upstream.closeAllConnections();
+    await Promise.all([new Promise<void>(resolve => server.close(() => resolve())), new Promise<void>(resolve => upstream.close(() => resolve()))]);
+  }
+});
 
 const pageErrors = new WeakMap<object, string[]>();
 
