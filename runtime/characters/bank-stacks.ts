@@ -4,7 +4,7 @@ import { nextStackMerge, stackDepositPlan, stackIdentity, stackLocations, stackQ
 interface Origin { pack: string; slot: number; floor: string }
 interface Buffer { slot: number; identity: string; origin?: Origin; source?: number }
 interface Expected { inventory?: number; bank?: Origin; item: StackItem | null }
-interface Journal { buffers: Buffer[]; pending?: Expected[]; supersededBuffers?: Buffer[] }
+interface Journal { buffers: Buffer[]; pending?: Expected[]; supersededBuffers?: Buffer[]; recoveryStartedAt?: number; retryAt?: number }
 export interface BankStackPorts {
   items(): (StackItem | null)[];
   bank(): Record<string, unknown>;
@@ -34,12 +34,17 @@ export function createBankStacks(p: BankStackPorts) {
   const equal = (a: StackItem | null | undefined, b: StackItem | null | undefined) =>
     stackIdentity(a) === stackIdentity(b) && stackQuantity(a) === stackQuantity(b);
   function active() { if (!p.current()) throw Error('Bank stack runtime replaced'); }
-  async function settle(expected: Expected[]) {
+  async function settle(expected: Expected[], recovering = false) {
     active();
     const deadline = p.now() + 5000;
     while (!expected.every(e => equal(e.bank ? at(e.bank) : p.items()[e.inventory!], e.item))) {
       active();
-      if (p.now() >= deadline) throw Error('Bank stack transfer not confirmed; recovery pending');
+      if (p.now() >= deadline) {
+        // Give native updates the same confirmation window before recognizing
+        // a reused identity. Quantity-only lag remains bounded by recover().
+        if (recovering && expected.some(e => stackIdentity(e.bank ? at(e.bank) : p.items()[e.inventory!]) !== stackIdentity(e.item))) return;
+        throw Error('Bank stack transfer not confirmed; recovery pending');
+      }
       await p.sleep(100);
     }
     active();
@@ -72,26 +77,26 @@ export function createBankStacks(p: BankStackPorts) {
   async function returnBuffer(buffer: Buffer) {
     const item = p.items()[buffer.slot];
     if (!item) return;
-    if (stackIdentity(item) !== buffer.identity) throw Error('Bank stack buffer changed; manual recovery required');
+    if (stackIdentity(item) !== buffer.identity) return;
     if (buffer.source !== undefined) {
       const source = p.items()[buffer.source];
       if (!source || stackIdentity(source) !== buffer.identity || stackQuantity(source) + stackQuantity(item) > p.limit(item))
-        throw Error('Bank stack split recovery blocked');
+        return; // Preserve current stock; this old split can no longer be undone.
       await operation(() => p.swap(buffer.source!, buffer.slot), [
         { inventory: buffer.source, item: { ...source, q: stackQuantity(source) + stackQuantity(item) } },
         { inventory: buffer.slot, item: null }]);
     } else if (buffer.origin) {
       await travel(buffer.origin.floor);
-      if (at(buffer.origin)) throw Error('Bank stack recovery location occupied');
+      if (at(buffer.origin)) return; // Never overwrite a reused bank location.
       await operation(() => p.store(buffer.slot, buffer.origin!.pack, buffer.origin!.slot), [
         { inventory: buffer.slot, item: null }, { bank: buffer.origin, item: copy(item) }]);
     }
   }
-  async function recover() {
+  async function recoverOnce() {
     const journal = p.read();
     if (!journal) return;
     // An uncertain operation is never repeated. Wait until its recorded result is visible.
-    if (journal.pending) { await settle(journal.pending); p.write({ ...journal, pending: undefined }); }
+    if (journal.pending) { await settle(journal.pending, true); p.write({ ...journal, pending: undefined }); }
     // Older IPC-backed journals could retain completed reservations. A later
     // reservation of the same slot was made only after that slot was empty;
     // it supersedes the earlier one. Still validate the latest item's identity.
@@ -106,6 +111,24 @@ export function createBankStacks(p: BankStackPorts) {
     for (const buffer of buffers.sort((a, b) => Number(b.source !== undefined) - Number(a.source !== undefined)))
       await returnBuffer(buffer);
     p.write(null);
+  }
+  async function recover() {
+    const journal = p.read();
+    if (!journal) return;
+    const startedAt = journal.recoveryStartedAt ?? p.now();
+    if (p.now() - startedAt >= 30_000) {
+      // Retire uncertain intent without replaying a transfer or moving inventory.
+      // A later deposit/compact plans afresh from the authoritative current stock.
+      p.write(null);
+      return;
+    }
+    if ((journal.retryAt || 0) > p.now()) throw Error('Bank stack recovery cooling down');
+    p.write({ ...journal, recoveryStartedAt: startedAt });
+    try { await recoverOnce(); }
+    catch (error) {
+      if (p.current() && p.read()) p.write({ ...p.read()!, recoveryStartedAt: startedAt, retryAt: p.now() + 5000 });
+      throw error;
+    }
   }
   function remember(buffers: Buffer[]) {
     const old = p.read();

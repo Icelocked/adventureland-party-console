@@ -432,6 +432,11 @@ export function startCoordinatorApplication(
       dispatch: dispatchMerchant,
       recoverSale: recoverStalledMerchantSale,
     });
+    setInterval(() => {
+      if (consoleUpdate.current()) return;
+      recoverStalledMerchantSale();
+      merchantRecovery.expire(String(party.merchantCharacter));
+    }, 1000);
     party.deconstructionCatalog = coordinatorPolicies.loadCoordinatorDeconstructionCatalog(version, gameDataPorts);
     const deconstructionRoutes = coordinatorPolicies.createDeconstruction(party, {
       now: () => Date.now(), next: () => party.nextCommandId++, persist: persistSettings,
@@ -1537,6 +1542,7 @@ export function startCoordinatorApplication(
 
     function dispatchMerchant() {
       if (consoleUpdate.current()) return;
+      merchantRecovery.expire(String(party.merchantCharacter));
       if (coordinatorPolicies.pruneIneligibleCollections(party, () => Date.now())) persistSettings();
       merchantDispatcher.dispatch();
     }

@@ -1,5 +1,19 @@
 # Testing
 
+Issues #41/#42 use `npm test -- -- --grep "stale merchant recovery"` followed by
+`npm run test:e2e:verify`. The native scenarios restore declared historical sale
+intent, verify expiry against unchanged inventory and retention of manual/locked
+marks, preserve an unrelated item under stale bank recovery, and deposit it through
+the native bank API. The offline-worker scenario admits one real status report,
+drops its command response, then withholds further merchant reports for the real
+three-minute timeout before resuming native reporting. It checks login admission
+while the job still exists and status is stale by reaching the normal assignment
+conflict instead of an inventory-busy rejection; it does not claim a full native
+group reconnect. Its exhausted retry
+counter is declared historical setup. This is focused coverage, not a full-suite
+result. Reports, native observations, screenshots and checksummed evidence remain
+under `.build/e2e-report/` and `.build/e2e-results/`.
+
 `npm test` runs console and real-game E2E through the dashboard, hosting gateway,
 built coordinator, maintained character runtime and a disposable upstream game
 server backed by MongoDB. Use `npx playwright test --list` for the current scenario

@@ -3650,8 +3650,7 @@
     for (var i = 0; i < entries.length; i += 1) {
       var entry = entries[i], item = character.items[entry.slot];
       if (!item) continue;
-      if (entry.identities.indexOf(bankStackIdentity(item)) < 0)
-        throw new Error("Bank sort buffer changed; manual recovery required");
+      if (entry.identities.indexOf(bankStackIdentity(item)) < 0) continue;
       if (character.map !== entry.floor) await movement.move(entry.floor);
       await bankStoreFully(entry.slot);
     }
@@ -9797,12 +9796,8 @@
     root.__partyStatusAttemptAt = Date.now();
     var statusPhase = "bank sort recovery";
     try {
-      try { await recoverBankSortBeforeWork(); }
-      catch (recoveryError) {
-        // Recovery blocks inventory work, not visibility of the connected character.
-        await request("/status", { method: "POST", body: snapshot() });
-        throw recoveryError;
-      }
+      // Bank recovery belongs to bank operations, which call it before moving
+      // inventory. Status, combat and navigation must remain available.
       statusPhase = "snapshot";
       var statusSentAt = Date.now();
       var statusBody = snapshot();
