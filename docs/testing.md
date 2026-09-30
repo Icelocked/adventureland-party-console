@@ -1,5 +1,13 @@
 # Testing
 
+Manual Hunt blacklisting uses `npm test -- -- --project=console --grep "Hunt blacklist picker"`
+and `npm run test:e2e:verify`. The browser opens Farming settings, searches the
+full monster catalog, opens Goo's details, adds it without any encounter or
+death, observes the disabled repeat-add action and "manually added" label,
+and verifies that the saved entry survives coordinator restart. Picker and
+section screenshots, state, trace and checksummed evidence are retained under
+the standard E2E directories. Coordinator/dashboard-only activation suffices.
+
 Hunt blacklist persistence uses `npm test -- -- --project=console --grep "blacklists survive"`
 and `npm run test:e2e:verify`. The console journey imports distinct owned profiles,
 skips an unknown owner, starts Hunt through the backup picker, exits Hunt, and

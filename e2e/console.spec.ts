@@ -8,6 +8,34 @@ import { Access } from '../tools/hosting/access';
 import { startupRealms } from '../tools/hosting/realms';
 import { accountConfig, sessionValue } from '../tools/hosting/account';
 
+test('Hunt blacklist picker adds unseen monsters manually and survives restart', async ({page,app},info) => {
+  // Failure modes: catalog excludes unseen monsters; search hides valid entries;
+  // details cannot open; add targets the wrong character; manual reason displays
+  // death counts; repeat clicks duplicate entries; restart loses the addition.
+  await page.goto('/');
+  const warrior=page.locator('article').filter({has:page.getByRole('heading',{name:'W',exact:true})});
+  await warrior.getByRole('button',{name:'Farming settings',exact:true}).click();
+  const settings=page.getByRole('dialog',{name:'Farming settings · W',exact:true});
+  await settings.getByRole('button',{name:'Add',exact:true}).click();
+  const picker=page.getByRole('dialog',{name:'Add to Hunt blacklist',exact:true});
+  await picker.getByRole('textbox',{name:'Search blacklist monsters'}).fill('goo');
+  await picker.getByRole('button',{name:'Inspect Goo',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Goo',exact:true})).toBeVisible();
+  await page.keyboard.press('Escape');
+  await picker.getByRole('button',{name:'Add Goo to blacklist',exact:true}).click();
+  await expect(picker.getByRole('button',{name:'Goo is blacklisted',exact:true})).toBeDisabled();
+  await info.attach('manual-blacklist-picker',{body:await page.screenshot(),contentType:'image/png'});
+  await page.keyboard.press('Escape');
+  await expect(picker).toHaveCount(0);
+  await expect(settings.getByText('manually added',{exact:false})).toBeVisible();
+  const before=await app.state();
+  expect(before.farmingProfiles.W.huntBlacklist.goo).toMatchObject({reason:'Manually blacklisted',deaths:0});
+  await info.attach('manual-blacklist-section',{body:await page.screenshot(),contentType:'image/png'});
+  await app.restartCoordinator();
+  expect((await app.state()).farmingProfiles.W.huntBlacklist).toEqual(before.farmingProfiles.W.huntBlacklist);
+  await info.attach('manual-blacklist-state',{body:JSON.stringify({before,after:await app.state()}),contentType:'application/json'});
+});
+
 test('blacklists survive Hunt mode changes, restart and dashboard export import', async ({page,app},info) => {
   // Failure modes: Hunt reset deletes durable exclusions/counts; exports omit
   // solo profiles; import overwrites execution state or admits unknown owners;

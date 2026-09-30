@@ -22,6 +22,7 @@ import { MonsterRadiusControl } from './monster-radius-control';
 import {HuntSettingsControl} from "./hunt-settings-control";
 import { HuntSpawnSettings } from './hunt-spawn-settings';
 import { huntBlacklistLabel } from './hunt-blacklist-label';
+import { HuntBlacklistPicker } from './hunt-blacklist-picker';
 
 export const FarmingModeControl = memo(function FarmingModeControl({
   policy, followingLeader, effectivePolicy = policy, settingsOwner,
@@ -31,7 +32,7 @@ export const FarmingModeControl = memo(function FarmingModeControl({
   onSelect,
   blacklist,
   catalog,
-  onClearBlacklist, onInspectMonster, renderMonsterDetails,
+  onClearBlacklist, onAddBlacklist, onInspectMonster, renderMonsterDetails,
   huntSettings, onHuntSettingsSave,
   passiveRareHunts, passiveHunting,
   onRareChange,
@@ -51,6 +52,7 @@ export const FarmingModeControl = memo(function FarmingModeControl({
   onInspectMonster?: (id: string) => void;
   renderMonsterDetails?: ComponentProps<typeof PassiveHuntingMenu>["renderMonsterDetails"];
   onClearBlacklist: (monsterId?: string) => Promise<void>;
+  onAddBlacklist?: (monsterId: string) => Promise<void>;
   policy: FarmingPolicy;
   effectiveMode: string;
   hunt?: MonsterHuntState | null;
@@ -149,8 +151,9 @@ export const FarmingModeControl = memo(function FarmingModeControl({
           <HuntSpawnSettings catalog={catalog} value={huntSettings} onSave={onHuntSettingsSave} disabled={inherited}/>
           {onRadiusSave && <MonsterRadiusControl radius={radius||400} onSave={onRadiusSave} context={radiusContext}/>}
           <PassiveHuntingMenu settings={migratePassiveSettings(passiveHunting,passiveRareHunts)} catalog={catalog} disabled={inherited} onSave={onRareChange} renderMonsterDetails={renderMonsterDetails}/>
+          <section aria-label="Hunt blacklist" className="space-y-3 rounded border border-emerald-700 bg-[#07110f] p-3">
           <div className="flex items-center gap-3">
-            <h3 className="font-semibold text-emerald-50">Hunt blacklist</h3>
+            <h3 className="flex-1 font-semibold text-emerald-50">Hunt blacklist</h3>
             <Button
               type="button"
               size="sm"
@@ -160,6 +163,7 @@ export const FarmingModeControl = memo(function FarmingModeControl({
             >
               Clear all
             </Button>
+            <HuntBlacklistPicker catalog={catalog} blacklist={blacklist} disabled={inherited||blacklistBusy} onAdd={onAddBlacklist} renderMonsterDetails={renderMonsterDetails}/>
           </div>
           <div className="max-h-[55vh] space-y-2 overflow-y-auto">
             {Object.entries(blacklist).length === 0 && (
@@ -205,6 +209,7 @@ export const FarmingModeControl = memo(function FarmingModeControl({
               {blacklistError}
             </p>
           )}
+          </section>
         </DialogContent>
       </Dialog>
       {open ? (
