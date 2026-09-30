@@ -2,6 +2,22 @@ import { test, expect } from './live-fixtures';
 
 const merchant = 'E2EMerchant';
 
+test('lucky slot recovery preserves a changed potion stack using native inventory swaps', async ({live},info) => {
+  // Failure modes: potion use changes the displaced quantity and blocks restore;
+  // an unrelated replacement is adopted; recovery duplicates or loses stock;
+  // a completed historical upgrade is issued again instead of only restored.
+  await live.admin(`output=(()=>{const p=get_player('${merchant}');p.items[20]={name:'hpot1',q:4};p.items[21]={name:'helmet',level:1};cache_player_items(p);resend(p,'reopen+cid');return p.items.slice(20,22);})()`);
+  await expect.poll(async()=>(await live.clients[merchant].snapshot()).items[20]?.q).toBe(4);
+  const journal={from:20,to:21,item:{name:'helmet',level:0},displaced:{name:'hpot1',q:5},phase:'running'};
+  await info.attach('declared-lucky-recovery-history',{body:JSON.stringify(journal),contentType:'application/json'});
+  const recovered=await live.clients[merchant].run(`(async()=>{let journal=${JSON.stringify(journal)};const service=createPartyLuckyUpgrade({item:i=>character.items[i]&&JSON.parse(JSON.stringify(character.items[i]))||null,busy:()=>!!(character.q&&(character.q.upgrade||character.q.compound)),swap:(a,b)=>swap(a,b),read:()=>journal,write:j=>{journal=j;},sleep:ms=>new Promise(r=>setTimeout(r,ms)),now:Date.now,current:()=>true,log:()=>{}});const original=JSON.parse(JSON.stringify(journal));journal.displaced={name:'mpot1',q:5};let rejected;try{await service.recover();}catch(error){rejected=error.message;}const untouched=JSON.parse(JSON.stringify(character.items.slice(20,22)));journal=original;await service.recover();journal={...original,phase:"restoring",result:{name:"helmet",level:1}};await service.recover();return {rejected,untouched,journal,items:character.items.slice(20,22)};})()`);
+  expect(recovered.rejected).toContain('displaced item changed');
+  expect(recovered.untouched).toEqual([{name:'hpot1',q:4},{name:'helmet',level:1}]);
+  expect(recovered.journal).toBeNull();
+  expect(recovered.items).toEqual([{name:'helmet',level:1},{name:'hpot1',q:4}]);
+  await info.attach('lucky-recovery-native-result',{body:JSON.stringify({recovered,events:await live.clients[merchant].events()}),contentType:'application/json'});
+});
+
 test('Hunt blacklist full catalog scrolls and sprites select their own monster', async ({page,live},info) => {
   // Failure modes: absolute sprites cover the modal and intercept other rows;
   // a large native catalog cannot scroll; sprite and text clicks select different
