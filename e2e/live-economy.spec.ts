@@ -49,7 +49,7 @@ async function seed(live: LiveGame, items: Record<number, Item>) {
 }
 
 async function catalog(live: LiveGame, id: string) {
-  await expect.poll(async () => (await live.state()).merchantCatalog?.buyable?.some((item: { id: string }) => item.id === id),
+  await expect.poll(async () => (await live.state(true)).merchantCatalog?.buyable?.some((item: { id: string }) => item.id === id),
     { timeout: 120_000, message: `Native merchant must publish the ${id} NPC catalog entry` }).toBe(true);
 }
 
