@@ -1,5 +1,16 @@
 # Testing
 
+The full-catalog Hunt blacklist regression uses
+`npm test -- -- --project=live --grep "Hunt blacklist full catalog"` and
+`npm run test:e2e:verify`. It uses the native game's many-monster catalog and
+sprites, clicks both row text and sprite areas, scrolls with the mouse wheel to
+the last row, searches Goo and manually adds it. Native catalog screenshots and
+selected monster names are retained as repeatable evidence. If the live character
+watcher races the pretest character build for its operation lock, run the same
+scenario with `npx playwright test --project=live --grep "Hunt blacklist full catalog"`
+after the runtime has built. This UI-only repair uses coordinator/dashboard-only
+activation and preserves the published character generation.
+
 Manual Hunt blacklisting uses `npm test -- -- --project=console --grep "Hunt blacklist picker"`
 and `npm run test:e2e:verify`. The browser opens Farming settings, searches the
 full monster catalog, opens Goo's details, adds it without any encounter or

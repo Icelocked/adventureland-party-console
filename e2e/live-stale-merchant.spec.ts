@@ -2,6 +2,44 @@ import { test, expect } from './live-fixtures';
 
 const merchant = 'E2EMerchant';
 
+test('Hunt blacklist full catalog scrolls and sprites select their own monster', async ({page,live},info) => {
+  // Failure modes: absolute sprites cover the modal and intercept other rows;
+  // a large native catalog cannot scroll; sprite and text clicks select different
+  // monsters; the one-monster console fixture hides those layout failures.
+  await page.goto(live.url);
+  const warrior=page.locator('article').filter({has:page.getByRole('heading',{name:'E2EWarrior',exact:true})});
+  await warrior.getByRole('button',{name:'Farming settings',exact:true}).click();
+  await page.getByRole('dialog',{name:'Farming settings · E2EWarrior',exact:true}).getByRole('button',{name:'Add',exact:true}).click();
+  const picker=page.getByRole('dialog',{name:'Add to Hunt blacklist',exact:true});
+  const list=picker.getByRole('region',{name:'Hunt blacklist monsters'});
+  const rows=list.getByRole('button',{name:/^Inspect /});
+  expect(await rows.count()).toBeGreaterThan(30);
+  const firstName=(await rows.first().getAttribute('aria-label'))!.replace('Inspect ','');
+  await rows.first().click({position:{x:70,y:20}});
+  await expect(page.getByRole('heading',{name:firstName,exact:true})).toBeVisible();
+  await page.keyboard.press('Escape');
+  await list.hover();
+  await page.mouse.wheel(0,100000);
+  await expect(rows.last()).toBeInViewport();
+  await expect(rows.first()).not.toBeInViewport();
+  const lastName=(await rows.last().getAttribute('aria-label'))!.replace('Inspect ','');
+  await rows.last().click({position:{x:20,y:20}});
+  await expect(page.getByRole('heading',{name:lastName,exact:true})).toBeVisible();
+  await page.keyboard.press('Escape');
+  await picker.getByRole('textbox',{name:'Search blacklist monsters'}).fill('goo');
+  const goo=picker.getByRole('button',{name:'Inspect Goo',exact:true});
+  await goo.click({position:{x:20,y:20}});
+  await expect(page.getByRole('heading',{name:'Goo',exact:true})).toBeVisible();
+  await page.keyboard.press('Escape');
+  await picker.getByRole('button',{name:'Add Goo to blacklist',exact:true}).click();
+  await expect.poll(async()=>(await live.state()).farmingProfiles.E2EWarrior.huntBlacklist.goo?.reason).toBe('Manually blacklisted');
+  await info.attach('native-blacklist-picker',{body:await page.screenshot(),contentType:'image/png'});
+  await info.attach('native-blacklist-selection',{body:JSON.stringify({firstName,lastName,state:await live.state()}),contentType:'application/json'});
+  // This page belongs to Playwright's base context, not the native fixture's
+  // context. Close its dashboard websocket before that fixture closes its gateway.
+  await page.close();
+});
+
 test.describe('stale merchant recovery', () => {
   test.setTimeout(300_000);
 
