@@ -35,6 +35,26 @@ surrounding Scatter, merchant-exclusion and disengagement checks remain.
 
 ## Run locally
 
+The independent solo-priest regression runs with:
+
+```sh
+npm test -- -- --project=live --grep "an unfollowed priest"
+npm run test:e2e:verify
+```
+
+CI run `36648481964`, shard 5, reached the Goo spawn but never attacked: the
+independent controller returned no combat group while the native priest waited
+for its group target authorization. Ordinary local runs and an isolated CI run
+passed when a native travel encounter completed the quest before spawn arrival.
+The regression now uses native setup walking to start inside the spawn, requires
+a priest-only combat group, then observes a native kill and exactly one Daisy
+reward while the warrior's Hunt remains off. The unfixed code fails the singleton
+group check locally. Ten related native Hunt/restart/death/merchant/solo-ranger
+journeys passed with the fix; this is focused coverage, not a complete suite run.
+The local run used a separate disposable Docker project and loopback ports to
+avoid another checkout's active test stack; those temporary settings are captured
+in its reproduction artifact and are not part of the fix.
+
 Issue #20 recovery can be repeated with:
 
 ```sh

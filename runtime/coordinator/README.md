@@ -1,5 +1,14 @@
 # Character coordinator
 
+Independent farming controllers now evaluate their own singleton combat group.
+Their scoped leader uses the native group target lock even while Follow is off;
+returning a null group stranded a solo priest after reaching its Hunt spawn.
+A native kill during travel could hide the missing authorization. The solo-priest
+Hunt E2E now walks to the spawn before starting its quest, requires the priest-only
+group, and observes a real kill and Daisy reward without enabling the warrior's
+Hunt. Activate this coordinator change with the supported coordinator-only restart.
+
+
 Failed delivery equips wait for a full merchant inventory received after the failure. Missing stock retires the mark; retained stock retries delivery under a fresh identity so late receipts cannot consume the new attempt. Combat heartbeats do not refresh inventory age. Pending reconciliation persists across restart without issuing more equip commands. Validate the two failed delivery equip native E2Es and activate with the supported coordinator-only restart below.
 
 SIGINT, SIGTERM and SIGQUIT already share the coordinator shutdown handler. It stops managed characters and closes storage; each worker gets a bounded 500 ms closing notification before forced termination. This is not a transaction drain and does not guarantee completion of an in-flight game transfer. Durable recovery remains required. The Windows E2E restart uses IPC to invoke that same handler; it does not claim POSIX signal delivery or container-wide draining coverage.
