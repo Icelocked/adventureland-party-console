@@ -7199,11 +7199,24 @@
         }
       }
       await merchantVisitBank(command, activity);
+      // Read current shared rules after the exchange and bank travel. A reward
+      // with a processing/sale rule stays carried for the normal merchant queue.
+      var routing = await request("/merchant/exchange-progress", { method: "POST", body: {
+        jobId: command.jobId, remaining: [], rewards: rewards,
+      }});
+      var rewardActions = routing.rewardActions || [];
+      var bankedRewards = 0;
       for (var rewardIndex = 0; rewardIndex < rewards.length; rewardIndex += 1) {
         var rewardSlot = findItem(rewards[rewardIndex]);
-        if (rewardSlot >= 0) await bankStoreFully(rewardSlot);
+        if (rewardSlot >= 0 && rewardActions[rewardIndex] && rewardActions[rewardIndex].action === "bank") {
+          await verifyMerchantItemMarks();
+          await bankStoreFully(rewardSlot);
+          bankedRewards += 1;
+        }
       }
-      activity.push({ level: "success", message: "Exchange results deposited in the bank" });
+      activity.push({ level: "success", message: "Exchange rewards routed through merchant rules", details: {
+        banked: bankedRewards, actions: rewardActions,
+      } });
       await request("/merchant/complete", { method: "POST", body: {
         jobId: command.jobId, success: true, autoExchangesResolved: command.autoExchangeKeys || [],
         merchantWithdrawalsDelivered: command._merchantWithdrawalsCompleted || [],
