@@ -242,13 +242,23 @@ test.describe('native Hunt lifecycle', () => {
         const secondDeath = await killNativeCharacter(live, W);
         expect(secondDeath.rip).toBeTruthy();
         await expect.poll(async () => profile(await live.state()).huntFailures?.goo?.deaths || 0, { timeout: 30_000 }).toBe(2);
+        const context=live.clients[W].page.context();
+        let droppedCatalogs=0;
+        const dropCatalog=async(route:import('@playwright/test').Route)=>{
+          if(route.request().postDataJSON()?.monsterChoices){droppedCatalogs++;await route.abort('connectionreset');}
+          else await route.fallback();
+        };
+        await context.route('**/party-api/status',dropCatalog);
         await live.restartCoordinator();
         await expect.poll(async () => !(await world(live))[W].rip, { timeout: 120_000 }).toBe(true);
         const crossed = profile(await live.state());
         expect(crossed.huntFailures.goo.deaths).toBe(2);
         expect(crossed.huntBlacklist.goo.deaths).toBe(2);
         thresholdCrossing = { secondDeath, failures: crossed.huntFailures, blacklist: crossed.huntBlacklist };
+        await expect.poll(()=>droppedCatalogs,{timeout:15_000}).toBeGreaterThan(0);
+        expect((await live.state(true)).monsterChoices||[]).toHaveLength(0);
         await live.post('/hunt-blacklist', { character: W, action: 'remove', monsterId: 'goo' });
+        await context.unroute('**/party-api/status',dropCatalog);
         const afterSecondRespawn = (await world(live))[W].quest.c;
         await expect.poll(async () => (await world(live))[W].quest.c, { timeout: 120_000 }).toBeLessThan(afterSecondRespawn);
       }

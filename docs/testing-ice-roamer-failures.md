@@ -68,3 +68,7 @@ Full-suite follow-up failure modes (recorded before the recovery change):
   `native`. Dispatching that entry while already farming creates endless new
   convoys and repeatedly revokes combat ownership. Retain the ledger/budget, but
   do not dispatch it after confirmed arrival unless a new owned route fails.
+- Restart can restore a death blacklist before the native monster catalog arrives.
+  Removing an existing saved blacklist entry must work during that window; adding
+  an unknown species must still fail. Exercise the native death/restart journey
+  while dropping actual catalog-bearing requests until the removal completes.

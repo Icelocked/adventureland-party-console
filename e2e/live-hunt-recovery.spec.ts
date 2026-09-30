@@ -7,9 +7,10 @@ test('native Hunt fallback arrival releases farming instead of repeatedly restar
   await quests(live,info,{[W]:{count:100},[P]:{count:100}});
   await start(live);
   await expect.poll(async()=> (await live.state()).activeConvoy?.phase==='travel' &&
-    await live.clients[W].run('!!character.moving && smart.moving && !character.c?.town'),
-    {timeout:90_000,message:'Interrupt a genuine native Hunt walking route'}).toBe(true);
-  const interrupted=await live.clients[W].run('(()=>{const before={at:Date.now(),map:character.map,x:character.x,y:character.y};stop("smart");return before})()');
+    await live.clients[W].run('!!character.moving && !character.c?.town'),
+    {timeout:90_000,intervals:[50,100],message:'Interrupt a genuine native Hunt walking route'}).toBe(true);
+  const interrupted=await live.clients[W].run('(()=>{const before={at:Date.now(),map:character.map,x:character.x,y:character.y,smartMoving:smart.moving};stop("smart");return before})()');
+  await info.attach('native-route-stop',{body:JSON.stringify(interrupted),contentType:'application/json'});
   await expect.poll(async()=>Object.values(profile(await live.state()).monsterHunt?.routeRecovery||{}).some((entry:any)=>entry.phase==='native'),
     {timeout:30_000,message:'The real route interruption must activate the bounded native fallback'}).toBe(true);
   const recovering=profile(await live.state()).monsterHunt;
@@ -30,7 +31,10 @@ for (const fault of ['completion-request', 'completion-response', 'follower-reco
     test.setTimeout(300_000);
     await party(live);
     const questCount = fault === 'follower-reconnect' ? 12 : 3;
-    await quests(live, info, { [W]: { count: questCount }, [P]: { count: questCount } });
+    // Disconnected characters do not receive native party kill credit. Keep the
+    // follower's initial quest complete in the reconnect scenario so it tests
+    // ownership recovery and both turn-ins, not credit for kills while offline.
+    await quests(live, info, { [W]: { count: questCount }, [P]: { count: fault==='follower-reconnect'?0:questCount } });
     const before = await world(live);
     const faults: unknown[] = [];
     let intercepted = false;
