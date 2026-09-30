@@ -1,5 +1,15 @@
 # Testing
 
+Hunt blacklist persistence uses `npm test -- -- --project=console --grep "blacklists survive"`
+and `npm run test:e2e:verify`. The console journey imports distinct owned profiles,
+skips an unknown owner, starts Hunt through the backup picker, exits Hunt, and
+restarts the coordinator. It exports both profiles' blacklist/count/settings
+preferences, clears one profile independently, imports the export, and restarts
+again. Merchant exclusions also round-trip. Execution checkpoints are excluded
+from exported profiles and existing profile state is preserved on import.
+The screenshot, export, final state, trace and journal are retained under the
+standard E2E report/results directories. Coordinator-only activation suffices.
+
 Production receipt recovery uses `npm test -- -- --project=live --grep "production recovery"`
 and `npm run test:e2e:verify`. Two native journeys restore a declared unfinished
 compound receipt with queued bank work. Without a local journal, the receipt

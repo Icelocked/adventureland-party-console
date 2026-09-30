@@ -8,6 +8,63 @@ import { Access } from '../tools/hosting/access';
 import { startupRealms } from '../tools/hosting/realms';
 import { accountConfig, sessionValue } from '../tools/hosting/account';
 
+test('blacklists survive Hunt mode changes, restart and dashboard export import', async ({page,app},info) => {
+  // Failure modes: Hunt reset deletes durable exclusions/counts; exports omit
+  // solo profiles; import overwrites execution state or admits unknown owners;
+  // merchant exclusions disappear; explicit clear fails or affects other owners.
+  const post = async (route: string, data: unknown) => {
+    const response = await page.request.post(app.url + '/party-api' + route, {data,headers:{Origin:app.url}});
+    expect(response.ok(), await response.text()).toBe(true);
+    return response.json();
+  };
+  const restore = async (settings: unknown) => {
+    const source=JSON.stringify({format:'party-console-settings',version:1,settings});
+    const headers={'Content-Type':'text/plain',Origin:app.url};
+    const preview=await page.request.post(app.url+'/party-api/dashboard-state/preview',{data:source,headers});
+    expect(preview.ok(),await preview.text()).toBe(true);
+    const summary=await preview.json();
+    const imported=await page.request.post(app.url+'/party-api/dashboard-state/import',{data:source,headers:{...headers,'X-State-Preview':summary.digest}});
+    expect(imported.ok(),await imported.text()).toBe(true);
+    return summary;
+  };
+  const blacklist={goo:{monsterId:'goo',at:Date.now(),deaths:2,expirations:0,reason:'Hunt death threshold reached'}};
+  const failures={goo:{deaths:2,expirations:0}};
+  const seed=await restore({farmingProfiles:{W:{huntBlacklist:blacklist,huntFailures:failures},P:{huntBlacklist:blacklist,huntFailures:failures},Unknown:{huntBlacklist:blacklist}}});
+  expect(seed.skippedCharacters.Unknown).toContain('farmingProfiles');
+  await post('/merchant/blacklist',{seller:'ExcludedMerchant',minutes:-1});
+  await page.goto('/');
+  const warrior=page.locator('article').filter({has:page.getByRole('heading',{name:'W',exact:true})});
+  await warrior.getByRole('button',{name:/^Farming settings .+/}).click();
+  await warrior.getByRole('button',{name:'Hunt',exact:true}).click();
+  const preparation=page.getByRole('dialog',{name:'Getting ready to hunt',exact:true});
+  await preparation.getByRole('button',{name:'No monsters selected 0',exact:true}).click();
+  await page.getByRole('checkbox',{name:/\bGoo · goo\b/}).check();
+  await page.keyboard.press('Escape');
+  await preparation.locator('button[aria-pressed]').first().click();
+  await preparation.getByRole('button',{name:'Save backup and start Hunt',exact:true}).click();
+  await expect(preparation).not.toBeVisible();
+  await post('/farming-mode',{character:'W',mode:'default'});
+  expect((await app.state()).farmingProfiles.W.huntBlacklist).toEqual(blacklist);
+  await app.restartCoordinator();
+  expect((await app.state()).farmingProfiles.W.huntFailures).toEqual(failures);
+  const exported=await (await page.request.get(app.url+'/party-api/dashboard-state/export')).json();
+  expect(exported.settings.farmingProfiles.P.huntBlacklist).toEqual(blacklist);
+  expect(exported.settings.farmingProfiles.W).not.toHaveProperty('monsterHunt');
+  await post('/hunt-blacklist',{character:'W',action:'clear'});
+  expect((await app.state()).farmingProfiles.W.huntBlacklist).toEqual({});
+  expect((await app.state()).farmingProfiles.P.huntBlacklist).toEqual(blacklist);
+  await post('/merchant/blacklist',{action:'clear'});
+  await restore(exported.settings);
+  await app.restartCoordinator();
+  const final=await app.state();
+  expect(final.farmingProfiles.W.huntBlacklist).toEqual(blacklist);
+  expect(final.farmingProfiles.P.huntBlacklist).toEqual(blacklist);
+  expect(final.merchantBlacklist).toEqual(exported.settings.merchantBlacklist);
+  await page.goto('/');
+  await info.attach('blacklist-export-round-trip',{body:JSON.stringify({seed,exported,final}),contentType:'application/json'});
+  await info.attach('blacklist-dashboard',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
+});
+
 test('setup calculates startup realms and validates account availability', async ({ browser }, info) => {
   // Failure modes: static options omit new/PVP realms; Roman-numeral validation
   // rejects live keys; every page load refetches; unavailable account realms pass;
