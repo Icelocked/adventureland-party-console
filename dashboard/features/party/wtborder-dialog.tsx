@@ -222,19 +222,18 @@ export function WTBOrderDialog({
             </p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {buttons.map(([label, value, tone]) => (
-                <div key={label} className="flex items-stretch gap-1">
                 <StandPriceButton
+                  key={label}
                   label={label}
                   value={value}
                   disabled={!value}
                   onClick={() => apply(value)}
                   tone={tone}
+                  information={label === 'Farm price' ? <Popover>
+                    <PopoverTrigger render={<button type="button" aria-label="Information: Farm price" className="flex h-5 w-5 items-center justify-center rounded border border-amber-700 bg-black text-amber-200 hover:bg-amber-950 hover:text-white" />}><Info className="h-3 w-3" /></PopoverTrigger>
+                    <PopoverContent className="max-w-xs border-amber-700 bg-black text-sm text-amber-100">Estimated gold you would earn while farming enough monsters to obtain one of this item, based on its drop rate and those monsters' gold rewards.</PopoverContent>
+                  </Popover> : undefined}
                 />
-                {label === 'Farm price' && <Popover>
-                  <PopoverTrigger render={<button type="button" aria-label="Information: Farm price" className="h-8 w-8 shrink-0 rounded border border-amber-700 bg-black text-amber-200 hover:bg-amber-950 hover:text-white" />}><Info className="mx-auto h-4 w-4" /></PopoverTrigger>
-                  <PopoverContent className="max-w-xs border-amber-700 bg-black text-sm text-amber-100">Estimated gold you would earn while farming enough monsters to obtain one of this item, based on its drop rate and those monsters’ gold rewards.</PopoverContent>
-                </Popover>}
-                </div>
               ))}
             </div>
           </div>

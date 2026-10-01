@@ -588,7 +588,18 @@ test('market affordability uses core bank gold and active WTB prices open the fu
   await expect(editor.getByLabel('Maximum price')).toHaveValue('1200');
   await expect(editor.getByLabel('Quantity',{exact:true})).toHaveValue('7');
   await expect(editor.getByRole('button',{name:/Farm price/}).first()).toBeVisible();
+  const farm=editor.getByRole('button',{name:/^Farm price/});
+  const npc=editor.getByRole('button',{name:/^NPC sale/});
+  const farmBox=await farm.boundingBox(), npcBox=await npc.boundingBox();
+  const infoBox=await editor.getByRole('button',{name:'Information: Farm price',exact:true}).boundingBox();
+  expect(farmBox).toBeTruthy(); expect(npcBox).toBeTruthy(); expect(infoBox).toBeTruthy();
+  expect(Math.abs(farmBox!.width-npcBox!.width)).toBeLessThan(1);
+  expect(infoBox!.x).toBeGreaterThan(farmBox!.x+farmBox!.width/2);
+  expect(infoBox!.x+infoBox!.width).toBeLessThanOrEqual(farmBox!.x+farmBox!.width);
+  expect(infoBox!.y).toBeGreaterThanOrEqual(farmBox!.y);
+  expect(infoBox!.y+infoBox!.height).toBeLessThan(farmBox!.y+farmBox!.height/2);
   await editor.getByRole('button',{name:'Information: Farm price',exact:true}).click();
+  await expect(editor.getByLabel('Maximum price')).toHaveValue('1200');
   await expect(page.getByText(/Estimated gold you would earn while farming/)).toBeVisible();
   await page.keyboard.press('Escape');
   await editor.getByLabel('Maximum price').fill('1500');

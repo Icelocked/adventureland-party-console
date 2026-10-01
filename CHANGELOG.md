@@ -41,6 +41,12 @@ from the commits merged into `main`.
 
 ### Fixed
 
+- Recover empty native WTB reservations that never received an offer ID, without
+  counting them as purchases. Back off failed placements before retrying, and
+  adopt matching offers that moved before their first acknowledgement.
+- Make WTB price options fill each grid column and place Farm price information
+  inside the option’s upper-right corner without changing the price when clicked.
+
 - Fix market “Hide unaffordable” using the account’s bank gold even when the Bank
   panel is closed (#38). Active WTB price buttons reopen the full price/quantity
   editor with current terms and price options. Rename “New WTB order” and “Farm

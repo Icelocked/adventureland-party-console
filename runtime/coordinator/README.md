@@ -1381,3 +1381,12 @@ Validate the market affordability console journey and native WTB funding/reopeni
 journey in live-economy.spec.ts, preserving screenshots and state evidence. These
 changes need the supported coordinator/dashboard-only restart; no character asset
 publication is required. Building alone does not activate the running coordinator.
+
+
+Empty WTB reservations without a native offer identity now release after receipt
+reconciliation and retry placement. Failed new placements back off for ten seconds;
+old persisted blocks without an identity recover on the next open-stand report.
+Matching offers can be adopted from a moved slot before their first acknowledgement.
+Confirmed offers that disappear still require purchase/removal evidence rather than
+silently counting a fill. Validate the declared historical unconfirmed-reservation
+native E2E and the market editor layout journey. Coordinator-only restart suffices.

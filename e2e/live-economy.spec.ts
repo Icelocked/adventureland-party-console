@@ -378,3 +378,25 @@ test('native WTB withdraws bank funding and reconciles replaced offers after reo
   await record(live,info,'native-wtb-funding-and-reconciliation',before,{funded,originalOffer:offer,after});
   await info.attach('native-wtb-reopened-stand',{body:await live.clients[merchant].page.screenshot(),contentType:'image/png'});
 });
+
+
+test('native WTB retries an empty never-confirmed reservation after restart without counting a fill', async ({live},info) => {
+  test.setTimeout(240_000);
+  // Historical boundary: an empty stand slot and a persisted reservation with no
+  // native identity. Failure modes: restart retains a permanent block; retry
+  // decrements bid quantity; a retry places duplicate offers or spends gold.
+  await catalog(live,'hpot0');
+  await seed(live,{10:{name:'stand0'}});
+  const before=await economy(live);
+  await live.restoreHistoricalSettings(()=>({
+    standBids:{leather:{price:1000,quantity:3,minimumQuality:0,useStandSlot:true,revision:1}},
+    nativeStand:{sequence:1,offers:{'native-1':{token:'native-1',itemId:'leather',auto:false,slot:'trade1',revision:1,level:0,price:1000,quantity:3,acknowledged:0,phase:'blocked',problem:'Offer disappeared without a confirmed fill/removal; reconciliation required'}},problems:{}},
+  }));
+  await expect.poll(async ()=>Object.values((await live.state()).nativeStand.offers).some((offer:any)=>offer.itemId==='leather' && offer.phase==='live' && offer.rid && !offer.problem),{timeout:90_000}).toBe(true);
+  const state=await live.state(), current=await live.clients[merchant].snapshot();
+  expect(state.standBids.leather.quantity).toBe(3);
+  expect(Object.values(current.slots).filter((item:any)=>item?.b && item.name==='leather')).toHaveLength(1);
+  expect(totalGold(await economy(live))).toBe(totalGold(before));
+  await record(live,info,'native-unconfirmed-wtb-recovered',before,{state,slots:current.slots});
+  await info.attach('native-unconfirmed-wtb-recovered-stand',{body:await live.clients[merchant].page.screenshot(),contentType:'image/png'});
+});
