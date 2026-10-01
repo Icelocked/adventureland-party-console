@@ -4288,9 +4288,16 @@
     if (character.q && (character.q.upgrade || character.q.compound)) throw Error("Production recovery waiting for game operation");
     var inspection = await request("/merchant/production", {method:"POST",body:Object.assign({},journal.request,{character:character.name,action:"inspect"})});
     if (!inspection || !Array.isArray(inspection.pending)) throw Error("Production recovery inspection unavailable");
+    // A local-storage replay can leave an older running journal after its
+    // coordinator receipt completed. Retire that evidence before comparing
+    // pending identities, then recover the newer coordinator journal normally.
+    // Never restore the completed attempt's old lucky layout or replay it.
+    if (inspection.attempt && inspection.attempt.completed) {
+      root.localStorage.removeItem(productionJournalKey());
+      return recoverProductionJournalWork();
+    }
     var orphan = inspection.pending.find(function (attempt) { return attempt.id !== journal.id; });
     if (orphan) throw Error("Production recovery needs review: " + orphan.id + " (" + orphan.name + " +" + orphan.level + "); local journal " + journal.id);
-    if (inspection.attempt && inspection.attempt.completed) { root.localStorage.removeItem(productionJournalKey()); return; }
     if (!inspection.attempt) {
       if (journal.phase !== "prepared") throw Error("Production recovery missing admitted attempt: " + journal.id);
       root.localStorage.removeItem(productionJournalKey());

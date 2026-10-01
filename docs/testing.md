@@ -4,9 +4,11 @@ Durable buy-with-upgrade recovery uses
 `npm test -- -- --project=live --grep "buy with upgrade target survives"` and
 `npm run test:e2e:verify`. The native merchant buys/upgrades two helmets, loses one
 lucky restoration swap, and retains the original order. The test removes local
-production, lucky and commerce journals, restarts the coordinator, and requires
+local lucky and commerce journals and replays an older running production journal
+whose native receipt already completed. It restarts the coordinator and requires
 mirrored receipt recovery to produce exactly two +1 helmets without replay after
-another restart. Initial lucky slot 30 is a declared configuration fixture, not
+another restart. The lost restoration occurs on the second item, after the first
+receipt completes. Initial lucky slot 30 is a declared configuration fixture, not
 a fabricated discovery or game outcome. The focused journey passed with 33
 verified evidence files; retained lucky-upgrade/recovery checks also passed (45).
 This is not full-suite coverage. Activation requires the ordinary full restart.

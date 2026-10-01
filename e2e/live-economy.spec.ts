@@ -10,6 +10,8 @@ test('buy with upgrade target survives lucky restoration failure and missing cli
   test.setTimeout(360_000);
   // Failure inventory: restore errors drop the order; a lost local receipt
   // holds all work; replay duplicates purchases/results or resets spend/attempts.
+  // A completed older local journal must not fence a newer mirrored receipt.
+  let completedJournal: Record<string, unknown> | undefined;
   await live.restoreHistoricalSettings(() => ({ luckyUpgradeSlots: { [merchant]: 30 } }));
   await catalog(live, 'helmet');
   const context = live.clients[merchant].page.context();
@@ -20,9 +22,9 @@ test('buy with upgrade target survives lucky restoration failure and missing cli
     else await route.continue();
   });
   await live.clients[merchant].run(`(()=>{
-    const nativeSwap=swap;globalThis.__e2eLuckyRestoreFault=false;
+    const nativeSwap=swap;globalThis.__e2eLuckyRestoreFault=false;globalThis.__e2eLuckyRestores=0;
     swap=function(a,b){const j=JSON.parse(localStorage.getItem('party-lucky-upgrade:'+character.name)||'null');
-      if(j?.phase==='restoring'&&!globalThis.__e2eLuckyRestoreFault){globalThis.__e2eLuckyRestoreFault=true;throw Error('Injected lost lucky restoration swap');}
+      if(j?.phase==='restoring'&&!globalThis.__e2eLuckyRestoreFault&&++globalThis.__e2eLuckyRestores===2){globalThis.__e2eLuckyRestoreFault=true;throw Error('Injected lost lucky restoration swap');}
       return nativeSwap(a,b);};return true;
   })()`);
   // Pending inspection is also used before the first operation: admit the
@@ -30,6 +32,7 @@ test('buy with upgrade target survives lucky restoration failure and missing cli
   await context.unroute('**/merchant/production');
   await context.route('**/merchant/production', async route => {
     const body = route.request().postDataJSON();
+    if (body.action === 'checkpoint' && body.journal?.phase === 'complete') completedJournal = body.journal;
     const fault = await live.clients[merchant].run('!!globalThis.__e2eLuckyRestoreFault');
     if (holdRecovery && fault && ['pending', 'inspect'].includes(body.action)) await route.abort('failed');
     else await route.continue();
@@ -42,7 +45,8 @@ test('buy with upgrade target survives lucky restoration failure and missing cli
   const held = (await live.state()).merchantQueue.find((job: any) => job.commerceOrderId === order.jobId);
   expect(held.resumeState.attempts).toBeGreaterThan(0);
   expect(held.resumeState.spent).toBeGreaterThan(0);
-  await live.clients[merchant].run(`(()=>{localStorage.removeItem('party-production:'+character.name);localStorage.removeItem('party-lucky-upgrade:'+character.name);localStorage.removeItem('party-commerce:${order.jobId}');return true})()`);
+  expect(completedJournal).toBeDefined();
+  await live.clients[merchant].run(`(()=>{localStorage.setItem('party-production:'+character.name,${JSON.stringify(JSON.stringify({...completedJournal, phase: 'running'}))});localStorage.removeItem('party-lucky-upgrade:'+character.name);localStorage.removeItem('party-commerce:${order.jobId}');return true})()`);
   await live.restartCoordinator();
   holdRecovery = false;
   await expect.poll(async () => {

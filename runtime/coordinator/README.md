@@ -886,7 +886,13 @@ Production recovery inspects admission by journal identity before taking action.
 A prepared journal that was never admitted is discarded without admitting new work;
 a different unfinished coordinator attempt remains held for explicit review.
 Production and journal recovery serialize locally to prevent overwriting an active
-journal. The existing `/party-api/merchant/production` endpoint accepts `action:
+journal. A stale local running journal with a completed coordinator receipt is
+discarded before checking other pending identities; recovery then loads the newer
+mirrored receipt without restoring the old lucky layout or replaying production.
+Recovery commands remain deliverable across heartbeat responses while reconciliation
+is deferred. Validate the native buy-with-upgrade recovery journey, including an
+older completed receipt replayed locally, and activate with the full restart.
+The existing `/party-api/merchant/production` endpoint accepts `action:
 "inspect"` with the original character/id/kind/item and returns its attempt plus
 pending identities. After reviewing an orphan, an operator can submit those same
 identity fields with `action: "resolve-unknown"` and a nonempty `reason`. This
