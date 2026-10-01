@@ -9,6 +9,21 @@ Activate with the supported coordinator/dashboard-only restart.
 
 # Character coordinator
 
+Cave travel assembles participants at the leader before departure, shares the
+leader's validated native route, applies the slowest party speed through native
+cruise, and holds members that get ahead in walking progress. Interrupted routes
+regroup and prepare together, with a bounded three-repair limit. Manual stair
+destinations issue native transport after arrival
+and retain that destination through an intervening farewell vote. Other encounter
+votes stop the selected route. Revealed objectives on other floors return a
+friendly floor error rather than entering ordinary cross-instance pathfinding.
+Resolved duel scenes identify the hostile participant when the party helps one
+side. Cave map telemetry includes both equipped weapon sprites. The full-floor
+map shows party/event pins and one replaceable waypoint. Validate the native cave
+E2E with duel death, shared cruise, route arrival, farewell voting and both members
+on the next floor; retain the report/screenshots. Activate using the full restart
+and recreate an existing disposable debug instance.
+
 Combat event ownership is checked before Hunt quest preparation and automatic
 Daisy returns, including initial Hunt activation and resume. Existing protected
 turn-ins retain priority. Respawn reentry retries temporary travel permission
@@ -1165,10 +1180,11 @@ A disconnected member keeps ownership. Return missing participants requires a
 server-confirmed resumable visit on the same server. Failed preparation can be
 retried explicitly; uncertain irreversible requests require observed reconciliation.
 
+Cave travel starts stopped. Users choose a room or explicitly start automatic exploration.
 Automatic cave progress visits unfinished required rooms, then gathers everyone at
 unlocked stairs down and transports them together. It pauses for visible hostile
 monsters, loot, forced choices, death, and stale reports. The panel can pause or
-continue this route; a manual destination pauses automatic progress. Final-floor
+stop this route; a manual destination replaces automatic exploration. Forced encounters stop travel and require another destination selection after answering. Nearby reachable enemies or active attackers pause navigation; distant visible enemies do not. Server chest-open receipts bypass the native animation cache. Loot readiness uses centre coordinates with a margin inside the server pickup radius, rather than sprite-edge distance. Final-floor
 completion never chooses the Mainland exit. Stairs receipts reconcile from an
 observed destination floor rather than replaying an uncertain transport.
 
@@ -1437,3 +1453,5 @@ Matching offers can be adopted from a moved slot before their first acknowledgem
 Confirmed offers that disappear still require purchase/removal evidence rather than
 silently counting a fill. Validate the declared historical unconfirmed-reservation
 native E2E and the market editor layout journey. Coordinator-only restart suffices.
+
+Cave encounter votes open an automatic dashboard dialog; resolved encounters remain reviewable. Dungeon ownership suppresses mainland farm reunion, and manual destinations clear stale travel errors. Generated map definitions are shared across participant streams so follower maps and reconnects retain geometry. These character and coordinator changes require the full restart workflow above; building does not update an existing debug session.

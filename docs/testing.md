@@ -11,6 +11,15 @@ a fabricated discovery or game outcome. The focused journey passed with 33
 verified evidence files; retained lucky-upgrade/recovery checks also passed (45).
 This is not full-suite coverage. Activation requires the ordinary full restart.
 
+The native `live-cave.spec.ts` journey covers cave party assembly/cruise, room
+arrival, stopping/resuming, encounter funds, full-floor pins/waypoint selection,
+native help-one-side duel completion and manual stairs through a farewell vote.
+Encounter selection is bounded to upstream duel/gift/shop definitions, avoiding
+the separate six-level-100-wolves challenge. The duel and farewell fixtures use
+native `cave_activate`/`cave_begin_vote`; no attack, death, vote receipt, completion,
+or transport result is fabricated. Inspect retained JSON, screenshots and traces
+and run `npm run test:e2e:verify` after the journey.
+
 Hunt/event respawn recovery uses
 `npm test -- -- --project=live --grep "disabling inherited Franky"` and
 `npm run test:e2e:verify`. The native fragile party fights Franky, enables Hunt
@@ -520,3 +529,5 @@ are disconnected. Each result includes `native-loadout-seed` with exact equipmen
 and `live-server-initial` with the native calculated HP/MP, attack, frequency,
 speed, armor, and resistance. These scenarios validate workflow behavior rather
 than normal player combat difficulty or natural gear progression.
+
+The native Cave regression is in live-cave.spec.ts. Run npm test -- -- --project=live --grep 'Cave entry closes'. It seeds the party beside Dorr, uses native entry and votes, captures both participant maps, verifies both characters reach selected rooms, stops and restarts manual travel, inspects the shop item, and checks exit confirmation through the dashboard. Artifacts include native-cave-entry, native-cave-choice, participant cave-map screenshots, native-cave-manual-travel, and native-cave-exit. Fixture reset destroys only generated runs belonging entirely to its test account, preventing a prior failed run from becoming a resume visit.
