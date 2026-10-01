@@ -9,6 +9,12 @@ Activate with the supported coordinator/dashboard-only restart.
 
 # Character coordinator
 
+BankBoi storage commands bypass the designated merchant's production receipt
+gate. BankBois cannot use the production endpoint; applying that gate to their
+merchant class leaves storage marked processing without starting native banking.
+Native stack filling still runs during unload, preserving stack caps and reserved
+stock. Validate `live-bankboi.spec.ts` and activate through the full restart.
+
 Cave travel assembles participants at the leader before departure, shares the
 leader's validated native route, applies the slowest party speed through native
 cruise, and holds members that get ahead in walking progress. Interrupted routes

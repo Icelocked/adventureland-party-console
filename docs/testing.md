@@ -1,5 +1,15 @@
 # Testing
 
+BankBoi production-gate recovery uses
+`npm test -- -- --project=live --grep "BankBoi storage bypasses"`.
+The declared historical fixture designates a connected merchant as a storage
+worker with a waiting transaction and no production owner. Native banking must
+combine three nightberries with ten and four gifts with twenty, then preserve
+those quantities through coordinator restart. Worker registration/transaction
+fixtures declare recovery intent; no transfer receipt or merged result is seeded.
+Retain the native trace, inventory, bank, state and event attachments and run
+`npm run test:e2e:verify`. Activation requires the ordinary full restart.
+
 Durable buy-with-upgrade recovery uses
 `npm test -- -- --project=live --grep "buy with upgrade target survives"` and
 `npm run test:e2e:verify`. The native merchant buys/upgrades two helmets, loses one

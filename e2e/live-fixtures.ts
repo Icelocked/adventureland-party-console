@@ -116,10 +116,19 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           const stored = Object.assign({}, ...entries);
           const settings = JSON.parse(stored[key]);
           const historical = restore(structuredClone(settings));
-          const allowed = new Set(['characterLocations', 'location', 'farmingPolicy', 'farmingProfiles', 'eventSelectionsByCharacter', 'activeConvoy', 'deferredEventReturns', 'eventReturn', 'monsterHunt', 'merchantDeliveries', 'npcSaleMarks', 'merchantCurrent', 'production', 'nativeStand', 'standBids', 'luckyUpgradeSlots']);
+          const allowed = new Set(['characterLocations', 'location', 'farmingPolicy', 'farmingProfiles', 'eventSelectionsByCharacter', 'activeConvoy', 'deferredEventReturns', 'eventReturn', 'monsterHunt', 'merchantDeliveries', 'npcSaleMarks', 'merchantCurrent', 'merchantCharacter', 'bankbois', 'bankboiTransaction', 'production', 'nativeStand', 'standBids', 'luckyUpgradeSlots']);
           if (Object.keys(historical).some(key => !allowed.has(key))) throw Error('Historical seed may only patch declared recovery, Hunt, navigation and native WTB settings');
           await testInfo.attach('declared-historical-settings-seed', { body: JSON.stringify(historical), contentType: 'application/json' });
-          appendFileSync(journal, JSON.stringify({ [key]: JSON.stringify({ ...settings, ...historical }) }) + '\n');
+          const bankKeys = new Set(['bankbois', 'bankboiTransaction']);
+          const bankPatch = Object.fromEntries(Object.entries(historical).filter(([field]) => bankKeys.has(field)));
+          const settingsPatch = Object.fromEntries(Object.entries(historical).filter(([field]) => !bankKeys.has(field)));
+          const restored: Record<string, string> = { [key]: JSON.stringify({ ...settings, ...settingsPatch }) };
+          if (Object.keys(bankPatch).length) {
+            const bankKey = 'party_dashboard_bank_state_v1';
+            restored[bankKey] = JSON.stringify({ ...JSON.parse(stored[bankKey] || '{}'), ...bankPatch });
+          }
+          for (const [stateKey, value] of Object.entries(restored))
+            appendFileSync(journal, JSON.stringify({ [stateKey]: value }) + '\n');
           await start();
         },
         async reconnectClient(name) {

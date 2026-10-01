@@ -9318,7 +9318,7 @@
       try { await luckyUpgradeService.recover(); }
       catch (error) { reportMerchantCommand(command, "deferred", error.message || String(error)); return; }
     }
-    if (character.ctype === "merchant" && !root.__merchantActiveJob) {
+    if (character.ctype === "merchant" && command.type !== "bankboi-service" && !root.__merchantActiveJob) {
       try { await recoverProductionJournal(); }
       catch (error) { reportMerchantCommand(command, "deferred", error.message || String(error)); return; }
     }
