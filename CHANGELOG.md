@@ -54,6 +54,35 @@ from the commits merged into `main`.
 
 ### Fixed
 
+- Pair manual inventory context actions with their automatic rules and expose
+  upgrade, deconstruction, stand and NPC-sale rules from bank menus. Persist
+  source-specific bank upgrade withdrawals until receipt reconciliation finds
+  the carried item; clearing bank marks also clears their pending intents.
+
+- Automatically retire stale lucky-slot layouts after the coordinator confirms
+  there are no pending production receipts and the displaced destination is
+  restored. Later source-slot deliveries or moved/finished gear no longer block
+  NPC sales, merchant luck and buy orders behind repeated inventory recovery.
+  Run recovery from the idle status pulse so the inventory-busy dispatch gate
+  cannot prevent the recovery needed to clear itself.
+
+- Preserve incoming party items while lucky-slot preparation waits for receipt
+  checkpoints. Refresh the destination and capture the actual displaced contents
+  after its native swap. Reconcile stack quantities when interrupted restoration
+  resumes, avoiding repeated inventory-recovery holds after deliveries or potion
+  use. Genuine mismatches now report expected and actual slot contents.
+  Keep the live lucky journal authoritative so delayed caracAL storage echoes
+  cannot resurrect a completed swap and strand the next upgrade in receipt review.
+
+- Apply merchant Mass Production immediately before buy-and-upgrade operations
+  as well as marked upgrades and compounds. Mass Production and Mass Exchange
+  prefer the ++ tier only when its cost leaves at least 20% MP, falling back to
+  the unlocked lower tier when affordable and ready. Log buff requests and
+  application; bounded waits prevent legacy skill promises from holding work.
+- Merchant passive recovery continues during production and uses HP/MP potions
+  below 20%, with HP priority, shared cooldowns and an overlap guard. Missing
+  potions fall through to free regeneration.
+
 - Remove "Left-click: details · Right-click: actions" from character inventories.
 - Keep Cave travel ownership through direct movement stops and suppress mainland
   farm reunion during dungeon activity. Pause for nearby reachable threats or

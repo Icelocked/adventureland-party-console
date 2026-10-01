@@ -2512,8 +2512,8 @@
       upgradePreviewRevision: root.localStorage.getItem("party-upgrade-preview-revision:"+character.name) || "0",
       luckySlotTracking: luckySlotTracking().report(),
       merchantEventReserved: merchantEventWorkReserved(),
-      upgradeInventoryBusy: !!(root.__merchantInventoryTidy || luckyUpgradeService && luckyUpgradeService.pending() ||
-        root.localStorage.getItem("party-lucky-upgrade:" + character.name)),
+      upgradeInventoryBusy: !!(root.__merchantInventoryTidy || (luckyUpgradeService ? luckyUpgradeService.pending() :
+        root.localStorage.getItem("party-lucky-upgrade:" + character.name))),
       steamPrimary: !parent.caracAL && !parent.no_html && !parent.is_bot,
       escape: escapeLocal,
       platform: parent.caracAL ? "caracal" : (parent.game && parent.game.platform || "browser"),
@@ -4279,10 +4279,17 @@
         if (!orphaned.journal) throw Error("Production recovery needs review: " + orphaned.id + " (" + orphaned.kind + " " + orphaned.name + " +" + orphaned.level + "); no local journal");
         journal = orphaned.journal;
         root.localStorage.setItem(productionJournalKey(),JSON.stringify(journal));
-        if (journal.phase !== "complete" && journal.lucky && !root.localStorage.getItem("party-lucky-upgrade:" + character.name))
+        if (journal.phase !== "complete" && journal.lucky && !root.localStorage.getItem("party-lucky-upgrade:" + character.name)) {
           root.localStorage.setItem("party-lucky-upgrade:" + character.name,JSON.stringify(journal.lucky));
+          luckyUpgradeService = null;
+        }
       }
-      else return;
+      else {
+        if (character.ctype === "merchant" && (luckyUpgradeService && luckyUpgradeService.pending() ||
+            root.localStorage.getItem("party-lucky-upgrade:" + character.name)))
+          merchantLuckyUpgrade().retireSettled();
+        return;
+      }
     }
     if (journal.phase === "complete") return finishProductionJournal(journal);
     if (character.q && (character.q.upgrade || character.q.compound)) throw Error("Production recovery waiting for game operation");
@@ -4406,6 +4413,7 @@
       return JSON.stringify(fingerprint(character.items[slot]));
     });
     var settled = false, result, failure = null;
+    await merchantMassBuff("massproduction");
     Promise.resolve(compound(first, second, third, scrollSlot)).then(function (value) {
       settled = true;
       result = value;
@@ -4466,12 +4474,18 @@
   function merchantLuckyUpgrade() {
     if (luckyUpgradeService) return luckyUpgradeService;
     var key = "party-lucky-upgrade:" + character.name;
+    // caracAL can echo an older persisted value after a newer write or clear.
+    // Load once on activation; this runtime owns subsequent journal transitions.
+    var journal = JSON.parse(root.localStorage.getItem(key) || "null");
     luckyUpgradeService = root.createPartyLuckyUpgrade({
       item: function (slot) { return fingerprint(character.items[slot]); },
       busy: function () { return !!(character.q && (character.q.upgrade || character.q.compound)) || character.items.some(function (item) { return item && item.name === "placeholder"; }); },
       swap: function (a, b) { return swap(a, b); },
-      read: function () { return JSON.parse(root.localStorage.getItem(key) || "null"); },
-      write: function (value) { if (value) root.localStorage.setItem(key, JSON.stringify(value)); else root.localStorage.removeItem(key); },
+      read: function () { return journal && JSON.parse(JSON.stringify(journal)); },
+      write: function (value) {
+        journal = value && JSON.parse(JSON.stringify(value));
+        if (value) root.localStorage.setItem(key, JSON.stringify(value)); else root.localStorage.removeItem(key);
+      },
       checkpoint: async function (value) {
         var journal = JSON.parse(root.localStorage.getItem(productionJournalKey()) || "null");
         if (!journal) return;
@@ -4488,6 +4502,34 @@
       }
     });
     return luckyUpgradeService;
+  }
+
+  async function merchantMassBuff(base) {
+    if (character.ctype !== "merchant" || character.rip) return false;
+    var higher = base + "pp", tiers = [higher, base];
+    if (tiers.some(function (skill) { return character.s && character.s[skill]; })) return true;
+    var skill = tiers.find(function (name) {
+      var definition = G.skills[name];
+      return definition && character.level >= Number(definition.level || 0) &&
+        (name !== higher || character.mp - Number(definition.mp || 0) >= character.max_mp * 0.2) &&
+        !is_on_cooldown(name) && can_use(name);
+    });
+    if (!skill) return false;
+    try {
+      // Legacy merchant buff promises may stay pending after the native
+      // condition arrives. A speed optimization must not fence production.
+      await Promise.race([Promise.resolve(use_skill(skill)), sleep(750)]);
+      var applied = !!(character.s && character.s[skill]);
+      var message = (applied ? "Applied " : "Requested ") + G.skills[skill].name + " for the next operation";
+      game_log(message, "#facc15");
+      var job = root.__merchantActiveJob;
+      if (job) request("/merchant/activity", {method:"POST",body:{character:character.name,jobId:job.jobId,
+        message:message,level:"info",details:{skill:skill,mp:character.mp,maxMp:character.max_mp}}}).catch(function () {});
+      return applied;
+    } catch (error) {
+      game_log("Could not apply " + skill + "; continuing without it: " + String(error.reason || error.message || error), "#facc15");
+      return false;
+    }
   }
 
   async function upgradeAtSlotConfirmed(itemSlot, scrollSlot, expectedName, expectedLevel, offeringSlot) {
@@ -4508,6 +4550,7 @@
           root.localStorage.setItem(productionJournalKey(),JSON.stringify(pendingProduction));
         }
       }
+      await merchantMassBuff("massproduction");
       Promise.resolve(upgrade(itemSlot, scrollSlot, offeringSlot)).then(function (value) {
         settled = true; result = value;
       }).catch(function (error) { settled = true; failure = error; });
@@ -5398,27 +5441,6 @@
     await merchantOperationStage(command, "processing");
     var returns = [], used = {};
     command._upgradeReturns = [];
-    async function productionBuff() {
-      var skill = character.level >= 60 ? "massproductionpp" : character.level >= 30 ? "massproduction" : null;
-      if (!skill || !can_use(skill) || is_on_cooldown(skill)) return false;
-      // The runner's generic use_skill path delegates merchant production
-      // buffs to the legacy client promise, which can remain pending even
-      // after the server applies the condition. The buff is an optimization,
-      // never a prerequisite: cap the wait so upgrading cannot deadlock.
-      try {
-        await Promise.race([
-          Promise.resolve(use_skill(skill)),
-          new Promise(function (resolve) { setTimeout(resolve, 750); }),
-        ]);
-      } catch (error) {
-        activity.push({ level: "info", message: "Could not apply " + skill + "; continuing without it",
-          details: String(error.reason || error.message || error) });
-        return false;
-      }
-      if (character.s && character.s[skill])
-        activity.push({ level: "info", message: "Applied " + G.skills[skill].name + " to the next operation" });
-      return !!(character.s && character.s[skill]);
-    }
     for (var purchaseIndex = 0; purchaseIndex < (command.purchases || []).length; purchaseIndex += 1) {
       var purchase = command.purchases[purchaseIndex], seller = purchase && itemSeller(purchase.name);
       if (!seller || !G.items[purchase.name]) { activity.push({ level: "error", message: "No seller for " + (purchase && purchase.name) }); continue; }
@@ -5456,7 +5478,6 @@
           scrollSlot = findInventoryItemByName(scrollName);
         }
         await smart_move(find_npc("newupgrade"));
-        await productionBuff();
         try {
           var before = character.items[slot].level || 0;
           var outcome = await upgradeConfirmed(slot, scrollSlot, undefined, undefined, mark.auto ? {family:"upgrade",key:mark.item.name+"@+"+(mark.item.level||0),mark:Object.assign({},mark,{slot:slot,equipped:false})} : undefined, offeringAttempt);
@@ -5500,7 +5521,7 @@
         await ensureOwnedItemQuantity(cscroll, 1, command, activity);
         cscrollSlot = findInventoryItemByName(cscroll);
       }
-      await smart_move(find_npc("newupgrade")); await productionBuff();
+      await smart_move(find_npc("newupgrade"));
       try {
         await compoundConfirmed(slots[0], slots[1], slots[2], cscrollSlot);
         var resultSlot = sameItem(character.items[slots[0]], {
@@ -5559,7 +5580,7 @@
             scrollSlot = findInventoryItemByName(scrollName);
           }
           await merchantOperationStage(command, "processing");
-          await smart_move(find_npc("newupgrade")); await productionBuff();
+          await smart_move(find_npc("newupgrade"));
           await refreshCompoundProtection(command);
           candidates = compoundInventorySlots(command, autoMark.name, level);
           if (candidates.length < 3) continue;
@@ -7253,12 +7274,6 @@
       if (result < 0) throw new Error("Could not split exchange quantity for " + item.name);
       return result;
     }
-    async function applyMassExchange() {
-      var skill = character.level >= 70 ? "massexchangepp" : character.level >= 40 ? "massexchange" : null;
-      if (!skill || is_on_cooldown(skill) || !can_use(skill)) return;
-      await use_skill(skill);
-      await new Promise(function (resolve) { setTimeout(resolve, 100); });
-    }
     function exactInventoryQuantity(itemId, level) {
       return character.items.reduce(function (sum, item) {
         return sum + (item && item.name === itemId && (Number(item.level) || 0) === (Number(level) || 0)
@@ -7332,7 +7347,7 @@
             result = await purchase;
           } else {
             slot = await splitExact(slot, required);
-            await applyMassExchange();
+            await merchantMassBuff("massexchange");
             await verifyMerchantItemMarks();
             result = await exchange(slot);
           }
@@ -9315,7 +9330,7 @@
     if (!returningToStand && character.ctype === "merchant" && root.__merchantInventoryTidy) await root.__merchantInventoryTidy;
     if (!returningToStand && character.ctype === "merchant" && luckyUpgradeService && luckyUpgradeService.pending()) {
       if (root.__merchantActiveJob) { reportMerchantCommand(command, "deferred", "lucky slot inventory operation"); return; }
-      try { await luckyUpgradeService.recover(); }
+      try { await recoverProductionJournal(); await luckyUpgradeService.recover(); }
       catch (error) { reportMerchantCommand(command, "deferred", error.message || String(error)); return; }
     }
     if (character.ctype === "merchant" && command.type !== "bankboi-service" && !root.__merchantActiveJob) {
@@ -9996,6 +10011,18 @@
       }
       await applyMerchantVisibility(state.merchantVisibility);
       if (character.ctype === "merchant") await flushNativePurchaseReceipts();
+      // Recovery cannot depend on dispatching another job: inventory-busy
+      // telemetry itself holds dispatch. Inspect receipts before stale layouts.
+      if (character.ctype === "merchant" && luckyUpgradeService && luckyUpgradeService.pending() &&
+          !root.__merchantActiveJob && !root.__partyProductionWorking && !root.__merchantInventoryTidy) {
+        try { await recoverProductionJournal(); await luckyUpgradeService.recover(); }
+        catch (error) {
+          if (Date.now() - (root.__partyInventoryRecoveryLogAt || 0) > 30000) {
+            root.__partyInventoryRecoveryLogAt = Date.now();
+            game_log("Inventory recovery retry: " + String(error.message || error), "red");
+          }
+        }
+      }
       if (character.ctype === "merchant" && character.stand && !merchantIdleActive && !root.__merchantActiveJob &&
           !root.__merchantInventoryTidy && !merchantLuckyUpgrade().pending())
         await nativeStandSync(null, false);
@@ -12249,6 +12276,12 @@
     var mpRatio = character.max_mp > 0 ? character.mp / character.max_mp : 1;
     var skill = null;
     if (character.ctype === "merchant") {
+      // The independent pulse runs while production owns the role loop.
+      // Critical pools use potions first, then fall through to free recovery.
+      regenerationBusy = true;
+      try {
+        if (await useRecoveryPotion({hpBelow:0.2,mpBelow:0.2,priority:"hp"})) return true;
+      } finally { regenerationBusy = false; }
       // use_hp consumes the last inventory item that grants HP. Match that
       // selection so the threshold reflects the potion actually consumed.
       var healAmount = 0;

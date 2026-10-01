@@ -1,5 +1,64 @@
 # Testing
 
+`npm test -- -- --project=live --grep "merchant finishes native upgrades despite delayed"`
+replays the previous persisted lucky journal after every native storage clear,
+modeling delayed caracAL IPC echoes without replacing any game outcome. The
+merchant must finish a native buy-and-upgrade order to +3 with exactly one target
+item. Retain `lucky-journal-storage-echo` and verify its E2E evidence.
+The journey also moves the completed gear natively, reconnects with an older
+running journal, and requires idle recovery to clear inventory-busy telemetry
+before another order is submitted. The follow-up +1 order must finish while the
+original +3 result remains intact. This expanded run passed with 32 verified
+evidence files; the live original order advanced after autonomous recovery.
+The focused run passed with 32 verified evidence files. The subsequent native
+party-delivery and missing-journal restart journeys both passed with 60 verified
+evidence files; 58 retained lucky/production/recovery checks also passed.
+
+Lucky-slot party-delivery recovery uses
+`npm test -- -- --project=live --grep "lucky upgrade preserves party deliveries"`.
+The priest sends three native seashells into the empty lucky slot while its
+preparation checkpoint is held, then merges one more into the displaced stack
+while restoration is persisted. One injected failed return swap leaves a real
+completed upgrade for reconciliation. Coordinator restart must finish the order
+with exactly one +1 helmet, four seashells, a cleared lucky journal, and no replay
+after another restart. The first run reproduced the stale-preparation hold.
+Retain `lucky-party-delivery-restart` and verify the E2E artifacts. Use the ordinary
+full restart to activate the character change; retries preserve the original order.
+The fixed repeat passed with 32 verified evidence files. Typechecking, focused
+lint and 34 retained lucky-slot checks passed; this is focused coverage.
+
+Merchant mass skills and recovery use
+`npm test -- -- --project=live --grep "merchant mass skills use both tiers"`.
+Native buy-and-upgrade and exchange orders must request both ++ and lower tiers,
+with every ++ request leaving at least 20% MP after its native 200-MP cost.
+The low-MP scenario pauses the independent recovery timer and declares native
+starting MP; reconnect reinstalls the production timer. A subsequent busy order
+receives declared sub-20% HP/MP pools and must consume real HP and MP potions.
+Skill calls forward to the unmodified native implementation; no buff conditions,
+upgrade/exchange outcomes or potion receipts are fabricated. Retain the
+`merchant-mass-skills-and-recovery` inventory/skill ledger and native artifacts,
+then run `npm run test:e2e:verify`. Activate through the full supported restart.
+The focused native repeat passed with 32 verified evidence files. Typechecking
+and 53 retained passive-healing/item-operation/recovery checks also passed.
+
+Context-menu ordering and bank mark persistence use
+`npm test -- -- --project=console --grep "player context marks|bank context marks|inventory context menu and upgrade preview"`.
+The bank fixture enters through the storage checkpoint read boundary; actual
+menu clicks create, persist and clear a source-specific upgrade withdrawal.
+Player inventory is a declared read-boundary fixture. Screenshots, HTTP responses
+and persisted state are retained. This verifies menu behavior and coordinator
+intents, not native upgrade/deconstruction outcomes.
+
+Upgrade batch sizing with existing target-level stock uses
+`npm test -- -- --project=live --grep "upgrade purchase batch excludes"`.
+The native merchant starts with one +5 coat, sets the purchase batch to ten,
+and receives a new order for four +5 coats. Before the first upgrade, inventory
+must contain ten newly purchased level-0 coats and the untouched existing +5
+coat. The focused repeat passed with 31 verified evidence files via
+`npm run test:e2e:verify`; the initial run's artifact capture failed during
+teardown. This validates initial purchase sizing, not complete order fulfillment
+or continuous replenishment of level-0 stock while a batch is upgrading.
+
 BankBoi production-gate recovery uses
 `npm test -- -- --project=live --grep "BankBoi storage bypasses"`.
 The declared historical fixture designates a connected merchant as a storage

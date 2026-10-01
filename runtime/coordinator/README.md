@@ -9,6 +9,53 @@ Activate with the supported coordinator/dashboard-only restart.
 
 # Character coordinator
 
+Lucky preparation refreshes the destination after its persisted checkpoint and
+captures the actual displaced contents after the native swap. Party deliveries
+into an originally empty lucky slot do not fence the untouched source or the
+confirmed swap. Recovery reconciles matching stack quantities in preparation,
+running and restoration phases. A changed nonempty item identity still holds
+work and reports the phase, source/destination and expected/actual contents.
+Validate the native lucky-party-delivery economy journey with real transfers
+during preparation and persisted restoration, an interrupted return swap,
+coordinator restart, conserved cargo and no replay. Publish through the ordinary
+full restart and retry the preserved order through `/merchant/job/retry`.
+The lucky service loads persistence once per activation and keeps subsequent
+writes and clears authoritative in memory. Delayed caracAL storage echoes must
+not resurrect completed layouts and move the next order item. Explicit missing-
+journal reconstruction resets the service before loading coordinator evidence.
+Validate the native delayed-lucky-journal-storage economy journey too.
+When authoritative receipt inspection finds no pending production, recovery may
+retire a leftover lucky journal whose displaced destination is already restored.
+It leaves later source-cell cargo and relocated finished gear untouched. A busy
+operation or an unrestored destination still requires actual reconciliation.
+The idle status pulse performs receipt and lucky-layout recovery before waiting
+for another job; inventory-busy telemetry can hold the dispatcher, so dispatch
+must never be the only recovery trigger. Commands inspect receipts first too.
+The native echo journey reconnects with an old running journal after moving the
+completed +3 gear and verifies a subsequent order finishes without replay/loss.
+
+Merchant Mass Production is applied at the native upgrade/compound boundary,
+including buy-and-upgrade orders; Mass Exchange is applied before timed native
+exchanges. Both prefer ++ only when its MP cost leaves at least 20% of maximum
+MP, then fall back to an unlocked, ready and affordable lower tier. An existing
+condition is reused. Buff requests have a bounded wait and activity telemetry.
+The independent 500ms recovery pulse runs during merchant work, prioritizing
+HP/MP potions below 20% (HP first) and falling back to free regeneration when
+potions are unavailable. The recovery guard covers potion requests too.
+Validate the native merchant mass-skills/recovery economy journey and retained
+passive-healing and item-operation checks. Publish character assets using the
+supported full restart; a coordinator-only restart does not activate this change.
+
+Inventory context menus pair each manual mark with its automatic action: bank,
+merchant stand, upgrade/compound, then player merchant collection. Deconstruction
+and NPC sale sit below the divider. Bank and Bankboi menus expose upgrade and
+automatic deconstruction/stand/NPC-sale rules. Manual bank upgrade marks retain a
+storage reference and remain ineligible until native withdrawal acknowledges that
+source and inventory reconciliation assigns the pass. Clearing bank marks removes
+the selected source intents and matching automatic rules. Validate the player,
+merchant and bank context-menu E2Es, including restart and cleared withdrawal
+persistence. Activate using the coordinator/dashboard-only restart.
+
 BankBoi storage commands bypass the designated merchant's production receipt
 gate. BankBois cannot use the production endpoint; applying that gate to their
 merchant class leaves storage marked processing without starting native banking.
