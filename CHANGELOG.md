@@ -1,10 +1,5 @@
 # Changelog
 
-- Fix cave combat queue delivery and acknowledgement after farming resets or runtime reloads; preserve cave healing participants and stop issued travel segments when combat pauses movement.
-- Fixed coordinator startup on oversized saved-state journals: stream records and compact by size without constructing one giant string. Preserve existing state and writer locks.
-
-- Unified Hunt turn-in and anniversary staging returns: attack aggressors while planning and walking, cancel interrupted party Town casts together, resume Town after aggro clears, and retain bounded route retries. Removed independent anniversary casting and return combat/loot stops.
-
 ## Unreleased
 
 Changes queued for the next release. The release workflow determines its version
@@ -53,6 +48,21 @@ from the commits merged into `main`.
   Persisted action receipts prevent blind retries after lost entry or spending replies.
 
 ### Fixed
+
+- Keep independent farming combat authorized through a singleton group while
+  Follow is off, so solo priests attack at their Hunt spawn and finish turn-in.
+- Let BankBoi storage proceed independently of the merchant's production-receipt
+  recovery gate; retain native stack filling and protected stock during unload.
+- Recover newer merchant receipts after stale completed client journals without
+  restoring or replaying the completed attempt's old lucky-slot layout.
+- Fix cave combat queue delivery and acknowledgement after farming resets or
+  runtime reloads; preserve cave healing participants and stop issued travel
+  segments when combat pauses movement.
+- Stream and compact oversized coordinator state journals without constructing
+  one giant string; preserve existing state and writer locks.
+- Coordinate Hunt turn-in and anniversary staging returns: defend against
+  aggressors, cancel interrupted party Town casts together, resume after aggro
+  clears, and retain bounded route retries.
 
 - Pair manual inventory context actions with their automatic rules and expose
   upgrade, deconstruction, stand and NPC-sale rules from bank menus. Persist
