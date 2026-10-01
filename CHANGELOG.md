@@ -20,9 +20,22 @@ from the commits merged into `main`.
   progress; Stop running cancels startup or destroys the instance and saved data.
   Supports Windows/Linux Docker engines and Docker-hosted consoles with engine access.
 
-- Cave progress clears required rooms and travels through stairs automatically,
-  pausing for combat, loot, revival and manual choices. Pause/continue controls
-  preserve manual routing; leaving the final floor remains a manual decision.
+- Cave travel starts stopped. Choose a room or explicitly start automatic
+  exploration to clear required rooms and travel through stairs. Combat, loot,
+  revival and forced choices pause travel; encounter votes stop the route until
+  another destination is selected. Leaving the final floor remains manual.
+- Cave travel assembles participants at the leader, shares the native route and
+  slowest party cruise speed, and holds members that get ahead. Interrupted
+  routes regroup with bounded retries. Manual stairs remain selected through
+  farewell votes; objectives on other floors show a floor-specific error.
+- Cave panels show a full-floor map with party and encounter pins and one
+  replaceable waypoint. Encounter votes open a dialog automatically; resolved
+  encounters remain reviewable, and equipped weapons appear on map characters.
+
+- Add the default-enabled "Marked withdrawals create merchant jobs" setting
+  and a separate prioritized bank-trip routine (#28). Pending withdrawal marks
+  request a bank visit, including after restart. Disabling the setting retains
+  the marks for another bank visit without scheduling a withdrawal-only trip.
 - Visible cave hostiles use the normal shared combat queue, skills, formation,
   kiting and three target rings, with one coordinated primary target.
 
@@ -40,6 +53,15 @@ from the commits merged into `main`.
   Persisted action receipts prevent blind retries after lost entry or spending replies.
 
 ### Fixed
+
+- Remove "Left-click: details · Right-click: actions" from character inventories.
+- Keep Cave travel ownership through direct movement stops and suppress mainland
+  farm reunion during dungeon activity. Pause for nearby reachable threats or
+  active attackers rather than distant visible enemies; recognize hostile duel
+  participants when helping one side. Honor chest-open receipts and the native
+  pickup radius so cached loot animations do not hold travel indefinitely.
+- Preserve shared map geometry for followers and reconnects, and clear obsolete
+  Cave travel errors when selecting a new manual destination.
 
 - Preserve buy-with-upgrade orders through production failures, disabled routines,
   and repeated worker stalls until completion or explicit cancellation. Keep
@@ -86,6 +108,7 @@ from the commits merged into `main`.
   and reserve passing attacks before bounded native timer delays.
 - Maintain warrior Warcry and priest Dark Blessing independently, after emergency
   defense, aggro rescue, and healing, while retaining survival mana reserves.
+  Cast only when off cooldown and the same buff is absent; both buffs can coexist.
 - Confirm Hunt blacklist “Clear all” before removing entries, with Cancel preserving the list.
 - Add passive-monster level caps and map previews for preferred Hunt spawn areas.
 
