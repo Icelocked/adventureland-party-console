@@ -41,6 +41,10 @@ from the commits merged into `main`.
 
 ### Fixed
 
+- Protect personal Tracktrix items from merchant collection and emergency cleanout
+  using the native `tracker` ID rather than the display name. Keep trackers and
+  supercomputers in the final inventory slot, including during merchant tidying.
+
 - Recover empty native WTB reservations that never received an offer ID, without
   counting them as purchases. Back off failed placements before retrying, and
   adopt matching offers that moved before their first acknowledgement.

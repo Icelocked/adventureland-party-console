@@ -400,3 +400,44 @@ test('native WTB retries an empty never-confirmed reservation after restart with
   await record(live,info,'native-unconfirmed-wtb-recovered',before,{state,slots:current.slots});
   await info.attach('native-unconfirmed-wtb-recovered-stand',{body:await live.clients[merchant].page.screenshot(),contentType:'image/png'});
 });
+
+test('native Tracktrix stays in the final inventory slot through full-bag cleanout and merchant tidying', async ({ live }, info) => {
+  test.setTimeout(240_000);
+  // Failure modes: display name mistaken for native tracker ID; unmarked tracker
+  // collected in a full bag; occupied final slot loses cargo; merchant tidy
+  // repacks the tracker; restart loses protection or item conservation.
+  await live.post('/merchant/force-stand', { enabled: true });
+  const initial = await economy(live);
+  const seeded = await live.admin(`output=(()=>{
+    const w=get_player('E2EWarrior'),m=get_player('E2EMerchant');
+    if(w.items[10]||m.items[10]||m.items[11])throw Error('Tracker seed slots occupied');
+    w.items[10]={name:'tracker'};m.items[10]={name:'tracker'};m.items[11]={name:'stand0'};
+    for(let i=0;i<w.items.length;i++)if(!w.items[i])w.items[i]={name:'feather0',q:1};
+    for(const p of [w,m]){cache_player_items(p);calculate_player_stats(p);resend(p,'reopen+cid');}
+    return {warrior:w.items,merchant:m.items};
+  })()`);
+  await expect.poll(async () => {
+    const current=await economy(live);
+    return ['E2EWarrior',merchant].every(name=>current.characters[name].items.at(-1)?.name==='tracker');
+  }, {timeout:30_000}).toBe(true);
+  const before=await economy(live);
+  expect(quantity(before.characters.E2EWarrior.items,'tracker')).toBe(1);
+  expect(before.characters.E2EWarrior.items.filter(Boolean)).toHaveLength(42);
+  expect(quantity(before.characters.E2EWarrior.items,'feather0')).toBe(quantity(seeded.warrior,'feather0'));
+  await live.post('/merchant/force-stand', { enabled: false });
+  await live.post('/merchant/routine-priorities', { priorities: {}, enabled: { 'inventory cleanout': true } });
+  await live.post('/merchant/cleanout', { character:'E2EWarrior' });
+  await expect.poll(async () => quantity((await economy(live)).characters.E2EWarrior.items,'feather0'),
+    {timeout:150_000}).toBeLessThan(quantity(before.characters.E2EWarrior.items,'feather0'));
+  await jobFinished(live);
+  await restartAndObserve(live);
+  const after=await economy(live);
+  for(const name of ['E2EWarrior',merchant]) {
+    expect(after.characters[name].items.at(-1)?.name).toBe('tracker');
+    expect(quantity(after.characters[name].items,'tracker')).toBe(1);
+  }
+  const totalFeathers=(value:Economy)=>bankQuantity(value,'feather0')+Object.values(value.characters).reduce((sum,c)=>sum+quantity(c.items,'feather0'),0);
+  expect(totalFeathers(after)).toBe(totalFeathers(before));
+  await record(live,info,'tracktrix-full-bag-cleanout-retained',before,{initial,seeded});
+  await info.attach('tracktrix-final-native-inventory',{body:await live.clients.E2EWarrior.page.screenshot(),contentType:'image/png'});
+});

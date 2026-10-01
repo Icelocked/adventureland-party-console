@@ -4805,7 +4805,27 @@
   }
 
   function cleanoutProtected(item) {
-    return item.l || item.b || ["tracktrix", "hpot0", "mpot0", "hpot1", "mpot1"].indexOf(item.name) >= 0;
+    return item.l || item.b || ["tracker", "supercomputer", "hpot0", "mpot0", "hpot1", "mpot1"].indexOf(item.name) >= 0;
+  }
+
+  function isPersonalTracker(item) {
+    return !!item && ["tracker", "supercomputer"].indexOf(item.name) >= 0;
+  }
+
+  async function keepTracktrixLast() {
+    if (!runtimeCurrent() || character.rip || root.__partyInventoryCommands ||
+        banking || bankQueued || upgrading || stocking || anniversaryBusy ||
+        gatheringActive || root.__merchantActiveJob || root.__merchantInventoryTidy ||
+        root.__partyUpgradePreviewInFlight || (luckyUpgradeService && luckyUpgradeService.pending())) return;
+    var last = character.items.length - 1;
+    if (last < 0 || isPersonalTracker(character.items[last])) return;
+    var source = character.items.findIndex(isPersonalTracker);
+    if (source < 0 || typeof swap !== "function") return;
+    // Native imove swaps different items, including an occupied final cell.
+    // Wait for the authoritative inventory before dispatching another command.
+    await swap(source, last);
+    var deadline = Date.now() + 2000;
+    while (runtimeCurrent() && Date.now() < deadline && !isPersonalTracker(character.items[last])) await sleep(50);
   }
 
   function cleanoutPriority(entry) {
@@ -4941,6 +4961,7 @@
       requests = requests.filter(function (entry) { return !cleanoutProtected(entry.item); });
       requests.sort(function (a, b) { return cleanoutPriority(a) - cleanoutPriority(b); });
     }
+    requests = requests.filter(function (entry) { return !isPersonalTracker(entry.item); });
     var capacity = Math.max(0, Number(command.capacity) || 0);
     var cleanoutFreeSlots = freeInventorySlots();
     var cleanoutEmergency = cleanoutFreeSlots <= 3;
@@ -4972,7 +4993,7 @@
         await refreshCompoundProtection(command);
         if (!compoundAvailableStock(command)[slot]) continue;
       }
-      if (command.cleanout && cleanoutProtected(character.items[slot])) continue;
+      if (isPersonalTracker(character.items[slot]) || command.cleanout && cleanoutProtected(character.items[slot])) continue;
       var sendQuantity = Math.min(Number(requests[i].quantity) || itemQuantity(character.items[slot]),
         itemQuantity(character.items[slot]));
       if (requests[i].mark && (requests[i].mark.deconstructionId || requests[i].mark.npcSaleId) && (character.items[slot].l || character.items[slot].b)) continue;
@@ -9104,6 +9125,13 @@
   }
 
   async function handle(command) {
+    if (root.__partyTracktrixMove) await root.__partyTracktrixMove;
+    root.__partyInventoryCommands = (root.__partyInventoryCommands || 0) + 1;
+    try { return await handleOwnedCommand(command); }
+    finally { root.__partyInventoryCommands -= 1; }
+  }
+
+  async function handleOwnedCommand(command) {
     if (root.__partyDungeonRuntime && root.__partyDungeonRuntime.owns()) return;
     if (escapeOwns() && !(escapeState.stage === "recovery-convoy" && command && command.purpose === "escape-recovery")) {
       reportMerchantCommand(command, "deferred", "escape"); return;
@@ -9819,6 +9847,11 @@
     try {
       // Bank recovery belongs to bank operations, which call it before moving
       // inventory. Status, combat and navigation must remain available.
+      statusPhase = "Tracktrix inventory position";
+      root.__partyTracktrixMove = keepTracktrixLast();
+      try { await root.__partyTracktrixMove; }
+      catch (error) { game_log("Tracktrix positioning retry: " + (error.reason || error.message || error), "red"); }
+      finally { root.__partyTracktrixMove = null; }
       statusPhase = "snapshot";
       var statusSentAt = Date.now();
       var statusBody = snapshot();

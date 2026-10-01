@@ -140,12 +140,15 @@ export function createLuckyUpgrade(ports: Ports) {
   async function tidy(lucky: unknown): Promise<void> {
     await recover();
     if (active || !validSlot(lucky)) return;
-    const ordered = Array.from({length: 42}, (_, i) => copy(ports.item(i))).filter((item): item is Item => !!item);
-    if (ordered.length > 41) throw failure('no room to keep lucky slot empty');
+    const tracker = ports.item(41);
+    const pinned = tracker?.name === 'tracker' || tracker?.name === 'supercomputer';
+    const targets = Array.from({length: 42}, (_, i) => i).filter(i => i !== lucky && !(pinned && i === 41));
+    const ordered = Array.from({length: 42}, (_, i) => pinned && i === 41 ? null : copy(ports.item(i))).filter((item): item is Item => !!item);
+    if (ordered.length > targets.length) throw failure('no room to keep lucky slot empty');
     active = true;
     try {
       for (let index = 0; index < ordered.length; index++) {
-        const target = index >= Number(lucky) ? index + 1 : index, wanted = ordered[index];
+        const target = targets[index]!, wanted = ordered[index];
         if (same(ports.item(target), wanted)) continue;
         const from = Array.from({length: 42}, (_, i) => i).find(i => (i >= target || i === lucky) && same(ports.item(i), wanted));
         if (from === undefined) throw failure('inventory changed while tidying');

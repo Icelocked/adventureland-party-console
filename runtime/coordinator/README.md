@@ -9,6 +9,15 @@ Activate with the supported coordinator/dashboard-only restart.
 
 # Character coordinator
 
+Personal Tracktrix items use the native item ID `tracker`, not `tracktrix`.
+Merchant collection and emergency cleanout retain trackers and supercomputers.
+Character inventory maintenance pins one to the final inventory slot when no
+inventory command is running; merchant lucky-slot tidying preserves that slot.
+Explicit Give remains available. Validate the native full-bag Tracktrix cleanout
+journey in `e2e/live-economy.spec.ts`, with conserved cargo and restart evidence.
+Publish character and coordinator assets through the supported full restart;
+CoordinatorOnly does not activate the inventory change.
+
 Exchange reward tiles edit the merchant's existing automatic item rules, including
 rules for stock that has not arrived yet. Inventory and reward previews share
 `dashboard/features/party/automatic-item-actions.tsx`; selecting an action retires
