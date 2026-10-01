@@ -41,6 +41,18 @@ from the commits merged into `main`.
 
 ### Fixed
 
+- Preserve buy-with-upgrade orders through production failures, disabled routines,
+  and repeated worker stalls until completion or explicit cancellation. Keep
+  spending, attempts, owned stock and results across retries. Mirror production
+  and lucky-slot recovery journals in coordinator storage so lost client journals
+  can be reconstructed without replaying purchases or guessing destroyed items.
+
+- Keep Hunt paused during live combat events before quest preparation or expiry
+  can start a protected Daisy return, including when Hunt is enabled or resumed.
+  After respawning, retry temporary event travel denials and lost permission
+  replies while the event remains selected and live; still cancel on event end,
+  deselection, Escape, or replacement navigation.
+
 - Protect personal Tracktrix items from merchant collection and emergency cleanout
   using the native `tracker` ID rather than the display name. Keep trackers and
   supercomputers in the final inventory slot, including during merchant tidying.

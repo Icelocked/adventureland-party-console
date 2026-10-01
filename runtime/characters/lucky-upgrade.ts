@@ -6,6 +6,7 @@ interface Ports {
   swap(a: number, b: number): Promise<unknown>;
   read(): Journal | null;
   write(value: Journal | null): void;
+  checkpoint?(value: Journal): Promise<void>;
   sleep(ms: number): Promise<void>;
   now(): number;
   current(): boolean;
@@ -57,6 +58,10 @@ function failure(reason: string): Error & {reason: string; code: string} {
 }
 export function createLuckyUpgrade(ports: Ports) {
   let active = false;
+  async function save(journal: Journal): Promise<void> {
+    ports.write(journal);
+    await ports.checkpoint?.(journal);
+  }
   async function wait(check: () => boolean, reason: string): Promise<void> {
     if (!ports.current()) throw failure('runtime interrupted');
     const end = ports.now() + 5000;
@@ -87,13 +92,13 @@ export function createLuckyUpgrade(ports: Ports) {
     // swap, so both items remain accounted for across interruption/restart.
     if (j.phase === 'running' && j.displaced === null && ports.item(j.from) &&
         validResult(j, ports.item(j.to))) {
-      j.displaced = copy(ports.item(j.from)); ports.write(j);
+      j.displaced = copy(ports.item(j.from)); await save(j);
     }
     if (!same(ports.item(j.from), j.displaced)) throw failure('displaced item changed; inventory recovery required');
     const result = ports.item(j.to);
     if (!validResult(j, result))
       throw failure('upgrade slot changed; inventory recovery required');
-    j.result = copy(result); j.phase = 'restoring'; ports.write(j);
+    j.result = copy(result); j.phase = 'restoring'; await save(j);
     await swapConfirmed(j.from, j.to, () => originalLayout(j, ports.item(j.from), ports.item(j.to)));
     ports.write(null);
   }
@@ -123,14 +128,14 @@ export function createLuckyUpgrade(ports: Ports) {
     try {
       if (from === to) { if (validSlot(lucky)) ports.log(to); return await action(from, scroll, offering); }
       const journal: Journal = {from, to, item, displaced: copy(ports.item(to)), scrollDisplaced: scroll === to, offeringDisplaced: offering === to, phase: 'preparing'};
-      ports.write(journal);
+      await save(journal);
       await swapConfirmed(from, to, () => same(ports.item(to), item) && same(ports.item(from), journal.displaced));
       const nextScroll = scroll === to ? from : scroll;
       const nextOffering = offering === to ? from : offering;
       if (nextOffering !== undefined && !same(ports.item(nextOffering), offeringItem)) throw failure("offering changed during preparation");
       if (!same(ports.item(nextScroll), scrollItem)) throw failure('scroll changed during preparation');
       // A scroll displaced from the lucky slot will be consumed by the operation.
-      journal.phase = 'running'; ports.write(journal); ports.log(to);
+      journal.phase = 'running'; await save(journal); ports.log(to);
       try { return await action(to, nextScroll, nextOffering); }
       finally {
         await restore(journal);

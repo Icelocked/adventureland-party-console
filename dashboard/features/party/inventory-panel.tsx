@@ -578,9 +578,6 @@ export const InventoryPanel = memo(function InventoryPanel({
       {inventoryOpen ? (
         <>
           <LuckySlotMenu selection={luckySlotMenu} onClose={() => setLuckySlotMenu(null)} onData={() => onLuckySlot?.()} onItem={onSelect} />
-          <p className="mb-3 text-right text-xs text-emerald-100/40">
-            Left-click: details · Right-click: actions
-          </p>
           <div className="grid grid-cols-5 gap-2">
             {(character.name === merchant ? physicalInventory(character.items) : compactInventory(character.items)).map((entry, i) => {
               const lucky = character.name === merchant && i === nextUpgradeSlot;

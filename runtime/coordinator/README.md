@@ -9,6 +9,15 @@ Activate with the supported coordinator/dashboard-only restart.
 
 # Character coordinator
 
+Combat event ownership is checked before Hunt quest preparation and automatic
+Daisy returns, including initial Hunt activation and resume. Existing protected
+turn-ins retain priority. Respawn reentry retries temporary travel permission
+holds and unavailable permission replies until admission or actual cancellation.
+Validate `live-franky-party.spec.ts`: native boss combat, completed initial quests,
+Hunt activation, native lethal damage, lost admission responses, respawn reentry,
+and voluntary event evacuation. These coordinator and character changes require
+the supported ordinary full restart; building alone does not activate both.
+
 Personal Tracktrix items use the native item ID `tracker`, not `tracktrix`.
 Merchant collection and emergency cleanout retain trackers and supercomputers.
 Character inventory maintenance pins one to the final inventory slot when no
@@ -17,6 +26,19 @@ Explicit Give remains available. Validate the native full-bag Tracktrix cleanout
 journey in `e2e/live-economy.spec.ts`, with conserved cargo and restart evidence.
 Publish character and coordinator assets through the supported full restart;
 CoordinatorOnly does not activate the inventory change.
+
+Marked withdrawals create merchant jobs by default at priority 90. The checkbox
+in Merchant settings controls the separate Marked withdrawals routine. Merchant
+heartbeats queue one bank visit for pending plain withdrawal marks, including
+marks restored after restart or retained while the setting was disabled. Turning
+it off removes queued withdrawal-only jobs without clearing the marks; other
+bank visits still retrieve them. Active work finishes normally. Specialized
+production, stand and BankBoi retrieval keep their existing scheduling.
+This addresses issue #28's bank-trip trigger only, not automatic bank NPC-sale
+selection. Validate the marked-withdrawals console journey and native marked-bank
+round trip with `npm test -- -- --grep "marked withdrawals|marked bank deposit"`,
+then verify retained E2E artifacts. Activate using the coordinator/dashboard-only
+restart below; character execution reuses the existing self-bank command.
 
 Exchange reward tiles edit the merchant's existing automatic item rules, including
 rules for stock that has not arrived yet. Inventory and reward previews share
@@ -257,6 +279,22 @@ tests. Publish character assets along with coordinator and dashboard using the f
 restart workflow below.
 
 ## Durable buy-with-upgrade orders
+
+Unfinished buy-with-upgrade orders stay queued after all execution errors and
+repeated worker timeouts; disabled routines hold rather than discard them.
+Resource and budget limits retain their original progress, with bounded retry
+backoff and the latest error visible. Explicit cancellation still removes intent.
+Admission stores the prepared production journal; running and complete phases
+are acknowledged before the game call and receipt retirement respectively.
+Lucky preparation/restoration checkpoints mirror their inventory layout too.
+Recovery can reconstruct missing client production, lucky and commerce journals
+from coordinator receipts. An active normal operation does not emit a recovery
+alarm. Legacy orphan receipts without mirrored evidence still require reviewed
+`resolve-unknown`; this does not count success or consume quotas.
+Validate the native `buy with upgrade target survives` economy journey with an
+actual upgrade, failed restoration swap, loss of client journals, coordinator
+restart, exact requested output and no restart replay. Publish both character and
+coordinator assets using the supported ordinary full restart.
 
 Commerce follows the owned item after checkpoints and between upgrade attempts.
 A missing old inventory slot is never destruction evidence: only a matching

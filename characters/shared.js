@@ -4150,7 +4150,7 @@
   function productionJournalKey() { return "party-production:" + character.name; }
   function rememberCommerceProduction(journal) {
     if (!journal.commerce) return;
-    var progress = JSON.parse(root.localStorage.getItem(journal.commerce.key) || "null");
+    var progress = JSON.parse(root.localStorage.getItem(journal.commerce.key) || "null") || journal.commerce.state;
     if (!progress || progress.sequence !== journal.commerce.sequence || !progress.pendingUpgrade) return;
     progress.pendingUpgrade.outcome = {item: journal.outcomeItem || null, destroyed: journal.destroyed === true};
     progress.sequence += 1;
@@ -4159,7 +4159,12 @@
   async function finishProductionJournal(journal) {
     if (journal.commerce) rememberCommerceProduction(journal);
     await request("/merchant/production", {method:"POST",body:{character:character.name,action:journal.request && journal.request.requestId && !journal.issued ? "abort-manual" : "complete",id:journal.id,success:journal.success}});
-    root.localStorage.removeItem(productionJournalKey());
+    var currentJournal = JSON.parse(root.localStorage.getItem(productionJournalKey()) || "null");
+    if (currentJournal && currentJournal.id === journal.id) root.localStorage.removeItem(productionJournalKey());
+  }
+  async function saveProductionJournal(journal) {
+    root.localStorage.setItem(productionJournalKey(),JSON.stringify(journal));
+    await request("/merchant/production", {method:"POST",body:{character:character.name,action:"checkpoint",id:journal.id,journal:journal}});
   }
   async function recoverProductionJournal() {
     if (root.__partyProductionWorking) throw Error("Production recovery waiting for game operation");
@@ -4175,9 +4180,13 @@
       if (!pending || !Array.isArray(pending.pending)) throw Error("Production recovery inspection unavailable");
       if (pending.pending.length) {
         var orphaned = pending.pending[0];
-        throw Error("Production recovery needs review: " + orphaned.id + " (" + orphaned.kind + " " + orphaned.name + " +" + orphaned.level + "); no local journal");
+        if (!orphaned.journal) throw Error("Production recovery needs review: " + orphaned.id + " (" + orphaned.kind + " " + orphaned.name + " +" + orphaned.level + "); no local journal");
+        journal = orphaned.journal;
+        root.localStorage.setItem(productionJournalKey(),JSON.stringify(journal));
+        if (journal.phase !== "complete" && journal.lucky && !root.localStorage.getItem("party-lucky-upgrade:" + character.name))
+          root.localStorage.setItem("party-lucky-upgrade:" + character.name,JSON.stringify(journal.lucky));
       }
-      return;
+      else return;
     }
     if (journal.phase === "complete") return finishProductionJournal(journal);
     if (character.q && (character.q.upgrade || character.q.compound)) throw Error("Production recovery waiting for game operation");
@@ -4199,7 +4208,8 @@
       if (luckyUpgradeService && luckyUpgradeService.pending()) await luckyUpgradeService.recover();
       else if (character.ctype === "merchant" && root.localStorage.getItem("party-lucky-upgrade:" + character.name)) await merchantLuckyUpgrade().recover();
       var live = character.items[journal.slots[0]];
-      if (journal.commerce && !live) {
+      if (journal.commerce && (!live || live.name !== journal.item.name ||
+          [(journal.item.level || 0), (journal.item.level || 0) + 1].indexOf(live.level || 0) < 0)) {
         var previous = JSON.stringify(journal.item), upgraded = JSON.stringify(Object.assign({}, journal.item, {level: (journal.item.level || 0) + 1}));
         var candidates = character.items.map(function (item, slot) {
           var state = JSON.stringify(fingerprint(item));
@@ -4213,7 +4223,7 @@
       else throw Error("Production outcome needs review before another attempt: " + journal.item.name);
     }
     if (journal.commerce) journal.outcomeItem = fingerprint(character.items[journal.slots[0]]);
-    journal.phase="complete";root.localStorage.setItem(productionJournalKey(),JSON.stringify(journal));
+    journal.phase="complete";await saveProductionJournal(journal);
     await finishProductionJournal(journal);
   }
   async function verifyProductionProtection(slots) {
@@ -4242,10 +4252,11 @@
     var journal={id:id,item:item,slots:slots,phase:"prepared",request:body};
     var commerceJob = root.__merchantActiveJob;
     if (kind === "upgrade" && commerceJob && commerceJob.commerceJournalKey)
-      journal.commerce = {key: commerceJob.commerceJournalKey, sequence: commerceJob.commerceSequence};
+      journal.commerce = {key: commerceJob.commerceJournalKey, sequence: commerceJob.commerceSequence,
+        state: JSON.parse(root.localStorage.getItem(commerceJob.commerceJournalKey) || "null")};
     root.localStorage.setItem(productionJournalKey(),JSON.stringify(journal));
     try {
-      var admission = await request("/merchant/production",{method:"POST",body:body});
+      var admission = await request("/merchant/production",{method:"POST",body:Object.assign({},body,{journal:journal})});
       if (admission && admission.attempt && admission.attempt.completed) {
         root.localStorage.removeItem(productionJournalKey()); return {success:false,alreadyAttempted:true};
       }
@@ -4261,7 +4272,7 @@
       }
       throw error;
     }
-    journal.phase="running";root.localStorage.setItem(productionJournalKey(),JSON.stringify(journal));
+    journal.phase="running";await saveProductionJournal(journal);
     var result, failure;
     try { result=await operation(); } catch(error) { failure=error; }
     if (body.requestId) journal.issued=!!JSON.parse(root.localStorage.getItem(productionJournalKey()) || "{}").issued;
@@ -4273,7 +4284,7 @@
     journal.destroyed = !!(failure && failure.reason === "upgrade_destroyed" && failure.confirmedDestroyed === true);
     journal.success=!!live && live.name===item.name && (live.level || 0)===(item.level || 0)+1;
     if (journal.commerce) journal.outcomeItem = journal.destroyed ? null : fingerprint(live);
-    journal.phase="complete";root.localStorage.setItem(productionJournalKey(),JSON.stringify(journal));
+    journal.phase="complete";await saveProductionJournal(journal);
     await finishProductionJournal(journal);
     if (failure) throw failure;
     return result;
@@ -4358,6 +4369,12 @@
       swap: function (a, b) { return swap(a, b); },
       read: function () { return JSON.parse(root.localStorage.getItem(key) || "null"); },
       write: function (value) { if (value) root.localStorage.setItem(key, JSON.stringify(value)); else root.localStorage.removeItem(key); },
+      checkpoint: async function (value) {
+        var journal = JSON.parse(root.localStorage.getItem(productionJournalKey()) || "null");
+        if (!journal) return;
+        journal.lucky = value;
+        await saveProductionJournal(journal);
+      },
       sleep: sleep, now: Date.now, current: runtimeCurrent,
       log: function (slot) {
         var message = "Using upgrade slot " + slot + " (" + (slot === luckyUpgradeSlot ? "verified" : "lucky-slot search") + ", inventory position " + (slot + 1) + ")";
@@ -7066,8 +7083,7 @@
     } catch (error) {
       if (error && (error.reason === "merchant_yield" || error.message === "merchant_yield")) return;
       if (command.commerceProgressVersion === 2 && error.partyRequest && error.partyRequest.path === '/movement-plan') error.commerceMovement = true;
-      var commerceRecovery = command.commerceProgressVersion === 2 && (error.partyRequest ||
-        /Upgrade operation timed out|upgrade_result_not_confirmed|Commerce production is still settling|Production recovery waiting/.test(String(error.reason || error.message || error)));
+      var commerceRecovery = command.commerceProgressVersion === 2;
       var recoverable = error.reason === "hunt_movement_owned" || error.commerceMovement || commerceRecovery || /^(interrupted|merchant_anniversary_reserved|bankboi_pending)$/.test(String(error.reason || error.message || error));
       activity.push({ level: recoverable ? "info" : "error", message: recoverable ? "Merchant order paused; progress preserved" : "Merchant order failed", details: String(error.reason || error.message || error) });
       try { await request("/merchant/complete", { method: "POST", body: {
@@ -12088,7 +12104,7 @@
     function current() { var live = activeCombatEvent(); return runtimeCurrent() && !character.rip && !escapeOwns() && !navigationIntent.cancelled &&
       Number(navigationIntent.revision) === revision && eventSelectionRevision === selection && eventSelected(event.name) &&
       live && live.name === event.name; }
-    if (!await eventTravelAllowed(event.name)) return { status: "cancelled" };
+    if (!await eventTravelAllowed(event.name)) return { status: current() ? "retryable" : "cancelled", reason: "Waiting for event travel permission" };
     if (eventTraveling) return { status: "retryable", reason: "Event travel already in progress" };
     eventTargetTypes = event.types; eventMissingSince = 0;
     eventTraveling = true; travellingEventName = event.name;
@@ -12098,7 +12114,8 @@
       if (!current()) return { status: "cancelled" };
       var destination = eventDestination(event.name, event.state);
       if (eventRequiresJoin(event.name) && !await joinCombatEvent(event, destination, current)) return { status: "cancelled" };
-      if (!current() || !await eventTravelAllowed(event.name)) return { status: "cancelled" };
+      if (!current()) return { status: "cancelled" };
+      if (!await eventTravelAllowed(event.name)) return { status: current() ? "retryable" : "cancelled", reason: "Waiting for event travel permission" };
       joinedEvent = event.name; root.__partyJoinedEvent = event.name; root.__partyEventRejoinRequired = null;
       if (!eventRequiresJoin(event.name) && !nearestEventTarget()) {
         phase = "event-travel";

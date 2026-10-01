@@ -1,5 +1,46 @@
 # Testing
 
+Durable buy-with-upgrade recovery uses
+`npm test -- -- --project=live --grep "buy with upgrade target survives"` and
+`npm run test:e2e:verify`. The native merchant buys/upgrades two helmets, loses one
+lucky restoration swap, and retains the original order. The test removes local
+production, lucky and commerce journals, restarts the coordinator, and requires
+mirrored receipt recovery to produce exactly two +1 helmets without replay after
+another restart. Initial lucky slot 30 is a declared configuration fixture, not
+a fabricated discovery or game outcome. The focused journey passed with 33
+verified evidence files; retained lucky-upgrade/recovery checks also passed (45).
+This is not full-suite coverage. Activation requires the ordinary full restart.
+
+Hunt/event respawn recovery uses
+`npm test -- -- --project=live --grep "disabling inherited Franky"` and
+`npm run test:e2e:verify`. The native fragile party fights Franky, enables Hunt
+with declared completed initial quests, and must remain paused without acquiring
+Daisy turn-in ownership. Native Rime Shatter kills the warrior; lost event
+permission replies must publish retryable recovery, then normal admission must
+rejoin the living boss. Deselection still evacuates both participants to Main.
+The focused run passed with 34 verified evidence files. A concurrent dashboard
+server required a temporary fixture using that existing isolated E2E dashboard;
+the game server, coordinator and native clients remained owned by the run.
+The initial `npm test` completed typechecking/building but stalled collecting the
+full test directory; the successful repeat selected this spec alone. This is
+focused validation, not a full-suite pass. Activate with the ordinary full restart.
+
+Issue #28's withdrawal-triggered bank trip uses
+`npm test -- -- --grep "marked withdrawals|marked bank deposit"` followed by
+`npm run test:e2e:verify`. The console journey checks the default-enabled Merchant
+settings checkbox, both saved values across restart, and the routine's disabled
+and editable priority states. The native round trip leaves a withdrawal marked
+while disabled, restarts, observes repeated heartbeats with stock still banked,
+then enables the routine and observes retrieval without another bank command.
+Stock and gold are conserved, and another restart does not replay retrieval.
+The focused final run passed both journeys with 43 verified evidence files under
+`.build/e2e-report/` and `.build/e2e-results/`; this is not a full-suite result.
+After a watcher build-lock race, the final repeat used
+`npx playwright test --grep "marked withdrawals|marked bank deposit"` against the
+already built coordinator/runtime. Coordinator/dashboard-only activation is
+sufficient. This does not certify the other automatic NPC-sale routing work in
+issue #28.
+
 The full-catalog Hunt blacklist regression uses
 `npm test -- -- --project=live --grep "Hunt blacklist full catalog"` and
 `npm run test:e2e:verify`. It uses the native game's many-monster catalog and

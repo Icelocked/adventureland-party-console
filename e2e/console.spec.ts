@@ -8,6 +8,52 @@ import { Access } from '../tools/hosting/access';
 import { startupRealms } from '../tools/hosting/realms';
 import { accountConfig, sessionValue } from '../tools/hosting/account';
 
+test.describe('marked withdrawal scheduling', () => {
+  test.use({ merchantDialogs: true });
+  test('marked withdrawals default on and Merchant settings survive restart', async ({page,app},info) => {
+    // Failure modes: legacy settings default off; UI does not persist the
+    // checkbox; restart loses disabled or enabled values. Native round-trip
+    // coverage verifies the resulting withdrawal scheduling and item receipts.
+    await page.goto('/');
+    await page.getByRole('button', {name:'Settings',exact:true}).click();
+    const settings = page.getByRole('dialog', {name:'Merchant settings',exact:true});
+    const toggle = settings.getByRole('checkbox', {name:'Marked withdrawals create merchant jobs',exact:true});
+    await expect(toggle).toBeChecked();
+    await toggle.uncheck();
+    await expect.poll(async () => (await app.state()).merchantAutomations.withdrawals).toBe(false);
+    await app.restartCoordinator();
+    await expect(toggle).not.toBeChecked();
+    expect((await app.state()).merchantAutomations.withdrawals).toBe(false);
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', {name:'Routines',exact:true}).click();
+    const routines = page.getByRole('dialog', {name:/Merchant routines/});
+    await expect(routines.getByRole('textbox', {name:'Marked withdrawals priority',exact:true})).toBeDisabled();
+    await routines.getByRole('button', {name:'Save routines',exact:true}).click();
+    expect((await app.state()).merchantAutomations.withdrawals).toBe(false);
+    await page.getByRole('button', {name:'Settings',exact:true}).click();
+    await toggle.check();
+    await expect.poll(async () => (await app.state()).merchantAutomations.withdrawals).toBe(true);
+    await info.attach('marked-withdrawals-enabled', {body:await page.screenshot(),contentType:'image/png'});
+    await toggle.uncheck();
+    await expect.poll(async () => (await app.state()).merchantAutomations.withdrawals).toBe(false);
+    await toggle.check();
+    await expect.poll(async () => (await app.state()).merchantAutomations.withdrawals).toBe(true);
+    await app.restartCoordinator();
+    await expect(toggle).toBeChecked();
+    expect((await app.state()).merchantAutomations.withdrawals).toBe(true);
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', {name:'Routines',exact:true}).click();
+    const priority = routines.getByRole('textbox', {name:'Marked withdrawals priority',exact:true});
+    await expect(priority).toBeEnabled();
+    await expect(priority).toHaveValue('90');
+    await priority.fill('91');
+    await routines.getByRole('button', {name:'Save routines',exact:true}).click();
+    await expect.poll(async () => (await app.state()).merchantRoutinePriorities.withdrawals).toBe(91);
+    expect((await app.state()).merchantAutomations.withdrawals).toBe(true);
+    await info.attach('marked-withdrawals-persisted', {body:JSON.stringify(await app.state()),contentType:'application/json'});
+  });
+});
+
 test('Hunt blacklist picker adds unseen monsters manually and survives restart', async ({page,app},info) => {
   // Failure modes: catalog excludes unseen monsters; search hides valid entries;
   // details cannot open; add targets the wrong character; manual reason displays

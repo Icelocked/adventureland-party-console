@@ -5,6 +5,59 @@ import type { Item } from '../runtime/coordinator/contracts/item';
 const merchant = 'E2EMerchant';
 const names = ['E2EWarrior', 'E2EPriest', merchant];
 type Items = (Item | null)[];
+
+test('buy with upgrade target survives lucky restoration failure and missing client journals across restart', async ({ live }, info) => {
+  test.setTimeout(360_000);
+  // Failure inventory: restore errors drop the order; a lost local receipt
+  // holds all work; replay duplicates purchases/results or resets spend/attempts.
+  await live.restoreHistoricalSettings(() => ({ luckyUpgradeSlots: { [merchant]: 30 } }));
+  await catalog(live, 'helmet');
+  const context = live.clients[merchant].page.context();
+  let holdRecovery = true;
+  await context.route('**/merchant/production', async route => {
+    const body = route.request().postDataJSON();
+    if (holdRecovery && body.action === 'pending') await route.abort('failed');
+    else await route.continue();
+  });
+  await live.clients[merchant].run(`(()=>{
+    const nativeSwap=swap;globalThis.__e2eLuckyRestoreFault=false;
+    swap=function(a,b){const j=JSON.parse(localStorage.getItem('party-lucky-upgrade:'+character.name)||'null');
+      if(j?.phase==='restoring'&&!globalThis.__e2eLuckyRestoreFault){globalThis.__e2eLuckyRestoreFault=true;throw Error('Injected lost lucky restoration swap');}
+      return nativeSwap(a,b);};return true;
+  })()`);
+  // Pending inspection is also used before the first operation: admit the
+  // first healthy probe, then hold only once the real swap failure has occurred.
+  await context.unroute('**/merchant/production');
+  await context.route('**/merchant/production', async route => {
+    const body = route.request().postDataJSON();
+    const fault = await live.clients[merchant].run('!!globalThis.__e2eLuckyRestoreFault');
+    if (holdRecovery && fault && ['pending', 'inspect'].includes(body.action)) await route.abort('failed');
+    else await route.continue();
+  });
+  const before = await economy(live);
+  const order = await live.post('/merchant/order', { buys: [{ id: 'helmet', quantity: 2, level: 1 }], crafts: [] });
+  await expect.poll(() => live.clients[merchant].run('!!globalThis.__e2eLuckyRestoreFault'), { timeout: 90_000 }).toBe(true);
+  await expect.poll(async () => (await live.state()).merchantQueue.some((job: any) => job.commerceOrderId === order.jobId),
+    { timeout: 15_000, message: 'Lucky restoration failure must retain the unfinished order' }).toBe(true);
+  const held = (await live.state()).merchantQueue.find((job: any) => job.commerceOrderId === order.jobId);
+  expect(held.resumeState.attempts).toBeGreaterThan(0);
+  expect(held.resumeState.spent).toBeGreaterThan(0);
+  await live.clients[merchant].run(`(()=>{localStorage.removeItem('party-production:'+character.name);localStorage.removeItem('party-lucky-upgrade:'+character.name);localStorage.removeItem('party-commerce:${order.jobId}');return true})()`);
+  await live.restartCoordinator();
+  holdRecovery = false;
+  await expect.poll(async () => {
+    const state = await live.state();
+    return ![state.merchantCurrent, ...state.merchantQueue].some((job: any) => job?.commerceOrderId === order.jobId);
+  }, { timeout: 180_000, message: 'Mirrored receipt recovery must restore inventory and finish the original order' }).toBe(true);
+  const after = await economy(live);
+  const results = (value: Economy) => value.characters[merchant].items.filter(item => item?.name === 'helmet' && item.level === 1).length;
+  expect(results(after) - results(before)).toBe(2);
+  await expect.poll(() => live.clients[merchant].run(`localStorage.getItem('party-production:'+character.name)`)).toBeNull();
+  await context.unroute('**/merchant/production');
+  await restartAndObserve(live);
+  expect(results(await economy(live))).toBe(results(after));
+  await record(live, info, 'buy-upgrade-lucky-journal-recovery', before, { order, held, after });
+});
 type Economy = {
   characters: Record<string, { map: string; gold: number; items: Items; upgrading: boolean }>;
   bank: Record<string, Items>;
@@ -243,6 +296,8 @@ test.describe('real merchant economy and durable work', () => {
   });
 
   test('marked bank deposit and requested withdrawal conserve a real stack across restart', async ({ live }, info) => {
+    // Withdrawal marks must recall the merchant without a separate bank command,
+    // consume only confirmed stock, and never replay after restart.
     await seed(live, { 10: { name: 'leather', q: 13 } });
     const before = await economy(live);
     const total = quantity(before.characters[merchant].items, 'leather') + bankQuantity(before, 'leather');
@@ -262,8 +317,19 @@ test.describe('real merchant economy and durable work', () => {
     const [pack, contents] = Object.entries(bank.bank).find(([, items]) => quantity(items, 'leather') > 0)!;
     const slot = contents.findIndex(item => item?.name === 'leather');
     expect(slot).toBeGreaterThanOrEqual(0);
+    await live.post('/merchant/routine-priorities', { priorities: {}, enabled: { withdrawals: false } });
     await live.post('/command', { character: merchant, type: 'withdraw', pack, slot, item: contents[slot] });
-    await live.post('/command', { character: merchant, type: 'bank' });
+    await live.restartCoordinator();
+    const disabledAt = Date.now();
+    await expect.poll(async () => (await live.clients[merchant].snapshot()).statusAt,
+      {timeout:30_000,message:'Observe repeated native scheduling while withdrawals are disabled'}).toBeGreaterThan(disabledAt + 5000);
+    const deferred = await live.state();
+    expect(deferred.merchantAutomations.withdrawals).toBe(false);
+    expect(deferred.withdrawals[merchant]).toHaveLength(1);
+    expect([deferred.merchantCurrent, ...deferred.merchantQueue].filter(Boolean).some(job => job.reason === 'withdrawals')).toBe(false);
+    expect(bankQuantity(await economy(live), 'leather')).toBe(total);
+    await record(live, info, 'marked-withdrawal-disabled', before, {pack,slot});
+    await live.post('/merchant/routine-priorities', { priorities: {}, enabled: { withdrawals: true } });
     await expect.poll(async () => {
       const state = await economy(live);
       return quantity(state.characters[merchant].items, 'leather') === total && bankQuantity(state, 'leather') === 0;
@@ -400,6 +466,7 @@ test('native WTB retries an empty never-confirmed reservation after restart with
   await record(live,info,'native-unconfirmed-wtb-recovered',before,{state,slots:current.slots});
   await info.attach('native-unconfirmed-wtb-recovered-stand',{body:await live.clients[merchant].page.screenshot(),contentType:'image/png'});
 });
+
 
 test('native Tracktrix stays in the final inventory slot through full-bag cleanout and merchant tidying', async ({ live }, info) => {
   test.setTimeout(240_000);
