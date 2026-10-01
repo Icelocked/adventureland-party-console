@@ -2167,7 +2167,7 @@ export function startCoordinatorApplication(
                 coordinatorPolicies.installMovementRoutes(router, movementPlanner, ownedCharacter);
                 installProductionRoutes(router, party, persistSettings, merchantLog);
                 installSharedRuleRoutes(router, party, persistSettings);
-                router.post("/party-api/merchant/native-stand", coordinatorPolicies.createNativeStandRoute(party, { fulfill: fulfillStandBid, persist: persistSettings }));
+                router.post("/party-api/merchant/native-stand", coordinatorPolicies.createNativeStandRoute(party, { fulfill: fulfillStandBid, persist: persistSettings, dispatch: dispatchMerchant, stamp: stampMerchantJob }));
                 mapStreams.install(router);
                 coordinatorPolicies.installSharedConvoyRoute(scopedRouter(router), party, ownedCharacter, {
                   now: () => Date.now(), members: () => farmingNavigation.members(), owned: ownedCharacter,

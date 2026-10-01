@@ -237,7 +237,7 @@ terminal. Closing the viewer does not stop the coordinator.
 
 ## Merchant upgrade purchase batches
 
-Merchant settings persist `buyUpgradeBatchSize` (1–42, default 1), passed to commerce
+Merchant settings persist `buyUpgradeBatchSize` (1â€“42, default 1), passed to commerce
 commands. Each batch buys only its starting-grade scroll requirements in bulk;
 subsequent grades are purchased one at a time. Capacity, remaining attempts and
 budget can reduce the batch. All purchased items finish even after the requested
@@ -1271,6 +1271,14 @@ Publish characters and coordinator together with the supported full restart.
 
 ## Preferred Hunt spawns
 
+Passive rules accept maxLevel: -1 (including omitted legacy values) allows any
+level; positive integers cap new intentional passive engagements. Finite caps
+reject unknown levels. Stop-required pursuits and moving attacks both apply the
+cap; defensive combat and explicit active selections retain their policies.
+Preferred spawns reuse the Find selected monster map preview on the right.
+This change includes character telemetry and requires the full supported restart
+to activate; building alone does not reload running characters.
+
 Farming settings store per-monster spawn preferences in huntSettings.preferredSpawns.
 The popup lists multiple available zones from the same catalog used by Hunt routing.
 Preferences apply when selecting future Hunt destinations, including recovery candidates;
@@ -1358,3 +1366,18 @@ Validate with the native missing-frame walking scenario, successive Ice Roamer
 hunt rewards, and delayed shared departures, plus the retained native selector
 and installer regressions. See docs/testing-ice-roamer-failures.md for failure
 modes and docs/testing.md for repeatable evidence.
+
+
+## Native WTB reconciliation and bank funding
+
+Market affordability uses core bank gold when the Bank panel is closed. Active
+WTB prices reopen the full price/quantity dialog; Farm price explains its farming
+estimate. Native stand reports follow offer identities across moved slots and
+reconcile replacement identities without treating replacement as a purchase.
+Unexplained disappearance still requires fill/removal evidence. Affordable native
+orders queue a deduplicated merchant bank exchange to fund one unit at the highest
+allocated bid price; the native game still validates carried funds before placement.
+Validate the market affordability console journey and native WTB funding/reopening
+journey in live-economy.spec.ts, preserving screenshots and state evidence. These
+changes need the supported coordinator/dashboard-only restart; no character asset
+publication is required. Building alone does not activate the running coordinator.

@@ -34,6 +34,19 @@ test('Hunt blacklist picker adds unseen monsters manually and survives restart',
   await app.restartCoordinator();
   expect((await app.state()).farmingProfiles.W.huntBlacklist).toEqual(before.farmingProfiles.W.huntBlacklist);
   await info.attach('manual-blacklist-state',{body:JSON.stringify({before,after:await app.state()}),contentType:'application/json'});
+  await settings.getByRole('button',{name:'Clear all',exact:true}).click();
+  const confirmation=page.getByRole('dialog',{name:'Clear Hunt blacklist?',exact:true});
+  await expect(confirmation).toContainText('for W');
+  expect((await app.state()).farmingProfiles.W.huntBlacklist).toEqual(before.farmingProfiles.W.huntBlacklist);
+  await info.attach('hunt-blacklist-clear-confirmation',{body:await page.screenshot({animations:'disabled'}),contentType:'image/png'});
+  await confirmation.getByRole('button',{name:'Cancel',exact:true}).click();
+  expect((await app.state()).farmingProfiles.W.huntBlacklist).toEqual(before.farmingProfiles.W.huntBlacklist);
+  await settings.getByRole('button',{name:'Clear all',exact:true}).click();
+  await confirmation.getByRole('button',{name:'Clear all',exact:true}).click();
+  await expect(confirmation).not.toBeVisible();
+  await expect.poll(async ()=>(await app.state()).farmingProfiles.W.huntBlacklist).toEqual({});
+  await info.attach('hunt-blacklist-cleared-state',{body:JSON.stringify(await app.state()),contentType:'application/json'});
+
 });
 
 test('blacklists survive Hunt mode changes, restart and dashboard export import', async ({page,app},info) => {
@@ -551,4 +564,42 @@ test.describe('unassigned merchant dialog names', () => {
     await expect(page.getByText(/match exact items currently held by the merchant or recorded/)).toBeVisible();
     await info.attach('unassigned-merchant-market',{body:await page.screenshot(),contentType:'image/png'});
   });
+});
+
+
+test('market affordability uses core bank gold and active WTB prices open the full editor', async ({page,app},info) => {
+  // Failure modes: opening only market omits bank gold; affordability hides every
+  // listing; price opens a bare input; editing resets quantity or preferences.
+  await page.route('**/party-api/state*', async route => {
+    const response = await route.fetch(), state = await response.json();
+    await route.fulfill({response,json:{...state,bank:undefined,bankGold:5000,
+      standBids:{leather:{price:1200,quantity:7,minimumQuality:0,useStandSlot:false,acceptHigherLevels:false}},
+      aldata:{...state.aldata,listings:[{key:'affordable-leather',seller:'AffordableSeller',item:{name:'leather'},price:4000,quantity:1,
+        slot:'trade1',serverRegion:'US',serverIdentifier:'II',seenAt:Date.now(),lastSeen:new Date().toISOString()}]}}});
+  });
+  await page.goto('/');
+  await expect(page.getByRole('heading',{name:'M',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'View market',exact:true}).click();
+  await expect(page.getByRole('button',{name:'New WTB order',exact:true})).toBeVisible();
+  const active=page.getByRole('button',{name:/^Active WTB orders/});
+  if(await active.getAttribute('aria-expanded') !== 'true') await active.click();
+  await page.getByRole('button',{name:'Edit price for Leather',exact:true}).click();
+  const editor=page.getByRole('dialog',{name:/Add to WTB/});
+  await expect(editor.getByLabel('Maximum price')).toHaveValue('1200');
+  await expect(editor.getByLabel('Quantity',{exact:true})).toHaveValue('7');
+  await expect(editor.getByRole('button',{name:/Farm price/}).first()).toBeVisible();
+  await editor.getByRole('button',{name:'Information: Farm price',exact:true}).click();
+  await expect(page.getByText(/Estimated gold you would earn while farming/)).toBeVisible();
+  await page.keyboard.press('Escape');
+  await editor.getByLabel('Maximum price').fill('1500');
+  await editor.getByLabel('Quantity',{exact:true}).fill('9');
+  await info.attach('prefilled-wtb-price-options',{body:await page.screenshot(),contentType:'image/png'});
+  const saved=page.waitForRequest(request=>request.url().includes('/merchant/bid') && request.method()==='POST');
+  await editor.getByRole('button',{name:'Place WTB',exact:true}).click();
+  expect((await saved).postDataJSON()).toMatchObject({price:1500,quantity:9,useStandSlot:false,acceptHigherLevels:false});
+  await expect.poll(async ()=>(await app.state()).standBids.leather).toMatchObject({price:1500,quantity:9,useStandSlot:false,acceptHigherLevels:false});
+  await page.getByRole('button',{name:/^Live WTS/}).click();
+  await page.getByText('Hide unaffordable',{exact:true}).click();
+  await expect(page.getByRole('button',{name:/AffordableSeller/}).first()).toBeVisible();
+  await info.attach('market-core-bank-gold-affordability',{body:await page.screenshot(),contentType:'image/png'});
 });

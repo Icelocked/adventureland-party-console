@@ -338,3 +338,43 @@ test.describe('real merchant economy and durable work', () => {
     await record(live, info, 'single-native-upgrade', before, { completed, outcome, observed });
   });
 });
+
+
+test('native WTB withdraws bank funding and reconciles replaced offers after reopening', async ({live},info) => {
+  test.setTimeout(420_000);
+  // Failure modes: bank wealth is ignored; repeated reports enqueue duplicate
+  // funding; a changed native identity permanently blocks the order; replacement
+  // is counted as a purchase; reopening causes duplicate advertisements.
+  await catalog(live,'hpot0');
+  await expect.poll(async ()=>(await live.state(true)).merchantCatalog?.allItems?.some((entry:{id:string})=>entry.id==='leather'),{timeout:120_000}).toBe(true);
+  await seed(live,{10:{name:'stand0'}});
+  await live.post('/command',{character:merchant,type:'bank'});
+  await jobFinished(live);
+  await expect.poll(async ()=>(await live.state()).bank?.gold,{timeout:30_000}).toBeGreaterThan(1000000);
+  const before=await economy(live);
+  const price=before.characters[merchant].gold+10000;
+  expect(before.bankGold).toBeGreaterThan(10000);
+  await live.post('/merchant/bid',{itemId:'leather',price,quantity:3,minimumQuality:0,useStandSlot:true});
+  await expect.poll(async ()=>{
+    const current=await live.clients[merchant].snapshot();
+    return Object.values(current.slots).some((item:any)=>item?.b && item.name==='leather' && item.price===price);
+  },{timeout:180_000,message:'Merchant must withdraw native stand funding and advertise the order'}).toBe(true);
+  await jobFinished(live);
+  const funded=await economy(live);
+  expect(funded.characters[merchant].gold).toBeGreaterThanOrEqual(price);
+  expect(totalGold(funded)).toBe(totalGold(before));
+  const ledger=(await live.state()).nativeStand;
+  const offer=Object.values(ledger.offers).find((entry:any)=>entry.itemId==='leather') as {slot:string;rid:string;token:string};
+  expect(offer).toBeTruthy();
+  // Real game mutations, no synthesized acknowledgements or heartbeat state.
+  await live.clients[merchant].run(`(async()=>{await unequip(${JSON.stringify(offer.slot)});await wishlist(${JSON.stringify(offer.slot)},'leather',${price},0,3);await close_stand();await open_stand();})()`);
+  await expect.poll(async ()=>{
+    const state=await live.state(), offers=Object.values(state.nativeStand.offers) as any[];
+    return offers.some(entry=>entry.itemId==='leather' && entry.phase==='live' && entry.rid!==offer.rid && !entry.problem);
+  },{timeout:45_000,message:'Reopened native identity must reconcile without an inferred purchase'}).toBe(true);
+  const after=await live.state();
+  expect(after.standBids.leather.quantity).toBe(3);
+  expect(Object.values((await live.clients[merchant].snapshot()).slots).filter((item:any)=>item?.b && item.name==='leather')).toHaveLength(1);
+  await record(live,info,'native-wtb-funding-and-reconciliation',before,{funded,originalOffer:offer,after});
+  await info.attach('native-wtb-reopened-stand',{body:await live.clients[merchant].page.screenshot(),contentType:'image/png'});
+});

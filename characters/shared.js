@@ -2916,7 +2916,7 @@
       if(control && control.primary && passingKey(e)!==passingKey(control.primary))return false;
       var rule = e && passiveHunting.rules[e.mtype];
       var defending = returning && e && (e.target === character.name || currentPartyList().indexOf(e.target) >= 0);
-      return (control && control.primary || defending || hunting && e && e.mtype === hunting || rule && rule.enabled && rule.keepMoving) && !committedHuntEncounter(e) && e.type === 'monster' && e.visible && !e.dead && e.hp > 0 &&
+      return (control && control.primary || defending || hunting && e && e.mtype === hunting || rule && rule.enabled && rule.keepMoving && passiveLevelAllowed(e)) && !committedHuntEncounter(e) && e.type === 'monster' && e.visible && !e.dead && e.hp > 0 &&
         (!e.map || e.map === character.map) && e.mtype !== 'fieldgen0' && is_in_range(e) &&
         (returning || isPassingEncounter(e) || !(e.target === character.name || currentPartyList().indexOf(e.target) >= 0)) &&
         !isExternallyClaimedMonster(e) && (returning || !groupedCombat || !groupedCombat.target || groupedCombat.target.id !== e.id) &&
@@ -2925,6 +2925,11 @@
     candidates.sort(function(a,b) {return Number(currentPartyList().indexOf(b.target)>=0)-Number(currentPartyList().indexOf(a.target)>=0) || monsterPriority(b)-monsterPriority(a) || Math.hypot(character.x-a.x,character.y-a.y)-Math.hypot(character.x-b.x,character.y-b.y) || String(a.id).localeCompare(String(b.id));});
     return candidates[0] || null;
   }
+  function passiveLevelAllowed(target) {
+    var rule=target && passiveHunting.rules[target.mtype], cap=rule && rule.maxLevel;
+    return cap==null || cap===-1 || Number.isFinite(target.level) && target.level<=cap;
+  }
+
   function walkingPassiveTarget(reserveAhead) {
     var convoy = typeof convoyTraveling !== 'undefined' && convoyTraveling;
     if (!(character.moving || convoy && convoy.phase === 'travelling') ||
@@ -2934,7 +2939,7 @@
         !passingTravelAllowed()) return null;
     return Object.values(parent.entities || {}).filter(function(e) {
       var rule = e && passiveHunting.rules[e.mtype];
-      return rule && rule.enabled && rule.keepMoving && e.type === 'monster' && e.visible && !e.dead && e.hp > 0 &&
+      return rule && rule.enabled && rule.keepMoving && passiveLevelAllowed(e) && e.type === 'monster' && e.visible && !e.dead && e.hp > 0 &&
         (!e.map || e.map === character.map) && (e.in == null || e.in === character.in) &&
         e.mtype !== 'fieldgen0' && !committedHuntEncounter(e) &&
         (is_in_range(e) || reserveAhead && character.moving &&
@@ -2971,7 +2976,7 @@
       if (!e || e.type !== "monster" || !(passiveRareHunts[e.mtype] || e.mtype === "phoenix") || isPassingEncounter(e) || !e.visible || e.dead) return;
       rareKnown[String(e.id)] = e.mtype;
       result.push({ id: String(e.id), mtype: e.mtype, x: e.real_x !== undefined ? e.real_x : e.x,
-        y: e.real_y !== undefined ? e.real_y : e.y, hp: e.hp, target: e.target || null, visible: true,
+        y: e.real_y !== undefined ? e.real_y : e.y, hp: e.hp, level: e.level, target: e.target || null, visible: true,
         reachable: typeof can_attack==='function' && can_attack(e),
         partyEngaged: typeof root !== 'undefined' && !!(root.partyLootClient && root.partyLootClient.rare.engaged({id:String(e.id),realm:':'+String(parent.server_region||'')+String(parent.server_identifier||''),map:character.map,in:String(character.in||character.map)})) });
     });
@@ -12458,7 +12463,7 @@
       fightDeaths.push({id:id,map:character.map,in:character.in,server:reunionRealm(),at:Date.now()+coordinatorClockOffset});
     if(root.partyQueueClient) { root.partyQueueClient.reportEvidence(fightDeaths); if(root.partyQueueClient.death)root.partyQueueClient.death(id);else root.partyQueueClient.flush(); }
   }
-  function groupedEntityReport(e) { return {id:e.id,mtype:e.mtype,map:character.map,in:character.in,x:e.x,y:e.y,hp:e.hp,max_hp:e.max_hp}; }
+  function groupedEntityReport(e) { return {id:e.id,mtype:e.mtype,level:e.level,map:character.map,in:character.in,x:e.x,y:e.y,hp:e.hp,max_hp:e.max_hp}; }
   function currentTravelAttackers() {
     return Object.values(parent.entities || {}).filter(function(e) {
       if(typeof outboundHuntTravel === 'function' && outboundHuntTravel() || typeof convoyTraveling!=='undefined' && convoyTraveling && convoyTraveling.continuousReturn===1)return e && e.type==='monster' && e.visible && !e.dead && e.hp>0 &&
@@ -12594,7 +12599,7 @@
       .map(function(e){return Object.assign(groupedEntityReport(e),{priority:monsterPriority(e),passiveRare:passiveRareCandidate(e)});});
   }
   function passiveRareCandidate(target) {
-    return !!(target && (passiveRareHunts[target.mtype] || target.mtype === 'phoenix' && monsterFocus.indexOf('phoenix')>=0));
+    return !!(target && passiveLevelAllowed(target) && (passiveRareHunts[target.mtype] || target.mtype === 'phoenix' && monsterFocus.indexOf('phoenix')>=0));
   }
   function queueRetentions() {
     if (character.cave) return (groupedCombat?.queue || []).map(function(t) {
@@ -12970,6 +12975,7 @@
     if(typeof root!=='undefined' && root.partyLootClient && root.partyLootClient.huntPending() &&
       target && target.type==='monster' && !isAttackingPartyMember(target))return reject("hunt loot pending");
     if (!target) return reject("missing target");
+    if (passiveHunting.rules[target.mtype]?.enabled && !passiveLevelAllowed(target) && !isAttackingPartyMember(target) && !unfinishedFight() && !eventTargetTypes.includes(target.mtype) && monsterFocus.indexOf(target.mtype)<0) return reject("passive max level");
     if (isPassingEncounter(target)) return reject("passing attack owns this encounter");
     if (typeof combatRecoveryActive==='function' && combatRecoveryActive() &&
         (root.__partyCombatRecovery.phase!=='finishing' || !(root.__partyCombatRecovery.targets||[]).some(function(t){
