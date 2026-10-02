@@ -2282,7 +2282,9 @@
       if (!runtimeCurrent() || character.rip || !character.cave || character.cave.paused) return;
       var chest = parent.chests[id];
       if (dungeonChestAvailable(id, chest))
-        await anniversaryWithTimeout(loot(id), 2500, 'Dungeon loot');
+        // loot(id) uses parent.parent, which can be the commander frame.
+        // The radius above belongs to this character and its own native socket.
+        await anniversaryWithTimeout(parent.open_chest(id), 2500, 'Dungeon loot');
     }
   }
   function dungeonChestAvailable(id, chest) {
@@ -10163,6 +10165,9 @@
       luckyUpgradeSlot = state.luckyUpgradeSlots && state.luckyUpgradeSlots[character.name];
       luckySlotTracking().sync(state.luckySlotTracking && state.luckySlotTracking[character.name]);
       merchantForceStand = !!state.merchantForceStand;
+      if (state.merchantStandLocation && state.merchantStandLocation.map === "main" &&
+          Number.isFinite(state.merchantStandLocation.x) && Number.isFinite(state.merchantStandLocation.y))
+        merchantMarketLocation = {map:"main",x:state.merchantStandLocation.x,y:state.merchantStandLocation.y};
       merchantCashTarget = Math.max(0, Number(state.merchantGoldTarget) || 0);
       if (character.ctype === "merchant" && !root.__merchantActiveJob && !gatheringActive &&
           !(merchantWeapon && merchantWeapon.item) && character.slots && character.slots.mainhand &&

@@ -9,6 +9,15 @@ Activate with the supported coordinator/dashboard-only restart.
 
 # Character coordinator
 
+Merchant settings stores one Main-map stand location for parking, Town-return
+checks and marketplace fallbacks. A fresh settings store chooses integer X/Y
+coordinates independently within -100..100, rejects native collision geometry
+against the human footprint, and persists the accepted point once. Existing
+installations retain the legacy location until edited. The setting is included
+in dashboard export/import and heartbeats; edits reject blocked points.
+Validate the native merchant-stand-location economy journey and publish character,
+coordinator and dashboard assets through the ordinary full restart.
+
 Lucky preparation refreshes the destination after its persisted checkpoint and
 captures the actual displaced contents after the native swap. Party deliveries
 into an originally empty lucky slot do not fence the untouched source or the

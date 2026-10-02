@@ -1,5 +1,13 @@
 # Testing
 
+Merchant stand setup uses
+`npm test -- -- --project=live --grep "merchant stand location is valid"`.
+The native journey checks randomized, geometry-valid first setup, wall rejection,
+dashboard coordinate edits, native travel/stand opening with a declared stand
+item, and persistence through coordinator restarts. Retain the
+`merchant-stand-location-settings` screenshot and `merchant-stand-location-native`
+state/event ledger, then run `npm run test:e2e:verify`.
+
 `npm test -- -- --project=live --grep "merchant finishes native upgrades despite delayed"`
 replays the previous persisted lucky journal after every native storage clear,
 modeling delayed caracAL IPC echoes without replacing any game outcome. The

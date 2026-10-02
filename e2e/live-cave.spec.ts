@@ -99,14 +99,15 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   const wrongFloor=await page.request.post(live.url+'/party-api/daily-dungeons',{headers:{Origin:live.url},data:{action:'waypoint',operationId:crypto.randomUUID(),run:(await dungeon()).state.run,map:before.characters.E2EWarrior.map.replace(/_0$/,'_1'),x:432,y:384}});
   expect(wrongFloor.status()).toBe(409);
   expect((await wrongFloor.json()).error).toContain('different floor');
+  const departure = await live.state();
   const cave = (await dungeon()).members[0].observation.cave;
-  const target = cave.points.find((p: any) => p.kind === 'farm' && !p.done && Math.hypot(p.x - before.characters.E2EWarrior.x, p.y - before.characters.E2EWarrior.y) > 100);
+  const target = cave.points.find((p: any) => p.kind === 'farm' && !p.done && Math.hypot(p.x - departure.characters.E2EWarrior.x, p.y - departure.characters.E2EWarrior.y) > 150);
   expect(target).toBeTruthy();
   await controls.getByRole('button', { name: target.label, exact: true }).first().click();
   let lastNative: unknown;
   await expect.poll(async () => {
     const state = await live.state();
-    return Math.min(...['E2EWarrior', 'E2EPriest'].map(name => Math.hypot(state.characters[name].x - before.characters[name].x, state.characters[name].y - before.characters[name].y)));
+    return Math.min(...['E2EWarrior', 'E2EPriest'].map(name => Math.hypot(state.characters[name].x - departure.characters[name].x, state.characters[name].y - departure.characters[name].y)));
   }, { timeout: 45_000 }).toBeGreaterThan(80);
   expect((await live.state()).characters.E2EPriest.movement.engine).toBe('cave-convoy');
   const cruise = await live.admin("output=['E2EWarrior','E2EPriest'].map(n=>({name:n,cruise:get_player(n).cruise}));");

@@ -37,8 +37,11 @@ export function reconcileCoordinatorCollectionMarks(
     inventory(status),
   );
   if (state.merchantRules) {
-    const allowed = (mark: ItemMark) => !mark.auto || !mark.item || (!processingPending(state, mark.item) && !itemRuleConflicts(state, mark.item).length);
-    const bank = result.bank.filter(allowed), merchant = result.merchant.filter(allowed);
+    const allowed = (mark: ItemMark) => !mark.auto || !mark.item || !itemRuleConflicts(state, mark.item).length;
+    // Processing needs stock at the merchant, including copies not yet claimed
+    // by a finite rule. Only banking competes with that destination.
+    const bank = result.bank.filter(mark => allowed(mark) && (!mark.auto || !mark.item || !processingPending(state, mark.item)));
+    const merchant = result.merchant.filter(allowed);
     result.changed ||= bank.length !== result.bank.length || merchant.length !== result.merchant.length;
     result.bank = bank; result.merchant = merchant;
   }

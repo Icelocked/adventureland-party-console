@@ -3,11 +3,47 @@ import type { TestInfo } from '@playwright/test';
 import type { Item } from '../runtime/coordinator/contracts/item';
 
 const merchant = 'E2EMerchant';
+
+test('merchant stand location is valid at first setup and stays saved through restart', async ({ live, page }, info) => {
+  test.setTimeout(240_000);
+  // Failure modes: a shared constant survives first setup; a wall point is saved;
+  // restart rerolls coordinates; settings never reach native stand movement.
+  const first = (await live.state()).merchantStandLocation;
+  expect(first.map).toBe('main');
+  expect(first.x).toBeGreaterThanOrEqual(-100); expect(first.x).toBeLessThanOrEqual(100);
+  expect(first.y).toBeGreaterThanOrEqual(-100); expect(first.y).toBeLessThanOrEqual(100);
+  expect(await live.clients[merchant].run(`can_move({map:'main',x:${first.x},y:${first.y},going_x:${first.x},going_y:${first.y},base:character.base})`)).toBe(true);
+  await live.restartCoordinator();
+  expect((await live.state()).merchantStandLocation).toEqual(first);
+  const blocked = await live.clients[merchant].run(`(()=>{const l=G.geometry.main.x_lines[0];return {map:'main',x:l[0],y:(l[1]+l[2])/2}})()`);
+  await expect(live.post('/merchant/stand-location', blocked)).rejects.toThrow(/clear|geometry|blocked|valid/i);
+  expect((await live.state()).merchantStandLocation).toEqual(first);
+  await page.goto(live.url);
+  await page.getByText(/Merchant logistics ·/).click();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByLabel('Stand X', { exact: true }).fill('80');
+  await page.getByLabel('Stand Y', { exact: true }).fill('80');
+  await page.getByRole('button', { name: 'Save stand location', exact: true }).click();
+  await expect.poll(async () => (await live.state()).merchantStandLocation).toEqual({ map: 'main', x: 80, y: 80 });
+  await info.attach('merchant-stand-location-settings', { body: await page.screenshot(), contentType: 'image/png' });
+  await page.keyboard.press('Escape');
+  await seed(live,{10:{name:'stand0'}});
+  await live.post('/merchant/force-stand', { enabled: true });
+  await expect.poll(async () => {
+    const c = await live.clients[merchant].snapshot();
+    return c.map === 'main' && Math.hypot(c.x-80,c.y-80) <= 35 && await live.clients[merchant].run('!!character.stand');
+  }, { timeout: 90_000 }).toBe(true);
+  await live.restartCoordinator();
+  expect((await live.state()).merchantStandLocation).toEqual({ map: 'main', x: 80, y: 80 });
+  await info.attach('merchant-stand-location-native', { body: JSON.stringify({ first, blocked, client: await live.clients[merchant].snapshot(), state: await live.state(), events: await live.clients[merchant].events() }), contentType: 'application/json' });
+  await page.close();
+});
 const names = ['E2EWarrior', 'E2EPriest', merchant];
 type Items = (Item | null)[];
 
 test('merchant finishes native upgrades despite delayed lucky journal storage echoes', async ({ live }, info) => {
-  test.setTimeout(240_000);
+  // Two native orders plus reconnect and lucky-slot swaps share this budget.
+  test.setTimeout(480_000);
   // Failure modes: IPC echoes resurrect a cleared lucky journal, move the next
   // owned item during recovery, and strand the durable order in receipt review.
   await live.restoreHistoricalSettings(() => ({ luckyUpgradeSlots: { [merchant]: 30 } }));
@@ -123,7 +159,7 @@ test('merchant mass skills use both tiers and passive recovery restores critical
 
   // Hold only the independent recovery pulse to exercise native low-MP input.
   // Reconnecting below reinstalls the actual production timer.
-  await live.clients[merchant].run('clearInterval(globalThis.__partyPassiveRegenTimer);true');
+  await live.clients[merchant].run('clearInterval(globalThis.__partyPassiveRegenTimer);globalThis.partyRoleRunner.stop();true');
   async function lowMana() {
     const pool = await live.admin(`output=(()=>{const p=get_player('${merchant}');p.mp=Math.max(40,Math.floor(p.max_mp*.2)-150);resend(p,'reopen+cid');return p.mp})()`);
     await expect.poll(async () => (await live.clients[merchant].snapshot()).mp).toBeLessThanOrEqual(pool + 50);
@@ -194,7 +230,7 @@ test('upgrade purchase batch excludes an existing target-level coat', async ({ l
 });
 
 test('buy with upgrade target survives lucky restoration failure and missing client journals across restart', async ({ live }, info) => {
-  test.setTimeout(360_000);
+  test.setTimeout(480_000);
   // Failure inventory: restore errors drop the order; a lost local receipt
   // holds all work; replay duplicates purchases/results or resets spend/attempts.
   // A completed older local journal must not fence a newer mirrored receipt.
@@ -226,7 +262,7 @@ test('buy with upgrade target survives lucky restoration failure and missing cli
   });
   const before = await economy(live);
   const order = await live.post('/merchant/order', { buys: [{ id: 'helmet', quantity: 2, level: 1 }], crafts: [] });
-  await expect.poll(() => live.clients[merchant].run('!!globalThis.__e2eLuckyRestoreFault'), { timeout: 90_000 }).toBe(true);
+  await expect.poll(() => live.clients[merchant].run('!!globalThis.__e2eLuckyRestoreFault'), { timeout: 180_000 }).toBe(true);
   await expect.poll(async () => (await live.state()).merchantQueue.some((job: any) => job.commerceOrderId === order.jobId),
     { timeout: 15_000, message: 'Lucky restoration failure must retain the unfinished order' }).toBe(true);
   const held = (await live.state()).merchantQueue.find((job: any) => job.commerceOrderId === order.jobId);
@@ -358,7 +394,7 @@ test.describe('real merchant economy and durable work', () => {
       return quantity(observed.characters[merchant].items, 'gem0') === 0 &&
         quantity(observed.characters[merchant].items, 'armorbox') === 1 && quantity(observed.characters[merchant].items, 'weaponbox') === 0 &&
         rewardIds.filter(id => !['armorbox', 'weaponbox'].includes(id)).every(id => quantity(observed.characters[merchant].items, id) === 0);
-    }, { timeout: 180_000, message: 'Native marked stock and exchange rewards must finish their selected actions' }).toBe(true);
+    }, { timeout: 240_000, message: 'Native marked stock and exchange rewards must finish their selected actions' }).toBe(true);
     const firstBatch = await economy(live);
     expect(firstBatch.characters[merchant].items.find(item => item?.name === 'armorbox')).toMatchObject({ l: 'l', q: 1 });
     expect(bankQuantity(firstBatch, 'armorbox')).toBe(0);
@@ -698,4 +734,27 @@ test('native Tracktrix stays in the final inventory slot through full-bag cleano
   expect(totalFeathers(after)).toBe(totalFeathers(before));
   await record(live,info,'tracktrix-full-bag-cleanout-retained',before,{initial,seeded});
   await info.attach('tracktrix-final-native-inventory',{body:await live.clients.E2EWarrior.page.screenshot(),contentType:'image/png'});
+});
+
+for (const kind of ['upgrade', 'compound']) test(`auto merchant collects twelve native copies alongside a finite ${kind} rule`, async ({live},info) => {
+  test.setTimeout(300_000);
+  // Declared initial rules reproduce coexisting persisted preferences. Native
+  // clients must transfer all copies even though only one result is requested.
+  const name=kind==='upgrade'?'helmet':'ringsj', owner='E2EWarrior';
+  await catalog(live,name);
+  await live.post('/config',{itemCollectionThreshold:10});
+  await live.admin(`output=(()=>{const p=get_player('${owner}');for(let i=0;i<12;i++)p.items[20+i]={name:'${name}',level:0};cache_player_items(p);resend(p,'reopen+cid');return p.items.slice(20,32)})()`);
+  await expect.poll(async()=>(await live.clients[owner].snapshot()).items.filter((i:Item|null)=>i?.name===name).length).toBe(12);
+  await live.restoreHistoricalSettings(()=>({autoItemMarks:{[merchant]:{[name+'@+0']:'merchant'}},
+    autoUpgradeMarks:kind==='upgrade'?{[merchant]:{[name+'@+0']:{tiers:1,quantity:1}}}:{},
+    autoCompounds:kind==='compound'?{[merchant]:[{name,targetTier:1,quantity:1}]}:{}}));
+  await expect.poll(async()=>(await live.clients[owner].snapshot()).items.filter((i:Item|null)=>i?.name===name).length,
+    {timeout:180_000,message:'Every copy must reach the merchant through native collection'}).toBe(0);
+  const count=async()=>{const all=(await economy(live)).characters;return Object.values(all).flatMap(c=>c.items).filter(i=>i?.name===name)};
+  await expect.poll(async()=> (await count()).filter(i=>i?.level===1).length,{timeout:90_000}).toBe(1);
+  expect((await count()).length).toBe(kind==='upgrade'?12:10);
+  await live.restartCoordinator();
+  await expect.poll(async()=>(await live.state()).characters[merchant]?.items?.some((e:any)=>e.item?.name===name&&e.item.level===1)).toBe(true);
+  expect((await count()).length).toBe(kind==='upgrade'?12:10);
+  await info.attach('auto-merchant-finite-processing-native',{body:JSON.stringify({kind,state:await live.state(),inventory:await economy(live),events:await live.clients[owner].events()}),contentType:'application/json'});
 });

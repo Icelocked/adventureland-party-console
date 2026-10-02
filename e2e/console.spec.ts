@@ -22,6 +22,8 @@ test.describe('marked withdrawal scheduling', () => {
     await toggle.uncheck();
     await expect.poll(async () => (await app.state()).merchantAutomations.withdrawals).toBe(false);
     await app.restartCoordinator();
+    await page.reload();
+    await page.getByRole('button', {name:'Settings',exact:true}).click();
     await expect(toggle).not.toBeChecked();
     expect((await app.state()).merchantAutomations.withdrawals).toBe(false);
     await page.keyboard.press('Escape');
@@ -39,6 +41,8 @@ test.describe('marked withdrawal scheduling', () => {
     await toggle.check();
     await expect.poll(async () => (await app.state()).merchantAutomations.withdrawals).toBe(true);
     await app.restartCoordinator();
+    await page.reload();
+    await page.getByRole('button', {name:'Settings',exact:true}).click();
     await expect(toggle).toBeChecked();
     expect((await app.state()).merchantAutomations.withdrawals).toBe(true);
     await page.keyboard.press('Escape');

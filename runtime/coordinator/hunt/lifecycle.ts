@@ -117,6 +117,11 @@ export function createHuntLifecycle(state: HuntLifecycleState, ports: HuntLifecy
     ports.persist();
   }
 
+  function clearHuntCommands(hunt: HuntCycle): void {
+    for (const name of hunt.participants)
+      if (state.commands[name]?.purpose === "monster-hunt") delete state.commands[name];
+  }
+
   function resume(hunt: HuntCycle): boolean {
     delete hunt.routeRecovery; // Explicit user retry grants a fresh destination budget.
     ports.cancelConvoy();
@@ -127,8 +132,7 @@ export function createHuntLifecycle(state: HuntLifecycleState, ports: HuntLifecy
       (hunt.stage === "paused-event" && pickupStages.includes(hunt.resumeStage || ""))
     )
       hunt.pickupPending = true;
-    for (const name of hunt.participants)
-      if (state.commands[name]?.purpose === "monster-hunt") delete state.commands[name];
+    clearHuntCommands(hunt);
     hunt.stage = "checking-quests";
     if ((!hunt.loot || hunt.loot.complete) && !combatEventPending(hunt)) ports.prepare(hunt);
     ports.persist();

@@ -48,6 +48,7 @@ test('disabling inherited Franky interrupts native boss combat and evacuates bot
   // living event. Quest preparation must not seize protected Daisy travel.
   await live.admin(`output=${JSON.stringify(members)}.map(name=>{const p=get_player(name);p.s.monsterhunt={sn:region+' '+server_name,id:'goo',c:0,ms:1800000};resend(p,'u+cid+reopen');return p.s.monsterhunt})`);
   await expect.poll(async () => (await live.state()).characters[W]?.monsterHunt?.count).toBe(0);
+  await expect.poll(async () => (await live.state(true)).monsterChoices?.some((choice: any) => choice.id === 'goo')).toBe(true);
   const goo = (await live.state(true)).monsterChoices.find((choice: any) => choice.id === 'goo');
   await live.post('/farming-mode', { character: W, mode: 'hunt', backup: { monsterFocus: ['goo'], location: goo.locations.find((location: any) => location.map === 'main') } });
   await expect.poll(async () => (await live.state()).monsterHunt?.stage, { timeout: 15_000 }).toBe('paused-event');
