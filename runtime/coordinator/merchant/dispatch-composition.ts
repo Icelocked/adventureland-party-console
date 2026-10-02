@@ -1,3 +1,5 @@
+import { dungeonOwns } from '../../dungeons/contracts.ts';
+import { pendingProduction, type ProductionState } from '../inventory/production.ts';
 import { upgradeOfferingReady } from '../inventory/offering-waits.ts';
 import { deliveryReady } from './delivery-recovery.ts';
 import { merchantEventReserved, type MerchantEventState } from './event-control.ts';
@@ -19,6 +21,7 @@ import type {
 } from "./work.ts";
 
 interface DispatchCoordinatorState extends BankImprovementState, MerchantEventState {
+  production: ProductionState;
   merchantAutomations?: Record<string, boolean | undefined>;
   merchantQueue: MerchantWork[];
   merchantCurrent: MerchantWork | null;
@@ -133,8 +136,9 @@ export function createCoordinatorMerchantDispatcher(
     },
     {
       ...ports,
+      productionPending: () => pendingProduction(state.production),
       eventReserved: () => merchantEventReserved(state, ports.now()),
-      enabled: job => routineEnabled(job, state.merchantAutomations || {}),
+      enabled: job => !(job.target && dungeonOwns(state, job.target)) && routineEnabled(job, state.merchantAutomations || {}),
       nextCommand: () => state.nextCommandId++,
       merchant: () => state.merchantCharacter,
       returningHome: () => !!state.merchantHomeReturnAt,

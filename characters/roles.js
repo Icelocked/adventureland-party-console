@@ -28,7 +28,8 @@
     combat: true,
     beforeTarget: async function() {
       if (await sharedRoutine.absorbSinsBelow(1)) return true;
-      return await sharedRoutine.healPartyBelow(0.9);
+      if (await sharedRoutine.healPartyBelow(0.9)) return true;
+      return await sharedRoutine.skillSupport?.() ?? false;
     },
     usePotion: async function() {
       return await sharedRoutine.useRecoveryPotion({ hpBelow: 0.5, mpBelow: 0.2, priority: "hp" });
@@ -106,8 +107,8 @@
     name: "warrior",
     combat: true,
     beforeTarget: async function() {
-      if (sharedRoutine.frankyCombatActive?.()) return false;
-      return await sharedRoutine.emergencyWarriorStomp();
+      if (!sharedRoutine.frankyCombatActive?.() && await sharedRoutine.emergencyWarriorStomp()) return true;
+      return await sharedRoutine.skillSupport?.() ?? false;
     },
     chooseTarget: function() {
       const scatterBreak = sharedRoutine.getScatterBreakTarget();
@@ -537,7 +538,11 @@
       ports.report(error);
     }
     function reserveHealing() {
-      if (!sharedRoutine.basicAttackReserved?.()) return false;
+      if (!sharedRoutine.basicAttackReserved?.()) {
+        if (!sharedRoutine.caveRecoveryReserved?.()) return false;
+        ports.state().skippedAttack = "cave priest recovery";
+        return true;
+      }
       ports.state().skippedAttack = "priest healing priority";
       Promise.resolve(sharedRoutine.healPartyBelow(0.9)).catch(ports.report);
       return true;
@@ -611,7 +616,7 @@
       const deadline = clock() ?? Date.now();
       const end = clock() === null ? Date.now() + 4 : deadline + 2;
       const attemptOnce = () => {
-        if (flight !== attempt || !confirmed(attempt) || !ports.allowed() || sharedRoutine.basicAttackReserved?.() || !is_in_range(target) || !permitted(target)) {
+        if (flight !== attempt || !confirmed(attempt) || !ports.allowed() || (sharedRoutine.basicAttackReserved?.() || sharedRoutine.caveRecoveryReserved?.()) || !is_in_range(target) || !permitted(target)) {
           cancelSlots();
           return;
         }
@@ -735,7 +740,7 @@
           if (stats) stats.timeouts++;
         }
         releaseExpired(target);
-        if (flight && (!confirmed(flight) || !ports.allowed() || sharedRoutine.basicAttackReserved?.())) cancelSlots();
+        if (flight && (!confirmed(flight) || !ports.allowed() || sharedRoutine.basicAttackReserved?.() || sharedRoutine.caveRecoveryReserved?.())) cancelSlots();
         if (ports.allowed() && !flight && reserveHealing()) return;
         if (!target || !ports.allowed()) {
           ports.state().skippedAttack = "no eligible target or combat blocked";
@@ -757,6 +762,9 @@
       }
     }
     return {
+      pending() {
+        return !!flight;
+      },
       hasStarted(targetId) {
         return flight?.targetId === targetId || lastSuccessfulTarget === targetId;
       },
@@ -1087,6 +1095,11 @@
     const target = w.context.allies.find((a) => (!a.s?.rspeed || (a.s.rspeed.ms || 0) < 6e4) && w.range(a, "rspeed"));
     return target ? [decision("rspeed", [target], "maintenance", "maintain party swiftness")] : [];
   }
+  function combatBuffSupport(w) {
+    const skill = w.actor.ctype === "warrior" ? "warcry" : w.actor.ctype === "priest" ? "darkblessing" : null;
+    if (!skill || w.actor.s?.[skill]) return [];
+    return [decision(skill, [], "maintenance", "maintain combat buff")];
+  }
   function opener(w, target) {
     if (w.actor.ctype !== "rogue" || w.actor.s?.invis || w.actor.s?.marked) return null;
     if (target.target || w.context.monsters.some((m) => m.target === w.actor.name)) return null;
@@ -1197,7 +1210,7 @@
       },
       support() {
         const w = world();
-        const choices = w.actor.ctype === "paladin" ? paladinSupport(w) : rogueSupport(w);
+        const choices = w.actor.ctype === "paladin" ? paladinSupport(w) : w.actor.ctype === "rogue" ? rogueSupport(w) : combatBuffSupport(w);
         return first(choices.filter((d) => d.skill !== "paladin_aura" || w.now - auraAt >= 1e4 && d.argument !== auraState));
       },
       offense(target) {
@@ -2133,6 +2146,8 @@
       if (!active || Date.now() < retryAt) return;
       if (!enabled()) return;
       formation?.tick();
+      const passingTarget = shared.getWalkingPassiveTarget?.(true);
+      if (passingTarget) preparePassing(passingTarget, true);
       const id = shared.sharedTargetId(), entity = id && get_entity(id);
       if (id) sight.observe(id, character, !!(entity && entity.visible && !entity.dead));
       wait();
@@ -2163,7 +2178,7 @@
       });
     }
     const timer = setInterval(tick, 100);
-    function preparePassing(target) {
+    function preparePassing(target, reserveOnly = false) {
       if (target.type !== "monster") return false;
       if (shared.convoyHoldDefenseTarget?.()?.id === target.id) return true;
       const report = shared.queueReport();
@@ -2173,10 +2188,10 @@
         in: report.in,
         server: report.server,
         at: Date.now() + shared.queueClockOffset(),
-        keepMoving: shared.getWalkingPassiveTarget?.()?.id === target.id
+        keepMoving: shared.getWalkingPassiveTarget?.(reserveOnly)?.id === target.id
       };
       if (!passing.prepare(identity, report.groupedCombat.passingEncounters)) return false;
-      shared.beginPassingAttack(target);
+      if (!reserveOnly) shared.beginPassingAttack(target);
       return true;
     }
     const api = {
@@ -2278,9 +2293,13 @@
     let control = null, progress = null, pending = false, retired = /* @__PURE__ */ new Set(), latest = 0;
     const engagements = /* @__PURE__ */ new Map();
     const identity = (t) => JSON.stringify([t.realm, t.map, String(t.in ?? t.map), String(t.id)]);
+    function samePlace(c) {
+      const s = ports.position();
+      return c && s.realm === c.realm && s.map === c.map && String(s.in) === String(c.in) && !ports.cancelled();
+    }
     function valid(c) {
       const s = ports.position();
-      return c && s.realm === c.realm && s.map === c.map && String(s.in) === String(c.in) && Math.hypot(s.x - c.x, s.y - c.y) <= 180 && !ports.cancelled();
+      return samePlace(c) && Math.hypot(s.x - c.x, s.y - c.y) <= 180;
     }
     function accept(c, at) {
       if (at < latest) return;
@@ -2317,6 +2336,7 @@
       accept,
       tick,
       valid,
+      samePlace,
       report: () => progress,
       blocks: () => valid(control) && !(progress?.id === control.id && progress.complete),
       hit(t) {
@@ -2394,7 +2414,7 @@
         if (!mission || finalKill !== huntLootId(mission) || mission.loot?.complete) finalKill = null;
         let c = state.rareControl;
         if (lastRare && lastRare.id !== c?.id) retired.add(lastRare.id);
-        if (c && (retired.has(c.id) || c.kind === "loot" && !rare.valid({ ...c.target, id: c.id }))) c = null;
+        if (c && (retired.has(c.id) || c.kind === "loot" && !rare.samePlace({ ...c.target, id: c.id }))) c = null;
         lastRare = c;
         rare.accept(c?.kind === "loot" ? { ...c.target, id: c.id, after: c.killedAt } : null, state.serverNow);
         hunt.accept(mission?.loot && !mission.loot.complete ? mission.loot : null, state.serverNow);
@@ -2475,12 +2495,13 @@
       }
     }
     return async () => {
+      if (ports.blocked?.()) return;
       observeDeath();
       if (!pendingReturn || recovering || Date.now() < retryAt) return;
       recovering = true;
       try {
         if (ports.isDead()) await spawn();
-        if (!ports.isDead()) await returnToActivity();
+        if (!ports.isDead() && !ports.blocked?.()) await returnToActivity();
       } catch (error) {
         const reason = errorReason(error);
         publish("recovery-retry", reason);
@@ -2582,7 +2603,8 @@
     });
     const recoverFromDeath = createDeathRecovery({
       isDead: () => !!character.rip,
-      respawn: () => Promise.resolve(respawn()),
+      blocked: () => !!sharedRoutine.dungeonOwned?.(),
+      respawn: () => sharedRoutine.dungeonOwned?.() ? Promise.reject(Error("Dungeon owns revival")) : Promise.resolve(respawn()),
       releaseCombat: () => {
         working = false;
       },
@@ -2599,6 +2621,7 @@
       return active && !character.rip && resolvedRole().combat && (character.ctype !== "merchant" || !!sharedRoutine.merchantEventCombatActive?.()) && !sharedRoutine.isOccupied() && ["pending", "feed"].indexOf(sharedRoutine.getAbtestingMode()) < 0;
     }
     function passingTarget() {
+      if (sharedRoutine.dungeonOwned?.()) return null;
       if (character.ctype === "merchant" || !active || character.rip || !resolvedRole().combat || ["pending", "feed"].includes(sharedRoutine.getAbtestingMode())) return null;
       if (sharedRoutine.frankyCombatActive?.()) return sharedRoutine.getWalkingPassiveTarget?.() || null;
       return sharedRoutine.getPassingTarget?.() || null;
@@ -2637,6 +2660,7 @@
       return currentEpoch(epoch) && !character.rip && !sharedRoutine.isOccupied();
     }
     function chooseTarget() {
+      if (sharedRoutine.dungeonOwned?.()) return sharedRoutine.getDungeonTarget?.() || null;
       if (sharedRoutine.returnCombatActive?.()) return sharedRoutine.returnDefenseTarget?.() || null;
       if (sharedRoutine.frankyCombatActive?.()) return sharedRoutine.getEventTarget();
       if (character.ctype === "merchant") return resolvedRole().chooseTarget();
@@ -2646,7 +2670,7 @@
       return resolvedRole().chooseTarget();
     }
     function exclusiveCombat() {
-      return !!sharedRoutine.returnCombatActive?.() || !!sharedRoutine.frankyCombatActive?.();
+      return !!sharedRoutine.dungeonOwned?.() || !!sharedRoutine.returnCombatActive?.() || !!sharedRoutine.frankyCombatActive?.();
     }
     async function publishSelection(target) {
       selectedTarget = target?.id || !exclusiveCombat() && sharedRoutine.sharedTargetId?.() || null;
@@ -2671,9 +2695,9 @@
         return;
       }
       if (!sharedRoutine.returnCombatActive?.() && !invalidated && current) {
-        const rare = sharedRoutine.getRareTarget?.();
-        const nominated = sharedRoutine.usesLeaderTarget?.() ? sharedRoutine.getGroupedTarget() : null;
-        if ((!rare || rare.id === selectedTarget) && (!sharedRoutine.usesLeaderTarget?.() || nominated?.id === selectedTarget)) return;
+        const rare = sharedRoutine.dungeonOwned?.() ? null : sharedRoutine.getRareTarget?.();
+        const nominated = sharedRoutine.dungeonOwned?.() ? sharedRoutine.getDungeonTarget?.() : sharedRoutine.usesLeaderTarget?.() ? sharedRoutine.getGroupedTarget() : null;
+        if ((!rare || rare.id === selectedTarget) && (!(sharedRoutine.dungeonOwned?.() || sharedRoutine.usesLeaderTarget?.()) || nominated?.id === selectedTarget)) return;
       }
       invalidated = false;
       selecting = true;
@@ -2713,17 +2737,24 @@
       return true;
     }
     function movementTick() {
+      const dungeon = !!sharedRoutine.dungeonOwned?.();
+      if (dungeon && !combatAllowed()) {
+        root.sharedRoutine?.resetCombatMovement?.();
+        return;
+      }
       try {
         equipmentTick();
-        if (sharedRoutine.returnCombatActive?.()) {
-          sharedRoutine.returnMovementTick?.();
-          attacks.wake();
-          return;
+        if (!dungeon) {
+          if (sharedRoutine.returnCombatActive?.()) {
+            sharedRoutine.returnMovementTick?.();
+            attacks.wake();
+            return;
+          }
+          if (frankyMovement()) return;
+          if (sharedRoutine.pollRareHunting?.()) return;
+          if (sharedRoutine.pollFarmingCombatHandoff) sharedRoutine.pollFarmingCombatHandoff();
+          if (sharedRoutine.pollFarmingSpawnRecovery) sharedRoutine.pollFarmingSpawnRecovery();
         }
-        if (frankyMovement()) return;
-        if (sharedRoutine.pollRareHunting?.()) return;
-        if (sharedRoutine.pollFarmingCombatHandoff) sharedRoutine.pollFarmingCombatHandoff();
-        if (sharedRoutine.pollFarmingSpawnRecovery) sharedRoutine.pollFarmingSpawnRecovery();
         if (selectedTarget && !currentTarget()) {
           invalidated = true;
           void selectTarget();
@@ -2738,10 +2769,12 @@
         if (target) missingSince = 0;
         else if (!missingSince) missingSince = Date.now();
         attacks.wake();
-        if (sharedRoutine.groupedMovement?.()) return;
-        if ((target || Date.now() - missingSince >= 750) && sharedRoutine.recoverFarmApproach && sharedRoutine.recoverFarmApproach(target)) return;
+        if (!dungeon && sharedRoutine.groupedMovement?.()) return;
+        if (!dungeon && (target || Date.now() - missingSince >= 750) && sharedRoutine.recoverFarmApproach && sharedRoutine.recoverFarmApproach(target)) return;
+        if (dungeon && sharedRoutine.caveRecoveryMove?.()) return;
         if (!target) {
-          idleMovement();
+          if (dungeon) root.sharedRoutine?.resetCombatMovement?.();
+          else idleMovement();
           return;
         }
         if (sharedRoutine.formationMove && sharedRoutine.formationMove(target)) return;
@@ -2754,10 +2787,15 @@
       }
     }
     async function supportTick(role8, epoch) {
+      if (!supportAllowed(epoch)) return;
       if (!await role8.usePotion()) await sharedRoutine.regenerateHpOrMp();
       if (!supportAllowed(epoch)) return;
       if (await role8.beforeTarget()) return;
-      if (!currentEpoch(epoch)) return;
+      if (!supportAllowed(epoch)) return;
+      if (sharedRoutine.caveRecoveryReserved?.() && attacks.pending()) return;
+      if (await sharedRoutine.caveRecoveryTick?.()) return;
+      if (sharedRoutine.caveRecoveryReserved?.()) return;
+      if (!supportAllowed(epoch)) return;
       const target = currentTarget();
       if (target && (!sharedRoutine.groupedAttackAllowed || sharedRoutine.groupedAttackAllowed(target)) && (target.mtype !== "tinyp" || sharedRoutine.rareAttackAllowed?.(target, "support")))
         await role8.beforeAttack(target);

@@ -4,6 +4,8 @@
 **/.build
 **/dist
 **/.next
+# Vinext font manifests contain absolute paths for the machine that built them.
+**/.vinext
 **/.wrangler
 **/*.log
 **/*.tsbuildinfo

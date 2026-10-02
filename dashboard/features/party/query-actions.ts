@@ -17,6 +17,7 @@ const core = ['core', 'config'] as const;
 const inventory = ['core', 'config', 'inventory', 'fast'] as const;
 const commerce = ['core', 'config', 'inventory', 'fast', 'bank', 'market'] as const;
 export const actionDomains = {
+  '/daily-dungeons': core,
   '/merchant/bank-sort': core,
   '/config': core,
   '/formation': core,
@@ -38,6 +39,7 @@ export const actionDomains = {
   '/bank/unlock': ['bank', 'core', 'config'],
   '/merchant/clear': core,
   '/merchant/force-stand': core,
+  '/merchant/stand-location': core,
   '/merchant/gather': core,
   '/merchant/job/cancel': commerce,
   '/merchant/job/retry': commerce,

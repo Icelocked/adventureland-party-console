@@ -1,3 +1,5 @@
+import { caveCombat } from "../dungeons/combat.ts";
+import type { DungeonState, CaveObservation } from "../../dungeons/contracts.ts";
 import {authorizeSuccessor, type HandoffPolicy} from '../../combat/successor-grant.ts';
 import {owner as huntOwner} from '../../hunt/policy.ts';
 import type { Group, Member } from "../../combat/grouped.ts";
@@ -7,6 +9,7 @@ import { phoenixCandidates } from './phoenix-candidates.ts';
 import {updateHuntTravel, interruptibleTravel, type HuntTravelConvoy} from '../../combat/hunt-travel.ts';
 import {passingIdentity} from '../../combat/passing.ts';
 interface GroupedState {
+  dailyDungeons?: DungeonState;
   passiveHunting?: import('../../combat/passive-travel.ts').PassiveTravelSettings;
   phoenixPatrolActive?: boolean;
   farmingPolicy?: string;
@@ -15,7 +18,7 @@ interface GroupedState {
   combatEventHandoff?: { startedAt: number; endedAt?: number } | null;
   eventReturn?: unknown;
   leader: string | null;
-  statuses: Record<string, Member["status"] & { ctype?: string }>;
+  statuses: Record<string, Member["status"] & { ctype?: string; dungeon?: CaveObservation }>;
   groupedCombat?: Group | null;
   groupedCombatResetAt?: number;
   partyFarmingMode: string;
@@ -105,6 +108,10 @@ function inEvent(status: Member["status"]): boolean {
 
 /** Events retain the prior group; cancelled navigation and ordinary scatter clear it. */
 export function coordinatorGroupedSnapshot(state: GroupedState, ports: GroupedPorts): Group | null {
+  if (state.dailyDungeons && state.dailyDungeons.phase !== "idle") {
+    state.groupedCombat = caveCombat(state, ports.now());
+    return state.groupedCombat;
+  }
   ports.tickDisengagement();
   const leader = state.leader,
     lead = state.statuses[String(leader)];

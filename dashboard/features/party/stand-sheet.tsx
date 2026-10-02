@@ -123,6 +123,7 @@ export const StandSheet = memo(function StandSheet({
   merchant,
 
   bank,
+  bankGold,
 
   listings,
 
@@ -180,6 +181,7 @@ export const StandSheet = memo(function StandSheet({
   merchant?: Char;
 
   bank?: BankSnapshot | null;
+  bankGold?: number | null;
 
   listings: StandListing[];
 
@@ -350,6 +352,7 @@ export const StandSheet = memo(function StandSheet({
   const [hideBadDeals, setHideBadDeals] = useState(false);
 
   const [hideUnaffordable, setHideUnaffordable] = useState(false);
+  const [hideUnowned, setHideUnowned] = useState(false);
 
   const [hideBlacklisted, setHideBlacklisted] = useState(true);
 
@@ -623,7 +626,7 @@ export const StandSheet = memo(function StandSheet({
 
       (!hideBadDeals || !isBadDeal(entry)) &&
 
-      (!hideUnaffordable || entry.price <= Number(bank?.gold || 0)) &&
+      (!hideUnaffordable || entry.price <= Number(bank?.gold ?? bankGold ?? 0)) &&
 
       (!hideBlacklisted ||
 
@@ -716,6 +719,7 @@ export const StandSheet = memo(function StandSheet({
   });
 
   const filteredBuyOrders = allBuyOrders
+    .filter((order) => !hideUnowned || (bankOwned.get(ownedKey(order.item)) || 0) > 0)
 
     .filter((order) =>
 
@@ -1603,7 +1607,7 @@ export const StandSheet = memo(function StandSheet({
 
                 {item?.name || order.item.name}
 
-                {Number.isFinite(Number(order.item.level))
+                {item?.meta?.upgradeable || item?.meta?.compoundable
 
                   ? ` +${Number(order.item.level) || 0}`
 
@@ -1797,7 +1801,7 @@ export const StandSheet = memo(function StandSheet({
 
             <div className="flex flex-wrap items-center gap-3">
               <h2 className="text-base font-semibold text-amber-200">Items for sale · {occupancy.sales}/16 slots</h2>
-              <span className={`rounded border px-2 py-1 text-xs font-semibold ${merchant?.standOpen ? 'border-emerald-600 bg-emerald-950 text-emerald-100' : 'border-red-600 bg-red-950 text-red-100'}`}>
+              <span className={`text-xs font-semibold ${merchant?.standOpen ? 'text-emerald-300' : 'text-red-300'}`}>
                 {merchant?.standOpen === true ? 'Stand open' : merchant?.standOpen === false ? 'Stand closed' : 'Stand status unknown'}
               </span>
             </div>
@@ -2280,7 +2284,7 @@ export const StandSheet = memo(function StandSheet({
 
                 >
 
-                  Manage WTB orders
+                  New WTB order
 
                 </Button>
 
@@ -2384,6 +2388,7 @@ export const StandSheet = memo(function StandSheet({
                             </button>
 
                             <ActiveWTBFields name={item?.name || itemId} bid={bid} disabled={Boolean(savingBid)}
+                              onEditPrice={() => onEditBuy({ name: itemId, level: bid.minimumQuality || 0 }, item?.meta)}
                               onSave={async (field, value) => {
                                 setSavingBid(itemId);
                                 try {
@@ -2730,6 +2735,12 @@ export const StandSheet = memo(function StandSheet({
                 </>
 
               ) : null}
+              {marketTab === 'wtb' ? (
+                <label className="flex shrink-0 items-center gap-2 rounded border border-emerald-700 bg-black px-3 py-2 text-sm text-emerald-100">
+                  <Checkbox checked={hideUnowned} onCheckedChange={(checked) => setHideUnowned(checked === true)} />
+                  Hide unowned
+                </label>
+              ) : null}
 
             </div>
 
@@ -2751,7 +2762,7 @@ export const StandSheet = memo(function StandSheet({
 
                         : hideUnaffordable
 
-                          ? `No matching listings are affordable with ${(bank?.gold || 0).toLocaleString()} bank gold.`
+                          ? `No matching listings are affordable with ${Number(bank?.gold ?? bankGold ?? 0).toLocaleString()} bank gold.`
 
                           : 'No matching live WTS listings.'}
 

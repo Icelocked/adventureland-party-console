@@ -13,4 +13,5 @@ export type MapDefinition = {
   placements: MapPlacement[];
   groups: MapPlacement[][];
   tilesets: Record<string, { file: string }>;
+  decorations?: { kind: 'dreams_gate'; x: number; y: number }[];
 };

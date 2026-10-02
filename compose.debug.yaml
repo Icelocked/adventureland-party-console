@@ -1,0 +1,8 @@
+# Opt in to launching sibling debug servers from Settings.
+# The socket grants this trusted console access to the host Docker engine.
+services:
+  party-console:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      AL_DEBUG_BIND: 0.0.0.0

@@ -14,7 +14,8 @@ export const role: Partial<Role> = {
   combat: true,
   beforeTarget: async function () {
     if (await sharedRoutine.absorbSinsBelow(1)) return true;
-    return await sharedRoutine.healPartyBelow(0.9);
+    if (await sharedRoutine.healPartyBelow(0.9)) return true;
+    return await sharedRoutine.skillSupport?.() ?? false;
   },
   usePotion: async function () {
     return await sharedRoutine.useRecoveryPotion({ hpBelow: 0.5, mpBelow: 0.2, priority: "hp" });

@@ -9,6 +9,7 @@ function fixture(grouped=false){
   isExternallyClaimedMonster:()=>false,combatTargetId:'bee',farmingTravelToken:null,departurePending:false,
   game_log(){},setTimeout,engagedMonster(){assert.fail('historic fight must not be consulted during travel');}});
  for(const [start,end] of [
+  ['  function dungeonOwned()', '  function cavePartyNames()'],
   ['  function groupedEntityReport(', '  function groupedThreatReports('],
   ['  function departureTargetEngaged(', '  function inFarmRadius('],
   ['  function groupedAttackAllowed(', '  var groupRegroup ='],

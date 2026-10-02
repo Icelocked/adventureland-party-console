@@ -35,6 +35,7 @@ export const selectionFields = [
 ] as const;
 
 export const settingsFields = [
+  "dailyDungeons",
   "merchantRules", "production", "upgradeOfferingRules", "upgradePreviewResults",
   "bankboiPrefix", "anniversaryAutoChat",
   "farmingProfiles",
@@ -102,6 +103,7 @@ export const settingsFields = [
   "restockPolicies",
   "merchantCharacter",
   "merchantForceStand",
+  "merchantStandLocation",
   "merchantWeapon",
   "luckyUpgradeSlots",
   "luckySlotTracking",

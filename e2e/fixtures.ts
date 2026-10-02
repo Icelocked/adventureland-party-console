@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { gateway } from '../tools/hosting/gateway';
 import { Access } from '../tools/hosting/access';
+import { DebugInstances } from '../tools/debug/service';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -57,9 +58,10 @@ async function ready(process: ChildProcess, url: string, log: string) {
 }
 type App = { url: string; restartCoordinator(): Promise<void>; state(): Promise<any> };
 
-export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantConnected: boolean }, { dashboard: { port: number; log: string } }>({
+export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantConnected: boolean; playerInventory: boolean }, { dashboard: { port: number; log: string } }>({
   merchantDialogs: [false, {option:true}],
   merchantConnected: [true, {option:true}],
+  playerInventory: [false, {option:true}],
   dashboard: [async ({}, use) => {
     const directory = path.join(root, '.build/e2e', `dashboard-${randomUUID()}`);
     mkdirSync(directory, { recursive: true });
@@ -72,14 +74,14 @@ export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantCo
       await use({ port, log });
     } finally { await stop(process); }
   }, { scope: 'worker', timeout: 120_000 }],
-  app: async ({ dashboard, merchantDialogs, merchantConnected }, use, testInfo) => {
+  app: async ({ dashboard, merchantDialogs, merchantConnected, playerInventory }, use, testInfo) => {
     const directory = path.join(root, '.build/e2e', `scenario-${randomUUID()}`);
     mkdirSync(directory, { recursive: true });
     const port = await unusedPort(), log = path.join(directory, 'coordinator.log');
     let coordinator: ChildProcess | undefined;
     async function start() {
       coordinator = child(path.join(root, 'e2e/coordinator.cjs'), [], root,
-        environment({ E2E_COORDINATOR_PORT: String(port), E2E_DATA_DIR: directory, E2E_MERCHANT_DIALOGS: String(merchantDialogs), E2E_MERCHANT_CONNECTED: String(merchantConnected) }), log);
+        environment({ E2E_COORDINATOR_PORT: String(port), E2E_DATA_DIR: directory, E2E_MERCHANT_DIALOGS: String(merchantDialogs), E2E_MERCHANT_CONNECTED: String(merchantConnected), E2E_PLAYER_INVENTORY: String(playerInventory) }), log);
       const started = coordinator;
       await new Promise<void>((resolve, reject) => {
         const output = () => existsSync(log) ? readFileSync(log, 'utf8') : 'No coordinator output';
@@ -99,7 +101,8 @@ export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantCo
     }
     const access = new Access(path.join(directory, 'access.json'));
     await access.load();
-    const server = gateway({ access, configured: () => true, dashboardPort: dashboard.port, apiPort: port });
+    const debug = await new DebugInstances(root, path.join(directory, 'debug')).load();
+    const server = gateway({ access, debug, configured: () => true, dashboardPort: dashboard.port, apiPort: port });
     let app: App | undefined;
     try {
       await start();
@@ -117,6 +120,10 @@ export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantCo
       await use(app);
     } finally {
       try {
+        if ((await debug.status()).project) {
+          await debug.stop();
+          await expect.poll(async () => (await debug.status()).phase, { timeout: 120_000 }).toBe('stopped');
+        }
         if (app) {
           try { await testInfo.attach('final-state', { body: JSON.stringify(await app.state(), null, 2), contentType: 'application/json' }); }
           catch (error) { await testInfo.attach('state-error', { body: String(error), contentType: 'text/plain' }); }

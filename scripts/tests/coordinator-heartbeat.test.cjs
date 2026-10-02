@@ -44,16 +44,16 @@ test(`${implementation} heartbeat saves cumulative slot evidence and returns it 
 test(`${implementation} coordinator handles first and repeated heartbeats without a current combat target`,async()=>{
  const host=await start(1900000000000);
  assert.equal(host.handlers.has('/party-api/anniversary/blacklist'),false);
- const contracts=require('./fixtures/heartbeat-contracts.json').map((value,index)=>({...value,groupedCombat:index===0?soloGroup:null,leader:'P',desiredPartyMembers:['P'],leaderLocation:{map:'main',x:0,y:0},monsterFocus:[],scatterEpoch:0,passingControl:{scope:'[null,[["P",0,null,"USII","main",null]]]',ready:false,admitted:[]}}));
+ const contracts=require('./fixtures/heartbeat-contracts.json').map((value,index)=>({...value,merchantStandLocation:{map:'main',x:-63,y:100},groupedCombat:index===0?soloGroup:null,leader:'P',desiredPartyMembers:['P'],leaderLocation:{map:'main',x:0,y:0},monsterFocus:[],scatterEpoch:0,passingControl:{scope:'[null,[["P",0,null,"USII","main",null]]]',ready:false,admitted:[]}}));
  const status=host.handlers.get('/party-api/status');let response;
  const res={status(code){assert.equal(code,200);return this;},json(value){response=value;}};
  const report=()=>({name:'P',ctype:'priest',map:'main',x:0,y:0,server:'USII',gold:0,items:Array(42).fill(null),hp:100,max_hp:100});
  status({body:report()},res);assert.ok(response);assert.equal(response.partyPositions[0].name,'P');
  assert.equal(Object.hasOwn(response.anniversary,'blacklist'),false);
- assert.deepEqual(stableResponse(response),{...contracts[0],luckyUpgradeSlots:{},luckySlotTracking:{},huntCombatTarget:null,travelCombat:null,combatRecovery:null,combatResetByCharacter:{},eventTrip:null,partyTownCycleId:null,returnProgress:null,merchantVisibility:null});
+ assert.deepEqual(stableResponse(response),{...contracts[0],luckyUpgradeSlots:{},luckySlotTracking:{},huntCombatTarget:null,travelCombat:null,combatRecovery:null,combatResetByCharacter:{},eventTrip:null,partyTownCycleId:null,returnProgress:null,merchantVisibility:null,dailyDungeon:{owned:false,movementReady:true}});
  status({body:{...report(),oneShotMonsterTypes:['goo'],oneShotEpoch:response.scatterEpoch}},res);
  assert.equal(response.partyFarmingMonsterType,'goo');assert.ok(response.scatterMonsterTypes.includes('goo'));
- assert.deepEqual(stableResponse(response),{...contracts[1],luckyUpgradeSlots:{},luckySlotTracking:{},huntCombatTarget:null,travelCombat:null,combatRecovery:null,combatResetByCharacter:{},eventTrip:null,partyTownCycleId:null,returnProgress:null,merchantVisibility:null});
+ assert.deepEqual(stableResponse(response),{...contracts[1],luckyUpgradeSlots:{},luckySlotTracking:{},huntCombatTarget:null,travelCombat:null,combatRecovery:null,combatResetByCharacter:{},eventTrip:null,partyTownCycleId:null,returnProgress:null,merchantVisibility:null,dailyDungeon:{owned:false,movementReady:true}});
 });
 
 test(`${implementation} application propagates explicit no-merchant configuration into heartbeat responses`,async()=>{

@@ -42,6 +42,7 @@ function setup(priestSelf = false) {
     move: (x, y) => { moves.push({ x, y }); return new Promise(() => {}); },
   }); c.root = c;
   c.sameEventTeamMember=()=>true;
+  vm.runInContext(source.slice(source.indexOf('  function dungeonOwned()'),source.indexOf('  function dungeonRuntime()')),c);
   vm.runInContext(source.slice(source.indexOf('  function isAttackingPartyMember('),source.indexOf('  function getNearestPartyAttacker(')),c);
   vm.runInContext(source.slice(source.indexOf('  function groupedFarming('), source.indexOf('  function isAllowedTarget(')), c);
   vm.runInContext(source.slice(source.indexOf('  var formationState ='), source.indexOf('  root.sharedRoutine = {')), c);
@@ -613,6 +614,24 @@ for (const meleeClass of ['paladin','rogue']) test(meleeClass+' reaches melee wh
   assert.equal(r.c.is_in_range(r.monster),true);
   r.c.formationMove(r.monster);
   assert.equal(r.c.partyCombatPosition.warriorPhase,'melee-kiting');
+});
+
+test('cave warrior approaches a ranged attacker using normal formation despite stale farm control', () => {
+  const r = setup(), {c, warrior, priest, monster, moves} = r;
+  Object.assign(warrior, {x:80,y:0,cave:{run:'run'}});
+  Object.assign(priest, {x:0,y:0});
+  Object.assign(monster, {x:160,y:0,target:'P',hp:100});
+  c.farmingMode = 'scatter';
+  c.groupedCombat = {protocol:4, recovering:['W','P'], priest:'OutOfCave'};
+  c.partyQueueClient = {formation:{movement:()=>assert.fail('stale farm formation must not own cave movement')}};
+  c.is_in_range = () => Math.hypot(warrior.x-monster.x,warrior.y-monster.y)<=30;
+  for(let i=0;i<40&&!c.is_in_range();i++) {
+    r.now(10000+i*100); moves.length=0;
+    c.formationMove(monster); const p=moves.at(-1);
+    assert.ok(p, 'cave fighter must approach the stationary ranged attacker');
+    warrior.x=p.x; warrior.y=p.y;
+  }
+  assert.ok(c.is_in_range(), 'normal formation reaches melee range in the cave');
 });
 
 test('return runner attacks and supports while planning or held without issuing combat movement',async()=>{

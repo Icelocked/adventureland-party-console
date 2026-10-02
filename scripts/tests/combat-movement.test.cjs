@@ -23,7 +23,7 @@ function runner(ctype = 'ranger', native = false, configure = () => {}) {
   };
   configure(routine);
   const c = vm.createContext({ character, parent: native ? {} : { caracAL: {} }, sharedRoutine: routine, get_entity: () => target,
-    G: {items:{},classes:{}},
+    G: {items:{},classes:{},skills:{}},
     can_attack: () => ready, is_in_range: () => true, game_log() {},
     attack: () => { attacks++; return new Promise(() => {}); },
     Date: class extends Date { static now() { return now; } },
@@ -484,6 +484,65 @@ test('eligible passing and active attacks share priority without passing movemen
     assert.equal(hit[0],passivePriority>50?'passing':r.target.id);
     r.c.partyRoleRunner.stop();
   }
+});
+
+for (const ctype of ['warrior', 'priest', 'mage']) test('cave uses normal ' + ctype + ' support, attacks and movement without farm travel', async () => {
+  const r = runner(ctype); let support = 0, formations = 0, kites = 0;
+  Object.assign(r.routine, {
+    dungeonOwned: () => true, getDungeonTarget: () => r.target,
+    regenerateHpOrMp: async () => {}, useRecoveryPotion: async () => false,
+    emergencyWarriorStomp: async () => { support++; return true; },
+    healPartyBelow: async () => { support++; return true; },
+    energizeLowestMana: async () => { support++; return true; },
+    formationMove: () => { formations++; return false; },
+    kiteIfNeeded: async () => { kites++; return false; },
+    pollRareHunting: () => assert.fail('rare travel during cave'),
+    pollFarmingCombatHandoff: () => assert.fail('farm handoff during cave'),
+    pollFarmingSpawnRecovery: () => assert.fail('farm recovery during cave'),
+    groupedMovement: () => assert.fail('stale farm movement during cave'),
+    recoverFarmApproach: () => assert.fail('farm approach during cave'),
+    followLeaderIfFar: () => assert.fail('ordinary follow during cave'),
+  });
+  r.character.cave = {run:'run', paused:false};
+  try {
+    await r.run(250); await r.run(100); await r.run(50);
+    assert.ok(support > 0, ctype + ' class support must run');
+    assert.ok(formations > 0 && kites > 0 && r.moves() > 0, 'normal positioning pipeline must run');
+    assert.equal(r.attacks(), 1);
+    r.occupied(true); const before = [support, formations, kites, r.moves(), r.attacks()];
+    await r.run(250); await r.run(100); await r.run(50);
+    assert.deepEqual([support, formations, kites, r.moves(), r.attacks()], before, 'forced pause stops combat');
+    r.occupied(false); r.routine.getDungeonTarget = () => null;
+    r.routine.allowsTarget = () => false;
+    await r.run(250); await r.run(100);
+    assert.equal(r.moves(), before[3], 'no target must leave room navigation alone');
+  } finally { r.c.partyRoleRunner.stop(); }
+});
+
+test('priest recovery reserves offensive slots, yields to living healing, and releases attacks afterward',async()=>{
+  const r=runner('priest',false,routine=>{routine.regenerateHpOrMp=async()=>{};});let recovering=true,living=false,revives=0;
+  r.routine.regenerateHpOrMp=async()=>{};
+  r.routine.caveRecoveryReserved=()=>recovering;
+  r.routine.caveRecoveryTick=async()=>{if(recovering)revives++;return recovering;};
+  r.routine.healPartyBelow=async()=>living;
+  r.routine.basicAttackReserved=()=>living;
+  try {
+    await r.run(250);await r.run(50);assert.equal(revives,1,JSON.stringify(r.c.partyCombatState));assert.equal(r.attacks(),0);
+    living=true;await r.run(250);await r.run(50);assert.equal(revives,1,JSON.stringify(r.c.partyCombatState));assert.equal(r.attacks(),0);
+    living=false;recovering=false;await r.run(250);await r.run(50);assert.equal(r.attacks(),1);
+  } finally { r.c.partyRoleRunner.stop(); }
+});
+
+test('priest waits for an outstanding attack before starting grave recovery',async()=>{
+  const r=runner('priest',false,routine=>{routine.regenerateHpOrMp=async()=>{};});let recovering=false,attempts=0;
+  r.routine.regenerateHpOrMp=async()=>{};r.routine.healPartyBelow=async()=>false;
+  r.routine.caveRecoveryReserved=()=>recovering;
+  r.routine.caveRecoveryTick=async()=>{if(recovering)attempts++;return recovering;};
+  try {
+    await r.run(250);await r.run(50);assert.equal(r.attacks(),1);
+    recovering=true;await r.run(250);assert.equal(attempts,0);
+    r.now(4000);await r.run(50);await r.run(250);assert.equal(attempts,1,JSON.stringify(r.c.partyCombatState));assert.equal(r.attacks(),1);
+  } finally { r.c.partyRoleRunner.stop(); }
 });
 
 for (const ctype of ['warrior','mage','priest','ranger','rogue','paladin','merchant'])

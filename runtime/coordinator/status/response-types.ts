@@ -35,6 +35,7 @@ export const heartbeatStateFields = [
   "abtestingStrategy",
   "merchantCharacter",
   "merchantForceStand",
+  "merchantStandLocation",
   "merchantWeapon",
   "luckyUpgradeSlots",
   "luckySlotTracking",
@@ -51,6 +52,7 @@ export const heartbeatStateFields = [
 ] as const;
 
 export interface HeartbeatState extends Record<(typeof heartbeatStateFields)[number], unknown> {
+  dailyDungeons?: import("../../dungeons/contracts.ts").DungeonState;
   passiveHunting: import('../navigation/passive-settings.ts').PassiveSettings;
   eventSessions?: import('../merchant/event-control.ts').MerchantEventState['eventSessions'];
   eventReturn?: import('../merchant/event-control.ts').MerchantEventState['eventReturn'];
@@ -59,6 +61,7 @@ export interface HeartbeatState extends Record<(typeof heartbeatStateFields)[num
   huntEventTrips?: import("../events/hunt-trip.ts").HuntEventTrips["huntEventTrips"];
   leader: string | null;
   merchantCharacter: string | null;
+  merchantStandLocation: import('../merchant/stand-location.ts').MerchantStandLocation | null;
   commands: Record<string, MerchantCommand | undefined>;
   statuses: Record<string, HeartbeatStatus | undefined>;
   followers: Record<string, boolean>;

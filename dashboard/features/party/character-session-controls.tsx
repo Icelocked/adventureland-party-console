@@ -9,6 +9,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import type { ActiveSlot } from './active-slot';
+import { useDebugBrowser, debugGameUrl } from './debug-browser';
 
 export const CharacterSessionControls = memo(function CharacterSessionControls({
   name,
@@ -27,6 +28,7 @@ export const CharacterSessionControls = memo(function CharacterSessionControls({
   onHeadless: (name: string) => Promise<void>;
   onSteam: (name: string, action: 'login' | 'primary') => Promise<void>;
 }) {
+  const debugBrowser = useDebugBrowser();
   const [confirmation, setConfirmation] = useState<{
     action: 'logout' | 'headless' | 'steam';
     slot: number;
@@ -81,6 +83,12 @@ export const CharacterSessionControls = memo(function CharacterSessionControls({
     'border-emerald-800 bg-[#07100f] text-slate-300 hover:border-cyan-400 hover:bg-[#16352b] hover:text-white';
   const active =
     'border-cyan-300 bg-[#164e63] text-white ring-1 ring-cyan-400 hover:border-cyan-100 hover:bg-[#155e75] hover:text-white';
+  if (debugBrowser) return <a href={debugGameUrl} target="_blank" rel="noreferrer"
+    aria-label={`${name} · Debug browser ${slot?.primary ? 'primary' : 'companion'}`}
+    title="View the running debug game browser"
+    className="rounded border border-cyan-700 bg-slate-950 px-2 py-1 text-xs text-cyan-100 hover:bg-cyan-950 hover:text-white">
+    Debug browser{slot?.primary ? ' · primary' : ''}
+  </a>;
   return (
     <>
       <div

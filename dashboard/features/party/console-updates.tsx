@@ -1,4 +1,5 @@
 "use client";
+import { DebugInstanceSettings } from './debug-instance';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import type { UpdateStatus } from '../../../tools/update/contracts';
@@ -57,6 +58,7 @@ export function ConsoleUpdateSettings() {
     <label className="flex items-start gap-3"><input type="checkbox" className="mt-1 size-4 accent-emerald-500" checked={state?.automatic || false} disabled={!state?.managed || busy} onChange={event => void action('preferences', { automatic: event.target.checked })} />Automatically download and install new versions when available</label>
     <p className="text-xs text-slate-300">While running, updates download and wait for Restart now. At startup, enabled automatic updates install before characters start. Local source edits must be reconciled before installing.</p>
     {state && !state.managed && <p className="text-amber-200">Development checkout: update notifications only. Update your source manually, or use the editable release package for managed updates.</p>}
+    <DebugInstanceSettings />
     {(error || state?.error) && <p role="alert" className="text-rose-300">{error || state?.error}</p>}
   </section>;
 }

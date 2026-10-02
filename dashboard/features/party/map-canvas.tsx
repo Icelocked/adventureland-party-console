@@ -7,6 +7,7 @@ import { croppedTile } from "./cropped-tile";
 import { dollLayers } from "./doll-layers";
 import { MapDefinition } from "./map-definition";
 import { MapFrame } from "./map-frame";
+import { drawDreamsGate } from './dreams-gate';
 import { drawDue, prepareMap, visibleTiles, type PreparedPlacement, type MapRenderBuffer } from "./map-render-buffer";
 
 export function MapCanvas({
@@ -21,6 +22,9 @@ export function MapCanvas({
   buffer,
   fps,
   active = true,
+  fullMap = false,
+  pins = [],
+  onWaypoint,
 }: {
   definition: MapDefinition | null;
   frame: MapFrame | null;
@@ -33,8 +37,12 @@ export function MapCanvas({
   buffer?: RefObject<MapRenderBuffer>;
   fps?: number;
   active?: boolean;
+  fullMap?: boolean;
+  pins?: {x:number;y:number;label:string;color:string}[];
+  onWaypoint?: (point:{x:number;y:number}) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const viewport = useRef({left:0,top:0,scale:1});
   const propsRef = useRef({
     definition,
     frame,
@@ -44,6 +52,7 @@ export function MapCanvas({
     detailed,
     area,
     huntRadius,
+    fullMap, pins,
   });
   useEffect(() => {
     propsRef.current = {
@@ -55,8 +64,9 @@ export function MapCanvas({
       detailed,
       area,
       huntRadius,
+      fullMap, pins,
     };
-  }, [definition, frame, previous, receivedAt, scale, detailed, area, huntRadius]);
+  }, [definition, frame, previous, receivedAt, scale, detailed, area, huntRadius, fullMap, pins]);
   useEffect(() => {
     if (!active) return;
     const canvas = canvasRef.current;
@@ -121,10 +131,12 @@ export function MapCanvas({
       }
       const alpha = Math.min(1, Math.max(0, (performance.now() - p.receivedAt) / 100));
       const old = p.previous && p.previous.map === p.frame.map ? p.previous : p.frame;
-      const cameraX = old.x + (p.frame.x - old.x) * alpha;
-      const cameraY = old.y + (p.frame.y - old.y) * alpha;
+      if (p.fullMap) p.scale = Math.min(rect.width/(p.definition.max_x-p.definition.min_x+100),rect.height/(p.definition.max_y-p.definition.min_y+100));
+      const cameraX = p.fullMap ? (p.definition.min_x+p.definition.max_x)/2 : old.x + (p.frame.x - old.x) * alpha;
+      const cameraY = p.fullMap ? (p.definition.min_y+p.definition.max_y)/2 : old.y + (p.frame.y - old.y) * alpha;
       const left = cameraX - rect.width / (2 * p.scale),
         top = cameraY - rect.height / (2 * p.scale);
+      viewport.current = {left,top,scale:p.scale};
       ctx.save();
       ctx.scale(p.scale, p.scale);
       ctx.translate(-left, -top);
@@ -169,6 +181,10 @@ export function MapCanvas({
       }
       prepared!.placements.forEach(drawPlacement);
       const layers: { y: number; draw: () => void }[] = [];
+      p.definition.decorations?.forEach(decoration => layers.push({ y: decoration.y, draw: () => {
+        ctx.save(); ctx.translate(decoration.x, decoration.y);
+        drawDreamsGate(ctx, p.definition!.tilesets, Date.now()); ctx.restore();
+      } }));
       prepared!.groups.forEach(group => layers.push({ y: group.y, draw: () => group.placements.forEach(drawPlacement) }));
       const priorEntities = new Map((old.entities || []).map((entity) => [entity.id, entity]));
       p.frame.entities.forEach((entity) => {
@@ -221,7 +237,7 @@ export function MapCanvas({
             const drawY =
               y + (attackTarget ? ((attackTarget.y - y) / attackLength) * attackAmount : 0);
             let drewDoll = false;
-            if (entity.type === "character" && entity.dollHtml) {
+            if (entity.dollHtml) {
               const layers = dollLayers(entity.dollHtml),
                 outerLeft = drawX - 13.5,
                 outerTop = drawY - 38;
@@ -285,6 +301,16 @@ export function MapCanvas({
                       : "#5eead4";
                 ctx.fillRect(x - 4, y - 8, 8, 8);
               }
+            }
+            for (const weapon of entity.weapons || []) {
+              const sprite = weapon.sprite, image = sprite && cachedMapImage(sprite.url);
+              if (!sprite || !image?.complete || !image.naturalWidth) continue;
+              const sw = image.naturalWidth/sprite.columns, sh = image.naturalHeight/sprite.rows;
+              ctx.save();
+              ctx.translate(drawX+(weapon.hand==='offhand'?6:-6),drawY-5);
+              if(weapon.hand==='offhand')ctx.scale(-1,1);
+              ctx.drawImage(image,sprite.x*sw+.5,sprite.y*sh+.5,sw-1,sh-1,-8,-16,16,16);
+              ctx.restore();
             }
             if (entity.stand && entity.standSprite) {
               const stand = entity.standSprite,
@@ -449,10 +475,30 @@ export function MapCanvas({
         ctx.arc(p.area.x, p.area.y, 5 / p.scale, 0, Math.PI * 2);
         ctx.fill();
       }
+      const labels: {left:number;right:number;top:number;bottom:number}[] = [];
+      for (const pin of p.pins) {
+        ctx.fillStyle = pin.color;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2/p.scale;
+        ctx.beginPath(); ctx.arc(pin.x,pin.y,6/p.scale,0,Math.PI*2); ctx.fill(); ctx.stroke();
+        ctx.font = `${12/p.scale}px sans-serif`; ctx.textAlign='center';
+        const half=ctx.measureText(pin.label).width/2;
+        let y=pin.y-10/p.scale;
+        for(let attempt=0;attempt<8;attempt++) {
+          if(!labels.some(box=>pin.x+half>box.left&&pin.x-half<box.right&&y>box.top&&y-14/p.scale<box.bottom))break;
+          y-=15/p.scale;
+        }
+        labels.push({left:pin.x-half,right:pin.x+half,top:y-14/p.scale,bottom:y});
+        ctx.strokeText(pin.label,pin.x,y); ctx.fillText(pin.label,pin.x,y);
+      }
       ctx.restore();
     };
     animation = requestAnimationFrame(draw);
     return () => { cancelAnimationFrame(animation); resize.disconnect(); };
   }, [active, buffer, fps]);
-  return <canvas ref={canvasRef} className="block h-full w-full" />;
+  return <canvas ref={canvasRef} className="block h-full w-full" onClick={event => {
+    if (!onWaypoint) return;
+    const rect = event.currentTarget.getBoundingClientRect(), v = viewport.current;
+    onWaypoint({x:v.left+(event.clientX-rect.left)/v.scale,y:v.top+(event.clientY-rect.top)/v.scale});
+  }} />;
 }

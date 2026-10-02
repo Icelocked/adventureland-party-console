@@ -202,6 +202,9 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
     },
     [post, name],
   );
+  const onAddBlacklist = useCallback(async (monsterId: string) => {
+    await post('/hunt-blacklist', {action:'add',monsterId,character:name});
+  }, [post,name]);
   const onSelectFarmingPolicy = useCallback(
     (mode: FarmingPolicy) => void setFarmingPolicy(mode, name),
     [setFarmingPolicy, name],
@@ -378,6 +381,7 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
             renderMonsterDetails={renderMonsterDetails}
             onInspectMonster={onInspectMonster}
             onClearBlacklist={onClearBlacklist}
+            onAddBlacklist={onAddBlacklist}
             effectiveMode={
               char.farmingMode || state.partyFarmingMode || 'default'
             }

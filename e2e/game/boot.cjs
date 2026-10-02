@@ -1,6 +1,7 @@
 const { spawn, spawnSync } = require('node:child_process');
 const { MongoClient } = require('mongodb');
 async function main() {
+  if (process.env.AL_DEBUG_INSTANCE === '1') require('./configure.cjs');
   const client = new MongoClient(require('../secretsandconfig/keys.js').mongodb_uri);
   await client.connect();
   const db = client.db('al_e2e');

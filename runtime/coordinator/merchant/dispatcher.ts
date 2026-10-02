@@ -1,4 +1,5 @@
 import { buyUpgradeOrder } from './commerce-progress.ts';
+import { hasMarkedWithdrawals } from './marked-withdrawals.ts';
 import { merchantJobReady } from './priority.ts';
 import { splitLegacyWork } from './routines.ts';
 import { mergePickupJobs } from './pickup-jobs.ts';
@@ -26,6 +27,7 @@ interface AnniversaryControl {
   busy: boolean;
 }
 export interface DispatchPorts {
+  productionPending?(): {id: string; name: string; level: number; kind: string}[];
   eventReserved?(): boolean;
   enabled?(job: MerchantWork): boolean;
   travel?(realm: string): Promise<unknown>;
@@ -68,6 +70,8 @@ export interface DispatchPorts {
 export function createMerchantDispatcher(state: DispatchState, ports: DispatchPorts) {
   const realmCheck = createPartyRealmCheck(state, ports);
   let capacityBankAt = -Infinity;
+  let productionHold = '';
+  let productionProbeAt = -Infinity;
   function clearCollectionCapacity(): boolean {
     if (!state.queue.some(job => ports.capacityBlocked(job))) return false;
     const merchant = ports.merchant()!, work = ports.inputs().work(merchant);
@@ -108,6 +112,7 @@ export function createMerchantDispatcher(state: DispatchState, ports: DispatchPo
   }
 
   function ready(job: MerchantWork): boolean {
+    if (ports.enabled?.(job) === false) return false;
     return merchantJobReady(job, {now: ports.now(), priority: candidate => ports.priority(candidate as MerchantWork),
       capacityBlocked: candidate => ports.capacityBlocked(candidate as MerchantWork), collectionReady: candidate => ports.collectionReady(candidate as MerchantWork)});
   }
@@ -214,6 +219,7 @@ export function createMerchantDispatcher(state: DispatchState, ports: DispatchPo
   }
 
   function hasQueuedWork(job: MerchantWork): boolean {
+    if (job.reason === 'withdrawals') return hasMarkedWithdrawals(ports.inputs().work(job.target).withdrawals);
     if (job.reason === "deliveries") return ports.inputs().work(job.target).deliveries.length > 0;
     if (job.reason !== "manual compounds") return true;
     if (ports.inputs().work(job.target).compounds.length) return true;
@@ -226,7 +232,7 @@ export function createMerchantDispatcher(state: DispatchState, ports: DispatchPo
     if (!merchantAlive()) return false;
     state.queue = mergePickupJobs(state.queue, ports.merchant()).map(job => ports.stamp(job));
     if (ports.returningHome() && !ports.ensureHome("resuming merchant work")) return false;
-    state.queue = state.queue.flatMap(job => splitLegacyWork(job)).filter(hasQueuedWork).filter((job) => !ports.bankboi(job.target) && ports.enabled?.(job) !== false && !(job.reason === "join giveaway" && Number(job.expiresAt) < ports.now()));
+    state.queue = state.queue.flatMap(job => splitLegacyWork(job)).filter(hasQueuedWork).filter((job) => !ports.bankboi(job.target) && (buyUpgradeOrder(job) || ports.enabled?.(job) !== false) && !(job.reason === "join giveaway" && Number(job.expiresAt) < ports.now()));
     return !state.current && !!ports.merchant() && !ports.manualEquipmentPending() && !reserved();
   }
 
@@ -234,8 +240,33 @@ export function createMerchantDispatcher(state: DispatchState, ports: DispatchPo
     const merchant = ports.status(ports.merchant());
     return !!merchant && !merchant.rip && merchant.seenAt >= ports.now() - 10000;
   }
+  function productionHeld(): boolean {
+    const pending = ports.productionPending?.() || [];
+    if (pending.length) {
+      if (state.current) return true; // An admitted in-flight operation is ordinary work, not a recovery alarm.
+      const identity = JSON.stringify(pending);
+      if (productionHold !== identity) {
+        productionHold = identity;
+        ports.log('Production recovery pending; merchant work held for receipt reconciliation', 'error', {pending});
+      }
+      // Keep active work intact. An idle merchant can reconcile its journal
+      // without travelling, moving inventory, or admitting another operation.
+      if (!state.current && merchantAlive() && ports.now() - productionProbeAt >= 5000) {
+        productionProbeAt = ports.now();
+        ports.command(ports.merchant(), {id:ports.nextCommand(), type:'merchant-production-recover'});
+      }
+      return true;
+    }
+    productionHold = '';
+    productionProbeAt = -Infinity;
+    return false;
+  }
   function dispatch(): void {
     if (ports.eventReserved?.()) return;
+    if (productionHeld()) return;
+    dispatchReady();
+  }
+  function dispatchReady(): void {
     if (gatheringCastActive(ports.status(ports.merchant()), ports.now())) return;
     if (realmCheck.advance()) return;
     state.queue.forEach(realmCheck.eligibility);

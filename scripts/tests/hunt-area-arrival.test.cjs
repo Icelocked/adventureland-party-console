@@ -33,7 +33,9 @@ const {namedFunction}=require('./helpers/named-function.cjs');
 test('three visible nominations authorize only the current target; incidental aggro blocks the next pull',()=>{
  const a={id:'a'},b={id:'b'},c={id:'c'}, group={protocol:4,committed:true,target:{id:'a',map:'spookytown',in:'spookytown',server:'USII',state:'planned'}};
  const context={root:{},groupedCombat:group,character:{map:'spookytown',in:'spookytown'},parent:{entities:{}},travelCombatActive:()=>false,groupedFarming:()=>true,groupedFresh:()=>true,reunionRealm:()=> 'USII',isAttackingPartyMember:e=>e.target==='W'};
- vm.createContext(context);vm.runInContext(namedFunction(fs.readFileSync('characters/shared.js','utf8'),'groupedAttackAllowed'),context);
+ vm.createContext(context);
+ const shared=fs.readFileSync('characters/shared.js','utf8');
+ vm.runInContext(namedFunction(shared,'dungeonOwned')+'\n'+namedFunction(shared,'groupedAttackAllowed'),context);
  assert.equal(context.groupedAttackAllowed(a),true);assert.equal(context.groupedAttackAllowed(b),false);assert.equal(context.groupedAttackAllowed(c),false);
  context.parent.entities.extra={id:'extra',type:'monster',visible:true,target:'W'};
  assert.equal(context.groupedAttackAllowed(a),false);

@@ -14,6 +14,7 @@ export interface NpcSale {
   retryAt?: number;
   retryCount?: number;
   blockedInventory?: string;
+  blockedAt?: number;
   auto?: boolean;
   autoRuleKey?: string;
   queuedAt?: number;
@@ -29,6 +30,24 @@ function clearBlocked(mark: NpcSale): void {
   mark.retryAt = 0;
   mark.error = null;
   delete mark.blockedInventory;
+  delete mark.blockedAt;
+}
+
+function blockInventory(mark: NpcSale, locked: boolean, signature: string, now: number): void {
+  if (locked) delete mark.blockedAt;
+  else mark.blockedAt ??= now;
+  mark.state = 'blocked';
+  mark.error = locked ? 'Item is locked' : 'Marked item is not in merchant inventory';
+  mark.blockedInventory = signature;
+}
+
+function retainBlocked(mark: NpcSale, now: number): NpcSale | null {
+  if (mark.error !== 'Marked item is not in merchant inventory') {
+    delete mark.blockedAt;
+    return mark;
+  }
+  mark.blockedAt ??= now;
+  return mark.auto && now - mark.blockedAt > 300_000 ? null : mark;
 }
 
 function reconcileInventory(
@@ -36,6 +55,7 @@ function reconcileInventory(
   inventory: Inventory,
   used: Map<number, number>,
   signature: string,
+  now: number,
 ): "duplicate" | "blocked" | "ready" {
   const matches = inventory.filter(
     (entry): entry is NonNullable<Inventory[number]> => !!entry && identity(entry.item, mark.item),
@@ -46,9 +66,7 @@ function reconcileInventory(
     matches.find((entry) => entry.slot === mark.slot && available(entry)) || matches.find(available);
   if (!entry && matches.length && !mark.character) return "duplicate";
   if (!entry || entry.item.l) {
-    mark.state = "blocked";
-    mark.error = entry ? "Item is locked" : "Marked item is not in merchant inventory";
-    mark.blockedInventory = signature;
+    blockInventory(mark, !!entry, signature, now);
     return "blocked";
   }
   used.set(entry.slot, (used.get(entry.slot) || 0) + mark.quantity);
@@ -71,11 +89,11 @@ function reconcileMark(
     mark.state = "running";
     return mark;
   }
-  if (mark.state === "blocked" && mark.blockedInventory === signature) return mark;
+  if (mark.state === "blocked" && mark.blockedInventory === signature) return retainBlocked(mark, now);
   if (mark.source === "merchant") {
-    const result = reconcileInventory(mark, inventory, used, signature);
+    const result = reconcileInventory(mark, inventory, used, signature, now);
     if (result === "duplicate") return null;
-    if (result === "blocked") return mark;
+    if (result === "blocked") return retainBlocked(mark, now);
   } else clearBlocked(mark);
   mark.state = (mark.retryAt || 0) > now ? "retrying" : "queued";
   return mark;
