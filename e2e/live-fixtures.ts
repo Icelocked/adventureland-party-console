@@ -9,6 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gateway } from '../tools/hosting/gateway';
 import { Access } from '../tools/hosting/access';
+import { selectionFields, stateKeys } from '../runtime/coordinator/persistence/snapshots';
 import { loadouts, seedLoadout, type NativeLoadout } from './game/loadouts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -121,8 +122,12 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           await testInfo.attach('declared-historical-settings-seed', { body: JSON.stringify(historical), contentType: 'application/json' });
           const bankKeys = new Set(['bankbois', 'bankboiTransaction']);
           const bankPatch = Object.fromEntries(Object.entries(historical).filter(([field]) => bankKeys.has(field)));
-          const settingsPatch = Object.fromEntries(Object.entries(historical).filter(([field]) => !bankKeys.has(field)));
+          const selectionKeys = new Set<string>(selectionFields);
+          const selectionsPatch = Object.fromEntries(Object.entries(historical).filter(([field]) => selectionKeys.has(field)));
+          const settingsPatch = Object.fromEntries(Object.entries(historical).filter(([field]) => !bankKeys.has(field) && !selectionKeys.has(field)));
           const restored: Record<string, string> = { [key]: JSON.stringify({ ...settings, ...settingsPatch }) };
+          if (Object.keys(selectionsPatch).length)
+            restored[stateKeys.selections] = JSON.stringify({ ...JSON.parse(stored[stateKeys.selections] || '{}'), ...selectionsPatch });
           if (Object.keys(bankPatch).length) {
             const bankKey = 'party_dashboard_bank_state_v1';
             restored[bankKey] = JSON.stringify({ ...JSON.parse(stored[bankKey] || '{}'), ...bankPatch });

@@ -741,13 +741,15 @@ for (const kind of ['upgrade', 'compound']) test(`auto merchant collects twelve 
   // Declared initial rules reproduce coexisting persisted preferences. Native
   // clients must transfer all copies even though only one result is requested.
   const name=kind==='upgrade'?'helmet':'ringsj', owner='E2EWarrior';
-  await catalog(live,name);
+  await catalog(live,'helmet'); // Catalog readiness; ringsj is loot-only stock.
   await live.post('/config',{itemCollectionThreshold:10});
   await live.admin(`output=(()=>{const p=get_player('${owner}');for(let i=0;i<12;i++)p.items[20+i]={name:'${name}',level:0};cache_player_items(p);resend(p,'reopen+cid');return p.items.slice(20,32)})()`);
   await expect.poll(async()=>(await live.clients[owner].snapshot()).items.filter((i:Item|null)=>i?.name===name).length).toBe(12);
   await live.restoreHistoricalSettings(()=>({autoItemMarks:{[merchant]:{[name+'@+0']:'merchant'}},
     autoUpgradeMarks:kind==='upgrade'?{[merchant]:{[name+'@+0']:{tiers:1,quantity:1}}}:{},
     autoCompounds:kind==='compound'?{[merchant]:[{name,targetTier:1,quantity:1}]}:{}}));
+  await expect.poll(async()=>(await live.state()).autoItemMarks?.[merchant]?.[name+'@+0']).toBe('merchant');
+  await live.post('/merchant/routine-priorities',{priorities:{},enabled:{'party collection':true,['auto '+kind]:true}});
   await expect.poll(async()=>(await live.clients[owner].snapshot()).items.filter((i:Item|null)=>i?.name===name).length,
     {timeout:180_000,message:'Every copy must reach the merchant through native collection'}).toBe(0);
   const count=async()=>{const all=(await economy(live)).characters;return Object.values(all).flatMap(c=>c.items).filter(i=>i?.name===name)};
