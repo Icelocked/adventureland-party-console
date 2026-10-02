@@ -99,6 +99,9 @@ Personal Tracktrix items use the native item ID `tracker`, not `tracktrix`.
 Merchant collection and emergency cleanout retain trackers and supercomputers.
 Character inventory maintenance pins one to the final inventory slot when no
 inventory command is running; merchant lucky-slot tidying preserves that slot.
+Use the native `isize` capacity for this destination, since item arrays can extend
+into overflow cells. Dashboard inventory streams retain occupied overflow cells;
+fighter inventory compaction keeps a tracker pinned in the final visible slot.
 Explicit Give remains available. Validate the native full-bag Tracktrix cleanout
 journey in `e2e/live-economy.spec.ts`, with conserved cargo and restart evidence.
 Publish character and coordinator assets through the supported full restart;
