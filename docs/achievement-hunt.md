@@ -1,14 +1,17 @@
 # Achievement Hunt
 
 Achievement Hunt farms monsters for their kill achievements (the permanent stat
-rewards in `G.monsters[id].achievements`). It works like Hunt mode, but it chooses
-its own targets from achievement progress instead of taking quests from Daisy.
+rewards in `G.monsters[id].achievements`). It is a farming mode like Hunt
+(`farmingPolicy: "achievements"`, chosen next to Auto, Default, Scatter and Hunt),
+but it chooses its own targets from achievement progress instead of taking
+quests from Daisy.
 
-It only chooses *what* to farm. Travel, formation, grouped combat, competition
-relocation and the fight style (Auto, Default or Scatter in `farmingPolicy`)
-work exactly as they do when a monster is picked by hand. Each target switch goes
-through the same `manual-monster-override` convoy as `navigate-to-monster`,
-except that it keeps the fight style instead of resetting it to Auto.
+It only chooses *what* to farm. Travel, formation, grouped combat and
+competition relocation work exactly as they do when a monster is picked by
+hand, and the fight style follows Auto's logic as in Hunt (scatter where it has
+been learned per monster). Each target switch goes through the same
+`manual-monster-override` convoy as `navigate-to-monster`, except that it stays
+in Achievement Hunt instead of resetting the mode to Auto.
 
 ## Choosing targets
 
@@ -41,16 +44,17 @@ Skipping works like Hunt's blacklist:
 
 ## Failure modes considered before implementation
 
-1. **Fighting the player.** If the player picks another monster or changes
-   focus while Achievement Hunt is running, re-selecting the target would undo
-   their choice every tick. Instead, Achievement Hunt pauses and reports why.
+1. **Fighting the player.** If the player changes the monster focus while
+   Achievement Hunt is running, re-selecting the target would undo their choice
+   every tick. Instead the mode switches to Auto, as picking a monster by hand
+   does, and reports why.
 2. **Thrashing.** Kill counts arrive from several clients and can lag. A target
    switch happens only when the current target's milestone is met, or when it is
    blacklisted or unselected, never because of small count differences.
-3. **Conflicting owners.** Hunt mode, daily dungeons, an event trip, a rare hunt
-   or another convoy may own travel. Achievement Hunt must not start a convoy
-   then; it waits. It cannot be enabled while Hunt mode is on, and choosing Hunt
-   turns it off.
+3. **Conflicting owners.** A daily dungeon, an event trip, a rare hunt or
+   another convoy may own travel. Achievement Hunt must not start a convoy then;
+   it waits. Hunt is a different farming mode, so the two never run together;
+   choosing another mode forgets the target.
 4. **Offline leader.** With no fresh leader report there is no party to move.
    It waits.
 5. **No route.** A selected monster may have no known spawn. It is skipped
@@ -65,8 +69,9 @@ Skipping works like Hunt's blacklist:
 8. **Restart.** Settings, blacklist and current target persist with the other
    farming settings, so a restart resumes the same target instead of starting
    over.
-9. **Fight style.** Switching targets must keep Auto, Default or Scatter.
-   Only the learned scatter state for the old monster resets, as on any focus
-   change.
+9. **Staying in the mode.** A target switch must keep the farming mode on
+   Achievement Hunt (picking a monster by hand resets it to Auto). Only the
+   learned scatter state for the old monster resets, as on any focus change.
+   Only the party leader's farming offers the mode.
 10. **Monsters with no achievements, or finished ladders.** They are never
     targets, and listing them is harmless.

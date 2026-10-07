@@ -30,7 +30,7 @@ function initialAchievementHunt(saved: SavedFarming) {
     achievementHunt: {...defaultAchievementHuntSettings, ...saved.achievementHunt} as AchievementHuntSettings,
     achievementBlacklist: saved.achievementBlacklist || {},
     achievementTarget: saved.achievementTarget || null,
-    achievementMessage: saved.achievementHunt?.enabled ? "Resuming" : "Off",
+    achievementMessage: "",
   };
 }
 
