@@ -730,6 +730,36 @@ export function startCoordinatorApplication(
       setPassive: (settings) => rareControl.setSettings(settings),
       invalidate: (...args) => farmingNavigation.invalidate(...args),
     });
+    // Achievement Hunt (docs/achievement-hunt.md): picks targets from kill-achievement
+    // progress and moves the party with the manual-monster convoy, keeping its fight style.
+    function achievementHuntBusy(): string | null {
+      if (dungeonOwns(party)) return "a daily dungeon is running";
+      if (party.monsterHunt) return "Hunt mode owns travel";
+      if (party.eventReturn || Object.keys(party.eventSessions || {}).length) return "an event trip is in progress";
+      if (rareControl.owns()) return "a rare hunt is running";
+      return otherConvoyRunning() ? "the party is travelling" : null;
+    }
+    function otherConvoyRunning(): boolean {
+      const convoy = party.activeConvoy as { purpose?: string | null; phase?: string } | null | undefined;
+      return !!convoy && convoy.purpose !== "manual-monster-override" && !["complete", "failed"].includes(String(convoy.phase));
+    }
+    const achievementHunt = coordinatorPolicies.createAchievementHunt(party, {
+      now: () => Date.now(),
+      members: () => farmingNavigation.members(),
+      busy: achievementHuntBusy,
+      destination: (type) => coordinatorPolicies.coordinatorHuntDestination(party, type,
+        (choices, focus) => farmZones.zones(choices, focus), false),
+      select: (id, location) => monsterSelectionRoutes.achievementTarget(id, location),
+      persist: persistSettings,
+    });
+    // Phoenix needs a route order and the Fairy passive hunting; neither can be a target.
+    const achievementHuntRoute = coordinatorPolicies.createAchievementHuntRoute(party, {
+      now: () => Date.now(),
+      known: () => new Set(coordinatorPolicies.achievementMonsters(party.bestiaryCatalog as never, party.monsterChoices)
+        .map((monster) => monster.id).filter((id) => id !== "phoenix" && id !== "tinyp")),
+      reset: () => achievementHunt.reset(),
+      persist: persistSettings,
+    });
     const staleOrderRoute = coordinatorPolicies.createStaleOrderRoute(party, persistSettings);
     const {
       automatic: automaticSaleRoutes,
@@ -1999,6 +2029,7 @@ export function startCoordinatorApplication(
     function monsterHuntTick(_previousStatus?: unknown, _changedName?: string) {
       dungeons.reconcile();
       if (party.leader && !dungeonOwns(party)) huntTick.tick();
+      if (party.leader && !dungeonOwns(party)) achievementHunt.tick();
       for (const service of independentServices()) {
         const before = JSON.stringify(service.state.monsterHunt);
         service.huntTick.tick();
@@ -2141,6 +2172,7 @@ export function startCoordinatorApplication(
               realmRoutes,
               statusIngestion,
               monsterSelectionRoutes,
+              achievementHuntRoute,
               focusRoute: scopedRoute(focusRoute, service => service.focusRoute),
               formationRoute,
               huntBlacklistRoute: scopedRoute(huntBlacklistRoute, service => service.huntBlacklistRoute, true),
