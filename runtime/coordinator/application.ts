@@ -654,6 +654,11 @@ export function startCoordinatorApplication(
       controls: huntControlRoutes,
     } = coordinatorPolicies.createCoordinatorHuntActions(party, {
       now: () => Date.now(),
+      achievementsAvailable: () => {
+        const leader = party.leader ? party.statuses[party.leader] : undefined;
+        if (!leader || Date.now() - leader.seenAt > 10000) return "an online party leader is required";
+        return party.achievementHunt?.monsters.length ? null : "choose at least one monster for Achievement Hunt";
+      },
       fighting: (state, names) => convoyDefense.fighting(state, names),
       participants: huntParticipants,
       intent: (name) => farmingNavigation.intent(name),
@@ -734,7 +739,6 @@ export function startCoordinatorApplication(
     // progress and moves the party with the manual-monster convoy, keeping its fight style.
     function achievementHuntBusy(): string | null {
       if (dungeonOwns(party)) return "a daily dungeon is running";
-      if (party.monsterHunt) return "Hunt mode owns travel";
       if (party.eventReturn || Object.keys(party.eventSessions || {}).length) return "an event trip is in progress";
       if (rareControl.owns()) return "a rare hunt is running";
       return otherConvoyRunning() ? "the party is travelling" : null;

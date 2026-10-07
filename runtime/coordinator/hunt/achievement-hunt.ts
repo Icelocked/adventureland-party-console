@@ -1,6 +1,6 @@
-// Achievement Hunt: chooses farming targets from monster kill-achievement
-// progress and hands each one to the regular manual-monster convoy, keeping
-// the party's fight style (docs/achievement-hunt.md, failure modes 1-10).
+// Achievement Hunt, the "achievements" farming mode: chooses farming targets
+// from monster kill-achievement progress and hands each one to the regular
+// manual-monster convoy (docs/achievement-hunt.md, failure modes 1-10).
 import type { ReturnLocation } from "../events/return-types.ts";
 import {
   achievementMonsters,
@@ -37,10 +37,10 @@ export interface AchievementHuntState {
 export interface AchievementHuntPorts {
   now(): number;
   members(): string[];
-  /** Why another owner holds travel right now (Hunt, dungeon, event, rare hunt, convoy), or null. */
+  /** Why another owner holds travel right now (dungeon, event, rare hunt, convoy), or null. */
   busy(): string | null;
   destination(id: string): ReturnLocation | null | undefined;
-  /** Starts the manual-monster convoy keeping the fight style; null when it could not start. */
+  /** Starts the manual-monster convoy, staying in this mode; null when it could not start. */
   select(id: string, location: ReturnLocation): string[] | null;
   persist(): void;
 }
@@ -66,8 +66,9 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
     const status = state.leader ? state.statuses[state.leader] : undefined;
     return !!status && ports.now() - status.seenAt <= 10_000;
   }
+  /** Leaves the mode for Auto, as picking a monster by hand does. */
   function stop(message: string): void {
-    settings().enabled = false;
+    state.farmingPolicy = "auto";
     state.achievementTarget = null;
     say(message);
     ports.persist();
@@ -136,14 +137,17 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
   }
 
   function tick(): void {
-    if (!settings().enabled) return;
-    if (state.farmingPolicy === "hunt") return stop("Off: Hunt mode is on");
+    if (state.farmingPolicy !== "achievements") {
+      // Another mode was chosen: forget the target; that mode owns travel now.
+      if (state.achievementTarget) { state.achievementTarget = null; say(""); ports.persist(); }
+      return;
+    }
     if (!leaderOnline()) return say("Waiting for an online party leader");
     const names = ports.members();
     recordDeaths(names);
     const busy = ports.busy();
     if (busy) return say(`Waiting: ${busy}`);
-    if (focusChangedByHand()) return stop("Paused: the monster focus was changed by hand");
+    if (focusChangedByHand()) return stop("Switched to Auto: the monster focus was changed by hand");
     const order = achievementMonsters(state.bestiaryCatalog as AchievementCatalogEntry[] | null, state.monsterChoices);
     const kills = partyAchievementKills(state.statuses, names.length ? names : [String(state.leader)]);
     if (!stillWorking(order, kills)) switchTo(order, kills);
