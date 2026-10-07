@@ -10,6 +10,7 @@ import { CharacterMapSection } from './character-map-section';
 import { MonsterDetailsDialog } from './monster-details-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { FarmingModeControl } from './farming-mode-control';
+import { AchievementHuntControl } from './achievement-hunt-control';
 import { farmingContext } from './farming-context';
 import { GoldTargetControl } from './gold-target-control';
 import { MerchantCardControls } from './merchant-card-controls';
@@ -205,6 +206,12 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
   const onAddBlacklist = useCallback(async (monsterId: string) => {
     await post('/hunt-blacklist', {action:'add',monsterId,character:name});
   }, [post,name]);
+  const onAchievementHuntSave = useCallback(async (settings: Record<string, unknown>) => {
+    await post('/achievement-hunt', { settings });
+  }, [post]);
+  const onAchievementBlacklist = useCallback(async (action: 'add' | 'remove' | 'clear', monsterId?: string) => {
+    await post('/achievement-hunt', { blacklist: { action, monsterId } });
+  }, [post]);
   const onSelectFarmingPolicy = useCallback(
     (mode: FarmingPolicy) => void setFarmingPolicy(mode, name),
     [setFarmingPolicy, name],
@@ -388,6 +395,16 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
             hunt={farming.hunt}
             characterHunt={char.monsterHunt}
             onSelect={onSelectFarmingPolicy}
+          />
+        ) : null}
+        {char.name === state.leader ? (
+          <AchievementHuntControl
+            state={state}
+            kills={char.monsterAchievementKills || emptyRecord<number>()}
+            catalog={monsters}
+            onSave={onAchievementHuntSave}
+            onBlacklist={onAchievementBlacklist}
+            renderMonsterDetails={renderMonsterDetails}
           />
         ) : null}
         {char.name === state.merchantCharacter ? (
