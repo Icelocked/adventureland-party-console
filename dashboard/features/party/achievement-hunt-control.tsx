@@ -53,7 +53,7 @@ export function AchievementHuntControl({
   // "Up to here": every regular monster from the weakest through this one; special picks are kept.
   const upTo = (index: number) => choose([...regular.slice(0, index + 1).map((m) => m.id), ...special.filter((m) => selected.has(m.id)).map((m) => m.id)]);
   if (!settings) return null;
-  const hunting = state.farmingPolicy === "hunt";
+  const active = state.farmingPolicy === "achievements";
   const row = (monster: AchievementMonster, index: number | null) => (
     <div key={monster.id} className={`flex items-center gap-2 rounded border p-2 ${blacklist[monster.id] ? "border-rose-900 opacity-60" : "border-emerald-800"} bg-[#07110f]`}>
       <input type="checkbox" aria-label={`Farm ${monster.name} for achievements`} checked={selected.has(monster.id)} disabled={busy} onChange={() => void toggle(monster.id)} className="h-4 w-4 accent-emerald-500" />
@@ -66,15 +66,10 @@ export function AchievementHuntControl({
   );
   return (
     <section aria-label="Achievement Hunt" className="mt-3 space-y-2 rounded border border-emerald-800 bg-[#081713] p-3 text-emerald-50">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold">Achievement Hunt</span>
-        <Button size="sm" className={control} disabled={busy || (hunting && !settings.enabled) || !selected.size} onClick={() => void save({ enabled: !settings.enabled })}>
-          {settings.enabled ? "Stop" : "Start"}
-        </Button>
-      </div>
+      <span className="text-sm font-semibold">Achievement Hunt</span>
       <p className="text-xs text-emerald-100/80">
-        {hunting && !settings.enabled ? "Turn off Hunt mode to start." : state.achievementMessage || "Off"}
-        {" · "}{selected.size} selected · fight style follows Auto/Default/Scatter
+        {active ? state.achievementMessage || "Starting" : "Choose Achievements in Farming settings to start."}
+        {" · "}{selected.size} selected
       </p>
       <div className="flex flex-wrap gap-2">
         <Button size="sm" className={control} onClick={() => { setError(""); setOpen(true); }}>Choose monsters…</Button>

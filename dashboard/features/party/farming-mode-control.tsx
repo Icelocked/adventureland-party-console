@@ -38,7 +38,10 @@ export const FarmingModeControl = memo(function FarmingModeControl({
   passiveRareHunts, passiveHunting,
   onRareChange,
   radius, onRadiusSave, radiusContext, farmArea,
+  achievementsAvailable,
 }: {
+  /** Offer Achievement Hunt (the party leader only). */
+  achievementsAvailable?: boolean;
   farmArea?: PartyState["farmAreaState"];
   followingLeader?: string; effectivePolicy?: FarmingPolicy; settingsOwner?: string;
   huntSettings?: PartyState["huntSettings"];
@@ -109,6 +112,12 @@ export const FarmingModeControl = memo(function FarmingModeControl({
       description: "One quest at a time: leader first, then the next member if its monster is blacklisted",
       color: "border-amber-600 bg-amber-950 text-amber-100 hover:bg-amber-900",
     },
+    ...(achievementsAvailable ? [{
+      id: "achievements" as const,
+      label: "Achievements",
+      description: "Farm the selected monsters for their kill achievements, weakest first, one milestone step at a time",
+      color: "border-rose-600 bg-rose-950 text-rose-100 hover:bg-rose-900",
+    }] : []),
   ];
   return (
     <section className="mt-4 border-t border-emerald-900/70 pt-3">
@@ -125,7 +134,7 @@ export const FarmingModeControl = memo(function FarmingModeControl({
           </span>
           <span className="rounded border border-cyan-700 bg-cyan-950 px-2 py-1 font-mono text-[10px] uppercase text-cyan-100">
             {followingLeader ? "Copy leader" : policy}
-            {!inherited && (policy === "auto" || policy === "hunt") ? ` · ${effectiveMode}` : ""}
+            {!inherited && (policy === "auto" || policy === "hunt" || policy === "achievements") ? ` · ${effectiveMode}` : ""}
           </span>
         </button>
         <Button

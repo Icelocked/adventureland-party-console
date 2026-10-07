@@ -1,7 +1,7 @@
 // Achievement Hunt settings and blacklist (docs/achievement-hunt.md).
 
+/** Achievement Hunt runs while farmingPolicy is "achievements"; these are its choices. */
 export interface AchievementHuntSettings {
-  enabled: boolean;
   /** Selected monster ids; list order comes from the bestiary, not from here. */
   monsters: string[];
   blacklistDeaths: boolean;
@@ -26,7 +26,6 @@ export interface AchievementTargetState {
 
 // A rotation visits many easy monsters; one unlucky death should not skip one.
 export const defaultAchievementHuntSettings: AchievementHuntSettings = {
-  enabled: false,
   monsters: [],
   blacklistDeaths: true,
   deathThreshold: 3,
@@ -42,6 +41,6 @@ const validMonsters = (value: unknown) =>
 export function validAchievementHuntSettings(value: unknown): value is Partial<AchievementHuntSettings> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const settings = value as Record<string, unknown>;
-  return optionalBoolean(settings.enabled) && optionalBoolean(settings.blacklistDeaths) &&
+  return optionalBoolean(settings.blacklistDeaths) &&
     validThreshold(settings.deathThreshold) && validMonsters(settings.monsters);
 }

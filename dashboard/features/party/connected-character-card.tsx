@@ -395,6 +395,7 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
             hunt={farming.hunt}
             characterHunt={char.monsterHunt}
             onSelect={onSelectFarmingPolicy}
+            achievementsAvailable={char.name === state.leader && !!state.achievementHunt}
           />
         ) : null}
         {char.name === state.leader ? (

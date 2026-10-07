@@ -20,17 +20,11 @@ export function createAchievementHuntRoute(state: AchievementHuntState, ports: P
     if (!validAchievementHuntSettings(value)) return [400, "Invalid Achievement Hunt settings"];
     const patch = value as Partial<AchievementHuntSettings>;
     if (patch.monsters?.some((id) => !known.has(id))) return [400, "Unknown monster, or one Achievement Hunt cannot target"];
-    if (patch.enabled && state.farmingPolicy === "hunt") return [409, "Turn off Hunt mode before starting Achievement Hunt"];
-    const was = state.achievementHunt.enabled;
     state.achievementHunt = {
       ...state.achievementHunt,
       ...patch,
       monsters: patch.monsters ? [...new Set(patch.monsters)] : state.achievementHunt.monsters,
     };
-    if (!state.achievementHunt.enabled) {
-      state.achievementTarget = null;
-      state.achievementMessage = "Off";
-    } else if (!was) state.achievementMessage = "Starting";
     ports.reset();
     return null;
   }

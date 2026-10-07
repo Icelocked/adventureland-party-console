@@ -20,9 +20,9 @@ function fixture(kills, extra = {}) {
   let now = 1_000_000;
   const selected = [];
   const state = {
-    leader: 'L', farmingPolicy: 'default', monsterFocus: [], bestiaryCatalog: catalog, monsterChoices: choices,
+    leader: 'L', farmingPolicy: 'achievements', monsterFocus: [], bestiaryCatalog: catalog, monsterChoices: choices,
     statuses: { L: { seenAt: now, monsterAchievementKills: { ...kills } }, F: { seenAt: now, monsterAchievementKills: {} } },
-    achievementHunt: { enabled: true, monsters: ['goo', 'bee', 'wolf'], blacklistDeaths: true, deathThreshold: 2 },
+    achievementHunt: { monsters: ['goo', 'bee', 'wolf'], blacklistDeaths: true, deathThreshold: 2 },
     achievementBlacklist: {}, achievementTarget: null, achievementMessage: '',
     ...extra,
   };
@@ -85,16 +85,16 @@ test('deaths count once each, only after the target started, then blacklist it a
   assert.deepEqual(f.selected, ['goo', 'bee']);
 });
 
-test('a monster focus changed by hand pauses Achievement Hunt instead of fighting the player', () => {
+test('a monster focus changed by hand switches to Auto instead of fighting the player', () => {
   const f = fixture({});
   f.hunt.tick();
   f.advance(20_000); f.state.monsterFocus = ['crab']; f.hunt.tick();
-  assert.equal(f.state.achievementHunt.enabled, false);
+  assert.equal(f.state.farmingPolicy, 'auto');
   assert.match(f.state.achievementMessage, /changed by hand/);
   assert.deepEqual(f.selected, ['goo']);
 });
 
-test('another owner of travel, an offline leader or Hunt mode stop it from starting a convoy', () => {
+test('another owner of travel, an offline leader or another farming mode stop it from starting a convoy', () => {
   const busy = fixture({});
   busy.ports.busy = () => 'a daily dungeon is running';
   busy.hunt.tick();
@@ -104,10 +104,16 @@ test('another owner of travel, an offline leader or Hunt mode stop it from start
   offline.state.statuses.L.seenAt = 0;
   offline.hunt.tick();
   assert.deepEqual(offline.selected, []);
-  const hunting = fixture({}, { farmingPolicy: 'hunt' });
-  hunting.hunt.tick();
-  assert.equal(hunting.state.achievementHunt.enabled, false);
-  assert.deepEqual(hunting.selected, []);
+  const other = fixture({}, { farmingPolicy: 'hunt' });
+  other.hunt.tick();
+  assert.deepEqual(other.selected, []);
+  // Leaving the mode forgets the target; the new mode owns travel.
+  const left = fixture({});
+  left.hunt.tick();
+  left.state.farmingPolicy = 'scatter';
+  left.advance(1_000); left.hunt.tick();
+  assert.equal(left.state.achievementTarget, null);
+  assert.deepEqual(left.selected, ['goo']);
 });
 
 test('a monster without a route is skipped for a while, and the rest of the list continues', () => {
@@ -126,31 +132,29 @@ test('with everything finished it reports so and keeps the party where it is', (
   assert.match(f.state.achievementMessage, /Nothing left to farm/);
 });
 
-test('the route validates monsters, refuses to start during Hunt mode, and edits the blacklist', () => {
-  const f = fixture({}, { achievementHunt: { enabled: false, monsters: [], blacklistDeaths: true, deathThreshold: 3 } });
+test('the settings route validates monsters and thresholds, and edits the blacklist', () => {
+  const f = fixture({}, { achievementHunt: { monsters: [], blacklistDeaths: true, deathThreshold: 3 } });
   const route = createAchievementHuntRoute(f.state, { now: () => 1, known: () => new Set(['goo', 'bee']), reset() {}, persist() {} });
   const call = (body) => { let out; route({ body }, { status: (code) => ({ json: (value) => { out = { code, value }; } }), json: (value) => { out = { code: 200, value }; } }); return out; };
   assert.equal(call({ settings: { monsters: ['goo', 'kraken'] } }).code, 400);
   assert.equal(call({ settings: { deathThreshold: 0 } }).code, 400);
-  assert.equal(call({ settings: { enabled: true, monsters: ['goo', 'goo', 'bee'] } }).code, 200);
+  assert.equal(call({ settings: { monsters: ['goo', 'goo', 'bee'] } }).code, 200);
   assert.deepEqual(f.state.achievementHunt.monsters, ['goo', 'bee']);
   assert.equal(call({ blacklist: { action: 'add', monsterId: 'bee' } }).code, 200);
   assert.ok(f.state.achievementBlacklist.bee);
   assert.equal(call({ blacklist: { action: 'clear' } }).code, 200);
   assert.deepEqual(f.state.achievementBlacklist, {});
-  f.state.achievementHunt.enabled = false; f.state.farmingPolicy = 'hunt';
-  assert.equal(call({ settings: { enabled: true } }).code, 409);
 });
 
-test('an Achievement Hunt switch keeps the fight style; picking a monster by hand still resets it to Auto', () => {
+test('an Achievement Hunt switch stays in the mode; picking a monster by hand still resets it to Auto', () => {
   const { createMonsterSelection } = require('../../runtime/coordinator/navigation/monster-selection.ts');
-  const party = () => ({ leader: 'L', followers: { F: true }, statuses: {}, farmAreaState: null, farmingPolicy: 'scatter', monsterFocus: ['bee'],
+  const party = () => ({ leader: 'L', followers: { F: true }, statuses: {}, farmAreaState: null, farmingPolicy: 'achievements', monsterFocus: ['bee'],
     monsterFocusByCharacter: {}, scatterMonsterTypes: ['bee'], scatterEpoch: 1, partyFarmingMode: 'scatter', partyFarmingMonsterType: 'bee',
     scatterBreakTarget: null, eventReturn: null, deferredEventReturns: {}, eventSessions: {}, commands: {}, passiveRareHunts: {} });
   const ports = { now: () => 1, release() {}, clearHunt() {}, members: () => ['L', 'F'], authorize() {}, start: () => true, startPhoenix() {}, stopPhoenix() {}, persist() {} };
   const kept = party();
   createMonsterSelection(kept, ports).select('goo', { map: 'main', x: 1, y: 2 }, undefined, true);
-  assert.equal(kept.farmingPolicy, 'scatter');
+  assert.equal(kept.farmingPolicy, 'achievements');
   assert.deepEqual(kept.monsterFocus, ['goo']);
   assert.deepEqual(kept.scatterMonsterTypes, []); // learned scatter state for the old monster resets
   const manual = party();
