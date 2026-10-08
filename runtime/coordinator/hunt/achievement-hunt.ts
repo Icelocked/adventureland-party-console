@@ -10,6 +10,7 @@ import {
   type AchievementCatalogEntry,
   type AchievementChoice,
   type AchievementMonster,
+  type AchievementTarget,
 } from "../../hunt/achievement-policy.ts";
 import {
   defaultAchievementHuntSettings,
@@ -108,19 +109,22 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
       ports.now() - current.startedAt > SWITCH_GRACE_MS;
   }
 
-  /** Keeps the current target until its milestone is met, so lagging counts never cause a switch. */
-  function stillWorking(order: AchievementMonster[], kills: Record<string, number>): boolean {
+  /**
+   * Keeps the current target until its milestone is met, so lagging counts never cause a switch.
+   * A monster at a lower step (re-selected, unblacklisted, or a route retry) takes over: kills only
+   * rise, so that cannot thrash.
+   */
+  function stillWorking(order: AchievementMonster[], kills: Record<string, number>, best: AchievementTarget | null): boolean {
     const current = state.achievementTarget;
     if (!current || !settings().monsters.includes(current.id) || excluded(current.id)) return false;
     const monster = order.find((entry) => entry.id === current.id);
     const count = Number(kills[current.id]) || 0;
-    if (!monster || nextStep(monster.ladder, count) !== current.step) return false;
+    if (!monster || nextStep(monster.ladder, count) !== current.step || (best && best.step < current.step)) return false;
     say(`Farming ${monster.name}: ${killText(count, current.milestone, current.step)}`);
     return true;
   }
 
-  function switchTo(order: AchievementMonster[], kills: Record<string, number>): void {
-    const choice = chooseAchievementTarget(order, new Set(settings().monsters), excluded, kills);
+  function switchTo(choice: AchievementTarget | null): void {
     if (!choice) {
       state.achievementTarget = null;
       return say("Nothing left to farm: every selected monster has finished its ladder or is skipped");
@@ -150,7 +154,8 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
     if (focusChangedByHand()) return stop("Switched to Auto: the monster focus was changed by hand");
     const order = achievementMonsters(state.bestiaryCatalog as AchievementCatalogEntry[] | null, state.monsterChoices);
     const kills = partyAchievementKills(state.statuses, names.length ? names : [String(state.leader)]);
-    if (!stillWorking(order, kills)) switchTo(order, kills);
+    const best = chooseAchievementTarget(order, new Set(settings().monsters), excluded, kills);
+    if (!stillWorking(order, kills, best)) switchTo(best);
   }
 
   /** Settings changes forget failed routes, so a fixed spawn is tried again at once. */
