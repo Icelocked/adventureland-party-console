@@ -96,3 +96,14 @@ Skipping works like Hunt's blacklist:
 12. **Upgrading a saved console.** Settings saved before scopes existed sit
     on the party state. The leader's profile picks them up on load, so an
     existing selection survives the upgrade.
+13. **Random-respawn bosses listed as regular.** `G.maps` marks the Dracul
+    (`mvampire`) and Phoenix spawns `stype: "randomrespawn"`, but the bestiary
+    catalog does not carry spawn types and Dracul has no `special` flag. The
+    policy names both, so Dracul lands in the special list.
+
+## Isolated tests
+
+`scripts/tests/achievement-hunt.test.cjs` checks failure modes 1-13 without a
+game. The console E2E journeys (docs/testing.md) cover one goo spawn, so they
+cannot reach a step sweep across several monsters, kill-achievement counts,
+death thresholds or a second independent farming scope.

@@ -1,6 +1,6 @@
 // Achievement Hunt, the "achievements" farming mode: chooses farming targets
 // from monster kill-achievement progress and hands each one to the regular
-// manual-monster convoy (docs/achievement-hunt.md, failure modes 1-10).
+// manual-monster convoy (docs/achievement-hunt.md § Failure modes).
 import type { ReturnLocation } from "../events/return-types.ts";
 import {
   achievementMonsters,
