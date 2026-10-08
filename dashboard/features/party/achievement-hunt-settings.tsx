@@ -116,6 +116,15 @@ export function AchievementHuntSettingsControl({
           onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} />
         <span>deaths</span>
       </div>
+      <label className="flex items-center gap-3 text-sm text-emerald-50">
+        <Checkbox className={checkbox} checked={settings.fillIdle} disabled={busy || !onSave}
+          onCheckedChange={(v) => void save({ fillIdle: !!v })} />
+        Fill respawn waits with nearby monsters
+      </label>
+      <p className="text-xs text-emerald-200">
+        While the target respawns, the party fights weaker monsters that spawn within its search radius. The target always
+        comes first.
+      </p>
       {Object.keys(blacklist).length > 0 && (
         <div aria-label="Achievement Hunt blacklist" className="space-y-2">
           <div className="flex items-center gap-3">

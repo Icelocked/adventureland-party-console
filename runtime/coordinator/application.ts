@@ -758,6 +758,7 @@ export function startCoordinatorApplication(
         destination: (type) => coordinatorPolicies.coordinatorHuntDestination(state, type,
           (choices, focus) => farmZones.zones(choices, focus), false),
         select: ports.select,
+        radius: () => Number(state.monsterSearchRadiusByCharacter?.[String(state.leader)]) || 400,
         persist: persistSettings,
       });
       // Phoenix needs a route order and the Fairy passive hunting; neither can be a target.

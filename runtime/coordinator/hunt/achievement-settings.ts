@@ -6,6 +6,8 @@ export interface AchievementHuntSettings {
   monsters: string[];
   blacklistDeaths: boolean;
   deathThreshold: number;
+  /** Fight nearby, weaker monsters while the target respawns (docs/achievement-hunt.md § Filling respawn waits). */
+  fillIdle: boolean;
 }
 export interface AchievementBlacklistEntry {
   monsterId: string;
@@ -22,6 +24,10 @@ export interface AchievementTargetState {
   deaths: number;
   /** Last counted `lastDeath.at` per character, so one death counts once. */
   counted: Record<string, number>;
+  /** The target and its fillers, as set in the monster focus. */
+  focus?: string[];
+  /** Each member's priority for every touched monster before the target set it; null when unset. */
+  savedPriorities?: Record<string, Record<string, number | null>>;
 }
 
 // A rotation visits many easy monsters; one unlucky death should not skip one.
@@ -29,6 +35,7 @@ export const defaultAchievementHuntSettings: AchievementHuntSettings = {
   monsters: [],
   blacklistDeaths: true,
   deathThreshold: 3,
+  fillIdle: true,
 };
 
 const optionalBoolean = (value: unknown) => value === undefined || typeof value === "boolean";
@@ -41,6 +48,6 @@ const validMonsters = (value: unknown) =>
 export function validAchievementHuntSettings(value: unknown): value is Partial<AchievementHuntSettings> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const settings = value as Record<string, unknown>;
-  return optionalBoolean(settings.blacklistDeaths) &&
+  return optionalBoolean(settings.blacklistDeaths) && optionalBoolean(settings.fillIdle) &&
     validThreshold(settings.deathThreshold) && validMonsters(settings.monsters);
 }

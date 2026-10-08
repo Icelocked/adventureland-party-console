@@ -45,6 +45,32 @@ settings dialog, next to Hunt settings.
 - **Moving on.** When the target's kill count reaches its milestone, the next
   target is chosen.
 
+## Filling respawn waits
+
+Some targets spawn in small numbers and respawn slowly: Orange Snakes
+(`osnake`, 2 to 4 per spawn, 60 s respawn) or Squigtoads (2 per spawn, 120 s).
+With *Fill respawn waits* on (the default), the target's focus also lists the
+nearby monsters that spawn within the search radius of the chosen spawn, for
+example plain snakes next to Orange Snakes, or Squigs under Squigtoads.
+
+Characters already pick targets by priority tier: the highest-priority focused
+monster within reach first, lower tiers only when none is in range. Achievement
+Hunt gives the target priority 90 and each filler priority 10 for every member
+of the farming scope, so the party fights fillers only while no target is up.
+Filler kills count toward their own achievements.
+
+A monster is a filler when it has a spawn on the same map within the search
+radius of the target's spawn, is no stronger than the target by XP per kill,
+is not special, and is not blacklisted.
+
+**Rare variants first.** When the chosen target would itself be a filler of
+another selected monster that is rarer (fewer of it spawn around its spawn
+than of the chosen target) and at the same step or lower, that monster becomes
+the target instead. If the sweep picks plain snakes and Orange Snakes are selected
+at the same step, the party farms Orange Snakes with snakes as fillers, and the
+snake step clears along the way. This applies only while *Fill respawn waits*
+is on.
+
 ## Skipping and blacklisting
 
 Skipping works like Hunt's blacklist:
@@ -100,6 +126,34 @@ Skipping works like Hunt's blacklist:
     (`mvampire`) and Phoenix spawns `stype: "randomrespawn"`, but the bestiary
     catalog does not carry spawn types and Dracul has no `special` flag. The
     policy names both, so Dracul lands in the special list.
+
+14. **A filler outranks the target.** Priorities are per character, and
+    followers read their own. The target and fillers get priorities for every
+    member of the scope, so the target is always the higher tier.
+15. **Fillers that are too strong.** Only monsters no stronger than the target
+    by XP per kill, not special and not blacklisted, become fillers.
+16. **Overwriting the player's priorities.** The previous priority of each
+    touched monster, per member, is saved with the target and restored when
+    the target changes or the mode ends.
+17. **Relocating to a filler-only spawn.** A competition relocation picks among
+    the spawns of every focused monster, so it can move the party to a spawn
+    without the target. When the farming location is no longer at one of the
+    target's spawns, Achievement Hunt moves the party back to the target.
+18. **Mistaking the filler list for a hand change.** The focus check compares
+    against the target plus its fillers, not the target alone.
+19. **Two monsters with one name.** The game names both `snake` and `osnake`
+    "Snake", and both `hen` and `rooster` "Chicken". Duplicated names show the
+    id, for example "Snake (osnake)".
+
+20. **Farming the common monster while its rare variant waits.** Without the
+    rare-variant rule, the sweep farms plain snakes for a step, then Orange
+    Snakes for the same step, killing plain snakes twice over. The chosen
+    target yields to a selected, not excluded monster at the same step or
+    lower whose fillers include it, but only a rarer one: a common, stronger
+    monster at the same spawn (Bee over Goo) has kills enough of its own and
+    would leave its filler unfarmed. Spawn counts come from the monster
+    choices' `spawnRecords`. The swap only happens at a target switch, so it
+    cannot thrash.
 
 ## Tests
 

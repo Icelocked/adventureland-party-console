@@ -27,7 +27,7 @@ function fixture(kills, extra = {}) {
     ...extra,
   };
   const ports = {
-    now: () => now, members: () => ['L', 'F'], busy: () => null, persist() {},
+    now: () => now, members: () => ['L', 'F'], busy: () => null, persist() {}, radius: () => 400,
     destination: (id) => (id === 'nowhere' ? null : { map: 'main', x: 1, y: 2 }),
     select: (id) => { selected.push(id); state.monsterFocus = [id]; return ['L', 'F']; },
   };
@@ -206,7 +206,7 @@ test('each farming scope keeps its own Achievement Hunt; a saved leader profile 
   solo.farmingPolicy = 'achievements';
   const selected = [];
   createAchievementHunt(solo, {
-    now: () => 1_000_000, members: () => ['S'], busy: () => null, persist() {},
+    now: () => 1_000_000, members: () => ['S'], busy: () => null, persist() {}, radius: () => 400,
     destination: () => ({ map: 'main', x: 1, y: 2 }),
     select: (id) => { selected.push(id); solo.monsterFocus = [id]; return ['S']; },
   }).tick();
@@ -214,4 +214,122 @@ test('each farming scope keeps its own Achievement Hunt; a saved leader profile 
   assert.equal(scopes.profile('S').achievementTarget.id, 'wolf');
   assert.equal(root.achievementTarget, null);
   assert.equal(root.farmingPolicy, 'auto');
+});
+
+// Filling respawn waits: failure modes 14-19 in docs/achievement-hunt.md.
+const { nearbyFillers } = require('../../runtime/hunt/achievement-policy.ts');
+const snakes = [
+  { id: 'snake', name: 'Snake', xp: 960, threat: 3, hp: 720, definition: { achievements: ladder(100, 1000) } },
+  { id: 'osnake', name: 'Snake', xp: 1600, threat: 3, hp: 720, definition: { achievements: ladder(100, 1000) } },
+  { id: 'greenjr', name: 'Green Jr.', xp: 9000, threat: 9, hp: 9000, definition: { achievements: ladder(1) } },
+  { id: 'ghost', name: 'Ghost', xp: 400, threat: 2, hp: 400, definition: { achievements: ladder(100) } },
+];
+const halloween = (x, y) => ({ map: 'halloween', x, y, boundary: [x - 60, y - 50, x + 60, y + 50] });
+const spawn = (place, count) => ({ ...place, sourceMap: place.map, count, restrictions: [] });
+const snakeChoices = [
+  { id: 'osnake', locations: [halloween(-590, -335)], spawnRecords: [spawn(halloween(-590, -335), 2)] },
+  { id: 'snake', locations: [halloween(-590, -160)], spawnRecords: [spawn(halloween(-590, -160), 9)] },
+  { id: 'greenjr', locations: [halloween(-590, -160)] },
+  { id: 'ghost', locations: [halloween(900, -750)] },
+];
+
+test('two monsters with one game name show their ids', () => {
+  const order = achievementMonsters(snakes, snakeChoices);
+  assert.equal(order.find((m) => m.id === 'osnake').name, 'Snake (osnake)');
+  assert.equal(order.find((m) => m.id === 'snake').name, 'Snake (snake)');
+  assert.equal(order.find((m) => m.id === 'ghost').name, 'Ghost');
+});
+
+test('fillers are nearby, no stronger than the target, regular and not excluded', () => {
+  const order = achievementMonsters(snakes, snakeChoices);
+  const at = { map: 'halloween', x: -590, y: -335 };
+  // Green Jr. shares the snake spawn but is stronger; the ghost spawn is far away.
+  assert.deepEqual(nearbyFillers(order, snakeChoices, 'osnake', at, 400, () => false), ['snake']);
+  assert.deepEqual(nearbyFillers(order, snakeChoices, 'osnake', at, 400, (id) => id === 'snake'), []);
+  assert.deepEqual(nearbyFillers(order, snakeChoices, 'osnake', at, 100, () => false), []);
+});
+
+function snakeFixture(extra = {}) {
+  let now = 1_000_000;
+  const selected = [];
+  const state = {
+    leader: 'L', farmingPolicy: 'achievements', monsterFocus: [], bestiaryCatalog: snakes, monsterChoices: snakeChoices,
+    statuses: { L: { seenAt: now, monsterAchievementKills: { snake: 100 } }, F: { seenAt: now, monsterAchievementKills: {} } },
+    achievementHunt: { monsters: ['osnake'], blacklistDeaths: true, deathThreshold: 3, fillIdle: true },
+    achievementBlacklist: {}, achievementTarget: null, achievementMessage: '',
+    monsterPrioritiesByCharacter: { L: { snake: 70, bat: 20 } }, location: null, activeConvoy: null,
+    ...extra,
+  };
+  const ports = {
+    now: () => now, members: () => ['L', 'F'], busy: () => null, persist() {}, radius: () => 400,
+    destination: (id) => ({ ...snakeChoices.find((c) => c.id === id).locations[0] }),
+    select: (id, location) => { selected.push(id); state.monsterFocus = [id]; state.location = location; return ['L', 'F']; },
+  };
+  return { state, ports, selected, hunt: createAchievementHunt(state, ports), advance: (ms) => { now += ms; for (const s of Object.values(state.statuses)) s.seenAt = now; } };
+}
+
+test('the target is the top priority tier and nearby fillers the bottom one, for every member', () => {
+  const f = snakeFixture();
+  f.hunt.tick();
+  assert.deepEqual(f.selected, ['osnake']);
+  assert.deepEqual(f.state.monsterFocus, ['osnake', 'snake']);
+  assert.deepEqual(f.state.monsterPrioritiesByCharacter, { L: { snake: 10, bat: 20, osnake: 90 }, F: { osnake: 90, snake: 10 } });
+  // The filler list is the hunt's own focus, not a change by hand.
+  f.advance(20_000); f.hunt.tick();
+  assert.equal(f.state.farmingPolicy, 'achievements');
+});
+
+test("leaving the mode restores each member's previous priorities", () => {
+  const f = snakeFixture();
+  f.hunt.tick();
+  f.state.farmingPolicy = 'default';
+  f.advance(1_000); f.hunt.tick();
+  assert.equal(f.state.achievementTarget, null);
+  assert.deepEqual(f.state.monsterPrioritiesByCharacter, { L: { snake: 70, bat: 20 }, F: {} });
+});
+
+test('a relocation to a spawn without the target sends the party back to the target', () => {
+  const f = snakeFixture();
+  f.hunt.tick();
+  f.advance(20_000);
+  f.state.location = { map: 'halloween', x: -590, y: 200 }; // a competition move to a snake-only spawn
+  f.hunt.tick();
+  assert.deepEqual(f.selected, ['osnake', 'osnake']);
+  assert.deepEqual(f.state.location, { ...snakeChoices[0].locations[0] });
+});
+
+test('with Fill respawn waits off the focus is the target alone', () => {
+  const f = snakeFixture();
+  f.state.achievementHunt.fillIdle = false;
+  f.hunt.tick();
+  assert.deepEqual(f.state.monsterFocus, ['osnake']);
+  assert.deepEqual(f.state.monsterPrioritiesByCharacter, { L: { snake: 70, bat: 20 } });
+});
+
+test('a rare variant at the same step is farmed first, with the common monster as its filler', () => {
+  const f = snakeFixture();
+  f.state.achievementHunt.monsters = ['snake', 'osnake'];
+  f.state.statuses.L.monsterAchievementKills = {}; // both at step 1: the sweep alone would pick plain snakes
+  f.hunt.tick();
+  assert.deepEqual(f.selected, ['osnake']);
+  assert.deepEqual(f.state.monsterFocus, ['osnake', 'snake']);
+  // Off, the sweep's own choice stands.
+  const off = snakeFixture();
+  off.state.achievementHunt = { ...off.state.achievementHunt, monsters: ['snake', 'osnake'], fillIdle: false };
+  off.state.statuses.L.monsterAchievementKills = {};
+  off.hunt.tick();
+  assert.deepEqual(off.selected, ['snake']);
+  // A stronger monster that is not rarer keeps the sweep's order.
+  const common = snakeFixture();
+  common.state.achievementHunt.monsters = ['snake', 'osnake'];
+  common.state.monsterChoices = snakeChoices.map((choice) => choice.id === 'osnake' ? { ...choice, spawnRecords: [spawn(choice.locations[0], 12)] } : choice);
+  common.state.statuses.L.monsterAchievementKills = {};
+  common.hunt.tick();
+  assert.deepEqual(common.selected, ['snake']);
+  // A variant a step behind the common monster does not take over a lower step.
+  const behind = snakeFixture();
+  behind.state.achievementHunt.monsters = ['snake', 'osnake'];
+  behind.state.statuses.L.monsterAchievementKills = { osnake: 100 };
+  behind.hunt.tick();
+  assert.deepEqual(behind.selected, ['snake']);
 });
