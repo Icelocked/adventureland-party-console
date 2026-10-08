@@ -13,6 +13,15 @@ been learned per monster). Each target switch goes through the same
 `manual-monster-override` convoy as `navigate-to-monster`, except that it stays
 in Achievement Hunt instead of resetting the mode to Auto.
 
+## Characters
+
+Achievement Hunt follows the same farming scopes as Hunt. The party leader's
+settings drive the leader and every follower. A character with Follow off has
+its own settings, blacklist and target, and travels alone. Followers can read
+the leader's settings but cannot edit them; the coordinator answers
+"following leader settings". The settings live in each character's Farming
+settings dialog, next to Hunt settings.
+
 ## Choosing targets
 
 - **Selection.** The player selects monsters from a list sorted weakest to
@@ -61,8 +70,8 @@ Skipping works like Hunt's blacklist:
    another convoy may own travel. Achievement Hunt must not start a convoy then;
    it waits. Hunt is a different farming mode, so the two never run together;
    choosing another mode forgets the target.
-4. **Offline leader.** With no fresh leader report there is no party to move.
-   It waits.
+4. **Offline owner.** With no fresh report from the scope's owner (the party
+   leader, or the independent character) there is nothing to move. It waits.
 5. **No route.** A selected monster may have no known spawn. It is skipped
    with a reason, not retried every tick.
 6. **Everything done or skipped.** The party keeps farming the last target.
@@ -78,6 +87,12 @@ Skipping works like Hunt's blacklist:
 9. **Staying in the mode.** A target switch must keep the farming mode on
    Achievement Hunt (picking a monster by hand resets it to Auto). Only the
    learned scatter state for the old monster resets, as on any focus change.
-   Only the party leader's farming offers the mode.
 10. **Monsters with no achievements, or finished ladders.** They are never
     targets, and listing them is harmless.
+11. **Scopes crossing.** An independent character's target switch must move
+    only that character and must not touch the party's mode, focus or
+    target. Its tick runs on its own scope view with itself as the only
+    member.
+12. **Upgrading a saved console.** Settings saved before scopes existed sit
+    on the party state. The leader's profile picks them up on load, so an
+    existing selection survives the upgrade.

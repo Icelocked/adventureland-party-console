@@ -87,6 +87,7 @@ export * from "./http/convoy-engagement.ts";
 export * from "./http/convoy-acknowledgements.ts";
 export * from "./http/farming-return.ts";
 export * from "./http/monster-selection.ts";
+export { createMonsterSelection } from "./navigation/monster-selection.ts";
 export * from "./http/achievement-hunt.ts";
 export * from "./hunt/achievement-hunt.ts";
 export * from "./hunt/achievement-settings.ts";
