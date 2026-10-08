@@ -8,7 +8,7 @@ export interface AchievementCatalogEntry {
   hp?: unknown;
   xp?: unknown;
   threat?: unknown;
-  definition?: Partial<Pick<GMonster, "achievements" | "special" | "cooperative" | "unlist">> | null;
+  definition?: Partial<Pick<GMonster, "achievements" | "special" | "cooperative" | "unlist" | "respawn">> | null;
 }
 export interface AchievementChoice {
   id: string;
@@ -56,6 +56,25 @@ export function milestones(achievements: unknown): number[] {
 // G.maps marks these spawns `stype: "randomrespawn"` (cave: mvampire, main: phoenix, game
 // data 17665). The bestiary catalog does not carry spawn types.
 const RANDOM_RESPAWN = new Set(["mvampire", "phoenix"]);
+// Boss-like monsters the game does not flag (docs/achievement-hunt.md § 23).
+const BOSS_SPAWNS = 2;
+const BOSS_HP = 50_000;
+
+/** Spawns in the world from the spawn records, leaving out those the game marks "ignore". */
+function worldSpawns(choice: AchievementChoice | undefined): number {
+  return (choice?.spawnRecords || []).reduce((total: number, record) => {
+    const value = record as { count?: unknown; restrictions?: unknown } | null;
+    const ignored = Array.isArray(value?.restrictions) && value.restrictions.includes("ignore");
+    return ignored ? total : total + (Number(value?.count) || 0);
+  }, 0);
+}
+/** Never respawns, or is a big single spawn: Stompy, Skeletor, the crypt bosses. */
+function bossLike(entry: AchievementCatalogEntry, choice: AchievementChoice | undefined): boolean {
+  const respawn = Number(entry.definition?.respawn);
+  if (Number.isFinite(respawn) && respawn < 0) return true;
+  const spawns = worldSpawns(choice);
+  return spawns > 0 && spawns <= BOSS_SPAWNS && (Number(entry.hp) || 0) >= BOSS_HP;
+}
 
 /** Every monster that has achievements, weakest first: by XP, then threat (attack × speed), HP and name.
  *  Threat alone misranks monsters (a Vampire Rat hits harder than a Fire Spirit but has a ninth of its HP). */
@@ -64,6 +83,7 @@ export function achievementMonsters(
   choices: readonly AchievementChoice[] | null | undefined,
 ): AchievementMonster[] {
   const routable = new Set((choices || []).filter((choice) => (choice.locations || []).length > 0).map((choice) => choice.id));
+  const choiceOf = (id: string) => (choices || []).find((choice) => choice.id === id);
   const monsters = (catalog || [])
     .map((entry) => {
       const definition = entry.definition || {};
@@ -75,7 +95,7 @@ export function achievementMonsters(
         threat: Number(entry.threat) || 0,
         hp: Number(entry.hp) || 0,
         special: !!definition.special || !!definition.cooperative || !!definition.unlist ||
-          RANDOM_RESPAWN.has(entry.id) || !routable.has(entry.id),
+          RANDOM_RESPAWN.has(entry.id) || !routable.has(entry.id) || bossLike(entry, choiceOf(entry.id)),
       };
     })
     .filter((monster) => monster.ladder.length > 0)

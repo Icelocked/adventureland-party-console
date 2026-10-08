@@ -168,8 +168,8 @@ export function AchievementHuntSettingsControl({
             <section aria-label="Regular monsters" className="space-y-2">{regular.map((m, i) => row(m, i))}</section>
             <h3 className="pt-2 font-semibold text-emerald-50">Special monsters</h3>
             <p className="text-xs text-emerald-200">
-              Bosses, event, cooperative and random-respawn monsters, training dummies, Cave of Many Dreams monsters, and any
-              without a regular spawn. Up to here never selects them.
+              Bosses and boss-like monsters, event, cooperative and random-respawn monsters, training dummies, Cave of Many
+              Dreams monsters, and any without a regular spawn. Up to here never selects them.
             </p>
             <section aria-label="Special monsters" className="space-y-2">{special.map((m) => row(m, null))}</section>
           </div>

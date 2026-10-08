@@ -236,6 +236,19 @@ const snakeChoices = [
   { id: 'ghost', locations: [halloween(900, -750)] },
 ];
 
+test('boss-like monsters the game does not flag are special; rare but weak ones stay regular', () => {
+  const one = (id, count) => ({ id, locations: [{ map: 'winterland', x: 0, y: 0 }],
+    spawnRecords: [{ map: 'winterland', x: 0, y: 0, count, restrictions: [] }, { map: 'test', x: 0, y: 0, count: 9, restrictions: ['ignore'] }] });
+  const order = achievementMonsters([
+    { id: 'stompy', name: 'Stompy', xp: 600000, hp: 640000, definition: { achievements: ladder(1), respawn: 2160 } },
+    { id: 'a1', name: 'Spike', xp: 32000000, hp: 18700000, definition: { achievements: ladder(1), respawn: -1 } },
+    { id: 'squigtoad', name: 'Squigtoad', xp: 32000, hp: 9600, definition: { achievements: ladder(10), respawn: 120 } },
+    { id: 'pinkgoblin', name: 'Pink Goblin', xp: 460000, hp: 420000, definition: { achievements: ladder(10), respawn: 40 } },
+  ], [one('stompy', 1), one('a1', 1), one('squigtoad', 2), one('pinkgoblin', 3)]);
+  const special = Object.fromEntries(order.map((m) => [m.id, m.special]));
+  assert.deepEqual(special, { stompy: true, a1: true, squigtoad: false, pinkgoblin: false });
+});
+
 test('two monsters with one game name show their ids', () => {
   const order = achievementMonsters(snakes, snakeChoices);
   assert.equal(order.find((m) => m.id === 'osnake').name, 'Snake (osnake)');
