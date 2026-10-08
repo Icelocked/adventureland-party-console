@@ -53,8 +53,10 @@ Skipping works like Hunt's blacklist:
    every tick. Instead the mode switches to Auto, as picking a monster by hand
    does, and reports why.
 2. **Thrashing.** Kill counts arrive from several clients and can lag. A target
-   switch happens only when the current target's milestone is met, or when it is
-   blacklisted or unselected, never because of small count differences.
+   switch happens only when the current target's milestone is met, when it is
+   blacklisted or unselected, or when a monster at a lower step becomes
+   available again (re-selected, unblacklisted, or a route retry). Counts only
+   rise, so small count differences never cause a switch.
 3. **Conflicting owners.** A daily dungeon, an event trip, a rare hunt or
    another convoy may own travel. Achievement Hunt must not start a convoy then;
    it waits. Hunt is a different farming mode, so the two never run together;

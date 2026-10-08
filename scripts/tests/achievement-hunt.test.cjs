@@ -82,6 +82,19 @@ test('no thrashing: the target is kept until its own milestone is met', () => {
   assert.match(f.state.achievementMessage, /Farming bee: 0 \/ 10 kills \(step 1\)/);
 });
 
+test('a monster that comes back at a lower step takes over from a higher-step target', () => {
+  const f = fixture({ goo: 10, bee: 10 }, { achievementHunt: { monsters: ['bee', 'wolf'], blacklistDeaths: true, deathThreshold: 2 } });
+  f.hunt.tick(); // wolf's step 1
+  f.advance(5_000); f.kills('wolf', 1); f.hunt.tick(); // all at step 2: bee
+  assert.deepEqual(f.selected, ['wolf', 'bee']);
+  f.state.achievementHunt.monsters = ['bee', 'wolf', 'goo']; // goo is re-selected, still at step 2: bee is kept
+  f.advance(5_000); f.hunt.tick();
+  assert.deepEqual(f.selected, ['wolf', 'bee']);
+  f.kills('goo', 0); f.state.statuses.F.monsterAchievementKills = {}; // a fresh step-1 monster appears
+  f.advance(5_000); f.hunt.tick();
+  assert.deepEqual(f.selected, ['wolf', 'bee', 'goo']);
+});
+
 test('deaths count once each, only after the target started, then blacklist it and move on', () => {
   const f = fixture({});
   f.state.statuses.L.lastDeath = { at: 1 }; // before the target started
