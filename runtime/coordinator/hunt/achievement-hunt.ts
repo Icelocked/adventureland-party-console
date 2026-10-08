@@ -68,6 +68,8 @@ const killText = (kills: number, milestone: number, step: number) =>
 
 export function createAchievementHunt(state: AchievementHuntState, ports: AchievementHuntPorts) {
   const unroutable = new Map<string, number>();
+  // Set again after a restart or a settings change (failure mode 21).
+  let refocus = true;
 
   const settings = (): AchievementHuntSettings => (state.achievementHunt ||= { ...defaultAchievementHuntSettings });
   const say = (message: string): void => { state.achievementMessage = message; };
@@ -218,6 +220,16 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
     if (!current || !state.location || (convoy && !["complete", "failed"].includes(String(convoy.phase)))) return false;
     return !nearSpawnOf(state.monsterChoices, current.id, state.location, ports.radius());
   }
+  /** Sets the kept target's focus again around where the party farms, without moving it. */
+  function focusKeptTarget(order: AchievementMonster[]): void {
+    const current = state.achievementTarget!;
+    const here = state.location && nearSpawnOf(state.monsterChoices, current.id, state.location, ports.radius()) ? state.location : ports.destination(current.id);
+    refocus = false;
+    if (!here) return;
+    restorePriorities(current);
+    focusWithFillers(current, here as ReturnLocation, order);
+    ports.persist();
+  }
   function returnToTarget(order: AchievementMonster[]): void {
     const current = state.achievementTarget!;
     const location = ports.destination(current.id);
@@ -245,9 +257,11 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
     const best = chooseAchievementTarget(order, new Set(settings().monsters), excluded, kills);
     if (!stillWorking(order, kills, best)) switchTo(preferVariant(best, order, kills), order);
     else if (awayFromTarget()) returnToTarget(order);
+    else if (refocus) focusKeptTarget(order);
+    refocus = false;
   }
 
   /** Settings changes forget failed routes, so a fixed spawn is tried again at once. */
-  const reset = (): void => unroutable.clear();
+  const reset = (): void => { unroutable.clear(); refocus = true; };
   return { tick, reset };
 }

@@ -154,6 +154,11 @@ Skipping works like Hunt's blacklist:
     would leave its filler unfarmed. Spawn counts come from the monster
     choices' `spawnRecords`. The swap only happens at a target switch, so it
     cannot thrash.
+21. **A target that predates its fillers.** A target kept across a restart, or
+    a *Fill respawn waits* change mid-target, would keep its old focus until
+    the next switch. After a restart or any settings change, the current
+    target's focus and priorities are set again once, around the party's
+    farming location, without moving the party.
 
 ## Tests
 
