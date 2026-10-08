@@ -1,18 +1,14 @@
 // Achievement Hunt target choice (docs/achievement-hunt.md). Pure: no state, no I/O.
+import type { GMonster } from "typed-adventureland";
 
+/** A bestiary catalog entry. `definition` is the monster's `G.monsters` entry. */
 export interface AchievementCatalogEntry {
   id: string;
   name?: string;
   hp?: unknown;
   xp?: unknown;
   threat?: unknown;
-  definition?: {
-    achievements?: unknown;
-    special?: unknown;
-    cooperative?: unknown;
-    stype?: unknown;
-    unlist?: unknown;
-  } | null;
+  definition?: Partial<Pick<GMonster, "achievements" | "special" | "cooperative" | "unlist">> | null;
 }
 export interface AchievementChoice {
   id: string;
@@ -48,6 +44,10 @@ export function milestones(achievements: unknown): number[] {
     .sort((a, b) => a - b);
 }
 
+// G.maps marks these spawns `stype: "randomrespawn"` (cave: mvampire, main: phoenix, game
+// data 17665). The bestiary catalog does not carry spawn types.
+const RANDOM_RESPAWN = new Set(["mvampire", "phoenix"]);
+
 /** Every monster that has achievements, weakest first: by XP, then threat (attack × speed), HP and name.
  *  Threat alone misranks monsters (a Vampire Rat hits harder than a Fire Spirit but has a ninth of its HP). */
 export function achievementMonsters(
@@ -66,7 +66,7 @@ export function achievementMonsters(
         threat: Number(entry.threat) || 0,
         hp: Number(entry.hp) || 0,
         special: !!definition.special || !!definition.cooperative || !!definition.unlist ||
-          definition.stype === "randomrespawn" || !routable.has(entry.id),
+          RANDOM_RESPAWN.has(entry.id) || !routable.has(entry.id),
       };
     })
     .filter((monster) => monster.ladder.length > 0)
