@@ -33,6 +33,11 @@ settings dialog, next to Hunt settings.
   monsters (bosses, event, cooperative and random-respawn monsters, and those
   the game leaves out of its monster list: the training dummies and the Cave of
   Many Dreams monsters) are listed separately and are never selected by default.
+  Boss-like monsters the game does not flag are special too: those that never
+  respawn (the crypt bosses and the Protectors), and those with at most two
+  spawns in the world and at least 50,000 HP (Stompy, Ms. Dracul, Skeletor,
+  Black Scorpion, the Fairies). Rare but weak monsters such as Froggies and
+  Squigtoads stay regular.
 - **Steps.** Every monster has its own milestone ladder, for example
   `10, 100, 1000…` or `1, 100, 1000…`. Step *n* is the *n*-th milestone of
   each monster's own ladder.
@@ -167,6 +172,11 @@ Skipping works like Hunt's blacklist:
     out of sight of a Squigtoad spawning on the far side; Squigtoads are
     passive and never come to the party. Only monsters whose spawn overlaps the
     target's become fillers, so the party stays on the target's own ground.
+23. **A boss pulled in by Up to here.** Stompy, Skeletor and Ms. Dracul have no
+    `special` flag and sort to the end of the regular list by XP, so selecting
+    far down with Up to here picked them, and the rare-variant rule then put
+    them ahead of the White Wolves, Irradiated Goos or Ghosts sharing their
+    spawn. They and the other boss-like monsters are listed as special.
 
 ## Tests
 
