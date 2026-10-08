@@ -82,7 +82,7 @@ test('no thrashing: the target is kept until its own milestone is met', () => {
   assert.deepEqual(f.selected, ['goo']);
   f.advance(5_000); f.kills('goo', 10); f.hunt.tick();
   assert.deepEqual(f.selected, ['goo', 'bee']);
-  assert.match(f.state.achievementMessage, /Farming bee: 0 \/ 10 kills \(step 1\)/);
+  assert.match(f.state.achievementMessage, /Farming Bee: 0 \/ 10 kills \(step 1\)/);
 });
 
 test('a monster that comes back at a lower step takes over from a higher-step target', () => {

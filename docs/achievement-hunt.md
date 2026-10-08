@@ -101,9 +101,15 @@ Skipping works like Hunt's blacklist:
     catalog does not carry spawn types and Dracul has no `special` flag. The
     policy names both, so Dracul lands in the special list.
 
-## Isolated tests
+## Tests
 
-`scripts/tests/achievement-hunt.test.cjs` checks failure modes 1-13 without a
-game. The console E2E journeys (docs/testing.md) cover one goo spawn, so they
-cannot reach a step sweep across several monsters, kill-achievement counts,
-death thresholds or a second independent farming scope.
+The console E2E journey `e2e/achievement-hunt.spec.ts` (failure modes in
+`e2e/achievement-hunt-failures.md`) drives the real dashboard and coordinator:
+it selects Goo in Farming settings, chooses the mode, waits for the target,
+restarts the coordinator and leaves the mode. Its evidence lands in
+`.build/e2e-report/` with the other console journeys.
+
+`scripts/tests/achievement-hunt.test.cjs` checks the rest of failure modes 1-13
+in isolation. The console fixture publishes one Goo spawn and no kill counts, so
+the journey cannot reach a step sweep across several monsters, death
+thresholds, a lower step taking over, or the random-respawn list.
