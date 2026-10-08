@@ -16,7 +16,10 @@ in Achievement Hunt instead of resetting the mode to Auto.
 ## Choosing targets
 
 - **Selection.** The player selects monsters from a list sorted weakest to
-  strongest (bestiary threat, `attack × frequency`, then HP).
+  strongest by XP per kill, which the game scales with HP, damage and
+  defenses. Ties are broken by bestiary threat (`attack × frequency`), then
+  HP. Threat alone misranks monsters: a Vampire Rat hits harder than a Fire
+  Spirit but has a ninth of its HP.
 - **Two lists.** Regular monsters are those with a fixed map spawn. Special
   monsters (bosses, event, cooperative and random-respawn monsters) are listed
   separately and are never selected by default.
