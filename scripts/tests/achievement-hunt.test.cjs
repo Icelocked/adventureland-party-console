@@ -8,10 +8,10 @@ const { createAchievementHuntRoute } = require('../../runtime/coordinator/http/a
 
 const ladder = (...counts) => counts.map((count) => [count, 'stat', 'hp', 10]);
 const catalog = [
-  { id: 'goo', name: 'Goo', threat: 1, hp: 50, definition: { achievements: ladder(10, 100, 1000) } },
-  { id: 'bee', name: 'Bee', threat: 5, hp: 100, definition: { achievements: ladder(10, 100, 1000) } },
-  { id: 'wolf', name: 'White Wolf', threat: 50, hp: 48000, definition: { achievements: ladder(1, 100, 1000) } },
-  { id: 'dragold', name: 'Dragold', threat: 800, hp: 25600000, definition: { achievements: ladder(1, 10, 20), special: true, cooperative: true } },
+  { id: 'goo', name: 'Goo', xp: 100, threat: 1, hp: 50, definition: { achievements: ladder(10, 100, 1000) } },
+  { id: 'bee', name: 'Bee', xp: 400, threat: 5, hp: 100, definition: { achievements: ladder(10, 100, 1000) } },
+  { id: 'wolf', name: 'White Wolf', xp: 48800, threat: 50, hp: 48000, definition: { achievements: ladder(1, 100, 1000) } },
+  { id: 'dragold', name: 'Dragold', xp: 24000000, threat: 800, hp: 25600000, definition: { achievements: ladder(1, 10, 20), special: true, cooperative: true } },
   { id: 'hen', name: 'Chicken', threat: 0, hp: 10, definition: {} },
 ];
 const choices = ['goo', 'bee', 'wolf', 'hen'].map((id) => ({ id, locations: [{ map: 'main', x: 0, y: 0 }] }));
@@ -42,6 +42,12 @@ function fixture(kills, extra = {}) {
 test('the list runs weakest to strongest; special and achievement-less monsters are marked or left out', () => {
   const order = achievementMonsters(catalog, choices);
   assert.deepEqual(order.map((m) => m.id), ['goo', 'bee', 'wolf', 'dragold']);
+  // XP, not attack × speed: a Vampire Rat hits harder than a Fire Spirit but is far weaker.
+  const rank = achievementMonsters([
+    { id: 'fireroamer', name: 'Fire Spirit', xp: 64200, threat: 384, hp: 84000, definition: { achievements: ladder(10) } },
+    { id: 'prat', name: 'Vampire Rat', xp: 7600, threat: 512, hp: 9200, definition: { achievements: ladder(1) } },
+  ], [{ id: 'fireroamer', locations: [{}] }, { id: 'prat', locations: [{}] }]);
+  assert.deepEqual(rank.map((m) => m.id), ['prat', 'fireroamer']);
   assert.equal(order.find((m) => m.id === 'dragold').special, true);
   assert.equal(order.find((m) => m.id === 'wolf').special, false);
 });
