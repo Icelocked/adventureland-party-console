@@ -21,8 +21,9 @@ in Achievement Hunt instead of resetting the mode to Auto.
   HP. Threat alone misranks monsters: a Vampire Rat hits harder than a Fire
   Spirit but has a ninth of its HP.
 - **Two lists.** Regular monsters are those with a fixed map spawn. Special
-  monsters (bosses, event, cooperative and random-respawn monsters) are listed
-  separately and are never selected by default.
+  monsters (bosses, event, cooperative and random-respawn monsters, and those
+  the game leaves out of its monster list: the training dummies and the Cave of
+  Many Dreams monsters) are listed separately and are never selected by default.
 - **Steps.** Every monster has its own milestone ladder, for example
   `10, 100, 1000…` or `1, 100, 1000…`. Step *n* is the *n*-th milestone of
   each monster's own ladder.
