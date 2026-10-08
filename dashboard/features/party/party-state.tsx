@@ -134,6 +134,10 @@ export type PartyState = {
     monsterHunt?: MonsterHuntState | null;
     huntSettings?: import("../../../runtime/coordinator/hunt/settings").HuntSettings;
     huntBlacklist?: PartyState["huntBlacklist"];
+    achievementHunt?: PartyState["achievementHunt"];
+    achievementBlacklist?: PartyState["achievementBlacklist"];
+    achievementTarget?: PartyState["achievementTarget"];
+    achievementMessage?: string;
     monsterFocus?: string[];
     location?: PartyState["partyLocation"];
   }>;
