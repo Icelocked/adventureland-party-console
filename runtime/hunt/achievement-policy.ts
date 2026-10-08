@@ -4,6 +4,7 @@ export interface AchievementCatalogEntry {
   id: string;
   name?: string;
   hp?: unknown;
+  xp?: unknown;
   threat?: unknown;
   definition?: {
     achievements?: unknown;
@@ -21,6 +22,8 @@ export interface AchievementMonster {
   name: string;
   /** Kill counts at which each reward is earned, ascending. */
   ladder: number[];
+  /** The game's reward for a kill; it follows HP, damage and defenses, so it ranks difficulty. */
+  xp: number;
   threat: number;
   hp: number;
   /** Bosses, event, cooperative and random-respawn monsters, and any without a regular spawn. */
@@ -43,7 +46,8 @@ export function milestones(achievements: unknown): number[] {
     .sort((a, b) => a - b);
 }
 
-/** Every monster that has achievements, weakest first (threat, then HP, then name). */
+/** Every monster that has achievements, weakest first: by XP, then threat (attack × speed), HP and name.
+ *  Threat alone misranks monsters (a Vampire Rat hits harder than a Fire Spirit but has a ninth of its HP). */
 export function achievementMonsters(
   catalog: readonly AchievementCatalogEntry[] | null | undefined,
   choices: readonly AchievementChoice[] | null | undefined,
@@ -56,13 +60,14 @@ export function achievementMonsters(
         id: entry.id,
         name: entry.name || entry.id,
         ladder: milestones(definition.achievements),
+        xp: Number(entry.xp) || 0,
         threat: Number(entry.threat) || 0,
         hp: Number(entry.hp) || 0,
         special: !!definition.special || !!definition.cooperative || definition.stype === "randomrespawn" || !routable.has(entry.id),
       };
     })
     .filter((monster) => monster.ladder.length > 0)
-    .sort((a, b) => a.threat - b.threat || a.hp - b.hp || a.name.localeCompare(b.name));
+    .sort((a, b) => a.xp - b.xp || a.threat - b.threat || a.hp - b.hp || a.name.localeCompare(b.name));
 }
 
 /** Index of the first milestone not yet reached, or -1 once the ladder is complete. */
