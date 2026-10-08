@@ -13,6 +13,15 @@ export interface AchievementCatalogEntry {
 export interface AchievementChoice {
   id: string;
   locations?: readonly unknown[] | null;
+  /** One entry per spawn, with how many of the monster it holds. */
+  spawnRecords?: readonly unknown[] | null;
+}
+/** A spawn as `monsterChoices` reports it: a centre, and a box when the game gives one. */
+export interface SpawnPlace {
+  map: string;
+  x: number;
+  y: number;
+  boundary?: readonly number[];
 }
 export interface AchievementMonster {
   id: string;
@@ -55,7 +64,7 @@ export function achievementMonsters(
   choices: readonly AchievementChoice[] | null | undefined,
 ): AchievementMonster[] {
   const routable = new Set((choices || []).filter((choice) => (choice.locations || []).length > 0).map((choice) => choice.id));
-  return (catalog || [])
+  const monsters = (catalog || [])
     .map((entry) => {
       const definition = entry.definition || {};
       return {
@@ -71,6 +80,55 @@ export function achievementMonsters(
     })
     .filter((monster) => monster.ladder.length > 0)
     .sort((a, b) => a.xp - b.xp || a.threat - b.threat || a.hp - b.hp || a.name.localeCompare(b.name));
+  // The game names both `snake` and `osnake` "Snake"; a shared name shows the id.
+  const counts = new Map<string, number>();
+  for (const monster of monsters) counts.set(monster.name, (counts.get(monster.name) || 0) + 1);
+  return monsters.map((monster) => (counts.get(monster.name)! > 1 ? { ...monster, name: `${monster.name} (${monster.id})` } : monster));
+}
+
+function spawnPlaces(choice: AchievementChoice | undefined, field: "locations" | "spawnRecords" = "locations"): SpawnPlace[] {
+  return (choice?.[field] || []).filter((place): place is SpawnPlace => {
+    const value = place as Partial<SpawnPlace> | null;
+    return !!value && typeof value.map === "string" && Number.isFinite(value.x) && Number.isFinite(value.y);
+  });
+}
+
+/** Distance from `point` to a spawn: to the edge of its box, or to its centre without one. */
+function spawnDistance(point: { x: number; y: number }, place: SpawnPlace): number {
+  const box = place.boundary;
+  if (!box || box.length < 4) return Math.hypot(point.x - place.x, point.y - place.y);
+  const dx = Math.max(box[0]! - point.x, 0, point.x - box[2]!);
+  const dy = Math.max(box[1]! - point.y, 0, point.y - box[3]!);
+  return Math.hypot(dx, dy);
+}
+
+/** Whether `place` is on the same map as one of `id`'s spawns and within `radius` of it. */
+export function nearSpawnOf(choices: readonly AchievementChoice[] | null | undefined, id: string,
+  place: { map: string; x: number; y: number }, radius: number): boolean {
+  const spawns = spawnPlaces((choices || []).find((choice) => choice.id === id));
+  return spawns.some((spawn) => spawn.map === place.map && spawnDistance(place, spawn) <= radius);
+}
+
+/** How many of `id` spawn on `place`'s map within `radius` of it, from its spawn records. */
+export function spawnCount(choices: readonly AchievementChoice[] | null | undefined, id: string,
+  place: { map: string; x: number; y: number }, radius: number): number {
+  return spawnPlaces((choices || []).find((choice) => choice.id === id), "spawnRecords")
+    .filter((spawn) => spawn.map === place.map && spawnDistance(place, spawn) <= radius)
+    .reduce((total, spawn) => total + (Number((spawn as { count?: unknown }).count) || 0), 0);
+}
+
+/**
+ * Monsters the party can fight while the target respawns: a spawn on the same map within
+ * `radius` of `at`, no stronger than the target by XP, regular, and not excluded.
+ */
+export function nearbyFillers(order: readonly AchievementMonster[], choices: readonly AchievementChoice[] | null | undefined,
+  targetId: string, at: { map: string; x: number; y: number }, radius: number, excluded: (id: string) => boolean): string[] {
+  const target = order.find((monster) => monster.id === targetId);
+  if (!target) return [];
+  return order
+    .filter((monster) => monster.id !== targetId && !monster.special && monster.xp <= target.xp && !excluded(monster.id))
+    .filter((monster) => nearSpawnOf(choices, monster.id, at, radius))
+    .map((monster) => monster.id);
 }
 
 /** Index of the first milestone not yet reached, or -1 once the ladder is complete. */

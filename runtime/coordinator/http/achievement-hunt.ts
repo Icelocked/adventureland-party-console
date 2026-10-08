@@ -36,8 +36,8 @@ export function createAchievementHuntRoute(state: AchievementHuntState, ports: P
     if (action === "clear") state.achievementBlacklist = {};
     else if (action === "remove" && id) delete state.achievementBlacklist[id];
     else if (action === "add" && known.has(id)) {
+      // The next tick moves on from a blacklisted target and restores its priorities.
       state.achievementBlacklist[id] = { monsterId: id, at: ports.now(), reason: "Manually blacklisted" };
-      if (state.achievementTarget?.id === id) state.achievementTarget = null;
     } else return false;
     return true;
   }
