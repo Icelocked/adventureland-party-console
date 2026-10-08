@@ -183,3 +183,32 @@ test('an Achievement Hunt switch stays in the mode; picking a monster by hand st
   createMonsterSelection(manual, ports).select('goo', { map: 'main', x: 1, y: 2 }, undefined);
   assert.equal(manual.farmingPolicy, 'auto');
 });
+
+test('each farming scope keeps its own Achievement Hunt; a saved leader profile keeps the party-wide selection', () => {
+  const { createFarmingScopes } = require('../../runtime/coordinator/hunt/scopes.ts');
+  const legacy = { monsters: ['goo', 'bee'], blacklistDeaths: true, deathThreshold: 4 };
+  const root = {
+    leader: 'L', followers: { F: true }, merchantCharacter: 'M', farmingProfiles: { L: { farmingPolicy: 'auto' } },
+    achievementHunt: legacy, achievementBlacklist: {}, achievementTarget: null, achievementMessage: '',
+    monsterFocusByCharacter: {}, bestiaryCatalog: catalog, monsterChoices: choices, statuses: {},
+  };
+  const scopes = createFarmingScopes(root, () => 1_000_000);
+  assert.deepEqual(root.achievementHunt, legacy); // the leader's profile inherited the existing selection
+  const solo = scopes.view('S');
+  assert.deepEqual(solo.achievementHunt.monsters, []);
+  assert.equal(scopes.effective('F').achievementHunt, root.achievementHunt); // followers use the leader's
+  // A solo character farms its own target and leaves the party's mode alone.
+  root.statuses = { L: { seenAt: 1_000_000, monsterAchievementKills: { goo: 10 } }, S: { seenAt: 1_000_000, monsterAchievementKills: { goo: 10 } } };
+  solo.achievementHunt = { monsters: ['goo', 'wolf'], blacklistDeaths: true, deathThreshold: 3 };
+  solo.farmingPolicy = 'achievements';
+  const selected = [];
+  createAchievementHunt(solo, {
+    now: () => 1_000_000, members: () => ['S'], busy: () => null, persist() {},
+    destination: () => ({ map: 'main', x: 1, y: 2 }),
+    select: (id) => { selected.push(id); solo.monsterFocus = [id]; return ['S']; },
+  }).tick();
+  assert.deepEqual(selected, ['wolf']); // goo already has step 1; wolf has not
+  assert.equal(scopes.profile('S').achievementTarget.id, 'wolf');
+  assert.equal(root.achievementTarget, null);
+  assert.equal(root.farmingPolicy, 'auto');
+});
