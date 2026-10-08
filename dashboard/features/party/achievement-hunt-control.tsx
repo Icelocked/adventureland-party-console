@@ -110,7 +110,7 @@ export function AchievementHuntControl({
           <div className="min-h-0 space-y-2 overflow-y-auto overscroll-contain">
             <section aria-label="Regular monsters" className="space-y-2">{regular.map((m, i) => row(m, i))}</section>
             <h3 className="pt-2 text-sm font-semibold">Special monsters</h3>
-            <p className="text-xs text-emerald-100/70">Bosses, event, cooperative and random-respawn monsters, and any without a regular spawn. Never selected by “Up to here”.</p>
+            <p className="text-xs text-emerald-100/70">Bosses, event, cooperative and random-respawn monsters, training dummies, Cave of Many Dreams monsters, and any without a regular spawn. Never selected by “Up to here”.</p>
             <section aria-label="Special monsters" className="space-y-2">{special.map((m) => row(m, null))}</section>
           </div>
           {error && <p role="alert" className="text-sm text-rose-200">{error}</p>}

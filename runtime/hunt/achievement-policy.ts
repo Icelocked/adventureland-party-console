@@ -11,6 +11,7 @@ export interface AchievementCatalogEntry {
     special?: unknown;
     cooperative?: unknown;
     stype?: unknown;
+    unlist?: unknown;
   } | null;
 }
 export interface AchievementChoice {
@@ -26,7 +27,8 @@ export interface AchievementMonster {
   xp: number;
   threat: number;
   hp: number;
-  /** Bosses, event, cooperative and random-respawn monsters, and any without a regular spawn. */
+  /** Bosses, event, cooperative and random-respawn monsters, monsters the game leaves out of its
+   *  list (training dummies, Cave of Many Dreams), and any without a regular spawn. */
   special: boolean;
 }
 export interface AchievementTarget {
@@ -63,7 +65,8 @@ export function achievementMonsters(
         xp: Number(entry.xp) || 0,
         threat: Number(entry.threat) || 0,
         hp: Number(entry.hp) || 0,
-        special: !!definition.special || !!definition.cooperative || definition.stype === "randomrespawn" || !routable.has(entry.id),
+        special: !!definition.special || !!definition.cooperative || !!definition.unlist ||
+          definition.stype === "randomrespawn" || !routable.has(entry.id),
       };
     })
     .filter((monster) => monster.ladder.length > 0)
