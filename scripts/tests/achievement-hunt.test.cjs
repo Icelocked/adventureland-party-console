@@ -51,6 +51,9 @@ test('the list runs weakest to strongest; special and achievement-less monsters 
   // Training dummies and Cave of Many Dreams monsters are unlisted by the game: special, not regular.
   const dummy = achievementMonsters([{ id: 'target_ar900', name: 'Target Automatron', xp: 1000, definition: { achievements: ladder(100), unlist: true } }], [{ id: 'target_ar900', locations: [{}] }]);
   assert.equal(dummy[0].special, true);
+  // Failure mode 13: Dracul's spawn is a random respawn, though its definition has no special flag.
+  const dracul = achievementMonsters([{ id: 'mvampire', name: 'Dracul', xp: 1, definition: { achievements: ladder(1) } }], [{ id: 'mvampire', locations: [{}] }]);
+  assert.equal(dracul[0].special, true);
   assert.equal(order.find((m) => m.id === 'dragold').special, true);
   assert.equal(order.find((m) => m.id === 'wolf').special, false);
 });

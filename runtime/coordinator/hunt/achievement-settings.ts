@@ -2,7 +2,7 @@
 
 /** Achievement Hunt runs while farmingPolicy is "achievements"; these are its choices. */
 export interface AchievementHuntSettings {
-  /** Selected monster ids; list order comes from the bestiary, not from here. */
+  /** Selected monster ids. The bestiary sets the list order. */
   monsters: string[];
   blacklistDeaths: boolean;
   deathThreshold: number;
