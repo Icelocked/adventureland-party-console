@@ -108,7 +108,7 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
   /** Focuses the target and the nearby monsters to fight while it respawns, target first. */
   function focusWithFillers(target: AchievementTargetState, location: ReturnLocation, order: AchievementMonster[]): void {
     const fillers = settings().fillIdle === false ? []
-      : nearbyFillers(order, state.monsterChoices, target.id, location, ports.radius(), excluded);
+      : nearbyFillers(order, state.monsterChoices, target.id, location, excluded);
     target.focus = [target.id, ...fillers];
     target.savedPriorities = {};
     state.monsterFocus = target.focus.slice();
@@ -191,8 +191,8 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
 
   /** Whether fewer of `rare` than of `common` spawn around `at`. */
   function rarer(rare: string, common: string, at: ReturnLocation): boolean {
-    const radius = ports.radius(), few = spawnCount(state.monsterChoices, rare, at, radius);
-    return few > 0 && few < spawnCount(state.monsterChoices, common, at, radius);
+    const few = spawnCount(state.monsterChoices, rare, at);
+    return few > 0 && few < spawnCount(state.monsterChoices, common, at);
   }
   /** `monster` as the target in place of `best`, when it is rarer and `best` would be one of its fillers. */
   function variantOf(best: AchievementTarget, monster: AchievementMonster, order: AchievementMonster[],
@@ -201,7 +201,7 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
     const count = Number(kills[monster.id]) || 0, step = nextStep(monster.ladder, count);
     const at = step >= 0 && step <= best.step ? ports.destination(monster.id) : null;
     if (!at || !rarer(monster.id, best.id, at)) return null;
-    if (!nearbyFillers(order, state.monsterChoices, monster.id, at, ports.radius(), excluded).includes(best.id)) return null;
+    if (!nearbyFillers(order, state.monsterChoices, monster.id, at, excluded).includes(best.id)) return null;
     return { id: monster.id, step, milestone: monster.ladder[step]!, kills: count };
   }
   /** Rare variants first: farming Orange Snakes with snakes as fillers clears the snake step too. */

@@ -223,13 +223,16 @@ const snakes = [
   { id: 'osnake', name: 'Snake', xp: 1600, threat: 3, hp: 720, definition: { achievements: ladder(100, 1000) } },
   { id: 'greenjr', name: 'Green Jr.', xp: 9000, threat: 9, hp: 9000, definition: { achievements: ladder(1) } },
   { id: 'ghost', name: 'Ghost', xp: 400, threat: 2, hp: 400, definition: { achievements: ladder(100) } },
+  { id: 'crab', name: 'Tiny Crab', xp: 100, threat: 1, hp: 400, definition: { achievements: ladder(100) } },
 ];
 const halloween = (x, y) => ({ map: 'halloween', x, y, boundary: [x - 60, y - 50, x + 60, y + 50] });
 const spawn = (place, count) => ({ ...place, sourceMap: place.map, count, restrictions: [] });
 const snakeChoices = [
   { id: 'osnake', locations: [halloween(-590, -335)], spawnRecords: [spawn(halloween(-590, -335), 2)] },
-  { id: 'snake', locations: [halloween(-590, -160)], spawnRecords: [spawn(halloween(-590, -160), 9)] },
-  { id: 'greenjr', locations: [halloween(-590, -160)] },
+  { id: 'snake', locations: [halloween(-590, -300)], spawnRecords: [spawn(halloween(-590, -300), 9)] },
+  { id: 'greenjr', locations: [halloween(-590, -300)] },
+  // A box touching the Orange Snake box without sharing it, like Tiny Crabs beside Squigtoads.
+  { id: 'crab', locations: [halloween(-590, -440)], spawnRecords: [spawn(halloween(-590, -440), 8)] },
   { id: 'ghost', locations: [halloween(900, -750)] },
 ];
 
@@ -240,13 +243,14 @@ test('two monsters with one game name show their ids', () => {
   assert.equal(order.find((m) => m.id === 'ghost').name, 'Ghost');
 });
 
-test('fillers are nearby, no stronger than the target, regular and not excluded', () => {
+test('fillers share the target spawn, are no stronger than the target, regular and not excluded', () => {
   const order = achievementMonsters(snakes, snakeChoices);
-  const at = { map: 'halloween', x: -590, y: -335 };
-  // Green Jr. shares the snake spawn but is stronger; the ghost spawn is far away.
-  assert.deepEqual(nearbyFillers(order, snakeChoices, 'osnake', at, 400, () => false), ['snake']);
-  assert.deepEqual(nearbyFillers(order, snakeChoices, 'osnake', at, 400, (id) => id === 'snake'), []);
-  assert.deepEqual(nearbyFillers(order, snakeChoices, 'osnake', at, 100, () => false), []);
+  const at = halloween(-590, -335);
+  // Green Jr. shares the snake spawn but is stronger; the crab box only touches it; the ghost spawn is far away.
+  assert.deepEqual(nearbyFillers(order, snakeChoices, 'osnake', at, () => false), ['snake']);
+  assert.deepEqual(nearbyFillers(order, snakeChoices, 'osnake', at, (id) => id === 'snake'), []);
+  // A target spot without a box counts spawns within 100 of it: the snake box holds it, the crab box is 130 away.
+  assert.deepEqual(nearbyFillers(order, snakeChoices, 'osnake', { map: 'halloween', x: -590, y: -260 }, () => false), ['snake']);
 });
 
 function snakeFixture(extra = {}) {

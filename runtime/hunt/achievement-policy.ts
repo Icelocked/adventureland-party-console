@@ -109,25 +109,36 @@ export function nearSpawnOf(choices: readonly AchievementChoice[] | null | undef
   return spawns.some((spawn) => spawn.map === place.map && spawnDistance(place, spawn) <= radius);
 }
 
-/** How many of `id` spawn on `place`'s map within `radius` of it, from its spawn records. */
-export function spawnCount(choices: readonly AchievementChoice[] | null | undefined, id: string,
-  place: { map: string; x: number; y: number }, radius: number): number {
+// A target spot without a box shares ground with spawns this close to it.
+const SHARED_GROUND = 100;
+
+/** Whether `spawn` shares ground with the target spot `at`: their boxes overlap, or, without
+ *  both boxes, the spawn is within SHARED_GROUND of the spot. A box that only touches does not count. */
+function sharesGround(at: SpawnPlace, spawn: SpawnPlace): boolean {
+  if (spawn.map !== at.map) return false;
+  const a = at.boundary, b = spawn.boundary;
+  if (!a || a.length < 4 || !b || b.length < 4) return spawnDistance(at, spawn) <= SHARED_GROUND;
+  return Math.min(a[2]!, b[2]!) > Math.max(a[0]!, b[0]!) && Math.min(a[3]!, b[3]!) > Math.max(a[1]!, b[1]!);
+}
+
+/** How many of `id` spawn on the ground of the target spot `at`, from its spawn records. */
+export function spawnCount(choices: readonly AchievementChoice[] | null | undefined, id: string, at: SpawnPlace): number {
   return spawnPlaces((choices || []).find((choice) => choice.id === id), "spawnRecords")
-    .filter((spawn) => spawn.map === place.map && spawnDistance(place, spawn) <= radius)
+    .filter((spawn) => sharesGround(at, spawn))
     .reduce((total, spawn) => total + (Number((spawn as { count?: unknown }).count) || 0), 0);
 }
 
 /**
- * Monsters the party can fight while the target respawns: a spawn on the same map within
- * `radius` of `at`, no stronger than the target by XP, regular, and not excluded.
+ * Monsters the party can fight while the target respawns: a spawn sharing the target spot's
+ * ground, no stronger than the target by XP, regular, and not excluded (docs/achievement-hunt.md § 22).
  */
 export function nearbyFillers(order: readonly AchievementMonster[], choices: readonly AchievementChoice[] | null | undefined,
-  targetId: string, at: { map: string; x: number; y: number }, radius: number, excluded: (id: string) => boolean): string[] {
+  targetId: string, at: SpawnPlace, excluded: (id: string) => boolean): string[] {
   const target = order.find((monster) => monster.id === targetId);
   if (!target) return [];
   return order
     .filter((monster) => monster.id !== targetId && !monster.special && monster.xp <= target.xp && !excluded(monster.id))
-    .filter((monster) => nearSpawnOf(choices, monster.id, at, radius))
+    .filter((monster) => spawnPlaces((choices || []).find((choice) => choice.id === monster.id)).some((spawn) => sharesGround(at, spawn)))
     .map((monster) => monster.id);
 }
 
