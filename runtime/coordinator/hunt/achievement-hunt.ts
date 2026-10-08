@@ -124,7 +124,7 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
     return true;
   }
 
-  function switchTo(choice: AchievementTarget | null): void {
+  function switchTo(choice: AchievementTarget | null, order: AchievementMonster[]): void {
     if (!choice) {
       state.achievementTarget = null;
       return say("Nothing left to farm: every selected monster has finished its ladder or is skipped");
@@ -136,7 +136,8 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
       return say(`Skipping ${choice.id}: ${location ? "the party convoy could not be started" : "no known spawn location"}`);
     }
     state.achievementTarget = { id: choice.id, step: choice.step, milestone: choice.milestone, startedAt: ports.now(), deaths: 0, counted: {} };
-    say(`Farming ${choice.id}: ${killText(choice.kills, choice.milestone, choice.step)}`);
+    const name = order.find((monster) => monster.id === choice.id)?.name || choice.id;
+    say(`Farming ${name}: ${killText(choice.kills, choice.milestone, choice.step)}`);
     ports.persist();
   }
 
@@ -155,7 +156,7 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
     const order = achievementMonsters(state.bestiaryCatalog as AchievementCatalogEntry[] | null, state.monsterChoices);
     const kills = partyAchievementKills(state.statuses, names.length ? names : [String(state.leader)]);
     const best = chooseAchievementTarget(order, new Set(settings().monsters), excluded, kills);
-    if (!stillWorking(order, kills, best)) switchTo(best);
+    if (!stillWorking(order, kills, best)) switchTo(best, order);
   }
 
   /** Settings changes forget failed routes, so a fixed spawn is tried again at once. */
