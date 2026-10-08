@@ -48,6 +48,9 @@ test('the list runs weakest to strongest; special and achievement-less monsters 
     { id: 'prat', name: 'Vampire Rat', xp: 7600, threat: 512, hp: 9200, definition: { achievements: ladder(1) } },
   ], [{ id: 'fireroamer', locations: [{}] }, { id: 'prat', locations: [{}] }]);
   assert.deepEqual(rank.map((m) => m.id), ['prat', 'fireroamer']);
+  // Training dummies and Cave of Many Dreams monsters are unlisted by the game: special, not regular.
+  const dummy = achievementMonsters([{ id: 'target_ar900', name: 'Target Automatron', xp: 1000, definition: { achievements: ladder(100), unlist: true } }], [{ id: 'target_ar900', locations: [{}] }]);
+  assert.equal(dummy[0].special, true);
   assert.equal(order.find((m) => m.id === 'dragold').special, true);
   assert.equal(order.find((m) => m.id === 'wolf').special, false);
 });
