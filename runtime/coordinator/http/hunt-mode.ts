@@ -3,7 +3,7 @@ import { createHuntMode, type HuntModeState, type HuntModePorts } from "../hunt/
 import type { ReturnLocation } from "../events/return-types.ts";
 
 interface ModePorts extends HuntModePorts {
-  /** Why Achievement Hunt can't start, or null. Only the party leader's farming supplies it. */
+  /** Why Achievement Hunt can't start, or null. */
   achievementsAvailable?(): string | null;
   waypoint(name: string | null): ReturnLocation | null;
   validLocation(focus: string[], location: unknown): ReturnLocation | null;

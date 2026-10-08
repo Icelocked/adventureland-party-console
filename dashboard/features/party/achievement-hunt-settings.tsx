@@ -14,7 +14,7 @@ import { ItemSprite } from './item-sprite';
 import type { MonsterChoice } from './monster-choice';
 import type { PartyState } from './party-state';
 
-// Phoenix needs a route order and the Fairy passive hunting; the coordinator rejects both.
+// The coordinator rejects these as targets (runtime/coordinator/application.ts).
 const untargetable = new Set(['phoenix', 'tinyp']);
 
 export type AchievementBlacklistChange = { action: 'remove' | 'clear'; monsterId?: string };
