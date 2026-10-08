@@ -333,3 +333,21 @@ test('a rare variant at the same step is farmed first, with the common monster a
   behind.hunt.tick();
   assert.deepEqual(behind.selected, ['snake']);
 });
+
+test('a target kept across a restart or a settings change gets its fillers without moving', () => {
+  const f = snakeFixture();
+  f.state.achievementHunt.fillIdle = false;
+  f.hunt.tick();
+  assert.deepEqual(f.state.monsterFocus, ['osnake']);
+  f.state.achievementHunt.fillIdle = true;
+  f.hunt.reset(); // the settings route calls this after every change
+  f.advance(1_000); f.hunt.tick();
+  assert.deepEqual(f.selected, ['osnake']);
+  assert.deepEqual(f.state.monsterFocus, ['osnake', 'snake']);
+  // A restarted coordinator resumes a saved target that has no focus list yet.
+  const restarted = snakeFixture({ achievementTarget: { id: 'osnake', step: 0, milestone: 100, startedAt: 1_000_000, deaths: 0, counted: {} },
+    monsterFocus: ['osnake'], location: { ...snakeChoices[0].locations[0] } });
+  restarted.hunt.tick();
+  assert.deepEqual(restarted.selected, []);
+  assert.deepEqual(restarted.state.monsterFocus, ['osnake', 'snake']);
+});
