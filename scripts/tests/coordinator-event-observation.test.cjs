@@ -8,7 +8,8 @@ function fixture(){
   capture:()=>({}),persist:()=>effects.push('persist'),log:message=>effects.push(message),statuses:()=>statuses,
   goobrawlStillFighting:()=>fighting,begin:(event,session)=>effects.push(['return',event,session.participants]),finishIfReady:()=>effects.push('finish'),
   location:recovery=>recovery.checkpoint,intent:()=>({revision,cancelled}),hasCommand:name=>!!commands[name],
-  command:(name,command)=>{commands[name]=command;},nextCommand:()=>1};
+  command:(name,command)=>{commands[name]=command;},nextCommand:()=>1,
+  retireCommand:(name,cycleId)=>{if(commands[name]?.cycleId!==cycleId)return false;delete commands[name];return true;}};
  return {state,statuses,commands,effects,...createEventObservations(state,ports),
   time:value=>{now=value;},intent:(value,cleared=false)=>{revision=value;cancelled=cleared;},fighting:value=>{fighting=value;}};
 }
@@ -82,4 +83,33 @@ test('merchant departures and joined reports participate in the normal event ret
  assert.deepEqual(f.effects.find(Array.isArray),['return','snowman',['M']]);
  const g=fixture();g.observe({name:'M',joinedEvent:'goobrawl',serverLiveEvents:[{name:'goobrawl'}]});
  assert.deepEqual(g.state.sessions.M.participants,['M']);
+});
+
+// Failure inventory: e2e/event-follow-leader-failures.md (entries 8–11). Live, a return
+// held a member whose other selected event was live: the return refused its event travel
+// and the live event blocked its walk home, so it could do neither.
+function openReturn(f,participants){
+ f.state.current={event:'mrgreen',cycleId:'r',startedAt:1000,pending:[...participants],participants:[...participants],checkpoint:null,
+  returnDispatchedAt:900,returnRoutes:Object.fromEntries(participants.map(name=>[name,{location:{map:'main',x:1,y:2},revision:1}]))};
+}
+test('an open return releases a member whose other selected event is live and finishes when empty',()=>{
+ const f=fixture();f.time(20000);openReturn(f,['W']);f.commands.W={id:7,type:'event-return-town',cycleId:'r'};
+ f.statuses.W={seenAt:20000,serverLiveEvents:[{name:'mrgreen'},{name:'mrpumpkin'}]};
+ f.observe({name:'W',serverLiveEvents:[{name:'mrgreen'},{name:'mrpumpkin'}]});
+ assert.deepEqual(f.state.current.participants,[]);assert.deepEqual(f.state.current.pending,[]);
+ assert.equal(f.state.current.returnRoutes,null);assert.equal(f.state.current.returnDispatchedAt,null);assert.ok(f.effects.includes('finish'));
+ assert.equal(f.commands.W,undefined,'its return command is retired, not retried against a superseded cycle');
+});
+test('an open return keeps members with no other live event, and stale reports release nobody',()=>{
+ const f=fixture();f.time(20000);openReturn(f,['P','W']);f.commands.P={id:8,type:'event-return-town',cycleId:'r'};
+ f.statuses.P={seenAt:20000,serverLiveEvents:[{name:'mrgreen'}]};
+ f.statuses.W={seenAt:5000,serverLiveEvents:[{name:'mrpumpkin'}]};
+ f.observe({name:'P',serverLiveEvents:[{name:'mrgreen'}]});
+ assert.deepEqual(f.state.current.participants,['P','W']);assert.ok(f.state.current.returnRoutes.W);assert.ok(f.commands.P);
+});
+test('a new return leaves out a member whose other selected event is live',()=>{
+ const f=fixture();f.authorize('P','mrgreen');f.authorize('W','mrgreen');
+ f.time(20000);f.statuses.W={seenAt:20000,serverLiveEvents:[{name:'mrpumpkin'}]};
+ f.observe({name:'P'});
+ assert.deepEqual(f.effects.find(Array.isArray),['return','mrgreen',['P']]);
 });

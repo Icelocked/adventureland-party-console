@@ -308,3 +308,87 @@ test.describe('Absent Halloween spawn', () => {
     await info.attach('absent-native-spawn-bounded-return', { body: JSON.stringify({ announcement, native: await world(live, 'mrpumpkin'), coordinator: await live.state() }), contentType: 'application/json' });
   });
 });
+
+// Earlier Halloween journeys can leave a native boss behind (its natural respawn);
+// these declared two-boss scenes start from no Green or Pumpkin at all.
+async function clearHalloweenBosses(live: LiveGame) {
+  return live.admin(`output=(()=>{const removed=[];for(const instance of Object.values(instances))for(const m of Object.values(instance.monsters||{}))
+    if(['mrgreen','mrpumpkin'].includes(m.type)){removed.push({id:m.id,type:m.type});remove_monster(m,{nospawn:true,silent:true});}
+    for(const type of ['mrgreen','mrpumpkin'])delete E[type];broadcast_e();return removed;})()`);
+}
+
+// Failure inventory: e2e/event-follow-leader-failures.md. Live: with two Halloween
+// bosses up, the leader and its followers attended different bosses. A follower
+// already in one boss that starts following a leader in the other must switch to the
+// leader's boss, and switching must not strand it in a return to checkpoint.
+test('a follower switches to its leader\'s Halloween boss without a stranded return', async ({ live }, info) => {
+  test.setTimeout(420_000);
+  await clearHalloweenBosses(live);
+  await live.post('/formation', { leader: W });
+  await live.post('/formation', { character: P, follow: false });
+  const checkpoint = await live.admin(`output=(()=>{const p=get_player(${JSON.stringify(W)});return {map:p.map,x:p.x,y:p.y}})()`);
+  await live.post('/travel', checkpoint);
+  await expect.poll(async () => { const state = await live.state(); return !state.activeConvoy || state.activeConvoy.phase === 'complete'; }, { timeout: 30_000 }).toBe(true);
+  await live.post('/formation', { character: P, eventSelections: ['mrgreen'] });
+  await live.post('/formation', { character: W, eventSelections: ['mrgreen', 'mrpumpkin'] });
+  // The leader attends Mr. Pumpkin first; the independent follower can only attend Mr. Green.
+  const pumpkin = await spawn(live, 'mrpumpkin', 'halloween', -495, 685);
+  await expect.poll(async () => (await live.state()).characters[W]?.joinedEvent, { timeout: 120_000 }).toBe('mrpumpkin');
+  const green = await spawn(live, 'mrgreen', 'spookytown', 636, 995);
+  await expect.poll(async () => { const state = await live.state();
+    return [state.characters[W]?.joinedEvent, state.characters[P]?.joinedEvent]; },
+  { timeout: 120_000, message: 'The leader attends Mr. Pumpkin and the independent follower Mr. Green' }).toEqual(['mrpumpkin', 'mrgreen']);
+  await live.post('/formation', { character: P, follow: true });
+  const samples: any[] = [];
+  const hits = async () => (await live.clients[P].events()).filter((event: any) => event.event === 'hit' &&
+    event.data?.hid === P && String(event.data?.id) === String(pumpkin.id) && event.data?.damage > 0);
+  try {
+    await expect.poll(async () => {
+      const state = await live.state();
+      samples.push({ at: Date.now(), leader: state.characters[W]?.joinedEvent, follower: state.characters[P]?.joinedEvent,
+        followerMap: state.characters[P]?.map, eventReturn: state.eventReturn ? { event: state.eventReturn.event,
+          participants: state.eventReturn.participants, phase: state.eventReturn.phase } : null });
+      return state.characters[P]?.joinedEvent === 'mrpumpkin' && (await hits()).length > 0;
+    }, { timeout: 180_000, intervals: [1000], message: 'The follower must switch to its leader\'s boss and fight it' }).toBe(true);
+    const state = await live.state();
+    expect(state.eventReturn?.participants?.includes(P) || false, 'No return holds the switched follower').toBe(false);
+  } finally {
+    await info.attach('follower-switches-to-leader-event', { body: JSON.stringify({ green, pumpkin, samples }, null, 2), contentType: 'application/json' });
+  }
+});
+
+// Leaving one Halloween boss while another selected boss is live (here by deselecting
+// it) must send the party on to the other boss. Live, the open return refused event
+// travel while the live event blocked the walk home, so the fighter could do neither.
+test('leaving one Halloween boss while another is live sends the party to the other', async ({ live }, info) => {
+  test.setTimeout(480_000);
+  await clearHalloweenBosses(live);
+  await prepare(live, 'mrgreen');
+  await live.post('/formation', { character: W, eventSelections: ['mrgreen', 'mrpumpkin'] });
+  const green = await spawn(live, 'mrgreen', 'spookytown', 636, 995);
+  await expect.poll(async () => { const state = await live.state();
+    return fighters.every(name => state.characters[name]?.joinedEvent === 'mrgreen'); },
+  { timeout: 120_000, message: 'Both fighters attend Mr. Green' }).toBe(true);
+  const pumpkin = await spawn(live, 'mrpumpkin', 'halloween', -495, 685);
+  const samples: any[] = [];
+  const hits = async (name: string) => (await live.clients[name].events()).filter((event: any) => event.event === 'hit' &&
+    event.data?.hid === name && String(event.data?.id) === String(pumpkin.id) && event.data?.damage > 0);
+  try {
+    await live.post('/formation', { character: W, eventSelections: ['mrpumpkin'] });
+    await expect.poll(async () => {
+      const [state, native] = await Promise.all([live.state(), world(live, 'mrpumpkin')]);
+      samples.push({ at: Date.now(), events: Object.fromEntries(fighters.map(name => [name, state.characters[name]?.joinedEvent])),
+        positions: native.players, eventReturn: state.eventReturn ? { event: state.eventReturn.event,
+          participants: state.eventReturn.participants, phase: state.eventReturn.phase } : null });
+      return (await Promise.all(fighters.map(hits))).every(list => list.length > 0);
+    }, { timeout: 240_000, intervals: [1000], message: 'Both fighters must go on to fight Mr. Pumpkin' }).toBe(true);
+    const state = await live.state();
+    expect(fighters.some(name => state.eventReturn?.participants?.includes(name)), 'No return holds a fighter with Mr. Pumpkin live').toBe(false);
+  } finally {
+    await info.attach('leave-one-boss-other-live', { body: JSON.stringify({ green, pumpkin, samples }, null, 2), contentType: 'application/json' });
+    const logs = await (await fetch(live.url + '/party-api/state?section=logs')).json();
+    await info.attach('leave-one-boss-character-logs', { body: JSON.stringify(Object.fromEntries(fighters.map(name => [name,
+      { game: (logs.gameLogs?.[name] || []).filter((entry: any) => !/^E2EMerchant:/.test(entry.message)).slice(-400), combat: (logs.combatLogs?.[name]?.events || logs.combatLogs?.[name] || []).slice(-80) }])), null, 2),
+      contentType: 'application/json' });
+  }
+});
