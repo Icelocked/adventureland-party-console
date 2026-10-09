@@ -753,11 +753,11 @@ export function startCoordinatorApplication(
     }) {
       const hunt = coordinatorPolicies.createAchievementHunt(state, {
         now: () => Date.now(),
-        members: ports.members,
-        busy: () => achievementHuntBusy(state, ports.rareOwns),
+        members: () => ports.members(),
+        busy: () => achievementHuntBusy(state, () => ports.rareOwns()),
         destination: (type) => coordinatorPolicies.coordinatorHuntDestination(state, type,
           (choices, focus) => farmZones.zones(choices, focus), false),
-        select: ports.select,
+        select: (id, location) => ports.select(id, location),
         radius: () => Number(state.monsterSearchRadiusByCharacter?.[String(state.leader)]) || 400,
         persist: persistSettings,
       });

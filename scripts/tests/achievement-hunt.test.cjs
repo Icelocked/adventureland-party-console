@@ -368,3 +368,54 @@ test('a target kept across a restart or a settings change gets its fillers witho
   assert.deepEqual(restarted.selected, []);
   assert.deepEqual(restarted.state.monsterFocus, ['osnake', 'snake']);
 });
+
+test('a dead party member holds the next switch until everyone is back', () => {
+  const f = fixture({});
+  f.hunt.tick();
+  f.advance(1_000); f.state.statuses.L.lastDeath = { at: 1_000_500 }; f.state.statuses.L.rip = true; f.hunt.tick();
+  f.advance(1_000); f.state.statuses.F.lastDeath = { at: 1_001_500 }; f.state.statuses.F.rip = true; f.hunt.tick();
+  assert.equal(f.state.achievementBlacklist.goo.deaths, 2);
+  assert.deepEqual(f.selected, ['goo']);
+  assert.match(f.state.achievementMessage, /^Waiting: L and F are dead/);
+  f.advance(1_000); f.state.statuses.L.rip = false; f.hunt.tick();
+  assert.match(f.state.achievementMessage, /^Waiting: F is dead/);
+  f.advance(1_000); f.state.statuses.F.rip = false; f.hunt.tick();
+  assert.deepEqual(f.selected, ['goo', 'bee']);
+});
+
+test('deaths during an event trip do not count toward the target, as in Hunt', () => {
+  const f = fixture({});
+  f.hunt.tick();
+  f.advance(1_000); f.state.statuses.L.lastDeath = { at: 1_000_500, eventTrip: { event: 'goobrawl', startedAt: 1_000_100 } }; f.hunt.tick();
+  assert.equal(f.state.achievementTarget.deaths, 0);
+  f.advance(1_000); f.state.statuses.L.lastDeath = { at: 1_001_500, eventTrip: null }; f.hunt.tick();
+  assert.equal(f.state.achievementTarget.deaths, 1);
+});
+
+test('a leader standing away from the target after a failed trip is sent back, at most every 30 seconds', () => {
+  const f = snakeFixture();
+  f.hunt.tick();
+  assert.deepEqual(f.selected, ['osnake']);
+  // The convoy failed: the configured location is the target, but the leader is elsewhere.
+  f.state.activeConvoy = { phase: 'failed' };
+  Object.assign(f.state.statuses.L, { map: 'winterland', x: 400, y: -2600 });
+  f.advance(20_000); f.hunt.tick();
+  assert.deepEqual(f.selected, ['osnake', 'osnake']);
+  f.advance(5_000); f.hunt.tick();
+  assert.deepEqual(f.selected, ['osnake', 'osnake'], 'no retry inside 30 seconds');
+  f.advance(30_000); f.hunt.tick();
+  assert.deepEqual(f.selected, ['osnake', 'osnake', 'osnake']);
+  // At the spawn the target is kept, and a convoy still travelling is never interrupted.
+  Object.assign(f.state.statuses.L, { map: 'halloween', x: -590, y: -335 });
+  f.advance(40_000); f.hunt.tick();
+  Object.assign(f.state.statuses.L, { map: 'winterland', x: 400, y: -2600 }); f.state.activeConvoy = { phase: 'travel' };
+  f.advance(40_000); f.hunt.tick();
+  assert.equal(f.selected.length, 3);
+  // A leader on its own errand, such as a town restock, is not pulled back.
+  f.state.activeConvoy = null; f.state.statuses.L.navigationState = 'town';
+  f.advance(40_000); f.hunt.tick();
+  assert.equal(f.selected.length, 3);
+  f.state.statuses.L.navigationState = 'idle';
+  f.advance(40_000); f.hunt.tick();
+  assert.equal(f.selected.length, 4);
+});
