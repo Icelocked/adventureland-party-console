@@ -76,6 +76,14 @@ function bossLike(entry: AchievementCatalogEntry, choice: AchievementChoice | un
   return spawns > 0 && spawns <= BOSS_SPAWNS && (Number(entry.hp) || 0) >= BOSS_HP;
 }
 
+/** Bosses, event, cooperative and random-respawn monsters, ones the game leaves out of its list,
+ *  and any without a regular spawn. */
+function isSpecial(entry: AchievementCatalogEntry, routable: ReadonlySet<string>, choice: AchievementChoice | undefined): boolean {
+  const definition = entry.definition || {};
+  return !!definition.special || !!definition.cooperative || !!definition.unlist ||
+    RANDOM_RESPAWN.has(entry.id) || !routable.has(entry.id) || bossLike(entry, choice);
+}
+
 /** Every monster that has achievements, weakest first: by XP, then threat (attack × speed), HP and name.
  *  Threat alone misranks monsters (a Vampire Rat hits harder than a Fire Spirit but has a ninth of its HP). */
 export function achievementMonsters(
@@ -94,8 +102,7 @@ export function achievementMonsters(
         xp: Number(entry.xp) || 0,
         threat: Number(entry.threat) || 0,
         hp: Number(entry.hp) || 0,
-        special: !!definition.special || !!definition.cooperative || !!definition.unlist ||
-          RANDOM_RESPAWN.has(entry.id) || !routable.has(entry.id) || bossLike(entry, choiceOf(entry.id)),
+        special: isSpecial(entry, routable, choiceOf(entry.id)),
       };
     })
     .filter((monster) => monster.ladder.length > 0)
