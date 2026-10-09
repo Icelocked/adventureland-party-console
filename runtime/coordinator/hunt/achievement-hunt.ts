@@ -28,7 +28,13 @@ export interface AchievementHuntState {
   monsterFocus: string[];
   statuses: Record<string, {
     seenAt: number;
-    lastDeath?: { at?: number } | null;
+    lastDeath?: { at?: number; eventTrip?: unknown } | null;
+    rip?: boolean;
+    hp?: number;
+    map?: string;
+    x?: number;
+    y?: number;
+    navigationState?: string;
     monsterAchievementKills?: Record<string, unknown> | null;
   } | undefined>;
   bestiaryCatalog?: unknown;
@@ -57,6 +63,10 @@ export interface AchievementHuntPorts {
 
 // A focus change this soon after our own switch is still settling, not the player.
 const SWITCH_GRACE_MS = 15_000;
+// A party sent back to its target is sent again no sooner than this.
+const RETURN_RETRY_MS = 30_000;
+// A status older than this no longer says whether a character is dead.
+const FRESH_STATUS_MS = 10_000;
 // A monster whose route failed is retried after this long.
 const UNROUTABLE_RETRY_MS = 10 * 60_000;
 // Characters fight the highest focused priority tier in reach (characters/shared.js monsterPriority).
@@ -68,6 +78,7 @@ const killText = (kills: number, milestone: number, step: number) =>
 
 export function createAchievementHunt(state: AchievementHuntState, ports: AchievementHuntPorts) {
   const unroutable = new Map<string, number>();
+  let returnedAt = -Infinity;
   // Set again after a restart or a settings change (failure mode 21).
   let refocus = true;
 
@@ -124,9 +135,12 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
   /** Counts each character's death once, and only deaths after the target started. */
   function newDeaths(target: AchievementTargetState, names: string[]): string[] {
     return names.filter((name) => {
-      const at = Number(state.statuses[name]?.lastDeath?.at) || 0;
+      const death = state.statuses[name]?.lastDeath;
+      const at = Number(death?.at) || 0;
       if (at <= target.startedAt || at === target.counted[name]) return false;
       target.counted[name] = at;
+      // Hunt does not count deaths on an event trip either (scripts/hunt-safety.cjs eventDeath).
+      if (death?.eventTrip) return false;
       target.deaths++;
       return true;
     });
@@ -215,10 +229,45 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
   }
 
   /** A competition relocation can pick a filler's spawn; the party belongs at one of the target's. */
+  /** A status's map position, or null when it reports none. */
+  function positionOf(status: AchievementHuntState["statuses"][string]): { map: string; x: number; y: number } | null {
+    if (typeof status?.map !== "string" || !Number.isFinite(status.x) || !Number.isFinite(status.y)) return null;
+    return { map: status.map, x: status.x!, y: status.y! };
+  }
+  /** Party members whose fresh status says they are dead. */
+  function deadMembers(names: string[]): string[] {
+    return names.filter((name) => {
+      const status = state.statuses[name];
+      return !!status && ports.now() - status.seenAt <= FRESH_STATUS_MS && (!!status.rip || status.hp === 0);
+    });
+  }
+  /** Where the leader stands, when that may count against the target: after our convoy failed,
+   *  or while the leader has no convoy and is idle. A town restock or similar errand runs without
+   *  a convoy, and is left alone. */
+  function leaderPlace(convoy: { phase?: string } | null | undefined): { map: string; x: number; y: number } | null {
+    const lead = state.leader ? state.statuses[state.leader] : undefined;
+    const place = positionOf(lead);
+    const errandFree = convoy?.phase === "failed" || (!convoy && (lead?.navigationState ?? "idle") === "idle");
+    return place && errandFree ? place : null;
+  }
+  /** Whether the party is away from the target's spawn: the farm location points elsewhere, or
+   *  the leader stands elsewhere (failure mode 25). */
   function awayFromTarget(): boolean {
     const current = state.achievementTarget, convoy = state.activeConvoy as { phase?: string } | null | undefined;
-    if (!current || !state.location || (convoy && !["complete", "failed"].includes(String(convoy.phase)))) return false;
-    return !nearSpawnOf(state.monsterChoices, current.id, state.location, ports.radius());
+    if (!current || (convoy && !["complete", "failed"].includes(String(convoy.phase)))) return false;
+    const near = (place: { map: string; x: number; y: number }) => nearSpawnOf(state.monsterChoices, current.id, place, ports.radius());
+    if (state.location && !near(state.location)) return true;
+    const leader = leaderPlace(convoy);
+    return !!leader && !near(leader);
+  }
+  const shouldReturn = (): boolean => awayFromTarget() && ports.now() - returnedAt >= RETURN_RETRY_MS;
+  /** Why this tick waits instead of choosing or moving, or null. */
+  function holdReason(names: string[]): string | null {
+    const busy = ports.busy();
+    if (busy) return `Waiting: ${busy}`;
+    // A convoy started while someone is dead fails during setup (failure mode 24).
+    const dead = deadMembers(names);
+    return dead.length ? `Waiting: ${dead.join(" and ")} ${dead.length === 1 ? "is" : "are"} dead` : null;
   }
   /** Sets the kept target's focus again around where the party farms, without moving it. */
   function focusKeptTarget(order: AchievementMonster[]): void {
@@ -232,6 +281,7 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
   }
   function returnToTarget(order: AchievementMonster[]): void {
     const current = state.achievementTarget!;
+    returnedAt = ports.now();
     const location = ports.destination(current.id);
     if (!location || !ports.select(current.id, location)) return;
     restorePriorities(current);
@@ -249,14 +299,14 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
     if (!leaderOnline()) return say("Waiting for an online party leader");
     const names = ports.members();
     recordDeaths(names);
-    const busy = ports.busy();
-    if (busy) return say(`Waiting: ${busy}`);
+    const hold = holdReason(names);
+    if (hold) return say(hold);
     if (focusChangedByHand()) return stop("Switched to Auto: the monster focus was changed by hand");
     const order = achievementMonsters(state.bestiaryCatalog as AchievementCatalogEntry[] | null, state.monsterChoices);
     const kills = partyAchievementKills(state.statuses, names.length ? names : [String(state.leader)]);
     const best = chooseAchievementTarget(order, new Set(settings().monsters), excluded, kills);
     if (!stillWorking(order, kills, best)) switchTo(preferVariant(best, order, kills), order);
-    else if (awayFromTarget()) returnToTarget(order);
+    else if (shouldReturn()) returnToTarget(order);
     else if (refocus) focusKeptTarget(order);
     refocus = false;
   }
