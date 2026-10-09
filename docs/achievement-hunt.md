@@ -178,6 +178,24 @@ Skipping works like Hunt's blacklist:
     them ahead of the White Wolves, Irradiated Goos or Ghosts sharing their
     spawn. They and the other boss-like monsters are listed as special.
 
+Found while running on a live party:
+
+24. **Switching while a member is dead.** The death that blacklisted White
+    Wolves also left the warrior dead, and the switch to Irradiated Goos started
+    a convoy that failed during setup ("dead during convoy setup"). Achievement
+    Hunt waits ("Waiting: Sadokunn is dead") while any member's fresh status
+    says it is dead, then switches.
+25. **A failed trip that looks like arrival.** The failed switch had already
+    set the farm location to the Arena, so the party, still split between
+    Mainland and Winterland, counted as at its target and stayed there for 20
+    minutes. The leader's own position now counts too, but only after our
+    convoy failed or while the leader has no convoy and is idle, so a town
+    restock is never pulled back. A party sent back is sent again no sooner
+    than 30 seconds later.
+26. **Event deaths counted against the target.** A death on an event trip
+    counted toward the death blacklist. Hunt leaves those out
+    (`scripts/hunt-safety.cjs` `eventDeath`), and so does Achievement Hunt.
+
 ## Tests
 
 The console E2E journey `e2e/achievement-hunt.spec.ts` (failure modes in
@@ -186,7 +204,7 @@ it selects Goo in Farming settings, chooses the mode, waits for the target,
 restarts the coordinator and leaves the mode. Its evidence lands in
 `.build/e2e-report/` with the other console journeys.
 
-`scripts/tests/achievement-hunt.test.cjs` checks the rest of failure modes 1-13
+`scripts/tests/achievement-hunt.test.cjs` checks the rest of the failure modes
 in isolation. The console fixture publishes one Goo spawn and no kill counts, so
 the journey cannot reach a step sweep across several monsters, death
 thresholds, a lower step taking over, or the random-respawn list.
