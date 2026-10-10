@@ -1,3 +1,4 @@
+import { swapHeld } from "../inventory/swap-reservations.ts";
 import { ruleOwner, itemRuleConflicts, sharedMember, type ConflictState } from "../inventory/shared-rules.ts";
 import type { Item, InventoryEntry, ItemMark } from "../contracts/item.ts";
 import { markBankDeconstruction, enqueueAutomaticBankDeconstruction, type BankDeconstructionState } from "./bank-deconstruction.ts";
@@ -153,7 +154,8 @@ export function createDeconstruction(state: DeconstructionState, ports: Ports) {
       if (!automaticRule(name,entry.item)) continue;
       if (
         !deconstructable(entry.item, state.deconstructionCatalog) ||
-        ports.reserved(name, entry.slot!, entry.item)
+        ports.reserved(name, entry.slot!, entry.item) ||
+        swapHeld(state.statuses[name], entry.slot, entry.item)
       )
         continue;
       // Do not recreate marks from a heartbeat sampled before the last acknowledgement.

@@ -3,6 +3,7 @@ import { CharacterSessionControls } from './character-session-controls';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroupItem } from '@/components/ui/radio-group';
 import { EventSelectionControl } from './event-selection-control';
+import { GearSetControl } from './gear-set-control';
 import { Coins } from 'lucide-react';
 import { abbreviatedGold } from './abbreviated-gold';
 import { ActiveStatuses } from './active-statuses';
@@ -325,7 +326,7 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
           </div>
         </div>
         <CharacterMapSection char={char} />
-        <div className="mt-4 flex gap-5 rounded border border-emerald-900/70 bg-black/20 p-3 text-sm">
+        <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 rounded border border-emerald-900/70 bg-black/20 p-3 text-sm">
           <label
             htmlFor={`leader-${char.name}`}
             className="flex items-center gap-2"
@@ -351,6 +352,7 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
             merchant={char.ctype === 'merchant'}
             onChange={onEventSelectionChange} onPriorityChange={onEventPriorityChange}
           />
+          {char.ctype !== 'merchant' && <GearSetControl name={char.name} model={inventoryModel} sets={state.gearSets?.[char.name]} />}
         </div>
         <div className="mt-5 grid gap-3">
           <Meter

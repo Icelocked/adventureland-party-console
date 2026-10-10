@@ -10,12 +10,6 @@ export const LUCK_SWAP_SLOTS = [
   "ring1", "ring2", "earring1", "earring2",
 ] as const;
 export type LuckSlot = (typeof LUCK_SWAP_SLOTS)[number];
-/** Which G.items[name].type value is acceptable in each tracked slot. */
-export const LUCK_SLOT_ITEM_TYPE: Record<LuckSlot, string> = {
-  chest: "chest", pants: "pants", helmet: "helmet", gloves: "gloves", shoes: "shoes",
-  cape: "cape", belt: "belt", orb: "orb", amulet: "amulet",
-  ring1: "ring", ring2: "ring", earring1: "earring", earring2: "earring",
-};
 type Loadout = Partial<Record<LuckSlot, GearItem | null>>;
 export interface LuckSwapSession {
   original: Loadout;
@@ -41,21 +35,13 @@ export interface LuckSwapPorts {
   isTank(): boolean;
   equipped(slot: LuckSlot): GearItem | null;
   items(): (GearItem | null)[];
-  itemType(item: GearItem): string | undefined;
-  luckValue(item: GearItem | null): number;
-  /** Set key an item belongs to (e.g. "wanderers"), or undefined for an unset item. */
-  itemSet(item: GearItem | null): string | undefined;
-  /**
-   * Cumulative luck granted by wearing `count` pieces of `set` (upstream `G.sets[set][count].luck`,
-   * already summed across lower tiers — `node/server_functions.js` folds each tier into the next).
-   * 0 for a count with no tier, an unset/unknown set, or a set whose tiers carry no luck at all.
-   */
-  setBonusLuck(set: string, count: number): number;
-  /** Set-member counts already locked in by slots this module never swaps (mainhand/offhand). */
-  fixedSetCounts(): Partial<Record<string, number>>;
+  /** This character's saved gear set (`luck` worn at the kill, `tank` restored after), or null. */
+  gearSet(name: "luck" | "tank"): Partial<Record<LuckSlot, GearItem>> | null;
   fingerprint(item: GearItem | null): GearItem | null;
   same(a: GearItem | null, b: GearItem | null): boolean;
   equip(index: number, slot: LuckSlot): Promise<unknown>;
+  /** Empty a slot (back into the bag); a luck piece worn where nothing was before the swap. */
+  unequip(slot: LuckSlot): Promise<unknown>;
   lethalBasicAttack(target: LuckTarget): boolean;
   /**
    * True while this monster's own `.target` is this character's name. Ordinary (non-cooperative)
@@ -71,16 +57,12 @@ export interface LuckSwapPorts {
 }
 
 /**
- * Swaps the designated tank into its highest-luck available gear right before a monster dies,
- * then restores combat gear once the kill is confirmed. Per upstream `node/server.js`'s
- * `issue_monster_award()`, an ordinary (non-cooperative) monster's drop is rolled using only
- * `players[name_to_id[monster.target]]` — whoever it was attacking at the instant it died — not
- * a per-contributor share, and not the rest of the party at all. So this only pays off while the
- * tank actually holds that monster's aggro (`holdsAggro`), with one exception: a lethal attack
- * from this character sets its own aggro as part of landing that same kill, so the one-shot path
- * doesn't need to already hold it. The trigger otherwise predicts "about to die" via an HP-trend
- * time-to-death estimate (scale- and source-agnostic, unlike a fixed HP percentage) plus that
- * one-shot fast path for trash mobs that die in a single hit with no gradual decline to observe.
+ * Swaps the designated tank into its saved `luck` gear set right before a monster dies, then
+ * restores its `tank` set (or the gear worn when the swap began) once the kill is confirmed. Per
+ * upstream `node/server.js`'s `issue_monster_award()`, an ordinary monster's drop is rolled using
+ * only whoever it was attacking when it died, so this only pays off while the tank holds that
+ * aggro (`holdsAggro`); a lethal attack from this character sets its own aggro as part of the
+ * kill. The trigger predicts the kill from an HP-trend time-to-death estimate plus a one-shot path.
  */
 export function createKillLuckSwap(ports: LuckSwapPorts, memory: LuckSwapMemory = {}) {
   let active = true;
@@ -119,13 +101,36 @@ export function createKillLuckSwap(ports: LuckSwapPorts, memory: LuckSwapMemory 
       if (!ports.same(ports.equipped(slot), wanted)) await equipSlot(wanted, slot, session);
     }
   }
-  async function restore(session: LuckSwapSession): Promise<void> {
-    for (const slot of Object.keys(session.original) as LuckSlot[]) {
-      if (!owned(session)) return;
-      const original = session.original[slot] ?? null;
-      if (original && !ports.same(ports.equipped(slot), original)) await equipSlot(original, slot, session);
+  function restoreTarget(session: LuckSwapSession): Loadout {
+    const tank = ports.gearSet("tank");
+    if (!tank) return session.original;
+    const target: Loadout = { ...session.original };
+    for (const slot of Object.keys(tank) as LuckSlot[]) {
+      const [index] = locate([tank[slot]!]);
+      const worn = ports.equipped(slot);
+      if (member(worn, tank[slot]!)) target[slot] = ports.fingerprint(worn);
+      else if (index >= 0) target[slot] = ports.fingerprint(ports.items()[index]);
     }
-    if (owned(session) && matches(session.original)) delete memory.session;
+    return target;
+  }
+  async function restore(session: LuckSwapSession): Promise<void> {
+    const target = restoreTarget(session);
+    for (const slot of Object.keys(target) as LuckSlot[]) {
+      if (!owned(session)) return;
+      const wanted = target[slot] ?? null;
+      if (!wanted) {
+        // The slot was empty before the swap: take the luck piece off again.
+        if (session.plan[slot] && ports.same(ports.equipped(slot), session.plan[slot]!)) {
+          await ports.unequip(slot);
+          session.expected = { ...session.expected, [slot]: null };
+        }
+        continue;
+      }
+      // A piece that is no longer carried leaves its slot as it is rather than failing the restore.
+      if (!ports.same(ports.equipped(slot), wanted) && ports.items().some(item => ports.same(item, wanted)))
+        await equipSlot(wanted, slot, session);
+    }
+    if (owned(session)) delete memory.session;
   }
   function run(operation: () => Promise<void>): void {
     if (!active || memory.pending || ports.now() < (memory.retryAt || 0)) return;
@@ -135,77 +140,33 @@ export function createKillLuckSwap(ports: LuckSwapPorts, memory: LuckSwapMemory 
     }).finally(() => { if (memory.pending === pending) delete memory.pending; });
     memory.pending = pending;
   }
-  function bestCarried(carried: GearItem[], type: string, exclude: (item: GearItem) => boolean) {
-    return carried
-      .filter(item => ports.itemType(item) === type && !exclude(item))
-      .reduce<{ item: GearItem; luck: number } | null>((top, item) => {
-        const luck = ports.luckValue(item);
-        return !top || luck > top.luck ? { item, luck } : top;
-      }, null);
+  /** Set members match by identity; lock state and quantity can change without it becoming another item. */
+  function member(item: GearItem | null, wanted: GearItem): boolean {
+    return !!item && item.name === wanted.name && (item.level ?? undefined) === (wanted.level ?? undefined) &&
+      (item.p ?? undefined) === (wanted.p ?? undefined) && (item.stat_type ?? undefined) === (wanted.stat_type ?? undefined);
   }
-  /**
-   * Per-slot standalone comparison: whichever carried item of the right type has the highest
-   * intrinsic luck, if it beats what's already equipped there.
-   */
-  function planStandalone(carried: GearItem[]): { plan: Partial<Record<LuckSlot, GearItem>>; luck: Record<LuckSlot, number> } {
-    const plan: Partial<Record<LuckSlot, GearItem>> = {};
-    const luck = {} as Record<LuckSlot, number>;
-    for (const slot of LUCK_SWAP_SLOTS) {
-      const currentLuck = ports.luckValue(ports.equipped(slot));
-      luck[slot] = currentLuck;
-      const best = bestCarried(carried, LUCK_SLOT_ITEM_TYPE[slot], item => ports.luckValue(item) <= currentLuck);
-      if (best) { plan[slot] = ports.fingerprint(best.item)!; luck[slot] = best.luck; }
-    }
-    return { plan, luck };
+  /** Each wanted item claims its own bag slot, so two identical rings fill both ring slots. */
+  function locate(wanted: GearItem[]): number[] {
+    const taken = new Set<number>(), items = ports.items();
+    return wanted.map(item => {
+      const index = items.findIndex((candidate, slot) => !taken.has(slot) && member(candidate, item));
+      if (index >= 0) taken.add(index);
+      return index;
+    });
   }
-  /**
-   * A set member can be worth equipping with zero (or merely lower) intrinsic luck of its own,
-   * once enough of a set's pieces are worn to unlock a luck bonus tier — something the per-slot
-   * standalone comparison can never discover, since it only ever compares one slot's items against
-   * each other. For each set with a carried, not-yet-equipped piece, this checks whether committing
-   * every available piece (displacing whatever the standalone pass chose for those slots) raises
-   * total luck enough to outweigh what's displaced. Two different candidate sets wanting the same
-   * slot type at once is not resolved jointly; the later one in iteration order wins that slot.
-   */
-  function applySetBonuses(carried: GearItem[], plan: Partial<Record<LuckSlot, GearItem>>, luck: Record<LuckSlot, number>): void {
-    const counts: Partial<Record<string, number>> = { ...ports.fixedSetCounts() };
-    for (const slot of LUCK_SWAP_SLOTS) {
-      const set = ports.itemSet(ports.equipped(slot));
-      if (set) counts[set] = (counts[set] || 0) + 1;
-    }
-    const candidatesBySet = new Map<string, { slot: LuckSlot; item: GearItem }[]>();
-    for (const slot of LUCK_SWAP_SLOTS) {
-      const bySet = new Map<string, { item: GearItem; luck: number }>();
-      for (const item of carried) {
-        if (ports.itemType(item) !== LUCK_SLOT_ITEM_TYPE[slot] || ports.same(ports.equipped(slot), item)) continue;
-        const set = ports.itemSet(item);
-        if (!set) continue;
-        const value = ports.luckValue(item);
-        const existing = bySet.get(set);
-        if (!existing || value > existing.luck) bySet.set(set, { item, luck: value });
-      }
-      for (const [set, { item }] of bySet) {
-        const list = candidatesBySet.get(set) ?? [];
-        list.push({ slot, item });
-        candidatesBySet.set(set, list);
-      }
-    }
-    for (const [set, candidates] of candidatesBySet) {
-      const bonusGain = ports.setBonusLuck(set, (counts[set] || 0) + candidates.length) - ports.setBonusLuck(set, counts[set] || 0);
-      if (bonusGain <= 0) continue;
-      const displacedLuck = candidates.reduce((sum, { slot, item }) => sum + luck[slot] - ports.luckValue(item), 0);
-      if (bonusGain > displacedLuck) for (const { slot, item } of candidates) plan[slot] = ports.fingerprint(item)!;
-    }
-  }
+  /** The luck set's pieces not yet worn in their slot and carried in the bag; nothing without a saved luck set. */
   function planSwap(): Partial<Record<LuckSlot, GearItem>> {
-    const carried = ports.items().filter((item): item is GearItem => !!item);
-    const { plan, luck } = planStandalone(carried);
-    applySetBonuses(carried, plan, luck);
+    const set = ports.gearSet("luck");
+    if (!set) return {};
+    const slots = (Object.keys(set) as LuckSlot[]).filter(slot => LUCK_SWAP_SLOTS.includes(slot) && !member(ports.equipped(slot), set[slot]!));
+    const found = locate(slots.map(slot => set[slot]!));
+    const plan: Partial<Record<LuckSlot, GearItem>> = {};
+    slots.forEach((slot, index) => { if (found[index] >= 0) plan[slot] = ports.fingerprint(ports.items()[found[index]])!; });
     return plan;
   }
   function beginSwap(): void {
     const plan = planSwap();
-    // No carried item beats what's already equipped anywhere: nothing to gain right now.
+    // No saved luck set, or every carried member is already worn: nothing to swap.
     if (!Object.keys(plan).length) { memory.retryAt = ports.now() + 2000; return; }
     const next: LuckSwapSession = { original: copyLoadout(), expected: copyLoadout(), plan, restoring: false };
     memory.session = next;
@@ -232,7 +193,9 @@ export function createKillLuckSwap(ports: LuckSwapPorts, memory: LuckSwapMemory 
     // kill, even if the monster had no target yet — so the aggro check only gates the trend-based
     // prediction, where the kill (and whichever aggro was already in place) may come from elsewhere.
     if (ports.lethalBasicAttack(target)) return true;
-    return ports.holdsAggro(target) && estimatedSecondsToDeath() <= 3;
+    // Each piece is a server round trip, so a larger set needs a longer lead before the kill.
+    const pieces = Object.keys(planSwap()).length;
+    return pieces > 0 && ports.holdsAggro(target) && estimatedSecondsToDeath() <= Math.max(3, 1.5 + 0.35 * pieces);
   }
   function shouldRestore(target: LuckTarget | null): boolean {
     if (!ports.isTank()) return true;
@@ -268,6 +231,22 @@ export function createKillLuckSwap(ports: LuckSwapPorts, memory: LuckSwapMemory 
       await memory.pending;
     },
     busy: () => !!memory.pending,
+    /**
+     * Inventory slots this swap holds: combat gear waiting to be restored and the luck pieces it
+     * wears or will wear. Automatic upgrade/compound pickups must leave them alone; one slot per
+     * held item, so identical copies elsewhere in the bag stay eligible.
+     */
+    reservedSlots(): number[] {
+      if (!active) return [];
+      const held: GearItem[] = [];
+      for (const name of ["luck", "tank"] as const) {
+        const set = ports.gearSet(name) || {};
+        for (const slot of Object.keys(set) as LuckSlot[]) if (!member(ports.equipped(slot), set[slot]!)) held.push(set[slot]!);
+      }
+      const session = memory.session;
+      if (session) for (const item of Object.values(session.original)) if (item) held.push(item);
+      return [...new Set(locate(held).filter(index => index >= 0))].sort((a, b) => a - b);
+    },
     stop() { active = false; },
   };
 }

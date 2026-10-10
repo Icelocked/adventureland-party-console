@@ -95,3 +95,16 @@ for (const family of ['upgrade', 'compound']) test(`automatic merchant collects 
   state.autoItemMarks.M['helmet@+0']='merchant';state.autoNpcSales={'{"name":"helmet","level":0,"p":null,"stat_type":null}':true};
   collect(state,'W',{items});assert.deepEqual(state.merchantMarked.W,[]);
 });
+
+// Failure inventory: e2e/gear-sets-failures.md (entry 4). Live, a luck-set amulet in the bag kept
+// an "auto bank" mark; gear held for a luck swap must never carry an automatic destination.
+test('automatic bank marks skip gear held for a luck swap, existing ones are dropped, manual marks stay', () => {
+  const manual = {slot: 2, item: {name: 'spookyamulet', level: 3}};
+  const stale = {slot: 1, item: {name: 'spookyamulet', level: 3}, auto: true};
+  const state = {marked: {M: [manual, stale]}, merchantMarked: {}, autoItemMarks: {M: {'spookyamulet@+3': 'bank'}}};
+  const status = {items: [{slot: 0, item: {name: 'spookyamulet', level: 3}}, {slot: 1, item: {name: 'spookyamulet', level: 3}}, {slot: 2, item: {name: 'spookyamulet', level: 3}}],
+    reservedInventory: [{slot: 1, item: {name: 'spookyamulet'}}, {slot: 2, item: {name: 'spookyamulet'}}]};
+  assert.equal(collect(state, 'M', status), true);
+  assert.deepEqual(state.marked.M.map(mark => [mark.slot, !!mark.auto]).sort(), [[0, true], [2, false]],
+    'the spare copy is auto-banked, the held copy is not, and the manual mark on a held slot stays');
+});

@@ -53,6 +53,16 @@ export const ConnectedInventory = memo(function ConnectedInventory({
     [state.luckySlotTracking, name, char?.luckySlotTracking],
   );
   const onLuckySlot = useCallback(() => setLuckySlotOpen(true), []);
+  const gearSets = state.gearSets?.[name];
+  const heldSlots = useMemo(() => {
+    const held: Record<number, string> = {};
+    for (const { slot, item } of char?.reservedInventory || []) {
+      const set = (['luck', 'tank', 'gold'] as const).find(id => Object.values(gearSets?.[id]?.slots || {}).some(member =>
+        member.name === item?.name && (member.level ?? 0) === (item?.level ?? 0)));
+      held[slot] = set ? `${set[0].toUpperCase()}${set.slice(1)} set` : 'Swapped-out gear';
+    }
+    return held;
+  }, [char?.reservedInventory, gearSets]);
   const deconstructionMarks = state.deconstructionMarks || emptyArray();
   const standListings = state.standListings || emptyArray();
   const npcSaleMarks = state.npcSaleMarks || emptyArray();
@@ -196,6 +206,7 @@ export const ConnectedInventory = memo(function ConnectedInventory({
       deconstructionMarks={deconstructionMarks}
       autoDeconstruction={state.autoDeconstruction?.[ruleName] || emptyRecord()}
       deconstructionCatalog={state.deconstructionCatalog || emptyRecord()}
+      heldSlots={heldSlots}
       onDeconstruction={onDeconstruction}
       onRetryDeconstruction={onRetryDeconstruction}
       onRemoveNpcSale={onRemoveNpcSale}

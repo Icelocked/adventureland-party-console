@@ -455,31 +455,27 @@ non-leader priest tank via `absorb`, per the issue's own example. No hold-back i
 added for non-tank characters; they keep today's approach/attack timing and are only
 barred from *stealing* aggro via taunt/absorb.
 
-The designated tank also gets a kill-time luck swap: `runtime/characters/roles/
-kill-luck-swap.ts` (mirroring `porcupine-equipment.ts`'s swap/verify/restore/bail-out
-shape) auto-detects, per equip slot, whichever carried item has more `G.items[name].
-luck` than what's equipped, and swaps in right before a kill. It also accounts for
-set bonuses (`G.sets[set][count].luck`, upstream `design/items.js`): a set member can
-be worth equipping with little or no intrinsic luck of its own — e.g. the "wanderers"
-set's five pieces have none individually but grant +16 luck only once all five are
-worn — once completing it (using carried pieces, counting whatever's already locked
-into mainhand/offhand too) raises total luck enough to outweigh whatever it would
-displace from those slots. Two different candidate sets wanting the same slot type at
-once isn't resolved jointly. Upstream `node/server.js`'s
-`issue_monster_award()` rolls an ordinary (non-cooperative) monster's drop using only
-`players[name_to_id[monster.target]]` — whoever it was attacking at the instant it
-died — not a per-contributor share, and not the rest of the party at all; whoever
-physically opens the resulting chest doesn't matter either. So the swap only triggers
-from the HP-trend prediction while the tank already holds that monster's aggro
-(`holdsAggro`), with one exception: a lethal attack from this character sets its own
-aggro as part of landing that same kill, so the one-shot fast path (for an immediately
-lethal basic attack) doesn't need to already hold it. The trend trigger is a
-scale-agnostic time-to-death estimate from the target's observed HP (not a fixed HP
-percentage, which breaks for both one-shot trash kills and slow external-party boss
-fights). It restores combat gear on confirmed death, a 10s safety timeout, or if the
-tank becomes endangered while under-geared — and defers entirely to
-`porcupine-equipment` if that module is already mid-swap, since both touch
-equip slots. mainhand/offhand and elixir are deliberately excluded from the swap.
+The designated tank also gets a kill-time luck swap built on **gear sets**
+(`runtime/coordinator/characters/gear-sets.ts`, `POST /party-api/gear-sets` with
+`{character, set: "luck" | "tank" | "gold", action: "save" | "clear"}`). A set is
+captured from the character's freshly reported worn gear in the non-weapon slots and
+persists per character; the dashboard's Gear sets control shows each set's worn/carried
+pieces and missing slots. `runtime/characters/roles/kill-luck-swap.ts` equips exactly
+the luck set's carried members right before a kill (each slot claims its own copy, so
+both rings and both earrings swap), starting `max(3, 1.5 + 0.35 × pieces)` seconds
+before the predicted death or on a lethal own attack while holding aggro, because
+`issue_monster_award()` rolls an ordinary drop only for the monster's current target.
+After the kill it restores the tank set, falling back to the gear worn when the swap
+began and emptying slots that were empty. Without a saved luck set nothing is swapped.
+Members of either set and swapped-out gear are reported as `reservedInventory`
+(`inventory/swap-reservations.ts`); automatic bank/merchant collection marks, automatic
+upgrade marks, compound/upgrade pickups (`collectionPickups`), automatic NPC sales,
+automatic deconstruction and emergency cleanouts skip those slots, and the character
+refuses to hand them off. Manual marks still apply. The dashboard labels held bag items
+`Luck set`, `Tank set` or `Swapped-out gear` in place of the automatic rules they are
+exempt from. It defers to `porcupine-equipment` while that
+module is mid-swap. Failure inventory: `e2e/gear-sets-failures.md`; validate
+`live-gear-sets.spec.ts`.
 
 Validate `live-designated-tank.spec.ts`. The role/route/broadcast plumbing activates
 with the supported coordinator-only restart; the movement, taunt-gating and luck-swap

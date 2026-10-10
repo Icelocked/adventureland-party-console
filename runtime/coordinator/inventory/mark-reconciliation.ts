@@ -4,6 +4,7 @@ import { reconcileCollectionMarks } from "./collection-marks.ts";
 import { reconcileUpgradeMarks, clearResolvedUpgradeMarks } from "./upgrade-marks.ts";
 import type { InventoryEntry, ItemMark } from "../contracts/item.ts";
 import type { UpgradeMark } from "./upgrade-marks.ts";
+import { swapHeld, type SwapReservationStatus } from "./swap-reservations.ts";
 
 interface CollectionState extends ConflictState {
   marked: Record<string, ItemMark[] | undefined>;
@@ -14,7 +15,7 @@ interface UpgradeState extends ConflictState, CraftReservationState {
   upgrades: Record<string, UpgradeMark[] | undefined>;
   autoUpgradeMarks: Record<string, Parameters<typeof reconcileUpgradeMarks>[1] | undefined>;
 }
-interface InventoryStatus {
+interface InventoryStatus extends SwapReservationStatus {
   upgradeInventoryBusy?: boolean;
   items?: unknown;
   slots?: Record<string, {item: import("../contracts/item.ts").Item} | null | undefined>;
@@ -45,8 +46,12 @@ export function reconcileCoordinatorCollectionMarks(
     result.changed ||= bank.length !== result.bank.length || merchant.length !== result.merchant.length;
     result.bank = bank; result.merchant = merchant;
   }
-  state.marked[name] = result.bank;
-  state.merchantMarked[name] = result.merchant;
+  // Gear held for a luck swap never carries an automatic destination; manual marks stay.
+  const unheld = (mark: ItemMark) => !mark.auto || !swapHeld(status, mark.slot, mark.item);
+  const bank = result.bank.filter(unheld), merchant = result.merchant.filter(unheld);
+  result.changed ||= bank.length !== result.bank.length || merchant.length !== result.merchant.length;
+  state.marked[name] = bank;
+  state.merchantMarked[name] = merchant;
   return result.changed;
 }
 
@@ -64,8 +69,9 @@ export function reconcileCoordinatorUpgradeMarks(
     availableCraftStock(inventory(status).map(entry => entry && {...entry,craftLocation:"inventory:"+name}), craftProtection(state)).map(entry => entry?.item && itemRuleConflicts(state, entry.item).length ? null : entry),
     status?.slots,
   );
-  state.upgrades[name] = result.marks;
-  return result.changed;
+  const marks = result.marks.filter(mark => !mark.auto || !swapHeld(status, mark.slot, mark.item));
+  state.upgrades[name] = marks;
+  return result.changed || marks.length !== result.marks.length;
 }
 
 /** Remove only the resolved pass; retain newer or unrelated upgrade requests. */

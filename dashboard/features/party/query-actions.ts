@@ -21,6 +21,7 @@ export const actionDomains = {
   '/merchant/bank-sort': core,
   '/config': core,
   '/formation': core,
+  '/gear-sets': core,
   '/focus': core,
   '/farming-mode': core,
   '/encounter-mode': core,
