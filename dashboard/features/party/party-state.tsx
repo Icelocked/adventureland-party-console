@@ -114,6 +114,7 @@ export type PartyState = {
   designatedTank?: string | null;
   followers?: Record<string, boolean>;
   eventsByCharacter?: Record<string, boolean>;
+  eventPrioritiesByCharacter?: Record<string, string[]>;
   eventSelectionsByCharacter?: Record<string, string[]>;
   eventSchedules?: import("./event-selection-control").EventSchedule[];
   monsterFocus?: string[] | string;

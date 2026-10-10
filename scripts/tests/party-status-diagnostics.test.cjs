@@ -8,7 +8,7 @@ function fixture() {
   const requests = [], logs = [];
   const r = vm.createContext({ observeBankSortVisit() {}, recoverBankSortBeforeWork:async()=>{}, root: {}, Date: { now: () => now }, api: 'http://localhost/party-api',
     character: { name: 'Warrior', ctype: 'warrior' }, convoySignal: { id: 'convoy', epoch: 4, phase: 'scheduled' }, convoyTraveling: null,
-    game_log: message => logs.push(message),
+    game_log: message => logs.push(message), applyEventReturnOwner: async () => {},
     $: { ajax(options) { requests.push(options); return {
       done(fn) { if (!failure) fn(response); return this; },
       fail(fn) { if (failure) fn(...failure); return this; },
@@ -81,6 +81,7 @@ function statusFixture() {
   handle:async()=>{r.handled=(r.handled||0)+1;},escapeOwns:()=>false,
   banking:false,stocking:false,upgrading:false,departurePending:false,quantity:()=>1,
  });
+ vm.runInContext(source.slice(source.indexOf('  async function applyEventReturnOwner('),source.indexOf('  async function merchantSendMail(')),r);
  vm.runInContext(tick,r);return f;
 }
 test('status request failure releases busy and the next successful update dispatches normally',async()=>{

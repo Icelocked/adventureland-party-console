@@ -303,6 +303,7 @@ export function startCoordinatorApplication(
       current: () => realmControlPayload().currentRealm,
       home: accountHomeRealm,
       characterHome: (name) => rosterProjection.owned(name)?.home || null,
+      characterType:(name)=>rosterProjection.owned(name)?.type || null,
       accountCharacters: () => my_acc.response.characters.map((entry) => entry.name),
       start: (name) => characterManager.start(name),
       connectionCount: () => my_acc.response.characters.filter((entry) => !!entry.online).length,
@@ -550,6 +551,7 @@ export function startCoordinatorApplication(
       persist: persistSettings,
       dispatch: dispatchMerchant,
       queueStorage: queueExchangeStorage,
+      queueOffering:offering=>storageService.queueOffering(offering),
     });
     const {
       visits: anniversaryVisitRoutes,

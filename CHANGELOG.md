@@ -5,6 +5,132 @@
 Changes queued for the next release. The release workflow determines its version
 from the commits merged into `main`.
 
+- Run native gameplay CI across 16 isolated runners: one for each of the three
+  Cave scenarios and 13 for the remaining suite. Increase retained unit-test CI
+  concurrency from two to four isolated test-file workers.
+
+- Save a separate event attendance priority for each character. Drag supported
+  events to reorder them; followers inherit their leader's order and merchants
+  retain their own. Higher-priority events can replace lower-priority attendance,
+  and the order survives coordinator restarts.
+
+- Show queued merchant item collections as red “blocked” in the logistics list
+  when inventory capacity reaches the three-slot reserve (39/42). Include a
+  capacity explanation on hover and restore “queued” when space becomes available.
+  Show due fishing/mining in logistics as red “BLOCKED” at capacity, hide modes
+  that are still cooling down, and defer gathering without casting or resetting
+  its cooldown until space returns.
+
+- Show uncertain merchant upgrades as errors with item, tier and inventory-slot
+  diagnostics. Log each admitted order retry with its actual scheduled timestamp
+  in explicit UTC and retain the numeric deadline for remote consoles.
+
+- Resume an unlinked interrupted commerce upgrade using compatible unfinished
+  inventory when available, recording an explicit adoption assumption. Preserve
+  paid spending and attempts, protect reserved stock, and keep existing finished
+  items outside the order's newly produced quota.
+  Its command-fenced adoption view excludes only its own commerce identity
+  reservations while retaining craft, delivery and other-order protection.
+  Record the adoption audit at its authoritative checkpoint so CODE replacement
+  cannot lose the assumption message after paid progress has been accepted.
+
+- Stage Bankboi compound deliveries without starting empty merchant improvement
+  visits. Remote inputs become runnable after their genuine native-bank deposit;
+  carried triples, native-bank inputs and leftover storage remain available.
+
+- Retain bounded completed production evidence for commerce orders and replay
+  its confirmed outcome after a lost completion response or CODE restart.
+  Recovery requires the exact paid order sequence and input identity; historical
+  receipts without that provenance remain subject to inventory review.
+
+- Defer automatic compounds that require bank or Bankboi inputs while the
+  merchant has only its three reserved slots available. Keep carried triples
+  and bankable leftovers runnable, and resume external work when genuine
+  inventory changes free space instead of repeatedly scheduling empty jobs.
+  Already admitted jobs report capacity-blocked withdrawals instead of false
+  success, retaining completed withdrawal acknowledgements.
+
+- Transfer the matching deferred return party together when a new combat event
+  is admitted, so blocked followers retain their checkpoints and can join.
+
+- Apply event-return ownership on fast heartbeat receipts so an awaiting old
+  exit cannot retain a fighter after new event admission; fence delayed replies.
+
+- Route event combat around native terrain with a bounded, owned local detour,
+  preserving secondary-attacker clearance so Goobrawl survivors remain reachable.
+
+- Keep owned party travel moving through native explosion splash from monsters
+  fighting another player. Genuine party-target attacks, direct hits and unknown
+  attackers retain defensive interruption and existing external-claim protection.
+
+- Drain held native commerce checkpoint requests before test teardown and
+  handle a completed Cave shop result reopening over waypoint controls.
+  Wait for the separate native compound receipt before checking finite-rule
+  conservation, retaining its original processing deadline and quota checks.
+
+- Keep every requested character in party escape recovery when class metadata
+  arrives late or classes are duplicated. Use independent evacuation when the
+  skill sequence cannot cover everyone, and reconcile matching persisted death
+  recovery membership after coordinator restart without changing newer navigation.
+
+- Confirm requested homes using fresh native reports for connected characters
+  and the refreshed account roster for offline visitors, so completion and home
+  projection agree within the existing confirmation budget.
+
+- Reject obsolete event-return walking requests after their cycle authority
+  ends, and retire an owned deferred exit even after another peer has already
+  transferred to the next event. Preserve newer commands and ordinary Town returns.
+
+- Release an owned failed event-entry route when a fresh participant selects a
+  different live event, and keep event rendezvous from waiting on characters
+  joining another event. Preserve same-event retry limits and newer commands.
+
+- Retire an already admitted deferred event-return walk when a new combat event
+  takes ownership, preserving saved checkpoints and newer navigation owners.
+
+- Keep farming navigation until the leader is actually in native attack range,
+  rather than yielding across terrain to a merely visible monster. Both travel
+  handoff paths enforce the selected farm boundary, and fresh observations
+  retire farming targets that leave it while preserving defense against party
+  attackers. This prevents stale encounters from holding relocation indefinitely.
+
+- Fence retired Anniversary item-response callbacks before reading native
+  character getters during Steam CODE replacement, preventing detached-frame
+  errors while preserving native socket handlers and the active game window.
+
+- Allow an offline secondary merchant to set its account home without requesting
+  the designated merchant's production receipts. Its own production journal and
+  pending lucky-slot safeguards still apply.
+
+- Fetch native CI database and game base images through a digest-pinned mirror to avoid
+  shared runner Docker Hub download limits; local cached-image defaults remain.
+
+- Count automatic compound production only when native inventory gains the next
+  tier. Failed rolls continue with remaining ingredients instead of consuming a
+  finite production quota or reporting a successful compound.
+
+- Retire combat-return commands when their recovery completes, and clean up
+  historical orphan returns within each active farming profile. Live and
+  deferred recovery cycles retain their movement ownership. Heartbeats release
+  abandoned running exits. A newly authorized event takes over a deferred return
+  while preserving its still-authorized farming checkpoint for the next return.
+
+- Separate native Goobrawl survivor combat from Hunt-off evacuation validation,
+  and keep initial gold in the focused item-delivery fixture so unrelated bank
+  deposits cannot obscure its durable item receipt and conservation checks.
+
+- Respect the native one-merchant connection limit when changing every account
+  character's home realm: temporarily pause and restore a managed merchant for
+  offline merchant visits, even when total connection capacity remains available.
+  Steam-only incumbents produce an explicit capacity error without replacing them.
+
+- Include protected BankBoi stock when selecting upgrade offerings and waking
+  required offering rules. Manual and automatic upgrades retrieve fully available
+  stored offering stacks through the existing BankBoi handoff before production;
+  locked, bound and reserved cargo remains protected.
+- Identify dedicated BankBoi storage workers on their first heartbeat so ordinary
+  potion restocking cannot replace a storage transfer's bank journey at startup.
+
 - Make native bank-sale validation wait for every actual sale receipt, and
   establish fresh Cave observations before floor validation. Cave assembly
   fixtures search native collision-safe staging beyond cramped entry areas

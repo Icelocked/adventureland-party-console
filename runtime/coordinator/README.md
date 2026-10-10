@@ -1,3 +1,57 @@
+Commerce may adopt actual compatible intermediate inventory when an old pending
+upgrade has no linked outcome and its old input is missing. This is explicitly
+logged as an inventory assumption, never a confirmed historical receipt. Paid
+spending and attempts remain intact; finished target-tier, reserved, locked or
+bound stock stays excluded. Validate the native unlinked-intermediate journey
+in `live-economy.spec.ts`; see `docs/testing-commerce-inventory-adoption.md`.
+Adoption requests an owner-specific protection view using the current paid job
+and command identities. Only that job's commerce identity markers are excluded;
+craft requirements, other orders and merchant deliveries remain protected.
+The authoritative checkpoint logs a newly persisted adoption marker once,
+including previous input/slot and unresolved target, so a replaced CODE
+continuation is not responsible for publishing the audit.
+
+Bankboi-only compound stock stages a delivery but does not admit an empty
+merchant improvement visit. Admission uses carried or native-bank stock until
+real storage completion rewrites the withdrawal location. Validate the native
+Bankboi compound admission journey in `live-bankboi-offerings.spec.ts`.
+
+Completed commerce production receipts retain their complete recovery journal
+within the existing 2,048-receipt bound. Recovery replays only confirmed outcomes
+whose durable commerce key, sequence, input identity and target level match the
+pending paid attempt. Historical unlinked receipts remain unresolved. Validate
+the lost-completion-response native journey in `live-economy.spec.ts`; failure
+inventory is `docs/testing-completed-commerce-receipts.md`. Publish character
+assets and coordinator together when activating this recovery change.
+
+Automatic compound admission respects the native merchant withdrawal reserve:
+bank and Bankboi inputs require more than three empty inventory slots. Carried
+triples and bankable leftovers remain runnable. Validate native NPC cleanout and
+subsequent compound receipts in `live-bank-npc-sales.spec.ts`; failure inventory
+is `docs/testing-merchant-compound-capacity.md`. Publish character assets and
+restart the coordinator together when changing withdrawal completion handling.
+
+Uncertain upgrade completions retain error severity even when their commerce
+order is retryable. A newly queued retry logs the actual retryAt in explicit UTC
+and numeric detail; do not announce a retry before delay classification finishes.
+Validate browser rendering with the uncertain merchant retry console scenario.
+
+New-event takeover also cancels an already admitted deferred return convoy only
+when all its participants, cycle identities, and navigation revisions still
+belong to that deferred recovery. Validate the native deferred takeover journey.
+
+Farming handoff requires actual native leader attack range in both walking
+implementations. Admission and fresh encounter retention obey the selected farm
+boundary; genuine party attackers still use travel defense. Validate native
+UHills relocation and both fighters' attack receipts in
+`live-farming-handoff.spec.ts`. Publish character assets and restart together.
+
+Event recovery completion retires only matching-cycle return commands. Each
+profile also retires historical orphan exit/continuation commands for its active
+members, preserving current and deferred cycles and other profiles' commands.
+Native heartbeat ownership must cancel an already running handler when its cycle
+disappears; deleting a backend command alone cannot stop an async runner.
+
 Event walking yields to a visible boss only when native attack range or a safe,
 collision-free local approach is available. Visibility across terrain retains
 the maintained route and formation ownership. Validate the native terrain gap
@@ -50,6 +104,51 @@ others pre-position for the respawn. Starting a patrol no longer launches a
 party convoy. Failure inventory: `e2e/phoenix-search-failures.md`. Validate
 `live-phoenix-search.spec.ts` and publish character and coordinator assets
 through the ordinary full restart.
+Fishing and mining wait when the merchant has three or fewer empty inventory
+slots. Dispatcher admission and the native gathering loop preserve cooldowns
+while capacity blocks work; logistics shows enabled modes as red BLOCKED rows.
+Validate the capacity console and native gathering E2Es. Activate character and
+coordinator assets together through the supported full restart.
+
+Native splash packets from a visible monster fighting an identified outsider
+do not repeatedly stop owned party travel. Direct hits and unknown or party
+targets retain defense safety. Validate native Targetron collateral and direct
+party-target control journeys; publish character assets with a full supported
+restart. Failure inventory: `docs/testing-collateral-convoy-defense.md`.
+
+Escape skill leaders are separate from requested evacuation membership. Missing
+or duplicate class metadata uses independent native evacuation for every member.
+Restart reconciliation expands an active escape only for the matching current
+death recovery and unchanged navigation revisions. Validate the native requested
+membership cases; supported CoordinatorOnly restart activates this backend fix.
+
+Heartbeat eventReturnCycleId explicitly fences running character exit continuations
+against completed or replaced recoveries. Authorizing a new event transfers a
+matching-revision deferred checkpoint into its event snapshot and retires only
+the previous deferred cycle's own exit/continuation commands. Validate both native
+retired-exit cases in live-event-runtime-recovery.spec.ts. Publish character assets
+and coordinator together for the heartbeat fence; subsequent backend-only deferred
+handoff changes can use the supported CoordinatorOnly restart.
+
+Account-wide home visits respect both total connection capacity and native
+one-merchant admission. Visiting an offline merchant temporarily suspends a
+managed active merchant and restores its original worker configuration after
+cleanup. A Steam-only incumbent remains online and receives an explicit capacity
+failure before any visitor login. Validate the real account-home journey with
+an offline second merchant; activate through CoordinatorOnly restart.
+
+Upgrade offering availability derives from one protected merchant/bank/BankBoi
+stock boundary, shared with upgrade-input sourcing. BankBoi whole-stack retrievals
+require the complete stack to be unreserved. After bank floors are exhausted,
+the current upgrade command requests `/merchant/offering-supply` with its current
+job/command identity, selected offering, live item and original mark. The route
+validates the live level's rule or manual request identity and queues an existing
+storage withdrawal; the merchant yields before BankBoi owns the slot. Pending
+supply preserves the original mark. Validate native manual/automatic BankBoi
+offering journeys and console availability; publish character and coordinator
+assets with the supported full restart. Failure inventory:
+`docs/testing-bankboi-offerings.md`.
+
 Party status scheduling dispatches an admitted `switching party realm` job so
 its native-arrival check and original sixty-second deadline continue while it
 owns the current job. Ordinary executing jobs retain their existing scheduling
@@ -1908,3 +2007,12 @@ event exit command for the same cycle and saved revision. Main arrival must stil
 be explicitly acknowledged before checkpoint travel begins. Activate these
 coordinator changes using the supported full restart and verify native death
 reentry and saved-point return artifacts; building alone does not activate them.
+
+
+Event attendance priorities are saved per character independently of event opt-ins.
+Followers use the leader's order; merchants retain their own order. Higher displayed
+numbers run first, including takeover from an already joined lower-priority event.
+Unsupported catalog events show zero and cannot enter the order; Cave is excluded.
+Validate the Halloween console order/inheritance/restart journey and native higher
+priority boss takeover in live-event-runtime-recovery.spec.ts. Publish character
+assets and coordinator/dashboard together through the supported full restart.

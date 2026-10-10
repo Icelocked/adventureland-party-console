@@ -15,6 +15,7 @@ export interface SavedPartySelection {
   designatedTank?: string | null;
   followers?: Record<string, boolean> | null;
   eventsByCharacter?: Record<string, boolean> | null;
+  eventPrioritiesByCharacter?: Record<string, string[]> | null;
   eventSelectionsByCharacter?: Record<string, string[]> | null;
 }
 

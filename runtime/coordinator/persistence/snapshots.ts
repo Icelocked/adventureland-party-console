@@ -85,7 +85,7 @@ export const settingsFields = [
   "designatedTank",
   "followers",
   "eventsByCharacter",
-  "eventSelectionsByCharacter",
+  "eventSelectionsByCharacter", "eventPrioritiesByCharacter",
   "eventSessions",
   "eventReturn",
   "deferredEventReturns",

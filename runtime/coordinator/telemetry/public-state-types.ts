@@ -47,7 +47,7 @@ export const publicStateFields = [
   "designatedTank",
   "followers",
   "eventsByCharacter",
-  "eventSelectionsByCharacter",
+  "eventSelectionsByCharacter", "eventPrioritiesByCharacter",
   "monsterFocus",
   "monsterFocusByCharacter",
   "monsterPrioritiesByCharacter",

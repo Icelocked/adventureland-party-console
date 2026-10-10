@@ -66,6 +66,8 @@ interface EventObservationPorts {
   location(recovery: EventRecovery, name: string): ReturnLocation | null;
   intent(name: string): { revision: number; cancelled?: boolean };
   hasCommand(name: string): boolean;
+  retireDeferredCommand?(name: string, cycleId: string): void;
+  retireDeferredWalk?(name: string, cycleId: string): void;
   command(name: string, command: Record<string, unknown>): void;
   /** Drop this member's pending command for the given return cycle, if it is still the current one. */
   retireCommand(name: string, cycleId: string): boolean;
@@ -227,8 +229,41 @@ export function createEventObservations(
     participate(name, event);
     if (cycle?.combatEvent === event && cycle.waypoints)
       state.sessions[name]!.waypoints = cycle.waypoints;
+    transferDeferredParty(name, event);
     ports.persist();
     return { allowed: true };
+  }
+  function transferDeferredCheckpoint(name: string): void {
+    const recovery = state.deferred[name];
+    if (!recovery) return;
+    ports.retireDeferredWalk?.(name, recovery.cycleId);
+    const intent = ports.intent(name), session = state.sessions[name]!;
+    if (recovery.checkpoint && recovery.navigationRevision === intent.revision && !intent.cancelled)
+      session.waypoints = {...session.waypoints, [name]: {revision:intent.revision, location:{...recovery.checkpoint}}};
+    ports.retireDeferredCommand?.(name, recovery.cycleId);
+    delete state.deferred[name];
+  }
+  function transferDeferredParty(name: string, event: string): void {
+    const cycleId = state.deferred[name]?.cycleId;
+    const followers = cycleId ? ports.activeNames().filter(member =>
+      member !== name && canTransferDeferredFighter(member, cycleId, event)) : [];
+    // Admission, not a global boss sighting, hands the original return party
+    // to combat. Blocked followers cannot independently request permission.
+    transferDeferredCheckpoint(name);
+    for (const member of followers) {
+      participate(member, event);
+      transferDeferredCheckpoint(member);
+    }
+  }
+  function canTransferDeferredFighter(name: string, cycleId: string, event: string): boolean {
+    const deferred = state.deferred[name], intent = ports.intent(name);
+    if (!deferred || deferred.cycleId !== cycleId || name === ports.merchant() ||
+        !ports.enabled(name, event) || intent.cancelled || deferred.navigationRevision !== intent.revision) return false;
+    return freshDeferredFighter(ports.statuses()[name]);
+  }
+  function freshDeferredFighter(report: ReturnStatus | undefined): boolean {
+    const at = Number(report?.seenAt);
+    return !!report && !report.rip && Number.isFinite(at) && ports.now()-at<=3000 && at<=ports.now()+500;
   }
 
   function reportAnniversaryHandoff(body: EventReport): void {

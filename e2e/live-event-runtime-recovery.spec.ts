@@ -1,7 +1,114 @@
 import {test,expect} from './live-fixtures';
+import type {Route} from '@playwright/test';
 
 const W='E2EWarrior',P='E2EPriest',fighters=[W,P];
 test.use({initialPosition:{map:'halloween',x:-550,y:-290}});
+
+test.describe('retired event exit ownership',()=>{
+  test.use({initialPosition:{map:'uhills',x:-550,y:-160}});
+  // Failure inventory: docs/testing-round2-recovery.md. Restoring a snapshot
+  // without the old recovery must retire its still-running CODE continuation;
+  // no successful Town receipt or native combat outcome is manufactured.
+  for (const variant of ['plain','deferred','stale-peer'] as const) test(`native event entry resumes after its old ${variant==='plain'?'return cycle disappears':variant==='deferred'?'deferred return is superseded':'deferred return admits a temporarily stale peer'}`,async({live},info)=>{
+    const deferred=variant!=='plain';
+    test.setTimeout(300_000);
+    await live.post('/formation',{leader:W});await live.post('/formation',{character:P,follow:true});
+    const oldCycle='historical-retired-pumpkin-exit';
+    let started:any,retiredAt=0,seed:any;
+    const exitOwnerSamples:any[]=[];
+    const communicationFaults:any[]=[];
+    const context=live.clients[P].page.context();
+    let holdUntil=0;
+    let priestSeenAtBeforeHold=0;
+    const intercept=async(route:Route)=>{
+      if(Date.now()<holdUntil&&route.request().method()==='POST'&&route.request().postDataJSON()?.name===P){
+        if(communicationFaults.length<128)communicationFaults.push({at:Date.now(),action:'dropped-priest-status'});
+        await route.abort('failed');return;
+      }
+      await route.fallback();
+    };
+    try {
+      await live.restoreHistoricalSettings(settings=>{
+        const profile=settings.farmingProfiles[W];
+        const waypoints=Object.fromEntries(fighters.map(name=>[name,{revision:settings.navigationIntents?.[name]?.revision||0,location:{map:'uhills',x:-550,y:-160}}]));
+        const recovery={cycleId:oldCycle,event:'mrpumpkin',participants:fighters,pending:fighters,startedAt:Date.now(),phase:'evacuating',checkpoint:{map:'uhills',x:-550,y:-160},waypoints,deferred:[]};
+        return {farmingProfiles:{...settings.farmingProfiles,[W]:{...profile,eventReturn:recovery}},eventReturn:recovery};
+      });
+      await expect.poll(async()=>{const s=await live.state();
+        if(fighters.every(name=>s.characters[name]?.eventRecovery?.cycleId===oldCycle && ['leaving-event','returning-to-main'].includes(s.characters[name].eventRecovery.phase))){started=s;return true;}return false;
+      },{timeout:45_000}).toBe(true);
+      seed=await live.admin(`output=(()=>{const original=G.monsters.mrpumpkin;try{
+        G.monsters.mrpumpkin={...original,hp:10000000,attack:1,speed:0,charge:0,range:1,aggro:0,spawns:[]};
+        // This case verifies retired exit ownership, not the separate long
+        // Halloween terrain leg. Use the native Mainland door arrival spawn and
+        // collision-validate the initial encounter before creating it.
+        const doorway=G.maps.main.doors.find(door=>door[4]==='halloween');
+        const portal=doorway&&G.maps.halloween.spawns[doorway[5]];
+        if(!portal)throw Error('Native Mainland-to-Halloween arrival spawn is unavailable');
+        const point=[[60,0],[-60,0],[0,60],[0,-60]].map(([dx,dy])=>({x:portal[0]+dx,y:portal[1]+dy})).find(point=>
+          ${JSON.stringify(fighters)}.every(name=>can_move({map:'halloween',x:portal[0],y:portal[1],going_x:point.x,going_y:point.y,base:get_player(name).base})));
+        if(!point)throw Error('No collision-safe native portal encounter seed');
+        const m=new_monster('halloween',{type:'mrpumpkin',count:1,boundary:[point.x,point.y,point.x,point.y]},{temp:1});
+        E.mrpumpkin={live:true,map:m.map,x:m.x,y:m.y,hp:m.hp,max_hp:m.max_hp};broadcast_e();return {id:m.id,map:m.map,x:m.x,y:m.y,portal,scope:'retired exit ownership; native door spawn with collision-safe initial encounter'};
+      }finally{G.monsters.mrpumpkin=original;}})()`);
+      if(variant==='stale-peer'){
+        priestSeenAtBeforeHold=Number((await live.state()).characters[P]?.seenAt);
+        expect(priestSeenAtBeforeHold).toBeGreaterThan(0);
+        holdUntil=Date.now()+20_000;
+        await context.route('**/party-api/status',intercept);
+        await expect.poll(async()=>Date.now()-Number((await live.state()).characters[P]?.seenAt||priestSeenAtBeforeHold),{timeout:8_000}).toBeGreaterThan(3500);
+      }
+      retiredAt=Date.now();
+      await live.restoreHistoricalSettings(settings=>{
+        const deferredEventReturns=deferred?Object.fromEntries(fighters.map(name=>[name,{event:'mrpumpkin',cycleId:oldCycle,
+          checkpoint:{map:'uhills',x:-550,y:-160},navigationRevision:settings.navigationIntents?.[name]?.revision||0,
+          deferredAt:Date.now(),phase:'returning-to-checkpoint'}])):{};
+        return {eventReturn:null,activeConvoy:null,deferredEventReturns,
+          farmingProfiles:{...settings.farmingProfiles,[W]:{...settings.farmingProfiles[W],eventReturn:null,activeConvoy:null,eventSessions:{}}},
+          eventSelectionsByCharacter:{...settings.eventSelectionsByCharacter,[W]:['mrpumpkin']}};
+      });
+      if(variant==='stale-peer'){
+        await expect.poll(async()=>{const s=await live.state();return !s.deferredEventReturns[W]&&!!s.farmingProfiles[W].eventSessions[W];},{timeout:12_000}).toBe(true);
+        expect(Date.now()).toBeLessThan(holdUntil);
+        const admission=await live.state();
+        const priestSeenAt=Number(admission.characters[P]?.seenAt||priestSeenAtBeforeHold);
+        const priestNative=await live.clients[P].snapshot();
+        expect(priestNative.name).toBe(P);
+        expect(priestNative.connected).toBe(true);
+        expect(Date.now()-priestSeenAt).toBeGreaterThan(3000);
+        expect(admission.deferredEventReturns[P]?.cycleId).toBe(oldCycle);
+        communicationFaults.push({at:Date.now(),action:'released-after-warrior-admission',priestSeenAt,priestSeenAtBeforeHold,
+          priestNative:{name:priestNative.name,connected:priestNative.connected,runtimeGeneration:priestNative.runtimeGeneration},
+          warriorSession:admission.farmingProfiles[W].eventSessions[W],priestDeferred:admission.deferredEventReturns[P]});
+        holdUntil=0;
+      }
+      await expect.poll(async()=>{const s=await live.state();
+        const native=Object.fromEntries(await Promise.all(fighters.map(async name=>[name,
+          await live.clients[name].run(`(()=>{const owner=globalThis.__partyEventExitOwner;
+            return {owner:owner?{cycleId:owner.cycleId,cancelled:!!owner.cancelled,commandId:owner.commandId}:null,
+              selectionPublished:Object.prototype.hasOwnProperty.call(globalThis,'__partyEventRecoveryCycleId'),
+              selectedCycle:globalThis.__partyEventRecoveryCycleId===undefined?null:globalThis.__partyEventRecoveryCycleId};})()`)])));
+        if(exitOwnerSamples.length===64)exitOwnerSamples.shift();
+        exitOwnerSamples.push({at:Date.now(),native,diagnostics:Object.fromEntries(fighters.map(name=>[name,s.characters[name]?.eventRecovery]))});
+        return fighters.every(name=>s.characters[name]?.dashboardRuntime===started.characters[name].dashboardRuntime &&
+          native[name].selectionPublished && native[name].selectedCycle!==oldCycle && (!native[name].owner || native[name].owner.cancelled || native[name].owner.cycleId!==oldCycle));
+      },{timeout:15_000}).toBe(true);
+      if(deferred){const resumed=await live.state();for(const name of fighters){
+        expect(resumed.deferredEventReturns[name]).toBeUndefined();
+        expect(resumed.farmingProfiles[W].eventSessions[name].waypoints[name].location).toEqual({map:'uhills',x:-550,y:-160});
+      }}
+      await expect.poll(async()=>{const events=await live.clients[W].events();return fighters.every(name=>events.some((e:any)=>
+        e.event==='hit'&&String(e.data?.id)===String(seed.id)&&e.data?.hid===name&&e.at>retiredAt));
+      },{timeout:180_000}).toBe(true);
+    }finally{
+      holdUntil=0;
+      await context.unroute('**/party-api/status',intercept);
+      await info.attach('native-retired-event-exit',{body:JSON.stringify({oldCycle,deferred,variant,communicationFaults,started,retiredAt,seed,exitOwnerSamples,final:await live.state().catch(error=>({error:String(error)})),events:await live.clients[W].events()}),contentType:'application/json'});
+      await live.post('/formation',{character:W,eventSelections:[]});
+      if(seed)await live.admin(`output=(()=>{const m=Object.values(instances).flatMap(i=>Object.values(i.monsters||{})).find(m=>String(m.id)===${JSON.stringify(String(seed.id))}&&m.type==='mrpumpkin');if(m)remove_monster(m,{silent:true});delete E.mrpumpkin;broadcast_e();return true;})()`);
+    }
+  });
+});
 
 test('native event walking recovers owned CODE turnover after coordinator restart',async({live},info)=>{
   test.setTimeout(360_000);
@@ -58,6 +165,45 @@ test('native event walking recovers owned CODE turnover after coordinator restar
     await info.attach('native-event-runtime-turnover',{body:JSON.stringify({seed,before,turnoverAt,failed,recovered,ownerObservations,final:await live.state(),events:await live.clients[W].events()}),contentType:'application/json'});
     await live.post('/formation',{character:W,eventSelections:[]});
     await live.admin(`output=(()=>{const m=get_monster('mrpumpkin');if(m?.e2eRuntimeRecovery)remove_monster(m,{silent:true});delete E.mrpumpkin;broadcast_e();return true;})()`);
+  }
+});
+
+test('native event selection replaces a failed old entry without waiting on another boss',async({live},info)=>{
+  test.setTimeout(360000);
+  // Failure inventory: CODE turnover plus a different genuine event selection
+  // must not leave the old failed rendezvous holding both live event workflows.
+  await live.post('/formation',{leader:W});await live.post('/formation',{character:P,follow:true});
+  const seeds=await live.admin(`output=(()=>{const result={};
+    for(const [type,x,y] of [['mrpumpkin',-495,685],['mrgreen',-495,650]]){
+      const original=G.monsters[type];try{G.monsters[type]={...original,hp:100000000,attack:1,speed:0,charge:0,range:1,aggro:0,spawns:[]};
+        const m=new_monster('halloween',{type,count:1,boundary:[x,y,x,y]},{temp:1});
+        result[type]={id:m.id,map:m.map,x:m.x,y:m.y};
+        if(type==='mrpumpkin')E[type]={live:true,map:m.map,x:m.x,y:m.y,hp:m.hp,max_hp:m.max_hp};
+      }finally{G.monsters[type]=original;}}
+    broadcast_e();return result;})()`);
+  const samples:unknown[]=[];
+  let before:any;
+  try {
+    await live.post('/formation',{character:W,eventSelections:['mrpumpkin']});
+    await expect.poll(async()=>{const s=await live.state();if(s.activeConvoy?.walkingEvent==='mrpumpkin'&&s.activeConvoy.phase==='travel'){before=s;return true;}return false;},{timeout:90000}).toBe(true);
+    // A higher-priority live boss must preempt retained attendance for both
+    // leader and follower, including after CODE turnover and persistence replay.
+    await live.post('/formation',{character:W,eventSelections:['mrpumpkin','mrgreen'],eventPriorities:['mrgreen','mrpumpkin','anniversary','abtesting','goobrawl','crabxx','franky','icegolem','snowman','slenderman']});
+    await live.admin(`output=(()=>{const seed=${JSON.stringify(seeds.mrgreen)};E.mrgreen={live:true,...seed,hp:100000000,max_hp:100000000,end:Date.now()+600000};broadcast_e();return true;})()`);
+    await live.clients[P].frame.evaluate(()=>{const game=window as any,runner=(document.getElementById('maincode') as HTMLIFrameElement).contentWindow as any;
+      game.start_runner('maincode',`$.getScript(${JSON.stringify(runner.__partyServer+'/CODE/adventure_land/universal-loader.js')});`);});
+    await live.restartCoordinator();
+    await expect.poll(async()=>{const state=await live.state();
+      const hits=await Promise.all([[W,'mrgreen'],[P,'mrgreen']].map(async([name,type])=>({name,type,hit:(await live.clients[name].events()).find((event:any)=>event.event==='hit'&&String(event.data?.id)===String(seeds[type].id)&&event.data?.hid===name&&event.data?.damage>0)})));
+      samples.push({at:Date.now(),convoy:state.activeConvoy&&{id:state.activeConvoy.id,phase:state.activeConvoy.phase,event:state.activeConvoy.walkingEvent},characters:Object.fromEntries(fighters.map(name=>[name,{map:state.characters[name]?.map,event:state.characters[name]?.joinedEvent,runtime:state.characters[name]?.dashboardRuntime}])),hits});
+      if(samples.length>64)samples.shift();
+      return hits.every(value=>!!value.hit);
+    },{timeout:180000,intervals:[500,1000],message:'Each genuinely selected boss must receive native fighter damage after CODE replacement and restart'}).toBe(true);
+  } finally {
+    await info.attach('native-different-event-turnover',{body:JSON.stringify({seeds,before,samples}),contentType:'application/json'});
+    await live.post('/formation',{character:W,eventSelections:[]});
+    await live.admin(`output=(()=>{for(const [type,seed]of Object.entries(${JSON.stringify(seeds)})){
+      const m=Object.values(instances).flatMap(i=>Object.values(i.monsters||{})).find(m=>String(m.id)===String(seed.id)&&m.type===type);if(m)remove_monster(m,{silent:true});delete E[type];}broadcast_e();return true;})()`);
   }
 });
 

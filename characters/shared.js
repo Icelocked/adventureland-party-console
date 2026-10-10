@@ -346,6 +346,7 @@
   root.__partyPassiveRegenTimer = null;
   var coordinatorClockOffset = 0;
   var banking = false;
+  var bankboiStorage = false;
   var bankQueued = false;
   var stocking = false;
   var upgrading = false;
@@ -880,6 +881,13 @@
     if (convoyTraveling && convoyTraveling.continuousReturn === 1) return;
     if(data && currentPartyList().indexOf(String(data.id))>=0) {
       var aggressor=get_entity(data.hid || data.actor);
+      // Native explosion hits can strike a passing party while the monster is
+      // fighting another player. Such a splash cannot nominate that player's
+      // fight or repeatedly replace our owned route with defense/loot holds.
+      // Direct and unknown-target hits retain the conservative safety path.
+      var victim=aggressor && aggressor.target && get_entity(aggressor.target);
+      if(data.splash===true && victim && victim.type==='character' && !victim.npc &&
+        currentPartyList().indexOf(String(aggressor.target))<0)return;
       var passingRule=aggressor && passiveHunting.rules[aggressor.mtype];
       if(aggressor && aggressor.type==='monster' && (!isPassingEncounter(aggressor) || returnDepartureDefense() && !(passingRule && passingRule.enabled && passingRule.keepMoving)) && !joinedEvent && !eventTargetTypes.length) {
         root.__partyDefensiveHit={target:groupedEntityReport(aggressor),at:Date.now()};
@@ -2945,7 +2953,14 @@
           var t=value.transportTiming || {}, duration=convoyDiagnosticClock()-transportStart.mono;
           (root.__partyTravelTransport || (root.__partyTravelTransport={})).barrier={at:Date.now(),durationMs:duration,processingMs:Math.max(0,(t.sentAt||0)-(t.receivedAt||0)),eventLoopMaxMs:t.eventLoopMaxMs,outcome:'success'};
         }
-        if (path === '/status') acceptTravelResponse(value, transportStart, !!(options.body && (options.body.combatOnly || options.body.combatWait)));
+        if (path === '/status') {
+          acceptTravelResponse(value, transportStart, !!(options.body && (options.body.combatOnly || options.body.combatWait)));
+          // The ordinary status tick can still be awaiting this exit handler.
+          // Fast heartbeat ownership must fence it at the transport boundary.
+          void applyEventReturnOwner(value).catch(function(error){
+            if(runtimeCurrent())game_log("Event ownership update: "+String(error.message||error),"red");
+          });
+        }
         rememberConvoyStatusRequest(convoyStatusStarted, 'success');
         resolve(value);
       }).fail(function (xhr, status, error) {
@@ -3497,7 +3512,7 @@
     var potionName = "hpot1";
     var targetQuantity = 20;
     var currentQuantity = quantity(potionName);
-    if (stocking || upgrading || banking || bankQueued || departurePending || character.rip || currentQuantity > 0) return false;
+    if (bankboiStorage || stocking || upgrading || banking || bankQueued || departurePending || character.rip || currentQuantity > 0) return false;
     var potion = G.items[potionName];
     var needed = targetQuantity - currentQuantity;
     if (!potion || character.gold < potion.g * needed) return false;
@@ -4571,6 +4586,21 @@
     progress.sequence += 1;
     root.localStorage.setItem(journal.commerce.key, JSON.stringify(progress));
   }
+  function replayCompletedCommerce(attempt) {
+    var journal = attempt && attempt.journal;
+    if (!attempt || !attempt.completed || !journal || journal.phase !== "complete" || !journal.commerce ||
+        attempt.success !== journal.success ||
+        !root.localStorage.getItem(journal.commerce.key)) return;
+    var progress = JSON.parse(root.localStorage.getItem(journal.commerce.key) || "null");
+    if (!progress || progress.sequence !== journal.commerce.sequence || !progress.pendingUpgrade ||
+        !sameItemState(progress.activeItem,journal.item) ||
+        Number(progress.pendingUpgrade.level) !== Number(journal.item.level || 0) + 1) return;
+    if (attempt.success === true) {
+      if (!journal.outcomeItem || journal.outcomeItem.name !== journal.item.name ||
+          Number(journal.outcomeItem.level || 0) !== Number(journal.item.level || 0) + 1) return;
+    } else if (attempt.success !== false || journal.destroyed !== true) return;
+    rememberCommerceProduction(journal);
+  }
   function rememberReviewedCommerce(journal, attempt, reviewedCommerce) {
     if (!journal.commerce || !attempt.resolution || attempt.resolution.outcome !== "unknown" || !attempt.resolution.resumeMissing) return false;
     var progress = JSON.parse(root.localStorage.getItem(journal.commerce.key) || "null") || journal.commerce.state;
@@ -4620,6 +4650,7 @@
     if (!journal) {
       var pending = await request("/merchant/production", {method:"POST",body:{character:character.name,action:"pending"}});
       if (!pending || !Array.isArray(pending.pending)) throw Error("Production recovery inspection unavailable");
+      (pending.completedCommerce || []).forEach(replayCompletedCommerce);
       if (pending.pending.length) {
         var orphaned = pending.pending[0];
         if (!orphaned.journal) throw Error("Production recovery needs review: " + orphaned.id + " (" + orphaned.kind + " " + orphaned.name + " +" + orphaned.level + "); no local journal");
@@ -4646,6 +4677,7 @@
     // pending identities, then recover the newer coordinator journal normally.
     // Never restore the completed attempt's old lucky layout or replay it.
     if (inspection.attempt && inspection.attempt.completed) {
+      replayCompletedCommerce(inspection.attempt);
       rememberReviewedCommerce(journal,inspection.attempt,inspection.reviewedCommerce);
       writeProductionJournal(null);
       return recoverProductionJournalWork();
@@ -5673,6 +5705,11 @@
     }
     for (var i = 0; i < (command.merchantWithdrawals || []).length; i += 1) {
       if (freeInventorySlots() <= 3) {
+        if (command.type === "merchant-self-improve") {
+          command._capacityDeferredWithdrawals = command.merchantWithdrawals.slice(i).filter(function (entry) {
+            return String(entry.pack || "").indexOf("bankboi:") !== 0;
+          });
+        }
         activity.push({ level: "info", message: "Deferred withdrawals; three inventory slots are reserved" });
         break;
       }
@@ -5828,7 +5865,7 @@
     var found = availableOfferingEntries(checkpoint).find(function(entry) { return !entry.pack && entry.item.name === name; });
     return found ? found.slot : -1;
   }
-  async function retrieveUpgradeOffering(command, name, activity) {
+  async function retrieveUpgradeOffering(command, name, mark, item, activity) {
     await merchantVisitBank(command,activity);
     var floors = accessibleBankSortFloors();
     for (var i=0;i<floors.length;i++) {
@@ -5844,6 +5881,16 @@
       await bankRetrieveConfirmed(found.pack,found.slot);
       if (carriedOffering(await upgradeOfferingCheckpoint(command),name)>=0) return;
     }
+    // BankBoi owns a different native login slot. Yield this exact job before
+    // storage takes that slot; its original upgrade intent survives the handoff.
+    var supply = await request("/merchant/offering-supply", {method:"POST",body:{
+      jobId:command.jobId, commandId:command.id || command.commandId,
+      offering:name, item:fingerprint(item), mark:mark,
+    }});
+    if (supply && supply.pending) {
+      activity.push({level:"info",message:"Waiting for BankBoi upgrade offering",details:{offering:name}});
+      throw new Error("bankboi_pending");
+    }
   }
   async function prepareUpgradeOffering(command, mark, slot, activity) {
     if (!mark.auto && !mark.offering) return undefined;
@@ -5854,7 +5901,7 @@
     });
     if (!rule) return undefined;
     if (carriedOffering(checkpoint,rule.offering)<0 && Number((checkpoint.upgradeOfferingStock || {})[rule.offering])>0) {
-      await retrieveUpgradeOffering(command,rule.offering,activity);
+      await retrieveUpgradeOffering(command,rule.offering,mark,item,activity);
       checkpoint = await upgradeOfferingCheckpoint(command);
     }
     var offeringSlot = carriedOffering(checkpoint,rule.offering);
@@ -6018,10 +6065,21 @@
           scrollSlot = findInventoryItemByName(scrollName);
           if (scrollSlot < 0) continue;
           var beforeCompound = JSON.stringify(candidates.map(function (slot) { return character.items[slot]; }));
+          var compoundOutputCount = function () {
+            return character.items.filter(function (item) {
+              return item && item.name === autoMark.name && (item.level || 0) === level + 1;
+            }).length;
+          };
+          var outputsBeforeCompound = compoundOutputCount();
           try {
             await compoundConfirmed(candidates[0], candidates[1], candidates[2], scrollSlot, {family:"compound",key:autoMark.name});
-            if (level + 1 === targetTier) producedThisPass++;
-            activity.push({ level: "success", message: "Auto compounded " + autoMark.name + " to +" + (level + 1) });
+            var producedCompoundOutput = compoundOutputCount() > outputsBeforeCompound;
+            if (producedCompoundOutput) {
+              if (level + 1 === targetTier) producedThisPass++;
+              activity.push({ level: "success", message: "Auto compounded " + autoMark.name + " to +" + (level + 1) });
+            } else {
+              activity.push({ level: "error", message: "Auto compound failed for " + autoMark.name });
+            }
           } catch (autoError) {
             activity.push({ level: "error", message: "Auto compound failed for " + autoMark.name,
               details: String(autoError.reason || autoError.message || autoError) });
@@ -6952,6 +7010,9 @@
         }
       }
       await restoreAnyEquippedUpgrades();
+      if ((command._capacityDeferredWithdrawals || []).some(function (withdrawal) {
+        return (command._merchantWithdrawalsCompleted || []).indexOf(withdrawal) < 0;
+      })) throw new Error("inventory_full");
       activity.push({ level: "success", message: "Finished merchant-owned upgrades and compounds" });
       await request("/merchant/complete", { method: "POST", body: {
         jobId: command.jobId, success: true, banked: [], bankedByCharacter: {}, kept: [],
@@ -6987,12 +7048,13 @@
     }
   }
 
-  function verifyCommerceResults(results) {
+  function verifyCommerceResults(results, available) {
     var used = new Set();
+    function eligible(slot) { return !available || available[slot] && available[slot].item && !available[slot].item.l && !available[slot].item.b; }
     (results || []).forEach(function (result) {
       var slot = result.slot;
-      if (used.has(slot) || !sameItem(character.items[slot], result.item))
-        slot = character.items.findIndex(function (item, index) { return !used.has(index) && sameItem(item, result.item); });
+      if (used.has(slot) || !eligible(slot) || !sameItem(character.items[slot], result.item))
+        slot = character.items.findIndex(function (item, index) { return !used.has(index) && eligible(index) && (available ? sameItemState(item, result.item) : sameItem(item, result.item)); });
       if (slot < 0) throw new Error("Owned upgrade result missing; order requires inventory review");
       used.add(slot);
       result.slot = slot;
@@ -7057,6 +7119,12 @@
     }
     // A pending native attempt owns its separate receipt/lucky reconciliation.
     // Otherwise remap the whole paid group before individual slot lookups.
+    if (progress.inventoryAdoption) {
+      var adoptionProtection = await refreshCommerceAdoptionProtection();
+      if (!runtimeCurrent() || !root.__merchantActiveJob || root.__merchantActiveJob.commandId !== command.id)
+        throw new Error("interrupted");
+      verifyCommerceResults(progress.results,availableCommerceInventory(adoptionProtection));
+    }
     if (!progress.pendingUpgrade && remapCommerceOwnedItems(progress)) await services.checkpoint(progress, false);
     verifyCommerceResults(progress.results);
     // A legacy survivor already consumed an attempt before its checkpoint.
@@ -7133,7 +7201,14 @@
         sameItem(character.items[progress.activeSlot], expected) ? progress.activeSlot : -1;
       if (receiptSlot < 0 && !destroyed && !reviewedMissing) receiptSlot = ownedSlot();
       var live = receiptSlot >= 0 ? character.items[receiptSlot] : null;
-      if (!destroyed && !reviewedMissing && !live) throw new Error("Upgrade outcome uncertain; owned item missing without confirmed destruction");
+      if (!destroyed && !reviewedMissing && !live) {
+        if (!pending.outcome && await adoptIntermediateInventory(pending)) return;
+        var occupant = character.items[progress.activeSlot];
+        throw new Error("Upgrade outcome uncertain; " + purchase.id + " from +" + Number(progress.activeItem && progress.activeItem.level || 0) +
+          " to +" + pending.level + " at inventory slot " + progress.activeSlot +
+          "; actual occupant " + (occupant ? occupant.name + " +" + Number(occupant.level || 0) : "absent") +
+          "; owned item missing without confirmed destruction");
+      }
       if (live) progress.activeSlot = receiptSlot;
       if (destroyed || reviewedMissing) {
         progress.activeItem = null;
@@ -7146,6 +7221,47 @@
       }
       delete progress.pendingUpgrade;
       await save(false);
+    }
+    async function adoptIntermediateInventory(pending) {
+      var adoptionProtection = await refreshCommerceAdoptionProtection();
+      if (!runtimeCurrent() || !root.__merchantActiveJob || root.__merchantActiveJob.commandId !== command.id)
+        throw new Error("interrupted");
+      var available = availableCommerceInventory(adoptionProtection);
+      var excluded = new Set(progress.results.concat(progress.batchItems).map(function(entry) { return entry.slot; }));
+      var candidates = available.filter(function(entry) {
+        if (!entry || !entry.item || entry.item.l || entry.item.b || excluded.has(entry.slot)) return false;
+        var level = Number(entry.item.level || 0);
+        if (level <= 0 || level >= target) return false;
+        return sameItemState(entry.item,Object.assign({},progress.activeItem,{level:level}));
+      }).sort(function(a,b) { return Number(b.item.level || 0) - Number(a.item.level || 0) || a.slot - b.slot; });
+      if (!candidates.length) return false;
+      var adopted = candidates[0], oldSlot = progress.activeSlot, oldItem = progress.activeItem;
+      verifyCommerceResults(progress.results,available);
+      progress.activeSlot = adopted.slot;
+      progress.activeItem = fingerprint(adopted.item);
+      progress.cycleActive = true;
+      delete progress.pendingUpgrade;
+      progress.inventoryAdoption = {at:Date.now(),input:progress.activeItem,slot:adopted.slot,
+        previousInput:oldItem,previousSlot:oldSlot,pendingLevel:pending.level};
+      // Existing result quota is unchanged. Paid unfinished groups retain the
+      // strict exact-count remap; surplus base items remain ambiguous.
+      remapCommerceOwnedItems(progress);
+      // This is a newly owned actual input, not a receipt for the old attempt.
+      await save(false);
+      return true;
+    }
+    async function refreshCommerceAdoptionProtection() {
+      var response = await request("/merchant/checkpoint", {method:"POST",body:{jobId:command.jobId,commandId:command.id,
+        protectionOnly:true,commerceAdoptionProtection:true}});
+      if (!response || !response.commerceAdoptionProtection || response.commerceAdoptionProtection.error)
+        throw new Error("Craft reservations unavailable; commerce adoption deferred");
+      return response.commerceAdoptionProtection;
+    }
+    function availableCommerceInventory(protection) {
+      var entries = character.items.map(function(item,slot) {
+        return item ? {slot:slot,item:item,craftLocation:"inventory:"+character.name} : null;
+      });
+      return globalThis.partyAvailableCraftStock(entries,protection);
     }
     async function finishItem() {
       var slot = ownedSlot(), item = character.items[slot];
@@ -7741,7 +7857,7 @@
       if (command.commerceProgressVersion === 2 && error.partyRequest && error.partyRequest.path === '/movement-plan') error.commerceMovement = true;
       var commerceRecovery = command.commerceProgressVersion === 2;
       var recoverable = error.reason === "hunt_movement_owned" || error.commerceMovement || commerceRecovery || /^(interrupted|merchant_anniversary_reserved|bankboi_pending)$/.test(String(error.reason || error.message || error));
-      activity.push({ level: recoverable ? "info" : "error", message: recoverable ? "Merchant order paused; progress preserved" : "Merchant order failed", details: String(error.reason || error.message || error) });
+      activity.push({ level: /upgrade.*uncertain|uncertain.*upgrade/i.test(String(error.reason || error.message || error)) ? "error" : recoverable ? "info" : "error", message: recoverable ? "Merchant order paused; progress preserved" : "Merchant order failed", details: String(error.reason || error.message || error) });
       try { await request("/merchant/complete", { method: "POST", body: {
         jobId: command.jobId, commandId: command.id, success: false,
         failureKind: error.reason === "hunt_movement_owned" ? "hunt_movement_owned" : error.commerceMovement ? "commerce_movement" : commerceRecovery ? "commerce_recovery" : undefined, error: String(error.reason || error.message || error),
@@ -9463,6 +9579,7 @@
     if (upgrading) return "upgrading";
     if (departurePending) return "departure pending";
     if (character.rip) return "dead";
+    if (freeInventorySlots() <= 3) return "inventory capacity";
     return null;
   }
 
@@ -9563,6 +9680,7 @@
       // Keep travel equipment (notably the broom's speed bonus) until arrival.
       await equipGatheringTool(session, current);
       if (!current()) return;
+      if (freeInventorySlots() <= 3) return;
       if (!is_on_cooldown(mode) && can_use(mode)) {
         var beforeGathering = gatheringInventoryTotals();
         gatheringStatus(mode === "fishing" ? "Fishing…" : "Mining…", "info");
@@ -9728,6 +9846,30 @@
     }
   }
 
+  async function applyEventReturnOwner(state) {
+    // Command deletion cannot release an old async exit after host restart.
+    if (!runtimeCurrent()) return;
+    if (!Object.prototype.hasOwnProperty.call(state, "eventReturnCycleId")) return;
+    var at=Number(state.transportTiming && state.transportTiming.sentAt || state.serverNow);
+    if(Number.isFinite(at)) {
+      if(at<(root.__partyEventRecoveryOwnerAt||0))return;
+      root.__partyEventRecoveryOwnerAt=at;
+    }
+    root.__partyEventRecoveryCycleId = state.eventReturnCycleId;
+    var owner = root.__partyEventExitOwner;
+    if (!owner || owner.cycleId === state.eventReturnCycleId) return;
+    owner.cancelled = true;
+    root.__partyEventExitOwner = null;
+    var ownsMovement = !convoyTraveling && !followingLeader && !forceTraveling && !townTraveling;
+    eventReturnPending = false;
+    departurePending = false;
+    eventRecoveryRetryAt = 0;
+    eventRecoveryState = { phase: "idle", cycleId: null, event: null, checkpoint: null, attemptAt: 0, lastError: null };
+    if (ownsMovement && typeof stop === "function") {
+      try { await Promise.all([stop("smart"),stop("move")]); } catch (_retiredEventExitStop) {}
+    }
+  }
+
   async function merchantSendMail(command) {
     var activity = [], mail = command.mail || {}, source = mail.source || {};
     try {
@@ -9872,7 +10014,11 @@
       try { await recoverProductionJournal(); await luckyUpgradeService.recover(); }
       catch (error) { reportMerchantCommand(command, "deferred", error.message || String(error)); return; }
     }
-    if (character.ctype === "merchant" && command.type !== "bankboi-service" && !root.__merchantActiveJob) {
+    // Home visits do not mutate inventory. An offline secondary merchant cannot
+    // inspect the designated merchant's backend receipts; retain recovery only
+    // when this visitor actually has its own local production journal.
+    var productionPreflight = command.type !== "realm-set-home" || readProductionJournal();
+    if (character.ctype === "merchant" && command.type !== "bankboi-service" && productionPreflight && !root.__merchantActiveJob) {
       try { await recoverProductionJournal(); }
       catch (error) { reportMerchantCommand(command, "deferred", error.message || String(error)); return; }
     }
@@ -9889,6 +10035,8 @@
     }
     if (character.ctype === "merchant" && !await gatheringCommandHandoff(command)) return;
     if (command.id <= lastCommand) return;
+    if (command.type === "event-return-town" && root.__partyEventRecoveryCycleId !== undefined &&
+        command.cycleId !== root.__partyEventRecoveryCycleId) return;
     reportMerchantCommand(command, "accepted");
     if (command.type !== "town-party" && command.purpose !== "shared-walk-return") root.__partyTownGeneration += 1;
     var exitOwner = root.__partyEventExitOwner;
@@ -10155,7 +10303,7 @@
       // Event recovery is coordinated as a barrier: every opted-in character
       // returns first, then the coordinator routes the leader back to the
       // selected farming target.
-      var eventExitOwner = root.__partyEventExitOwner = { commandId: command.id, cancelled: false };
+      var eventExitOwner = root.__partyEventExitOwner = { commandId: command.id, cycleId: command.cycleId, cancelled: false };
       var eventExitRevision = Number(navigationIntent.revision) || 0;
       var eventExitCurrent = function () {
         return runtimeCurrent() && !escapeOwns() &&
@@ -10583,6 +10731,7 @@
       statusPhase = "apply escape";
       await applyEscape(state.escape || null);
       statusPhase = "apply navigation";
+      await applyEventReturnOwner(state);
       await applyNavigationIntent(state.navigationIntent);
       statusPhase = "apply combat control";
       acceptCombatControl(state);
@@ -10693,6 +10842,7 @@
         try { await recoverMerchantDeliveryReceipts(); } catch (_) { /* Keep receipts for the next heartbeat. */ }
       }
       statusPhase = "apply merchant settings";
+      bankboiStorage = state.bankboiStorage === true;
       var nextStandListings = state.standListings || gatheringStandListings;
       if (JSON.stringify(nextStandListings) !== JSON.stringify(gatheringStandListings) && gatheringSession)
         gatheringSession.atStandForCooldown = false;
@@ -10806,7 +10956,7 @@
           game_log(String(error.message || error), "red");
         }).finally(function () { root.__merchantInventoryTidy = null; });
       }
-      if (!escapeOwns() && !banking && !bankQueued && !stocking && !upgrading && !departurePending && !character.rip && quantity("hpot1") === 0 &&
+      if (!bankboiStorage && !escapeOwns() && !banking && !bankQueued && !stocking && !upgrading && !departurePending && !character.rip && quantity("hpot1") === 0 &&
           !root.__merchantInventoryTidy && !root.__merchantActiveJob &&
           Date.now() - lastStockAttempt >= 5000) {
         lastStockAttempt = Date.now();
@@ -11376,7 +11526,7 @@
       return;
     }
     if (character.ctype !== "merchant" && eventsEnabled &&
-        (activeCombatEvent() || joinedEvent || eventTraveling || eventReturnPending ||
+        (activeCombatEvent() || eventTraveling || eventReturnPending ||
           anniversaryPlan && anniversaryPlan.eventCycle && anniversaryPlan.eventCycle.combatHandoffAt &&
             Date.now() <= anniversaryPlan.eventCycle.endsAt)) {
       if (!anniversaryBusy) anniversaryStaging = false;
@@ -11911,7 +12061,7 @@
   }
 
   function anniversaryItemReceived(data) {
-    if (character.ctype !== "merchant" || !data || data.response !== "item_received" ||
+    if (!runtimeCurrent() || character.ctype !== "merchant" || !data || data.response !== "item_received" ||
         anniversarySliceNames.indexOf(data.item) < 0) return;
     var event = eventStatus() && eventStatus().anniversary;
     var senderEntity = get_player(data.name);
@@ -12202,19 +12352,8 @@
     });
     goobrawlEvidenceCache={at:Date.now(),map:character.map,live:live};return live;
   }
-  // A follower attends its leader's event whenever it has that event selected and
-  // live too. Choosing alone split the party between simultaneous Halloween bosses,
-  // and a follower on another event than its leader is never walked anywhere.
-  function leaderEventName() {
-    if (!leader || leader === character.name) return null;
-    var entry = (partyPositions || []).find(function (member) { return member && member.name === leader; });
-    if (!entry || entry.rip || entry.server !== reunionRealm()) return null;
-    if (!(Date.now() + coordinatorClockOffset - Number(entry.seenAt) <= 10000)) return null;
-    return entry.activeEvent || null;
-  }
-
   function activeCombatEvent() {
-    var status = eventStatus(), followed = leaderEventName();
+    var status = eventStatus();
     if (manuallySuppressedEvent) {
       var suppressedState = status && status[manuallySuppressedEvent.name];
       var suppressedId = suppressedState && (suppressedState.id || suppressedState.event_id) || null;
@@ -12230,6 +12369,16 @@
       var kind = name === "abtesting" ? "pvp" : "monster";
       var attendance = halloweenEvent(name) ? halloweenAttendance(name, state) : null;
       if (manuallySuppressedEvent && manuallySuppressedEvent.name === name) return null;
+      var anniversary = status && status.anniversary;
+      var cycle = anniversaryPlan && anniversaryPlan.eventCycle;
+      var anniversaryPending = eventSelected("anniversary") && anniversary && anniversary.active !== false &&
+        !anniversaryRoundAborted(anniversary) && !(cycle &&
+          (cycle.returnCompletedAt || cycle.supersededAt || cycle.combatHandoffAt) && Date.now() <= cycle.endsAt) &&
+        (anniversary.live !== false ? !!(character.s && character.s.anniversary_visit) ||
+          !(character.s && character.s.anniversary_kiss) :
+          anniversaryEpoch(anniversary.next) > Date.now() && anniversaryEpoch(anniversary.next) - Date.now() <= 90000);
+      if (anniversaryPending && enabledEventSelections &&
+          enabledEventSelections.indexOf("anniversary") < enabledEventSelections.indexOf(name)) return null;
       if (!eventSelected(name) || !eventIsSupported(name) || (kind === "monster" && !types.length) ||
           (halloweenEvent(name) ? !attendance : !corroborated && (!state || state.live === false))) return null;
       return { name: name, state: state || {}, types: types, kind: kind,
@@ -12238,8 +12387,9 @@
       var mapped = G.maps && G.maps[character.map] && G.maps[character.map].event;
       var aCurrent = Number(a.name === mapped || a.name === joinedEvent);
       var bCurrent = Number(b.name === mapped || b.name === joinedEvent);
-      return Number(b.name === followed) - Number(a.name === followed) || bCurrent - aCurrent ||
-        (Number(a.state.end) || Infinity) - (Number(b.state.end) || Infinity);
+      var aPriority = enabledEventSelections ? enabledEventSelections.indexOf(a.name) : -1;
+      var bPriority = enabledEventSelections ? enabledEventSelections.indexOf(b.name) : -1;
+      return (aPriority >= 0 && bPriority >= 0 ? aPriority - bPriority : 0) || bCurrent - aCurrent || (Number(a.state.end) || Infinity) - (Number(b.state.end) || Infinity);
     })[0] || null;
   }
 
@@ -12787,7 +12937,7 @@
       }
       if (eventTraveling || banking || stocking || upgrading || departurePending || bankQueued) return;
       if (!await eventTravelAllowed(event.name)) return;
-      if (!event.staging && eventCombatReachable(nearestEventTarget())) {
+      if (!event.staging && joinedEvent === event.name && eventCombatReachable(nearestEventTarget())) {
         joinedEvent = event.name;
         root.__partyJoinedEvent = event.name;
         return;
@@ -14097,7 +14247,10 @@
     if (huntTravel && farmApproach.failed[target.id]>Date.now()) return reject("failed approach cooldown");
     if (typeof passiveRareCandidate === "function" && passiveRareCandidate(target)) return true;
     if (isAttackingPartyMember(target)) return true;
-    if(typeof root!=='undefined' && root.__partyFarmingEngagement && root.__partyFarmingEngagement.target.id===target.id) return true;
+    if(typeof root!=='undefined' && root.__partyFarmingEngagement && root.__partyFarmingEngagement.target.id===target.id) {
+      if (!inFarmArea(target, partyLocation)) return reject("farming engagement left selected area");
+      return true;
+    }
     // Farm boundaries govern new pulls. The exact unfinished target must stay
     // eligible after it wanders out, or the lock and selector deadlock.
     if (typeof unfinishedFight === "function" && unfinishedFight() &&
@@ -14320,7 +14473,8 @@
           (!entity.map || entity.map === character.map) &&
           (entity.in === undefined || entity.in === character.in) &&
           (allTypes || monsterFocus.indexOf(entity.mtype) >= 0) &&
-          isAllowedTarget(entity, farmTravel ? command : undefined) && (farmTravel ? Math.hypot(entity.x-character.x,entity.y-character.y)<=monsterSearchRadius : inFarmArea(entity, waypoint));
+          isAllowedTarget(entity, farmTravel ? command : undefined) && inFarmArea(entity, waypoint) &&
+          (!farmTravel || Math.hypot(entity.x-character.x,entity.y-character.y)<=monsterSearchRadius);
       });
     candidates.sort(function (a, b) {
       return monsterPriority(b) - monsterPriority(a) ||
@@ -14694,12 +14848,18 @@
     if(first.town || first.transport || first.method === "leave" || first.map!==origin.map || !can_move_to(first.x,first.y))return null;
     return {destination:segment.location,plot:segment.plot,source:"itinerary"};
   }
+  function convoyHandoffReachable(target, command) {
+    // Farming keeps smart-route ownership until the leader can attack now.
+    // A walkable future approach does not establish group combat clearance.
+    if (command && ['', 'party-travel', 'farm-relocation', 'manual-monster-override'].indexOf(command.purpose || '') >= 0)
+      return !!(target && !target.dead && target.hp !== 0 && typeof is_in_range === "function" && is_in_range(target));
+    return eventCombatReachable(target);
+  }
   function sharedConvoyEngagement(convoy,command,ownsConvoy,phase) {
     if(command.purpose === "monster-hunt" || command.combatHandoffAllowed===false || convoy.handoffPending || Date.now()<(convoy.handoffRetryAt||0))return;
     if(typeof farmingTravelTarget!=="function" || !command.huntTarget && typeof groupedFollower==="function" && groupedFollower())return;
     var target=farmingTravelTarget(command);
-    var approach=target && typeof combatApproachPoint==="function"?combatApproachPoint(target):target;
-    if(!target || !(typeof is_in_range==="function" && is_in_range(target) || approach && can_move_to(approach.x,approach.y)))return;
+    if(!convoyHandoffReachable(target,command))return;
     convoy.handoffPending=true;
     if (command.huntTarget) huntAcquisitionLog(command,target,"requesting handoff",null,"request");
     request("/convoy-engage",{method:"POST",body:Object.assign(sharedConvoyIdentity(command),{
@@ -14903,11 +15063,7 @@
               // obstacle-aware smart route to direct combat movement until the
               // character can actually walk a straight segment into attack
               // position (or is already in range).
-              var attackPoint = target && typeof combatApproachPoint === "function"
-                ? combatApproachPoint(target) : target;
-              var directEngagement = target &&
-                (typeof is_in_range === "function" && is_in_range(target) ||
-                 typeof can_move_to !== "function" || attackPoint && can_move_to(attackPoint.x, attackPoint.y));
+              var directEngagement = convoyHandoffReachable(target,command);
               if (target && directEngagement) {
                 convoy.handoffPending = true;
                 if (command.huntTarget) huntAcquisitionLog(command,target,"requesting handoff",null,"request");
@@ -16228,6 +16384,7 @@
     return { x: target.x + dx / length * radius, y: target.y + dy / length * radius };
   }
   function resetCombatMovement() {
+    eventCombatDetour = null;
     // Only cancel the exact direct segment still owned by combat. Navigation
     // may already have installed another destination since the last tick.
     var dest = kiteState.destination;
@@ -16564,22 +16721,71 @@
     return true;
   }
 
+  var eventCombatDetour = null;
+  function eventApproachDetour(target, destination, step) {
+    // Event combat owns this local detour; farming/navigation never inherit it.
+    if (!runtimeCurrent()) { eventCombatDetour=null; return false; }
+    if (!joinedEvent || !can_walk(character) ||
+        navigationIntent.cancelled || convoyTraveling || followingLeader || forceTraveling || townTraveling || departurePending) {
+      if(eventCombatDetour)resetCombatMovement();
+      return false;
+    }
+    var identity = [target.id, character.map, character.in, joinedEvent, navigationIntent.revision].join(":");
+    var route = eventCombatDetour;
+    if (!route || route.identity !== identity || Math.hypot(route.goal.x-destination.x,route.goal.y-destination.y)>80)
+      route = eventCombatDetour = {identity:identity,goal:destination,point:null,retryAt:0};
+    if (route.point && (Math.hypot(route.point.x-character.x,route.point.y-character.y)<8 ||
+        !safeCombatPoint(route.point,target))) route.point=null;
+    if (!route.point && Date.now()>=route.retryAt) {
+      route.retryAt=Date.now()+1000;
+      var score=Infinity;
+      // Native collision checks validate both legs; all intermediate samples
+      // retain the same secondary-attacker clearance as ordinary combat.
+      for(var ring=0;ring<4;ring++)for(var angle=0;angle<16;angle++) {
+        var radius=80*Math.pow(2,ring), radians=angle*Math.PI/8;
+        var point={x:character.x+Math.cos(radians)*radius,y:character.y+Math.sin(radians)*radius};
+        var cost=radius+Math.hypot(destination.x-point.x,destination.y-point.y);
+        if(cost>=score || !safeCombatPoint(point,target) ||
+            !can_move({map:character.map,x:point.x,y:point.y,going_x:destination.x,going_y:destination.y,base:character.base}) ||
+            !eventApproachLegSafe(character,point,target) || !eventApproachLegSafe(point,destination,target))continue;
+        route.point=point;score=cost;
+      }
+    }
+    if(!route.point)return false;
+    var dx=route.point.x-character.x,dy=route.point.y-character.y,length=Math.hypot(dx,dy);
+    var next={x:character.x+dx*Math.min(1,step/length),y:character.y+dy*Math.min(1,step/length)};
+    return safeCombatPoint(next,target) && sendCombatMove(target,next,"event-terrain-detour");
+  }
+  function eventApproachLegSafe(from,to,target) {
+    var attackers=Object.values(parent.entities||{}).filter(function(enemy){
+      return enemy && enemy.type==="monster" && enemy.visible && !enemy.dead && enemy.id!==target.id && enemy.target===character.name;
+    });
+    var samples=Math.max(1,Math.ceil(Math.hypot(to.x-from.x,to.y-from.y)/20));
+    for(var index=0;index<=samples;index++) {
+      var point={x:from.x+(to.x-from.x)*index/samples,y:from.y+(to.y-from.y)*index/samples};
+      if(attackers.some(function(enemy){return Math.hypot(point.x-enemy.x,point.y-enemy.y)<
+        Math.min(Math.hypot(character.x-enemy.x,character.y-enemy.y),Number(enemy.range)||30)-1;}))return false;
+    }
+    return true;
+  }
   // Shared by ordinary combat and the Franky "tank" routine: approach and hold
   // at this character's own weapon range, regardless of who currently has aggro.
   function engageMovementTick(target) {
-    if (!target || target.dead) return false;
+    if (!target || target.dead) { eventCombatDetour=null; return false; }
     var delta = combatDistance(target) - desiredCombatRange();
     var tolerance = Math.min(3, Math.max(0.5, Number(character.range) * 0.01));
-    if (Math.abs(delta) <= tolerance && is_in_range(target)) return false;
+    if (Math.abs(delta) <= tolerance && is_in_range(target)) { eventCombatDetour=null; return false; }
     var destination = combatApproachPoint(target);
     var dx = destination.x - character.x, dy = destination.y - character.y, length = Math.hypot(dx, dy);
     var step = Math.min(length, Math.max(1, Number(character.speed || 40) * 0.6));
     var angle = Math.atan2(dy, dx);
+    if (delta>0 && eventCombatDetour && eventCombatDetour.point && eventApproachDetour(target,destination,step)) return true;
     for (var i = 0, offsets = [0, 0.4, -0.4, 0.8, -0.8]; i < offsets.length; i++) {
       var point = { x: character.x + Math.cos(angle + offsets[i]) * step,
         y: character.y + Math.sin(angle + offsets[i]) * step };
       if (safeCombatPoint(point, target)) return sendCombatMove(target, point, delta > 0 ? "approaching" : "retreating");
     }
+    if (delta>0 && eventApproachDetour(target,destination,step)) return true;
     var blockedKite = root.partyCombatPosition;
     root.partyCombatPosition = { at: Date.now(), target: target.id, distance: combatDistance(target),
       desiredRange: desiredCombatRange(), mode: "blocked", movementOwner: "combat",

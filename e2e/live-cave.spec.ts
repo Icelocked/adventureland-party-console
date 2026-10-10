@@ -196,6 +196,9 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     }
   };
   const activateWaypoint=async(expectedMap:string)=>{
+    // A requested shop can resolve while outside its nearby radius, then reopen
+    // its result when Stop/resume crosses the shop again. Dismiss that real
+    // result before accessing the map; never dismiss an unresolved native vote.
     const parts=expectedMap.split("_");
     const expectedRun=parts[1],expectedFloor=Number(parts[2]);
     const attempts:unknown[]=[];
@@ -207,11 +210,23 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     }));
     try{
       await expect.poll(async()=>{
+        const resolvedEncounter=page.getByRole('dialog').filter({has:page.getByText('Encounter result',{exact:true})});
+        if(await resolvedEncounter.isVisible()){
+          await resolvedEncounter.getByRole('button',{name:'Close',exact:true}).click();
+          await expect(resolvedEncounter).not.toBeVisible();
+        }
         const before=await snapshot();
         if(before.adding)return true;
         if(!before.disabled){
           expect(before.error,'Add activation may not retry an unrelated rendered error').toBe(false);
-          await fullMap.getByRole('button',{name:'Add waypoint',exact:true}).click();
+          try {
+            await fullMap.getByRole('button',{name:'Add waypoint',exact:true}).click({timeout:1000});
+          } catch (error) {
+            // A fresh native shop update may reopen its completed result
+            // after Close. Only that observed modal obstruction is retryable.
+            if(await resolvedEncounter.isVisible())return false;
+            throw error;
+          }
         }
         let observed=before;
         await expect.poll(async()=>{

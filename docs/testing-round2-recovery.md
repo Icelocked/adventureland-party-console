@@ -2,6 +2,26 @@
 
 Failure inventory recorded before implementation:
 
+- Native CODE turnover can expose a historical managed Anniversary response
+  callback between old-frame removal and new-generation socket migration. The
+  Linux trace proves anniversaryItemReceived read character.ctype through native
+  runner_functions.js:2816 after parent became null. Ownership must be checked
+  before any native getter; keep native response handlers and migration intact.
+
+- Completing or abandoning combat recovery can leave an event-return-town or
+  event-resume-travel command after its owning cycle disappears. An old native
+  handler can then block a newly engaged destination. Retirement must match the
+  exact recovery cycle, preserve live and deferred cycles, and avoid clearing
+  unrelated commands; native heartbeat cancellation must retire active handlers.
+
+- Hunt-off Goobrawl expiry leaves real survivors alive; timing native combat and
+  evacuation as a single phase can fail after a healthy late admission. Observe
+  native deaths and retained Hunt cancellation before the unchanged return bound.
+- One-item delivery with zero gold targets also collects and banks seeded gold;
+  that separate trip can consume the durable delivery receipt's deadline. Declare
+  targets retaining initial gold, while preserving real item transfer, exact copy
+  conservation, durable job completion and restart checks.
+
 - Halloween adds never selected, leader/follower splitting targets, add selection
   replacing boss recovery coordinates, unrelated Jr monsters pulled across maps,
   event deselection leaving add hunting enabled, native spawn/loot outcomes faked.
@@ -85,3 +105,138 @@ convoy was still walking through Mtunnel (both native actors progressed with
 1–34 ms of no-progress time). Arrival must belong to the dispatched checkpoint
 phase, or an already fully retired recovery, before the acknowledgement window
 starts. Preserve both phase bounds and the actual native coordinate checks.
+
+### Franky native exit replacement identity
+
+Failure inventory before the fixture correction: the native first exit convoy
+`1791540503060` failed because the priest's Town shortcut did not complete.
+Persisted state records the same recovery cycle reissuing exit `1791540522804`;
+both actual clients reported its issued command IDs, revisions and runtime IDs.
+The test retained the first exit ID and rejected every valid replacement report.
+Observe the current exit convoy only within the original recovery cycle, preserve
+both native ownership checks and the thirty-second bound, and never accept an
+unrelated recovery or command label without character reports.
+
+Deferred return takeover failure inventory: live followers can retain an old same-cycle deferred event-resume-travel command even after eventReturn becomes null. A newly authorized event trip has parent command ID zero, so shared walking cannot capture that checkpoint command and remains waiting. The new event admission must transfer a still-authorized deferred checkpoint into its new return snapshot and retire only that deferred cycle and its own exit/continuation command. Changed revisions, newer unrelated commands, and active recovery barriers must remain protected. Native regression declares both abandoned and deferred old exits before requiring unchanged CODE runtimes and real boss hits.
+
+Retired-exit fixture isolation: get_monster takes a monster type rather than a declared monster ID. Passing the ID during cleanup left the first declared living boss behind, so the second case's fighters acquired different bosses (observed Priest target489 versus Warrior target491). Between scenarios, retire only the declared ID/type by searching native instance monster maps. Retain all real boss-hit assertions and original deadlines; never remove competing bosses during an active assertion.
+# Retired native event exit observation
+
+Before changing the existing retirement fence: the last eventRecovery diagnostic can retain an old cycle after its asynchronous owner is cancelled, and departurePending can independently belong to new travel. Observe actual native CODE exit ownership and coordinator-published recovery selection for both fighters, preserving runtime identity. The unchanged 15-second fence requires no live uncancelled old exit owner and no old published selection; retain old diagnostics in a bounded ledger instead of treating them as ownership. Preserve the 180-second requirement for both real native boss hits and the exact deferred checkpoint assertions. A missing owner alone never proves resumed behavior.
+# Deferred event handoff: admitted return walk
+
+## Fast heartbeat retirement while an exit handler is awaiting
+
+Run 38010082218 exposes a second dependency: the warrior's new-event permission
+clears its deferred checkpoint and cancels the old shared walk, but its enabled
+priest follower still has that same deferred cycle. Its old exit blocks its own
+permission request, and the backend correctly republishes the still-owned cycle.
+New party event admission must hand off fresh enabled fighters from that exact
+deferred cycle together, retaining each matching navigation revision/checkpoint.
+Do not include merchants, offline/dead fighters, another profile/cycle, disabled
+events, cancelled navigation, or newer revisions. Keep the existing 15-second
+native ownership gate and real combat checks unchanged.
+
+Latest Linux deferred-handoff evidence clears both backend deferred journals and
+the old convoy, but the priest's native exit owner retains the old cycle while
+the warrior clears it. The priest's normal tick awaits its existing exit handler;
+independent combat heartbeats continue, but their responses omitted return-cycle
+ownership and the transport receipt did not install it. Publish that ownership
+on fast responses and fence the native continuation immediately on receipt.
+Reject older ownership responses and clear old flags before any asynchronous
+movement stop, preserving newer routes. The existing native scenario retains its
+15-second limit, unchanged CODE identities, saved checkpoints, and real boss hits.
+
+## Goobrawl survivor blocked by terrain
+
+The Boo Boo walking-cache scenario also records a bounded admission ledger:
+native Town eligibility and cached route steps, coordinator map-local walking
+policy, expected command identity, and actual status-response travel commands.
+Keep the first and latest 64 entries to distinguish an in-flight policy change
+from a legitimate native readiness reset without changing any movement,
+communication hold, cache reuse, reward, or timeout requirement.
+
+Run 37995615362 leaves one real full-health Brawl Goo across arena terrain.
+The warrior is stationary at (230,-230), target (-275,-223), with native range
+rejection and no collision-safe direct approach. Its five forward offsets cannot
+find a route around the corner. The existing Hunt-off scenario fails before any
+fix and requires genuine survivor deaths followed by native evacuation.
+Use a bounded collision-checked two-leg event approach, retain one waypoint
+until reached, and cancel its ownership when target, map, event, or navigation
+revision changes. Secondary attackers must never lose their clearance barrier.
+
+## Linux checkpoint and Cave modal fixture ownership
+
+The same run's finite compound case observed its native level-one inventory
+before the separate `game_response` callback arrived. Its final artifact records
+one real compound success and ten conserved rings (one level one, nine level
+zero). Wait for both native inventory and response evidence within the existing
+90-second processing deadline before asserting the response count; do not
+manufacture outcomes or alter quota and restart checks.
+
+Run 37995615362 captured the real coat purchase (ten level-zero coats and the
+existing level-five coat) at checkpoint 28. Its cleanup removed routes while
+the released checkpoint callback was still continuing the request, producing
+`Route is already handled`. Drain the released handler before fixture teardown.
+
+The Cave failure snapshot shows its full map underneath a reopened, completed
+shop result. A native update reopened that result between the existing Close
+and Add clicks; the default 20-second click blocked the outer modal handling.
+Retry only this observed completed-result obstruction inside the original
+60-second activation deadline. Keep unrelated click failures, unresolved votes,
+native waypoint acceptance, movement, and collision checks strict.
+
+Linux run 37997222115 retained both old native exit owners after a new combat
+event was authorized. Deferred checkpoints transferred successfully, but an
+already admitted `shared-walk-return` convoy still contained the old cycle's
+parent commands. Command deletion alone could not retire that walking owner.
+The existing native deferred-handoff scenario requires retirement within 15
+seconds, unchanged CODE identities, checkpoint preservation, and real boss hits.
+Retire only an event-return walk whose participants, parent cycle IDs, and
+navigation revisions all still belong to the superseded deferred recovery;
+preserve other profiles, manual navigation, and newer walking owners.
+# Capped commerce retry identity
+
+Full native run 37995615362 shard 1 retained capped order spending after restart,
+then scheduled a stalled-worker retry with a new job ID and the original
+commerceOrderId. The terminal-outcome poll matched only the initial job ID,
+so it could miss a legitimate resumed order's cap exhaustion. Match either
+the original job ID or its durable commerce order ID. Preserve the original
+120-second observation bound and all actual purchase/spending assertions;
+the recorded retry latency does not establish a production cap defect.
+
+## Temporarily stale deferred peer admission
+
+A first fighter can authorize a new event while a matching deferred peer's last
+real status is older than the three-second freshness bound. Source review raised
+the possibility that retiring the first fighter's journal could leave the peer
+blocked, because later requests no longer identify that superseded cycle. This
+was a hypothesis to verify, not an observed production failure.
+The native retired-exit scenario now drops only Priest status transport for a
+bounded twenty-second window, proves it is stale at real Warrior admission,
+then releases communication. It retains the fifteen-second owner retirement
+bound, unchanged CODE identities, both original saved checkpoints, and actual
+boss hits. The bounded fault ledger records dropped requests and real admission;
+no response, readiness flag, or successful receipt is manufactured.
+
+The corrected native scenario passed on unchanged production commit 0a85cb1:
+one scenario, 34 verified evidence files. At Warrior admission Priest remained
+connected, its verified last status was approximately 9.5 seconds old, and its
+deferred journal was still present. After communication resumed, Warrior's old
+owner disappeared at 5.6 seconds after restoration; Priest resumed its real old
+return handler and its owner disappeared at 13.9 seconds. Both saved waypoints
+and actual boss hits passed. Priest ultimately had its own admitted event
+session containing its original checkpoint; Warrior's repeated permission
+requests cannot transfer that journal once Warrior's journal is gone. These
+observations support Priest progressing through its own admission after the old
+return released its local gate, rather than establishing the hypothesized
+deadlock. The ledger does not record every permission request or Priest Town
+receipt, so it cannot attribute that gate release to an exact native receipt.
+Retain the bounded regression scenario; no provenance production change is
+justified by this passing result.
+
+The first stale-peer run stopped in fixture setup: public state intentionally
+omits stale characters, so reading Priest's projected seenAt after admission
+threw before the owner check. Capture its verified finite timestamp before the
+hold, retain any newer projected timestamp, and independently verify its native
+client remains connected at admission. This setup failure is not product RED.

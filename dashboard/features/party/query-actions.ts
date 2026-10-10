@@ -45,7 +45,6 @@ export const actionDomains = {
   '/merchant/clear': core,
   '/merchant/config': inventory,
   '/merchant/force-stand': core,
-  '/merchant/bank-visit': commerce,
   '/merchant/stand-location': core,
   '/merchant/gather': core,
   '/merchant/job/cancel': commerce,

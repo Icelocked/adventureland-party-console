@@ -2,6 +2,91 @@ import {test,expect} from './live-fixtures';
 import {killNativeCharacter} from './hunt-interruption-helpers';
 import {W,P,M,world,beginAnniversary,endAnniversary} from './game/hunt-events';
 
+test.describe('native escape requested membership',()=>{
+  test.use({initialPosition:{map:'main',x:200,y:-120}});
+  for(const metadata of ['missing','duplicate'] as const)test(`native escape retains both members with ${metadata} role metadata`,async({live},info)=>{
+    test.setTimeout(120_000);
+    // Failure inventory is recorded before the implementation in
+    // docs/testing-escape-membership.md. Only coordinator metadata is faulted;
+    // the native classes, movement and server arrival remain genuine.
+    await live.post('/formation',{leader:W});
+    await live.post('/formation',{character:P,follow:true});
+    const context=live.clients[W].page.context();
+    await context.route('**/party-api/status',async route=>{
+      const body=route.request().postDataJSON();
+      if(body?.name===P){if(metadata==='missing')delete body.ctype;else body.ctype='warrior';}
+      await route.continue({postData:JSON.stringify(body)});
+    });
+    const positions:any[]=[];let admission:any;
+    try{
+      // Let the real coordinator observe the declared metadata before admission.
+      await expect.poll(async()=>{const s=(await live.state()).characters[P];return metadata==='missing'?!s?.ctype:s?.ctype==='warrior';},{timeout:15_000}).toBe(true);
+      admission=await live.post('/escape',{});
+      expect(admission.escape.participants).toEqual(expect.arrayContaining([W,P]));
+      if(metadata==='missing'){
+        const before=await live.state();
+        // Historical persisted omission, not a fabricated gameplay outcome:
+        // restore the old membership bug with unchanged native/navigation state.
+        await live.restoreHistoricalSettings(settings=>{
+          const recovery={id:'declared-historical-membership-death',names:[W,P],leader:W,
+            policy:settings.farmingPolicy,focus:JSON.stringify(before.monsterFocus),
+            revisions:Object.fromEntries([W,P].map(name=>[name,settings.navigationIntents[name].revision])),
+            phase:'recovering',at:Date.now(),deaths:[],reason:'Declared persisted omission'};
+          return {escape:{...settings.escape,participants:[W],stage:'failed-hold'},combatRecovery:recovery,
+            farmingProfiles:{...settings.farmingProfiles,[W]:{...settings.farmingProfiles[W],combatRecovery:recovery}}};
+        });
+      }else await live.restartCoordinator();
+      await expect.poll(async()=>{const native=await world(live);positions.push({at:Date.now(),players:native.players});return [W,P].every(name=>{const p=native.players[name];return p&&!p.rip&&p.map==='main'&&Math.hypot(p.x,p.y)<=65;});},{timeout:60_000,intervals:[500]}).toBe(true);
+    }finally{
+      await info.attach('native-escape-requested-membership',{body:JSON.stringify({metadata,admission,positions,final:await live.state(),native:await world(live),events:{[W]:await live.clients[W].events(),[P]:await live.clients[P].events()}}),contentType:'application/json'});
+      await context.unrouteAll({behavior:'ignoreErrors'});
+    }
+  });
+});
+
+test.describe('native collateral convoy defense',()=>{
+  test.use({initialPosition:{map:'main',x:0,y:0}});
+  for(const partyTarget of [false,true])test(`native Targetron splash ${partyTarget?'preserves party defense':'does not stop an outsider convoy pass'}`,async({live},info)=>{
+    test.setTimeout(180_000);
+    await live.post('/formation',{leader:W});await live.post('/formation',{character:P,follow:true});
+    await live.post('/merchant/stand-location',{map:'main',x:0,y:0});
+    await expect.poll(()=>live.clients[M].run('Math.hypot(character.real_x,character.real_y)'),{timeout:45_000}).toBeLessThan(4);
+    await expect.poll(()=>live.clients[W].run(`!parent.party_list.includes('${M}')`),{timeout:15_000}).toBe(true);
+    // Lose the readiness transport while the real client has installed its
+    // owner. This gives the native explosion a stationary initial window;
+    // readiness and actual movement are restored immediately after its receipt.
+    let holdReady=true;
+    const context=live.clients[W].page.context();
+    await context.route('**/party-api/status',async route=>{
+      const body=route.request().postDataJSON();
+      if(holdReady&&body?.name===W&&body.convoyNavigation?.routeReady)return route.abort('failed');
+      return route.continue();
+    });
+    const samples:any[]=[];let monster:any;
+    const destination=await live.clients[W].run(`(()=>{for(let i=0;i<16;i++){const x=100*Math.cos(i*Math.PI/8),y=100*Math.sin(i*Math.PI/8);if(can_move_to(x,y))return {map:character.map,x,y};}throw Error('No native clear convoy endpoint');})()`);
+    expect(await live.clients[P].run(`can_move_to(${destination.x},${destination.y})`),'The same native endpoint must be clear for the Priest footprint').toBe(true);
+    try{
+      await live.post('/travel',destination);
+      await expect.poll(async()=>{const s=await live.state();return s.activeConvoy?.participants?.includes(W)&&['shared-prepare','shared-travel','travel'].includes(s.activeConvoy.phase);},{timeout:30_000}).toBe(true);
+      await expect.poll(async()=>{const s=await live.state();return s.characters[W]?.convoyNavigation?.id===s.activeConvoy.id;},{timeout:15_000}).toBe(true);
+      monster=await live.admin(`output=(()=>{const p=get_player('${W}'),original=G.monsters.targetron;try{
+        G.monsters.targetron={...original,hp:1000000,attack:1000,speed:0,charge:0,aggro:0,range:200};
+        const m=new_monster(p.in,{type:'targetron',count:1,boundary:[p.x+40,p.y,p.x+41,p.y+1]},{temp:1});
+        target_player(m,get_player('${partyTarget?W:M}'));return {id:m.id,target:m.target,map:m.map,x:m.x,y:m.y,explosion:m.explosion};
+      }finally{G.monsters.targetron=original;}})()`);
+      await expect.poll(async()=>{const hits=(await live.clients[W].events()).filter((e:any)=>e.event==='hit'&&String(e.data?.hid)===String(monster.id)&&e.data?.id===W&&e.data?.damage>0);return partyTarget?hits.length:hits.filter((e:any)=>e.data.splash===true).length;},{timeout:30_000}).toBeGreaterThan(0);
+      holdReady=false;
+      await expect.poll(async()=>{const state=await live.state(),native=await world(live);samples.push({at:Date.now(),convoy:state.activeConvoy&&{id:state.activeConvoy.id,phase:state.activeConvoy.phase,epoch:state.activeConvoy.epoch},players:Object.fromEntries([W,P].map(n=>[n,{map:native.players[n].map,x:native.players[n].x,y:native.players[n].y}]))});
+        return partyTarget?[W,P].some(n=>state.characters[n]?.convoyNavigation?.defenseTargets?.some((t:any)=>String(t.id)===String(monster.id))):[W,P].every(n=>native.players[n].map===destination.map&&Math.hypot(native.players[n].x-destination.x,native.players[n].y-destination.y)<=25);
+      },{timeout:60_000}).toBe(true);
+    }finally{
+      holdReady=false;
+      await context.unrouteAll({behavior:'ignoreErrors'});
+      await info.attach('native-targetron-collateral-ownership',{body:JSON.stringify({partyTarget,destination,monster,samples,native:await world(live),state:await live.state(),events:await live.clients[W].events()}),contentType:'application/json'});
+    }
+  });
+});
+
 test.describe('native arrival connector recovery',()=>{
   test.use({initialPosition:{map:'main',x:200,y:-120}});
   for(const dropped of ['first','all'] as const)test(`native Town connector ${dropped} submission loss preserves arrival and deadline`,async({live},info)=>{

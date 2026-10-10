@@ -47,7 +47,9 @@ interface RealmPorts {
   dispatchMerchant(): void;
   start(name: string): unknown;
   characterHome(name: string): string | null;
+  characterType?(name:string):string|null;
   connectionCount(): number;
+  refresh(): Promise<unknown>;
 }
 
 /** Coordinates one requested realm transition without changing worker restart ownership. */
@@ -181,7 +183,20 @@ export function createRealmSwitch(ports: RealmPorts) {
     });
   }
 
-  function connectionToSuspend(operation: RealmOperation): string | undefined {
+  function characterType(name:string):string|undefined|null {
+    return ports.characterType?.(name) || ports.status(name)?.ctype;
+  }
+  function merchantToSuspend(operation:RealmOperation,offline:string[]):string|undefined {
+    if(!offline.some(name=>characterType(name)==='merchant')) return undefined;
+    const incumbent=operation.participants.find(name=>characterType(name)==='merchant');
+    if(!incumbent) return undefined;
+    if(ports.steamMembers().includes(incumbent))
+      throw new Error('A managed merchant slot must be available to temporarily log in offline merchants; existing Steam merchant sessions were preserved');
+    return incumbent;
+  }
+  function connectionToSuspend(operation: RealmOperation,offline:string[]): string | undefined {
+    const merchant=merchantToSuspend(operation,offline);
+    if(merchant) return merchant;
     if (ports.connectionCount() < 4) return undefined;
     const name = operation.participants.find((participant) => !ports.steamMembers().includes(participant));
     if (!name) throw new Error("A headless slot must be available to temporarily log in offline characters; existing Steam sessions were preserved");
@@ -204,7 +219,7 @@ export function createRealmSwitch(ports: RealmPorts) {
     if (!offline.length) return;
     // Free one headless connection while retaining its slot and configuration. No
     // Steam window is replaced, and temporary visitors are never assigned slots.
-    const suspendedName = connectionToSuspend(operation);
+    const suspendedName = connectionToSuspend(operation,offline);
     const suspended = suspendedName ? ports.block(suspendedName) : null;
     const enabled = suspended?.enabled;
     await withCleanup(async () => {
@@ -226,9 +241,11 @@ export function createRealmSwitch(ports: RealmPorts) {
       : "Every active character arrived on " + ports.label(operation.realm);
     ports.persist();
     if (operation.setHome) {
+      const confirmationDeadline = ports.now() + 120_000;
       assignHomeExecutor(operation);
       await waitHome(operation, operation.participants);
       await offlineHomes(operation);
+      await confirmAccountHomes(operation, confirmationDeadline);
       operation.phase = "complete";
       operation.homeRealm = operation.realm;
       operation.completedAt = ports.now();
@@ -236,6 +253,22 @@ export function createRealmSwitch(ports: RealmPorts) {
       ports.persist();
     }
     ports.dispatchMerchant();
+  }
+  async function confirmAccountHomes(operation: RealmOperation, deadline: number): Promise<void> {
+    const names = operation.homeTargets || operation.participants;
+    do {
+      await ports.refresh();
+      if (names.every(name => persistedHomeConfirmed(name, operation))) return;
+      if (ports.now() >= deadline) break;
+      await ports.sleep(500);
+    } while (ports.now() < deadline);
+    throw new Error('Account roster did not confirm every persisted home realm before the confirmation deadline');
+  }
+  function persistedHomeConfirmed(name: string, operation: RealmOperation): boolean {
+    // Native set_home changes connected player state without a synchronous DB
+    // write. Visitors have stopped, so only their refreshed account home counts.
+    const home = operation.participants.includes(name) ? currentHome(name, operation) : ports.characterHome(name);
+    return 'SR_' + String(home || '').replace(/^SR_/, '') === operation.realm;
   }
 
   async function run(operation: RealmOperation): Promise<void> {

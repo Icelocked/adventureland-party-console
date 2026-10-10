@@ -1,19 +1,30 @@
 import { test, expect, type LiveGame } from './live-fixtures';
 import { killNativeCharacter } from './hunt-interruption-helpers';
 import { nativeEventSpawn } from './game/event-spawn';
+import { supportedEvents } from '../dashboard/lib/event-policy';
 
 const W = 'E2EWarrior', P = 'E2EPriest', fighters = [W, P];
 
-test.beforeEach(async ({live}) => {
+test.beforeEach(async ({live},info) => {
   // Reset only declarations from previous Halloween cases, before this case
   // creates any encounter. Never manufacture a kill or absence during a fight.
-  await live.admin(`output=(()=>{
-    for(const instance of Object.values(instances))for(const monster of Object.values(instance.monsters||{}))
-      if(monster.e2eHalloween)remove_monster(monster,{silent:true});
+  const cleanup=await live.admin(`output=(()=>{
+    const declared=globalThis.__e2eHalloweenDeclared||{},owned=new Set(Object.keys(declared));
+    const monsters=Object.values(instances).flatMap(instance=>Object.values(instance.monsters||{}));
+    // Native irregular reconstitution drops ad-hoc fields. Keep fixture identity
+    // outside the native object; offspring belong only by actual master chains.
+    let changed=true;while(changed){changed=false;for(const monster of monsters)
+      if(monster.master!=null&&owned.has(String(monster.master))&&!owned.has(String(monster.id))){owned.add(String(monster.id));changed=true;}}
+    const removed=[];
+    for(const monster of monsters){const id=String(monster.id),definition=declared[id];
+      if(monster.e2eHalloween||owned.has(id)&&(!definition||definition.type===monster.type)){
+        removed.push({id,type:monster.type,master:monster.master});remove_monster(monster,{silent:true});}}
+    globalThis.__e2eHalloweenDeclared={};
     for(const entry of Object.values(globalThis.__e2eHalloweenAnnouncements||{}))clearInterval(entry.timer);
     globalThis.__e2eHalloweenAnnouncements={};
     for(const type of ['mrgreen','mrpumpkin','slenderman'])delete E[type];
-    broadcast_e();return true;})()`);
+    broadcast_e();return {removed,scope:'between-case exact declared native IDs and actual descendants'};})()`);
+  await info.attach('native-halloween-between-case-cleanup',{body:JSON.stringify(cleanup),contentType:'application/json'});
 });
 
 // Failure inventory, written before runtime implementation: unsupported native
@@ -27,11 +38,13 @@ async function prepare(live: LiveGame, event: string) {
   await live.post('/formation', { leader: W });
   await live.post('/formation', { character: P, follow: true });
   const checkpoint = await live.admin(`output=(()=>{const p=get_player(${JSON.stringify(W)});return {map:p.map,x:p.x,y:p.y}})()`);
-  await live.post('/travel', checkpoint);
   await expect.poll(async () => {
     const state = await live.state();
-    return !state.activeConvoy || state.activeConvoy.phase === 'complete';
-  }, { timeout: 30_000 }).toBe(true);
+    const leader=state.characters[W];
+    return leader&&Date.now()-leader.seenAt<3000&&leader.map===checkpoint.map&&
+      Math.hypot(leader.x-checkpoint.x,leader.y-checkpoint.y)<1;
+  }, { timeout: 30_000, message:'Save only the fresh native leader checkpoint' }).toBe(true);
+  await live.post('/checkpoint', {});
   await live.post('/formation', { character: W, eventSelections: [event] });
 }
 
@@ -83,14 +96,17 @@ async function spawn(live: LiveGame, event: string, map: string, x: number, y: n
     });
     const dps=eligible.reduce((n,p)=>n+p.attack*p.frequency,0);
     if(!dps)throw Error('No native fighter eligible for declared encounter');
+    const nominalSeconds=${nativeAdds ? 30 : event === 'slenderman' ? 40 : ['mrgreen','mrpumpkin'].includes(event) ? 45 : 90};
     try {
-      G.monsters[type]={...original,hp:Math.ceil(dps*90),attack:1,speed:0,charge:0,range:1,aggro:0,phresistance:0,spawns:${nativeAdds ? 'original.spawns' : '[]'}};
+      G.monsters[type]={...original,hp:Math.ceil(dps*nominalSeconds),attack:1,speed:0,charge:0,range:1,aggro:0,phresistance:0,spawns:${nativeAdds ? 'original.spawns' : '[]'}};
       const m=new_monster(${JSON.stringify(map)},{type,count:1,boundary:[${x},${y},${x},${y}]},{temp:1});
       m.e2eHalloween=true;
+      (globalThis.__e2eHalloweenDeclared||={})[String(m.id)]={type,map:m.map};
       E[type]={live:true,map:m.map,hp:m.hp,max_hp:m.max_hp,target:m.target};
       // Native Slender status deliberately omits coordinates.
       if(type!=='slenderman'){E[type].x=m.x;E[type].y=m.y;}
-      broadcast_e();return {id:m.id,type,map:m.map,x:m.x,y:m.y,hp:m.hp,eligibleFighters:eligible.map(p=>p.name),difficultyDps:dps,initialDefinition:G.monsters[type],nativeStatus:E[type]};
+      broadcast_e();return {id:m.id,type,map:m.map,x:m.x,y:m.y,hp:m.hp,eligibleFighters:eligible.map(p=>p.name),difficultyDps:dps,
+        difficulty:{nominalSeconds,observedNativeCadence:93/240,nominalCadence:1.2,scope:'initial encounter HP only'},initialDefinition:G.monsters[type],nativeStatus:E[type]};
     } finally {G.monsters[type]=original;}
   })()`);
 }
@@ -106,12 +122,27 @@ for (const encounter of [{id:'mrgreen',add:'greenjr',drop:'ashleaf',map:'spookyt
       // fabricated spawn/death/loot; add policy survives event deselection.
       const ledgers:any[]=[];
       const observedHits=new Map<string,any>();
+      const attacks:any[]=[];
+      for(const name of fighters)await live.clients[name].frame.evaluate(()=>{
+        const game=window as any,socket=game.socket,emit=socket.emit;
+        game.__e2eHalloweenAttacks=[];
+        socket.emit=function(event:string,...args:any[]){
+          if(event==='attack'){
+            game.__e2eHalloweenAttacks.push({at:Date.now(),actor:game.character.name,id:String(args[0]?.id)});
+            if(game.__e2eHalloweenAttacks.length>2048)game.__e2eHalloweenAttacks.shift();
+          }
+          return emit.apply(socket,[event,...args]);
+        };
+        game.__e2eHalloweenRestoreAttack=()=>{socket.emit=emit;};
+      });
       const before=await live.admin(`output=${JSON.stringify(fighters)}.map(name=>({name,items:get_player(name).items}))`);
       await live.admin(`output=(()=>{
         globalThis.__e2eThresholdAdds=[];
         const original=new_monster;globalThis.__e2eAddSpawner=original;
         new_monster=function(...args){const m=original.apply(this,args);
           if(m&&m.type===${JSON.stringify(encounter.add)}&&m.master){
+            if(globalThis.__e2eHalloweenDeclared?.[String(m.master)])
+              globalThis.__e2eHalloweenDeclared[String(m.id)]={type:m.type,map:m.map,master:String(m.master)};
             const boss=instances[m.in]?.monsters[m.master];globalThis.__e2eThresholdAdds.push({id:String(m.id),master:String(m.master),type:m.type,at:Date.now(),bossHp:boss?.hp,bossMaxHp:boss?.max_hp});
           }return m;};return true;})()`);
       try {
@@ -124,6 +155,8 @@ for (const encounter of [{id:'mrgreen',add:'greenjr',drop:'ashleaf',map:'spookyt
           const selection=await live.state();
           ledgers[ledgers.length-1].selections=fighters.map(name=>({name,target:selection.characters[name]?.combatSelection?.target}));
           const events=await live.clients[W].events();
+          attacks.length=0;
+          for(const name of fighters)attacks.push(...await live.clients[name].frame.evaluate(()=>(window as any).__e2eHalloweenAttacks||[]));
           for(const event of events) {
             if(event.event==='hit'&&fighters.includes(event.data?.hid)&&event.data?.damage>0&&
               (String(event.data.id)===String(seed.id)||sample.adds.some((add:any)=>String(event.data.id)===add.id)))
@@ -131,10 +164,9 @@ for (const encounter of [{id:'mrgreen',add:'greenjr',drop:'ashleaf',map:'spookyt
           }
           return [0.75,0.5,0.25].every(threshold=>sample.adds.some((add:any)=>
             add.master===String(seed.id)&&add.bossHp/add.bossMaxHp<=threshold&&add.bossHp/add.bossMaxHp>threshold-0.2&&
-            [...observedHits.values()].some((event:any)=>String(event.data.id)===add.id)&&
-            ledgers.some(observation=>observation.boss?.hp>0&&observation.selections?.some((actor:any)=>
-              String(actor.target?.id)===add.id&&ledgers.some(previous=>previous.at<observation.at&&
-                previous.selections?.some((prior:any)=>prior.name===actor.name&&String(prior.target?.id)===String(seed.id)))))));
+            attacks.some(attack=>attack.id===add.id&&attacks.some(previous=>previous.actor===attack.actor&&
+              previous.id===String(seed.id)&&previous.at<attack.at)&&
+              [...observedHits.values()].some((event:any)=>String(event.data.id)===add.id&&event.data.hid===attack.actor&&event.at>=attack.at))));
         },{timeout:300_000,intervals:[250,500],message:'Native boss damage must spawn and the party must attack adds at each threshold'}).toBe(true);
         const firstAddHit=[...observedHits.values()].filter(event=>String(event.data.id)!==String(seed.id)).sort((a,b)=>a.at-b.at)[0];
         expect([...observedHits.values()].some(event=>String(event.data.id)===String(seed.id)&&event.at>firstAddHit.at),
@@ -145,12 +177,15 @@ for (const encounter of [{id:'mrgreen',add:'greenjr',drop:'ashleaf',map:'spookyt
           return items.reduce((n:number,item:any)=>n+(item?.name===encounter.drop?(item.q||1):0),0)>
             before.flatMap((p:any)=>p.items).reduce((n:number,item:any)=>n+(item?.name===encounter.drop?(item.q||1):0),0);
         },{timeout:30_000,message:'Real native add loot must reach party inventory'}).toBe(true);
-        await info.attach('native-threshold-add-combat-and-loot',{body:JSON.stringify({seed,before,ledgers,
+        await info.attach('native-threshold-add-combat-and-loot',{body:JSON.stringify({seed,before,ledgers,attacks,
           events:await live.clients[W].events(),after:await live.admin(`output=${JSON.stringify(fighters)}.map(name=>({name,items:get_player(name).items}))`),state:await live.state()}),contentType:'application/json'});
       } finally {
-        await info.attach('native-threshold-observer-final',{body:JSON.stringify({ledgers,hits:[...observedHits.values()],
+        await info.attach('native-threshold-observer-final',{body:JSON.stringify({ledgers,attacks,hits:[...observedHits.values()],
           native:await live.admin(`output={adds:globalThis.__e2eThresholdAdds,players:${JSON.stringify(fighters)}.map(name=>{const p=get_player(name);return {name,map:p.map,x:p.x,y:p.y,rip:p.rip}})}`),
           state:await live.state()}),contentType:'application/json'});
+        for(const name of fighters)await live.clients[name].frame.evaluate(()=>{
+          const game=window as any;game.__e2eHalloweenRestoreAttack?.();delete game.__e2eHalloweenRestoreAttack;
+        });
         await live.admin(`if(globalThis.__e2eAddSpawner){new_monster=globalThis.__e2eAddSpawner;delete globalThis.__e2eAddSpawner;}output=true`);
         await live.post('/formation',{character:W,eventSelections:[]});
       }
@@ -331,6 +366,8 @@ test('a follower switches to its leader\'s Halloween boss without a stranded ret
   await expect.poll(async () => { const state = await live.state(); return !state.activeConvoy || state.activeConvoy.phase === 'complete'; }, { timeout: 30_000 }).toBe(true);
   await live.post('/formation', { character: P, eventSelections: ['mrgreen'] });
   await live.post('/formation', { character: W, eventSelections: ['mrgreen', 'mrpumpkin'] });
+  // The leader ranks Mr. Pumpkin first; the follower inherits that order once it follows.
+  await live.post('/formation', { character: W, eventPriorities: ['mrpumpkin', 'mrgreen', ...supportedEvents.filter(id => id !== 'mrpumpkin' && id !== 'mrgreen')] });
   // The leader attends Mr. Pumpkin first; the independent follower can only attend Mr. Green.
   const pumpkin = await spawn(live, 'mrpumpkin', 'halloween', -495, 685);
   await expect.poll(async () => (await live.state()).characters[W]?.joinedEvent, { timeout: 120_000 }).toBe('mrpumpkin');

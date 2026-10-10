@@ -1,5 +1,42 @@
 import { test, expect } from './live-fixtures';
 
+// Failure modes: capacity still admits travel/tool swaps/casts; blocked work
+// advances a cooldown; one mode bypasses the reserve; freeing space never resumes.
+test('merchant gathering waits at capacity without resetting cooldowns',async({live,page},info)=>{
+  const name='E2EMerchant';
+  for(const mode of ['fishing','mining'])await live.post('/merchant/gather',{mode,enabled:false});
+  const seed=await live.admin(`output=(()=>{const p=get_player('${name}');
+    for(let i=0;i<42;i++)p.items[i]=i<39?{name:'helmet',level:0}:null;
+    p.items[10]={name:'rod',level:0};p.items[11]={name:'pickaxe',level:0};
+    cache_player_items(p);resend(p,'reopen+cid');return {items:p.items,last:{fishing:p.last.fishing,mining:p.last.mining}};})()`);
+  await expect.poll(async()=> (await live.state()).characters[name]?.items?.filter(Boolean).length).toBe(39);
+  await live.restoreHistoricalSettings(async()=>{
+    await live.admin(`output=(()=>{const p=get_player('${name}');p.last.fishing=p.last.mining=new Date(0);return true;})()`);
+    await live.clients[name].frame.evaluate(()=>{
+      const game=window as any,root=(document.getElementById('maincode') as HTMLIFrameElement).contentWindow as any;
+      for(const mode of ['fishing','mining']){game.next_skill[mode]=new Date(0);root.__merchantGatheringCooldowns[mode]=0;}
+    });
+    return {gatheringCooldowns:{fishing:0,mining:0}};
+  });
+  const before=(await live.state()).gatheringCooldowns;
+  for(const mode of ['fishing','mining'])await live.post('/merchant/gather',{mode,enabled:true});
+  await page.goto(live.url);await page.getByText(/Merchant logistics ·/).click();
+  await expect(page.locator('details').filter({has:page.locator('summary').getByText(/Merchant logistics/)}).getByText('BLOCKED',{exact:true})).toHaveCount(2);
+  await expect.poll(()=>live.clients[name].frame.evaluate(()=>{
+    const root=(document.getElementById('maincode') as HTMLIFrameElement).contentWindow as any;
+    return root.__merchantGatheringBlockedReason;
+  })).toBe('inventory capacity');
+  const after=await live.state();expect(after.gatheringCooldowns).toEqual(before);
+  const native=await live.admin(`output=(()=>{const p=get_player('${name}');return {items:p.items,last:{fishing:p.last.fishing,mining:p.last.mining}};})()`);
+  expect(Object.values(native.last).map(value=>new Date(value as string).getTime())).toEqual([0,0]);
+  await info.attach('native-gathering-capacity',{body:JSON.stringify({seed,before,after,native}),contentType:'application/json'});
+  await info.attach('native-gathering-blocked',{body:await page.screenshot(),contentType:'image/png'});
+  // Native potion restocking can occupy one reserve cell after the initial
+  // seed. Free two helmets so that real capacity crosses below 39 occupied.
+  await live.admin(`output=(()=>{const p=get_player('${name}');p.items[37]=p.items[38]=null;cache_player_items(p);resend(p,'reopen+cid');return p.items;})()`);
+  await expect(page.getByText('BLOCKED',{exact:true})).toHaveCount(0);
+});
+
 // Failure modes: an old weapon preference overrides manual Equip; gathering
 // retains obsolete displaced gear; restart forgets the new preference; any
 // swap loses the weapon or tool. Observe native tool equip and native restore.

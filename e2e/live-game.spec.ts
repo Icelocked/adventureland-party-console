@@ -15,6 +15,9 @@ test('Steam-style CODE replacement retires old socket callbacks and pending hear
   // Failure modes: detached CODE callbacks still dereference native parent;
   // socket listeners accumulate; an old pending heartbeat applies after reload;
   // retirement disconnects the game or prevents the new runtime from operating.
+  // Deployment can also be deferred by a real activity owner, a stopped loader,
+  // or a changed runner context. Preserve those actual boundaries on failure.
+  const loaderObservations:unknown[]=[],deploymentResponses:unknown[]=[];
   const client=live.clients[W],game=client.frame;
   const before=await game.evaluate(()=>{
     const host=window as any,runner=(document.getElementById('maincode') as HTMLIFrameElement).contentWindow as any;
@@ -41,10 +44,12 @@ test('Steam-style CODE replacement retires old socket callbacks and pending hear
   await client.page.route('**/CODE/adventure_land/manifest.json*',async route=>{
     const response=await route.fetch(),manifest=await response.json();
     if(deploy)manifest.classes.warrior.sha256=deployedHash;
+    if(deploy&&deploymentResponses.length<80)deploymentResponses.push({at:Date.now(),kind:'manifest',oldFrame:route.request().frame()===oldFrame,warriorHash:manifest.classes.warrior.sha256});
     await route.fulfill({response,json:manifest});
   });
   await client.page.route('**/CODE/adventure_land/generated/**/*.js*',async route=>{
     if(deploy&&new URL(route.request().url()).pathname.endsWith('/'+deployedFile)){
+      if(deploymentResponses.length<80)deploymentResponses.push({at:Date.now(),kind:'class',oldFrame:route.request().frame()===oldFrame,hash:deployedHash});
       if(!replayed&&route.request().frame()!==oldFrame){
         replayed=true;
         await game.evaluate(()=>{const host=window as any;for(const handler of host.__e2eHistoricResponses)host.socket.on('game_response',handler);});
@@ -63,10 +68,19 @@ test('Steam-style CODE replacement retires old socket callbacks and pending hear
     deployedFile=asset.file;deployedBody=asset.body+'\n// Native E2E declared deployment revision.\n';
     deployedHash=createHash('sha256').update(deployedBody).digest('hex');
     await expect.poll(()=>held,{timeout:20_000}).toBe(true);deploy=true;
-    await expect.poll(()=>game.evaluate(()=>{
-      const host=window as any,runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow;
-      return !!runner&&runner!==host.__e2eRetiringRunner;
-    }),{timeout:30_000,message:'The actual loader must replace its native CODE iframe'}).toBe(true);
+    await expect.poll(async()=>{
+      const observation=await game.evaluate(()=>{
+        const host=window as any,runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+        return {at:Date.now(),replaced:!!runner&&runner!==host.__e2eRetiringRunner,
+          caracAL:!!host.caracAL,connected:host.socket.connected,codeActive:host.code_active,
+          loaderPresent:!!runner?.__partyCodeLoader,loaderGeneration:runner?.__partyLoaderGeneration,runtimeGeneration:runner?.__partyRuntimeGeneration,
+          runtimeStartedAt:runner?.__partyLoaderRuntimeStartedAt,statusSuccessAt:runner?.__partyStatusSuccessAt,
+          stopped:host.localStorage.getItem('party-code-stopped:'+host.character.name),
+          occupied:runner?.sharedRoutine?.isOccupied?.(),canReload:runner?.sharedRoutine?.canReload?.(),combatOwner:runner?.__partyCombatOwner};
+      });
+      if(loaderObservations.length<80)loaderObservations.push(observation);
+      return observation.replaced;
+    },{timeout:30_000,message:'The actual loader must replace its native CODE iframe'}).toBe(true);
     release();
     await expect.poll(()=>client.snapshot().then(s=>s.statusAt||0),{timeout:30_000}).toBeGreaterThan(before.at);
     const after=await game.evaluate(()=>{
@@ -85,7 +99,10 @@ test('Steam-style CODE replacement retires old socket callbacks and pending hear
     expect(client.errors.filter(error=>/null.*(?:character|S)|(?:character|S).*null/.test(error))).toEqual([]);
     const destination=await point(live,W,120);await travel(live,W,destination);await arrived(live,[W],destination,60_000);
     await evidence(live,info,'native-code-replacement-new-runtime-arrival',{before,after,destination});
-  }finally{release();}
+  }finally{
+    release();
+    await info.attach('native-loader-deployment-observations',{body:JSON.stringify({before,held,deploy,replayed,deployedHash,loaderObservations,deploymentResponses}),contentType:'application/json'});
+  }
 });
 
 async function observed(live: Live): Promise<Record<string, any>> {
@@ -327,7 +344,18 @@ test.describe('real server, native clients, maintained character runtime', () =>
     await live.post('/farming-mode', { character: W, mode: 'default' });
     // Cancelling Hunt must preserve the already-authorized party event entry.
     await expect.poll(async () => { const state=await observed(live);return [W,P].every(name=>state[name].map==='goobrawl'); }, { timeout: 90_000 }).toBe(true);
+    const remainingArenaIds:string[]=await live.admin(`output=Object.values(instances.goobrawl.monsters).filter(m=>!m.dead&&m.hp>0).map(m=>String(m.id))`);
     await live.admin(`timers.goobrawl=new Date(0);output=true`);
+    // Failure inventory: timer expiry does not remove native survivors. Their
+    // real combat can consume the evacuation budget before return is admitted.
+    // Observe completion of that distinct native phase before timing transport.
+    await expect.poll(async()=>({monsters:await live.admin(`output=Object.values(instances.goobrawl.monsters).filter(m=>!m.dead&&m.hp>0).length`),huntActive:!!hunt(await live.state())}),
+      {timeout:120_000,message:'Hunt cancellation must retain native event combat until the remaining arena monsters die'}).toEqual({monsters:0,huntActive:false});
+    const nativeCombat=(await Promise.all([W,P].map(name=>live.clients[name].events()))).flat();
+    if(remainingArenaIds.length)expect(nativeCombat.some((event:any)=>remainingArenaIds.includes(String(event.data?.id))&&
+      (event.event==='death'||event.event==='hit'&&event.data?.kill)),
+      'Cancelled Hunt must still kill an observed surviving event monster').toBe(true);
+    await info.attach('hunt-off-native-survivor-completion',{body:JSON.stringify({remainingArenaIds,hunt:hunt(await live.state())||null}),contentType:'application/json'});
     await expect.poll(async () => { const state=await observed(live);return [W,P].every(name=>state[name].map==='main'); }, { timeout: 120_000 }).toBe(true);
     expect(hunt(await live.state())).toBeFalsy();
     await evidence(live, info, 'event-exit-with-hunt-off', { joining, atCancellation });
@@ -348,6 +376,12 @@ test.describe('real server, native clients, maintained character runtime', () =>
 
   test('a merchant delivery transfers one real item without creating or losing copies', async ({ live }, info) => {
     await live.post('/merchant/routine-priorities', { priorities: {}, enabled: { deliveries: true } });
+    // Failure inventory: zero gold targets add a full native bank deposit after
+    // the item transfer, so an unrelated gold run consumes delivery's receipt
+    // deadline. Retain the seeded gold for this one-item conservation scenario.
+    const initialGold=await observed(live);
+    for(const name of [W,M])await live.post('/command',{character:name,type:'gold-target',amount:initialGold[name].gold});
+    await info.attach('declared-item-delivery-gold-targets',{body:JSON.stringify([W,M].map(name=>({name,gold:initialGold[name].gold}))),contentType:'application/json'});
     await live.admin(`output=(()=>{const p=get_player(${JSON.stringify(M)});p.items[10]={name:'helmet',level:0};cache_player_items(p);resend(p,'u+cid+reopen');return p.items[10]})()`);
     await expect.poll(async () => (await live.state()).characters[M]?.items?.some((entry: any) => entry?.slot===10 && entry.item?.name==='helmet'), { timeout: 20_000 }).toBe(true);
     const before=await observed(live), total=names.reduce((sum,name)=>sum+quantity(before[name].items,'helmet'),0);

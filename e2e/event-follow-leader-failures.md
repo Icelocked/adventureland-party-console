@@ -27,6 +27,12 @@ location and combat selection, but not its event.
 **live**: two Halloween bosses live at once, the leader joined to the one later
 in the list; both followers must join and fight the leader's boss.
 
+**Superseded by upstream (merged 10-09):** upstream's event priorities rank live
+events by the selection order the follower inherits from its leader, ahead of the
+current event, so the whole party picks the same boss. The fork's leader-follow
+ranking was dropped in favour of it; the switch journey now sets the leader's
+priorities and still covers entries 1–7.
+
 ## A return must not hold a member whose other selected event is live
 
 Written before the change (corrected once while investigating). The warrior was

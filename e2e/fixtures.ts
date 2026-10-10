@@ -56,9 +56,10 @@ async function ready(process: ChildProcess, url: string, log: string) {
   }
   throw new Error(`E2E service failed readiness at ${url}\n${existsSync(log) ? readFileSync(log, 'utf8').slice(-12000) : 'No output'}`);
 }
-type App = { url: string; restartCoordinator(): Promise<void>; state(): Promise<any>; deliverStatus(report: unknown): Promise<unknown> };
+type App = { url: string; restartCoordinator(): Promise<void>; state(): Promise<any>; deliverStatus(report: unknown): Promise<unknown>; deliverMerchantCompletion(report: unknown): Promise<unknown> };
 
-export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantConnected: boolean; merchantManaged: boolean; playerInventory: boolean }, { dashboard: { port: number; log: string } }>({
+export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantConnected: boolean; merchantManaged: boolean; playerInventory: boolean; bankboiOfferings: boolean }, { dashboard: { port: number; log: string } }>({
+  bankboiOfferings: [false, {option:true}],
   merchantDialogs: [false, {option:true}],
   merchantConnected: [true, {option:true}],
   merchantManaged: [false, {option:true}],
@@ -79,9 +80,15 @@ export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantCo
       await use({ port, log });
     } finally { await stop(process); }
   }, { scope: 'worker', timeout: 120_000 }],
-  app: async ({ dashboard, merchantDialogs, merchantConnected, merchantManaged, playerInventory }, use, testInfo) => {
+  app: async ({ dashboard, merchantDialogs, merchantConnected, merchantManaged, playerInventory, bankboiOfferings }, use, testInfo) => {
     const directory = path.join(root, '.build/e2e', `scenario-${randomUUID()}`);
     mkdirSync(directory, { recursive: true });
+    if(bankboiOfferings){
+      // Declared historical account inventory, not a synthetic public stock map.
+      const bankbois={E2EOfferingBank:{name:'E2EOfferingBank',state:'ready',items:['offeringp','offering','offeringx'].map((name,slot)=>({slot,item:{name,q:2}}))}};
+      appendFileSync(path.join(directory,'state.jsonl'),JSON.stringify({party_dashboard_bank_state_v1:{bankbois}})+'\n');
+      await testInfo.attach('declared-bankboi-offering-stock',{body:JSON.stringify(bankbois),contentType:'application/json'});
+    }
     const port = await unusedPort(), log = path.join(directory, 'coordinator.log');
     let coordinator: ChildProcess | undefined;
     async function start() {
@@ -130,6 +137,13 @@ export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantCo
         async state() {
           const response = await fetch(`${url}/party-api/state`, { signal: AbortSignal.timeout(10_000) });
           if (!response.ok) throw new Error(`State request failed: ${response.status}`);
+          return response.json();
+        },
+        async deliverMerchantCompletion(report: unknown) {
+          // Declared worker outcome at the private boundary; not a fabricated
+          // native game result. The console scenario tests retry presentation.
+          const response=await fetch(`http://127.0.0.1:${port}/party-api/merchant/complete`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(report),signal:AbortSignal.timeout(10_000)});
+          if(!response.ok) throw new Error(`Fixture merchant completion failed: ${response.status}: ${await response.text()}`);
           return response.json();
         },
       };

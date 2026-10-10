@@ -24,6 +24,7 @@ export function initialPartySelection(saved: SavedPartySelection) {
     designatedTank: saved.designatedTank || null,
     followers: saved.followers || {},
     eventsByCharacter: saved.eventsByCharacter || {},
+    eventPrioritiesByCharacter: saved.eventPrioritiesByCharacter || {},
     eventSelectionsByCharacter: saved.eventSelectionsByCharacter || {},
   };
 }
