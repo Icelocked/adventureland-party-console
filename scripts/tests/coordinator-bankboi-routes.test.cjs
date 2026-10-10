@@ -62,3 +62,36 @@ test('repeated command completion receipts restore the merchant only once',()=>{
  assert.equal(t.send('complete',body).body.duplicate,true);
  assert.equal(t.calls.filter(c=>c[0]==='restore').length,1);
 });
+
+// Failure inventory: e2e/bankboi-delete-failures.md. A BankBoi deleted in game made
+// the dashboard's Delete fail with no_character forever.
+test('a BankBoi already deleted in game is forgotten without asking the game, even with stale assets',async()=>{
+ const t=fixture();let requested=0;
+ const route=createBankboiDeleteRoute(t.state,{now:()=>100,request:async()=>{requested++;return {ok:false,payload:{failed:true,reason:'no_character'},statusText:'no_character'};},
+  refresh:async()=>{},owned:()=>false,persist(){}});
+ const res=response();await route({params:{name:'bankboi0'}},res);
+ assert.equal(res.body.ok,true);assert.equal(res.body.alreadyDeleted,true);assert.equal(t.state.bankbois.bankboi0,undefined);assert.equal(requested,0);
+});
+test('a failed roster refresh forgets nothing',async()=>{
+ const t=fixture();
+ const route=createBankboiDeleteRoute(t.state,{now:()=>100,request:async()=>({ok:true,payload:{},statusText:'OK'}),
+  refresh:async()=>{throw new Error('roster unavailable');},owned:()=>false,persist(){}});
+ const res=response();await route({params:{name:'bankboi0'}},res);
+ assert.equal(res.code,502);assert.ok(t.state.bankbois.bankboi0);
+});
+test('a listed BankBoi the game reports as gone is forgotten once a refreshed roster confirms it',async()=>{
+ const t=fixture();let listed=true;
+ const route=createBankboiDeleteRoute(t.state,{now:()=>100,request:async()=>({ok:false,payload:{failed:true,reason:'no_character'},statusText:'no_character'}),
+  refresh:async()=>{listed=false;},owned:()=>listed,persist(){}});
+ t.state.bankbois.bankboi0={items:[],slots:{},gold:0};t.state.bankboiTransaction=null;t.state.bankboiQueue=[];
+ const res=response();await route({params:{name:'bankboi0'}},res);
+ assert.equal(res.body.alreadyDeleted,true);assert.equal(t.state.bankbois.bankboi0,undefined);
+});
+test('a game refusal of no_character for a character still listed after refresh keeps the entry',async()=>{
+ const t=fixture();
+ const route=createBankboiDeleteRoute(t.state,{now:()=>100,request:async()=>({ok:false,payload:{failed:true,reason:'no_character'},statusText:'no_character'}),
+  refresh:async()=>{},owned:()=>true,persist(){}});
+ t.state.bankbois.bankboi0={items:[],slots:{},gold:0};t.state.bankboiTransaction=null;t.state.bankboiQueue=[];
+ const res=response();await route({params:{name:'bankboi0'}},res);
+ assert.equal(res.code,502);assert.ok(t.state.bankbois.bankboi0);
+});
