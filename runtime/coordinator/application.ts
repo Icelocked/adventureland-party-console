@@ -642,6 +642,7 @@ export function startCoordinatorApplication(
     const {
       focus: focusRoute,
       formation: formationRoute,
+      gearSets: gearSetRoute,
       actions: partyActionRoutes,
     } = coordinatorPolicies.createCoordinatorPartyConfiguration(party, character_manage, {
       dungeon: dungeons,
@@ -2265,6 +2266,7 @@ export function startCoordinatorApplication(
               monsterSelectionRoutes,
               focusRoute: scopedRoute(focusRoute, service => service.focusRoute),
               formationRoute,
+              gearSetRoute,
               huntBlacklistRoute: scopedRoute(huntBlacklistRoute, service => service.huntBlacklistRoute, true),
               huntSettingsRoute: scopedRoute(huntSettingsRoute, service => service.huntSettingsRoute, true),
               huntModeRoute: scopedRoute(huntModeRoute, service => service.huntModeRoute, true, true),

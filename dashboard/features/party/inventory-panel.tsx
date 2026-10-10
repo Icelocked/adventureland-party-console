@@ -105,6 +105,7 @@ export const InventoryPanel = memo(function InventoryPanel({
   deconstructionMarks = [],
   autoDeconstruction = {},
   deconstructionCatalog = {},
+  heldSlots = {},
   onDeconstruction,
   onRetryDeconstruction,
   onRemoveNpcSale,
@@ -153,6 +154,8 @@ export const InventoryPanel = memo(function InventoryPanel({
   deconstructionMarks?: DeconstructionMark[];
   autoDeconstruction?: Record<string, { item: Item }>;
   deconstructionCatalog?: DeconstructionCatalog;
+  /** Bag slot → gear set label; automatic rules skip these items, manual marks still apply. */
+  heldSlots?: Record<number, string>;
   onDeconstruction?: (entry: InventoryEntry, auto: boolean, remove: boolean, id?: string) => void;
   onRetryDeconstruction?: (id: string) => void;
   onRemoveNpcSale?: (id: string) => void;
@@ -694,7 +697,9 @@ export const InventoryPanel = memo(function InventoryPanel({
                 character.name === merchant && autoStandMarks[automaticSaleKey];
               const exchangeable =
                 character.name === merchant && Number(entry.meta?.definition.e || 0) > 0;
+              const held = heldSlots[entry.slot];
               const banner = itemActionBanner([
+                !!held && {action:'held',label:held,title:`${held}: automatic bank, merchant, compound, upgrade, sale and deconstruction rules skip this item`},
                 !!deconstruction && {action:'deconstruction',label:'Deconstruction'},
                 !!npcSale && {action:'npc',label:'NPC sale',automatic:!!npcSale.auto,title:npcSaleDetails || undefined},
                 !!inventoryStatScrollMark && {action:'stat',label:'Stat scroll'},
@@ -707,8 +712,8 @@ export const InventoryPanel = memo(function InventoryPanel({
                 !!autoStandMarked && {action:'stand',automatic:true,label:'Auto stand'},
                 autoExchangeMarked && {action:'exchange',automatic:true,label:'Auto exchange'},
                 !!deliveryTarget && {action:'delivery',label:`To ${deliveryTarget}`},
-                (autoMarkMode === 'bank' || bankMarked) && {action:'bank',label:autoMarkMode === 'bank' ? 'Auto bank' : 'Bank'},
-                (autoMarkMode === 'merchant' || merchantMarkedItem) && {action:'merchant',label:autoMarkMode === 'merchant' ? 'Auto merchant' : 'Mark for merchant'},
+                (autoMarkMode === 'bank' || bankMarked) && {action:'bank',automatic:autoMarkMode === 'bank',label:autoMarkMode === 'bank' ? 'Auto bank' : 'Bank'},
+                (autoMarkMode === 'merchant' || merchantMarkedItem) && {action:'merchant',automatic:autoMarkMode === 'merchant',label:autoMarkMode === 'merchant' ? 'Auto merchant' : 'Mark for merchant'},
                 merchantWeaponMarked && {action:'weapon',label:'Merchant weapon'},
               ], character.name === merchant);
 

@@ -138,6 +138,8 @@ export interface RoleRunner {
 export interface CombatRoot {
   partyPorcupineEquipment?: ReturnType<typeof import("./porcupine-equipment.ts").createPorcupineEquipment>;
   partyKillLuckSwap?: ReturnType<typeof import("./kill-luck-swap.ts").createKillLuckSwap>;
+  /** Saved gear sets per character, from the coordinator status response. */
+  partyGearSets?: Record<string, Partial<Record<"luck" | "tank" | "gold", { slots: Record<string, unknown> }>> | undefined>;
   sharedRoutine: SharedCombat;
   partyRoleRunner?: RoleRunner;
   partyCombatState: CombatState;

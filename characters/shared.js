@@ -2646,6 +2646,10 @@
       codeRevision: "realm-logistics-v3",
       consoleMaintenance: consoleMaintenanceReport(),
       bankSortProtocol: 1,
+      reservedInventory: swapReservedSlots().map(function (slot) {
+        var item = character.items[slot];
+        return { slot: slot, item: item ? { name: item.name, level: item.level } : null };
+      }),
       steamRealmProtocol: parent.__partySteamBridge && parent.__partySteamBridge.realmProtocol || 0,
       combatSelection: { id: combatSelection.id, revision: combatSelection.revision,
         map: combatSelection.map, runtimeId: convoyRuntimeId, target: groupedNomination() },
@@ -5483,6 +5487,17 @@
     return { ready: false, waited: waited };
   }
 
+  // Gear a luck swap holds in the bag (combat gear awaiting restore, luck pieces it wears) is
+  // never automatic merchant stock: compounding it destroyed the tank's best piece mid-swap.
+  function swapReservedSlots() {
+    try { return root.partyKillLuckSwap && root.partyKillLuckSwap.reservedSlots ? root.partyKillLuckSwap.reservedSlots() : []; }
+    catch (_swapReservationError) { return []; }
+  }
+  function swapReserved(request, slot) {
+    var mark = request.mark || {};
+    var automatic = request.kind === "cleanout" || mark.automaticPickup || mark.autoCompound || mark.auto;
+    return !!automatic && swapReservedSlots().indexOf(slot) >= 0;
+  }
   async function merchantHandoff(command) {
     var window = { deadline: Date.now() + 30000, revision: navigationIntent.revision, realm: reunionRealm(), approachPending: false, reason: null };
     var sent = [], banked = [], kept = [], cleaned = [], reserved = [];
@@ -5609,6 +5624,7 @@
         if (requests[i].mark && requests[i].mark.automaticPickup && slot !== requests[i].slot) { i -= 1; continue; }
         if (requests[i].mark && (requests[i].mark.autoCompound || requests[i].mark.automaticPickup) && !compoundAvailableStock(command)[slot]) continue;
         if (isPersonalTracker(character.items[slot]) || command.cleanout && cleanoutProtected(character.items[slot])) continue;
+        if (swapReserved(requests[i], slot)) continue;
         var sendQuantity = Math.min(Number(requests[i].quantity) || itemQuantity(character.items[slot]),
           itemQuantity(character.items[slot]));
         if (requests[i].mark && (requests[i].mark.deconstructionId || requests[i].mark.npcSaleId) && (character.items[slot].l || character.items[slot].b)) continue;
@@ -10758,6 +10774,7 @@
       bankQueued = !!state.bankQueued;
       leader = state.leader || null;
       tank = state.designatedTank || null;
+      root.partyGearSets = state.gearSets || {};
       var followedBeforeRefresh = followLeader;
       followLeader = !!state.followLeader;
       partyTownActive = character.ctype !== "merchant" && !!state.partyTownActive;

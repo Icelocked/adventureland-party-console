@@ -112,6 +112,8 @@ export type PartyState = {
   withdrawals?: Record<string, Withdrawal[]>;
   leader?: string | null;
   designatedTank?: string | null;
+  /** Saved gear sets per character (luck/tank; gold reserved). */
+  gearSets?: Record<string, Partial<Record<"luck" | "tank" | "gold", { slots: Record<string, { name: string; level?: number; p?: string; stat_type?: string }>; savedAt: number }>>>;
   followers?: Record<string, boolean>;
   eventsByCharacter?: Record<string, boolean>;
   eventPrioritiesByCharacter?: Record<string, string[]>;

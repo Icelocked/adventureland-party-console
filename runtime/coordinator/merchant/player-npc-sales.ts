@@ -1,3 +1,4 @@
+import { swapHeld, type SwapReservationStatus } from "../inventory/swap-reservations.ts";
 import { itemRuleConflicts, sharedMember, type ConflictState } from "../inventory/shared-rules.ts";
 import type { Item, ItemMark } from "../contracts/item.ts";
 import { automaticCommerceRuleKey, sameMarkedItem } from "../inventory/item-identity.ts";
@@ -178,6 +179,7 @@ export function reconcilePlayerSales(
 function automaticRule(state: PlayerSaleState, key: string, item: Item) { return !!state.autoNpcSales[key] && !itemRuleConflicts(state,item).length; }
 
 function protectedEntry(state: PlayerSaleState, name: string, entry: {slot:number;item:Item}) {
-  return !!entry.item.l || !!entry.item.b || playerSaleReserved(state,name,entry.slot,entry.item);
+  return !!entry.item.l || !!entry.item.b || playerSaleReserved(state,name,entry.slot,entry.item) ||
+    swapHeld((state as {statuses?: Record<string, SwapReservationStatus | undefined>}).statuses?.[name], entry.slot, entry.item);
 }
 
