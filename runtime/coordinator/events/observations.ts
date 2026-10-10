@@ -69,8 +69,6 @@ interface EventObservationPorts {
   retireDeferredCommand?(name: string, cycleId: string): void;
   retireDeferredWalk?(name: string, cycleId: string): void;
   command(name: string, command: Record<string, unknown>): void;
-  /** Drop this member's pending command for the given return cycle, if it is still the current one. */
-  retireCommand(name: string, cycleId: string): boolean;
   nextCommand(): number;
   releaseAnniversary?(cycle: AnniversaryReturnCycle): unknown;
 }
@@ -347,7 +345,7 @@ export function createEventObservations(
     for (const name of switched) {
       // Its Town or route command for this cycle would otherwise be retried forever against
       // a superseded workflow (409), clearing the member's event on every attempt.
-      ports.retireCommand(name, recovery.cycleId);
+      ports.retireDeferredCommand?.(name, recovery.cycleId);
       if (recovery.returnRoutes) delete recovery.returnRoutes[name];
     }
     if (!recovery.participants.length) {

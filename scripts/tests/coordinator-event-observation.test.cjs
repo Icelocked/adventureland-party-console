@@ -9,7 +9,7 @@ function fixture(){
   goobrawlStillFighting:()=>fighting,begin:(event,session)=>effects.push(['return',event,session.participants]),finishIfReady:()=>effects.push('finish'),
   location:recovery=>recovery.checkpoint,intent:()=>({revision,cancelled}),hasCommand:name=>!!commands[name],
   command:(name,command)=>{commands[name]=command;},nextCommand:()=>1,
-  retireCommand:(name,cycleId)=>{if(commands[name]?.cycleId!==cycleId)return false;delete commands[name];return true;}};
+  retireDeferredCommand:(name,cycleId)=>{const c=commands[name];if(c?.cycleId===cycleId&&['event-return-town','event-resume-travel'].includes(String(c.type)))delete commands[name];}};
  return {state,statuses,commands,effects,...createEventObservations(state,ports),
   time:value=>{now=value;},intent:(value,cleared=false)=>{revision=value;cancelled=cleared;},fighting:value=>{fighting=value;}};
 }

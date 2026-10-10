@@ -83,11 +83,6 @@ export function createCoordinatorEventObservations(
       command: (name, command) => {
         state.commands[name] = command;
       },
-      retireCommand: (name, cycleId) => {
-        if (state.commands[name]?.cycleId !== cycleId) return false;
-        delete state.commands[name];
-        return true;
-      },
       nextCommand: () => state.nextCommandId++,
     },
   );
