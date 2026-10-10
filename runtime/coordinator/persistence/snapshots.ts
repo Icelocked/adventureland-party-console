@@ -86,7 +86,7 @@ export const settingsFields = [
   "gearSets",
   "followers",
   "eventsByCharacter",
-  "eventSelectionsByCharacter", "eventPrioritiesByCharacter",
+  "eventSelectionsByCharacter", "eventPrioritiesByCharacter", "eventLimitsByCharacter", "eventAttendance",
   "eventSessions",
   "eventReturn",
   "deferredEventReturns",

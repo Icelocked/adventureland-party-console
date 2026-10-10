@@ -1,3 +1,4 @@
+import { observeEventAttendance, eventInstanceAllowed } from "./events/attendance-limits.ts";
 import { createDungeons } from './dungeons/service.ts';
 import { dungeonOwns } from '../dungeons/contracts.ts';
 import type { HttpHandler, HttpRouter } from "./http/contracts.ts";
@@ -511,7 +512,7 @@ export function startCoordinatorApplication(
       mapSubscriberCount,
       stackHomes: (bank, bankbois) => bankStackRouting.homes(bank, bankbois),
       groupedCombat: groupedCombatSnapshot,
-      selectedEvents: (state, name) => selectedEvents(state, name),
+      selectedEvents: (state, name) => selectedEvents(state, name).filter(event => eventInstanceAllowed(party, name, event)),
       anniversary: publicAnniversaryState,
       rareOwns: () => rareControl.owns(),
     });
@@ -1025,6 +1026,7 @@ export function startCoordinatorApplication(
         abtesting: resolveAbtestingStrategy,
         activeNames,
         events: report => {
+          if (observeEventAttendance(party, report, Date.now())) persistSettings();
           (soloFor(report.name)?.eventObservations || eventObservations).observe(report);
           coordinatorPolicies.recordFrankyAutoTankDeath(report, {
             profile: name => farmingScopes.profile(farmingScopes.owner(name)),
@@ -1069,6 +1071,10 @@ export function startCoordinatorApplication(
       priorities: routinePriorityRoute,
       thresholds: thresholdRoute,
     } = coordinatorPolicies.createCoordinatorMerchantConfiguration(party, {
+      reconcile: () => {
+        const status = party.statuses[String(party.merchantCharacter)];
+        if (status) reconcileAutomaticMerchantSales(status);
+      },
       runtime: (name) => {
         const status = party.statuses[name];
         return status && !status.rip && Date.now() - status.seenAt < 10000
@@ -1225,7 +1231,7 @@ export function startCoordinatorApplication(
 
     function eventsEnabledFor(name: string, event?: string) {
       const enabled = event ? eventEnabled(party, name, event) : eventPolicy(party, name).enabled;
-      if (!enabled) return false;
+      if (!enabled || event && !eventInstanceAllowed(party, name, event)) return false;
       const report = party.statuses[name];
       const live = !!report && Date.now() - report.seenAt < 3000 && (event === 'anniversary'
         ? !!report.anniversaryServer?.live
@@ -1626,21 +1632,25 @@ export function startCoordinatorApplication(
       return coordinatorPolicies.merchantRoutineNeedsHome(reason);
     }
 
+    function merchantRuntimeFresh(merchant: string, runtime: "native" | "headless") {
+      const status = party.statuses[merchant];
+      return status?.runtime === runtime && Number(status.seenAt) >= Date.now() - 10_000;
+    }
+
     function ensureMerchantHome(reason: Parameters<typeof merchantHomeRecovery.ensureHome>[0]) {
       const merchant = String(party.merchantCharacter);
+      const returningHome = party.merchantRealmRequests[merchant]?.owner === "home";
       if (party.steamMembers.includes(merchant)) {
-        party.merchantHomeReturnAt = 0;
-        return "SR_" + String(party.statuses[merchant]?.server || "").replace(/^SR_/, "") === party.activeRealm;
+        if (!returningHome && !merchantRuntimeFresh(merchant, "native")) return false;
+        return merchantHomeRecovery.ensureHome(reason);
       }
-      const status = party.statuses[merchant];
       // A retired native status is not permission to create a headless realm
       // return. Wait for the assigned worker's own fresh observation so initial
       // native-home login cannot inherit an offline merchant's phantom request.
       // Already admitted returns retain their original retry/exhaustion clock
       // even while the worker disconnects or its status becomes stale.
-      const returningHome = party.merchantRealmRequests[merchant]?.owner === "home";
-      if (!returningHome && (!party.headlessSlots.includes(merchant) || status?.runtime !== "headless" ||
-          !(Number(status.seenAt) >= Date.now() - 10_000))) return false;
+      if (!returningHome && (!party.headlessSlots.includes(merchant) ||
+          !merchantRuntimeFresh(merchant, "headless"))) return false;
       return merchantHomeRecovery.ensureHome(reason);
     }
 
@@ -1892,7 +1902,7 @@ export function startCoordinatorApplication(
       mapSubscriberCount,
       stackHomes: (bank, bankbois) => bankStackRouting.homes(bank, bankbois),
       groupedCombat: groupedCombatSnapshot,
-      selectedEvents: (state, name) => selectedEvents(state, name),
+      selectedEvents: (state, name) => selectedEvents(state, name).filter(event => eventInstanceAllowed(party, name, event)),
       anniversary: publicAnniversaryState,
       rareOwns: () => rareControl.owns(),
     });

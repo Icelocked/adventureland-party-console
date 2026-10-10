@@ -4707,7 +4707,7 @@
       if (luckyUpgradeService && luckyUpgradeService.pending()) await luckyUpgradeService.recover();
       else if (character.ctype === "merchant" && root.localStorage.getItem("party-lucky-upgrade:" + character.name)) await merchantLuckyUpgrade().recover();
       var live = character.items[journal.slots[0]];
-      if (journal.commerce && (!live || live.name !== journal.item.name ||
+      if ((journal.commerce || journal.request && journal.request.kind === "upgrade") && (!live || live.name !== journal.item.name ||
           [(journal.item.level || 0), (journal.item.level || 0) + 1].indexOf(live.level || 0) < 0)) {
         var previous = JSON.stringify(fingerprint(journal.item)), upgraded = JSON.stringify(fingerprint(Object.assign({}, journal.item, {level: (journal.item.level || 0) + 1})));
         var candidates = character.items.map(function (item, slot) {
@@ -4784,7 +4784,12 @@
     var ownedJournal = readProductionJournal();
     if (ownedJournal && ownedJournal.id === journal.id) journal = Object.assign(journal,ownedJournal);
     if (body.requestId) journal.issued=!!(readProductionJournal() || {}).issued;
-    var live=journal.commerce && result && result.item || character.items[slots[0]];
+    // Swap-back is optional. A confirmed native upgrade can remain at its actual
+    // upgrade slot; the production receipt must follow that result, not cargo
+    // now occupying the original source cell.
+    if (kind === "upgrade" && result && result.item && Number.isInteger(result.slot) &&
+        sameItemState(character.items[result.slot],result.item)) journal.slots[0] = result.slot;
+    var live=kind === "upgrade" && result && result.item || character.items[journal.slots[0]];
     if (journal.commerce && !live && !(failure && failure.reason === "upgrade_destroyed" && failure.confirmedDestroyed === true))
       throw Error("Upgrade outcome uncertain; production receipt requires inventory review");
     if (journal.commerce && failure && !(failure.reason === "upgrade_destroyed" && failure.confirmedDestroyed === true)) throw failure;
@@ -4871,7 +4876,12 @@
       luckySlotTracking().begin();
       return upgradeAtSlotConfirmed(slot, scroll, expectedName, expectedLevel, offering);
     }, offeringSlot);
-    return outcome && Object.assign({}, outcome, {slot: itemSlot});
+    if (!outcome || !outcome.item) return outcome;
+    var actualSlot = sameItemState(character.items[itemSlot],outcome.item) ? itemSlot :
+      sameItemState(character.items[outcome.slot],outcome.item) ? outcome.slot :
+      character.items.findIndex(function(item){return sameItemState(item,outcome.item);});
+    if (actualSlot < 0) throw Error("Upgrade outcome uncertain; confirmed result moved before receipt reconciliation");
+    return Object.assign({},outcome,{slot:actualSlot});
   }
 
   function merchantLuckyUpgrade() {
@@ -4899,6 +4909,13 @@
         await saveProductionJournal(journal);
       },
       sleep: sleep, now: Date.now, current: runtimeCurrent,
+      warn: function (reason, layout) {
+        var message = "Lucky slot restoration skipped; leaving items in their current positions";
+        game_log(message + ": " + reason, "#facc15");
+        request("/merchant/activity", {method:"POST",body:{character:character.name,
+          jobId:root.__merchantActiveJob && root.__merchantActiveJob.jobId,
+          message:message,level:"info",details:{reason:reason,layout:layout}}}).catch(function(){});
+      },
       log: function (slot) {
         var message = "Using upgrade slot " + slot + " (" + (slot === luckyUpgradeSlot ? "verified" : "lucky-slot search") + ", inventory position " + (slot + 1) + ")";
         game_log(message, "#facc15");
@@ -8212,6 +8229,23 @@
     }
   }
 
+  function realmPagePath(realm) {
+    var match = String(realm || "").match(/^SR_(US|EU|ASIA)([IVX]+|PVP)$/);
+    return match ? "/character/" + encodeURIComponent(character.name) +
+      "/in/" + match[1] + "/" + match[2] + "/" : null;
+  }
+
+  async function awaitRealmRestart(realm) {
+    // Headless is replaced by the coordinator; Steam owns its page navigation.
+    if (!parent.caracAL) {
+      var path = realmPagePath(realm);
+      if (!path) throw new Error("Invalid realm switch destination");
+      parent.window.location.href = path;
+    }
+    // Prevent this outgoing runtime from doing work on the previous realm.
+    await new Promise(function () {});
+  }
+
   async function merchantPontyBuy(command) {
     var activity = [], purchases = command.listings || [], completed = [];
     var done = new Set(command.completedListingKeys || []);
@@ -8220,7 +8254,7 @@
       var response = await request("/merchant/realm-switch", { method: "POST", body: {
         jobId: command.jobId, character: character.name, realm: realm,
       }});
-      if (!response.alreadyThere) await new Promise(function () {});
+      if (!response.alreadyThere) await awaitRealmRestart(realm);
     }
     function exactProperties(item) {
       var clean = Object.assign({}, item, { level: Number(item.level) || 0 });
@@ -8338,7 +8372,7 @@
       await request("/merchant/realm-switch", { method: "POST", body: {
         jobId: command.jobId, character: character.name, realm: realm,
       }});
-      await new Promise(function () {});
+      await awaitRealmRestart(realm);
     }
     function activeGiveaways(seller) {
       if (!seller || !seller.slots) return [];
@@ -8454,7 +8488,7 @@
       await request("/merchant/realm-switch", { method: "POST", body: {
         jobId: command.jobId, character: character.name, realm: realm,
       }});
-      await new Promise(function () {});
+      await awaitRealmRestart(realm);
     }
     try {
       if (character.stand) await close_stand();
@@ -8598,7 +8632,7 @@
       await request("/merchant/realm-switch", { method: "POST", body: {
         jobId: command.jobId, character: character.name, realm: realm,
       }});
-      await new Promise(function () {});
+      await awaitRealmRestart(realm);
     }
     try {
       if (!order.item || !order.buyer) throw new Error("ALData buy order is incomplete");
@@ -9083,9 +9117,9 @@
         await request("/merchant/ensure-home-realm", { method: "POST", body: {
           character: character.name, realm: merchantHomeRealm,
         }});
-        // The coordinator restarts this character on the home realm. Keep this
-        // old runtime from walking/opening a stand while shutdown is pending.
-        await new Promise(function () {});
+        // Wait for headless replacement or navigate the Steam page home before
+        // this character can walk or open its stand again.
+        await awaitRealmRestart(merchantHomeRealm);
       }
       if (command.inPlace) {
         // Closed stands retain their trade inventory server-side. Suspend an
@@ -10527,11 +10561,10 @@
     }
     if (command.type === "native-realm-switch") {
       if (parent.caracAL) throw new Error("Native realm switching requires the Steam game client");
-      var realmMatch = String(command.realm || "").match(/^SR_(US|EU|ASIA)(I{1,4}|PVP)$/);
-      if (!realmMatch) throw new Error("Invalid realm switch destination");
-      game_log("Switching realm to " + realmMatch[1] + " " + realmMatch[2], "#51D2E1");
-      parent.window.location.href = "/character/" + encodeURIComponent(character.name) +
-        "/in/" + encodeURIComponent(realmMatch[1]) + "/" + encodeURIComponent(realmMatch[2]) + "/";
+      var realmPath = realmPagePath(command.realm);
+      if (!realmPath) throw new Error("Invalid realm switch destination");
+      game_log("Switching realm to " + String(command.realm).replace(/^SR_/, ""), "#51D2E1");
+      parent.window.location.href = realmPath;
     }
     if (command.type === "realm-set-home") {
       try {
@@ -11084,7 +11117,10 @@
         ? halloweenFeedCurrent() && state.live === true : state.live !== false);
     }).map(function (name) {
       var state = status[name] || {};
-      return { name: name, id: state.id || state.event_id || null };
+      // Native IDs, round identities and fixed end epochs distinguish successive
+      // instances even when the next feed arrives without a long absent interval.
+      var identity = state.id || state.event_id || state.round || state.end || state.expires;
+      return { name: name, id: identity == null ? null : String(identity) };
     });
   }
 

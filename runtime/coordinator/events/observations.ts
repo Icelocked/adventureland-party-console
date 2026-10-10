@@ -47,7 +47,7 @@ interface EventReport extends ReturnStatus {
   x?: number;
   y?: number;
   joinedEvent?: string;
-  serverLiveEvents?: { name: string; id?: string }[];
+  serverLiveEvents?: { name: string; id?: string | null }[];
 }
 
 interface EventObservationPorts {
@@ -86,7 +86,7 @@ export function createEventObservations(
   }
 
   function liveSession(
-    report: { name: string; id?: string },
+    report: { name: string; id?: string | null },
     previous?: EventSession,
   ): EventSession {
     return {
@@ -121,7 +121,7 @@ export function createEventObservations(
     state.sessions[name] = session;
     if (changed || previous !== session) ports.persist();
   }
-  function reportLive(name: string, report: { name: string; id?: string }): void {
+  function reportLive(name: string, report: { name: string; id?: string | null }): void {
     if (!ports.enabled(name, report.name)) return;
     const existing = state.sessions[name];
     const previous = existing?.event === report.name ? existing : undefined;
@@ -170,6 +170,7 @@ export function createEventObservations(
     return ports.now() <= cycle.endsAt && !!(cycle.combatHandoffAt || cycle.combatPendingEvent);
   }
   function anniversaryPermission(name: string, operation?: { id: string; phase: string }) {
+    if (!ports.enabled(name, "anniversary")) return { allowed: false, reason: "anniversary disabled or instance exhausted" };
     const cycle = state.anniversary.eventCycle;
     if (name === ports.merchant()) return { allowed: true };
     if (!cycle) return { allowed: true };
@@ -302,6 +303,58 @@ export function createEventObservations(
       );
   }
 
+  function nextLiveEvent(name: string, returningFrom: string): string | null {
+    const report = ports.statuses()[name];
+    const at = Number(report?.seenAt);
+    if (!report || !Number.isFinite(at) || ports.now() - at > 10000 || at > ports.now() + 500 ||
+        report.eventFeedConnected === false || report.eventClockStale || ports.intent(name).cancelled) return null;
+    return report.serverLiveEvents?.find(entry => entry.name !== returningFrom &&
+      ports.enabled(name, entry.name) && rawLive(entry.name) &&
+      !(entry.name === 'slenderman' && report.slendermanSearchExhausted))?.name || null;
+  }
+
+  function carryCheckpoint(name: string, event: string, previous: EventSession): void {
+    const waypoint = previous.waypoints[name];
+    const intent = ports.intent(name);
+    if (!waypoint || waypoint.revision !== intent.revision || intent.cancelled) return;
+    const target = state.sessions[name]?.event === event ? state.sessions[name] : liveSession({name: event});
+    target.waypoints[name] = {
+      revision: waypoint.revision,
+      location: waypoint.location && {...waypoint.location},
+    };
+    state.sessions[name] = target;
+  }
+
+  function releaseLiveMembers(): void {
+    const recovery = state.current;
+    if (!recovery) return;
+    const released = recovery.participants.filter(name => nextLiveEvent(name, recovery.event));
+    if (!released.length) return;
+    for (const name of released) {
+      // Retain the checkpoint until normal event authorization adopts it.
+      // Merely observing a live boss must not manufacture participation.
+      state.deferred[name] = {
+        event: recovery.event,
+        cycleId: recovery.cycleId,
+        checkpoint: ports.location(recovery, name),
+        navigationRevision: ports.intent(name).revision,
+        deferredAt: ports.now(),
+        phase: 'awaiting-event-handoff',
+      };
+      ports.retireDeferredWalk?.(name, recovery.cycleId);
+      ports.retireDeferredCommand?.(name, recovery.cycleId);
+      if (recovery.returnRoutes) delete recovery.returnRoutes[name];
+    }
+    recovery.participants = recovery.participants.filter(name => !released.includes(name));
+    recovery.pending = recovery.pending.filter(name => !released.includes(name));
+    if (!recovery.participants.length) {
+      recovery.returnRoutes = null;
+      recovery.returnDispatchedAt = null;
+    }
+    ports.persist();
+    ports.finishIfReady();
+  }
+
   function ended(name: string, session: EventSession): boolean {
     if (!session || !ports.enabled(name, session.event)) return false;
     const latest = Math.max(
@@ -322,50 +375,19 @@ export function createEventObservations(
     );
   }
 
-  /**
-   * A member with another selected event live goes there, not back to the checkpoint: its
-   * live event blocks the return walk, and the return blocks travel to the event, so
-   * holding it in the return deadlocks both (one Halloween boss ending while another is up).
-   */
-  function switchedAway(name: string, event: string): boolean {
-    const status = ports.statuses()[name];
-    if (!status || !(Number(status.seenAt) >= ports.now() - 10000)) return false;
-    return (status.serverLiveEvents || []).some((live) =>
-      !!live && live.name !== event && ports.enabled(name, live.name) && rawLive(live.name));
-  }
-
-  /** Release members whose return could never finish because another selected event is live. */
-  function releaseSwitchers(): void {
-    const recovery = state.current;
-    if (!recovery || recovery.returnCompletedAt) return;
-    const switched = (recovery.participants || []).filter((name) => switchedAway(name, recovery.event));
-    if (!switched.length) return;
-    recovery.participants = recovery.participants.filter((name) => !switched.includes(name));
-    recovery.pending = recovery.pending.filter((name) => !switched.includes(name));
-    for (const name of switched) {
-      // Its Town or route command for this cycle would otherwise be retried forever against
-      // a superseded workflow (409), clearing the member's event on every attempt.
-      ports.retireDeferredCommand?.(name, recovery.cycleId);
-      if (recovery.returnRoutes) delete recovery.returnRoutes[name];
-    }
-    if (!recovery.participants.length) {
-      // Nobody is left to return: the ordinary finish completes it with no route.
-      recovery.returnRoutes = null;
-      recovery.returnDispatchedAt = null;
-    }
-    ports.log(`Event return for ${recovery.event} released ${switched.join(", ")}: another selected event is live`, "info");
-    ports.persist();
-    ports.finishIfReady();
-  }
-
   function beginEndedReturn(): void {
     const session = Object.entries(state.sessions).find(([name, value]) => ended(name, value))?.[1];
     if (!session || state.current) return;
     const sessions = Object.values(state.sessions).filter(
       (entry) => entry?.event === session.event,
     );
-    const participants = [...new Set(sessions.flatMap((entry) => entry.participants))]
-      .filter((name) => !switchedAway(name, session.event));
+    const participants = [...new Set(sessions.flatMap((entry) => entry.participants))].filter(name => {
+      const event = nextLiveEvent(name, session.event);
+      if (!event) return true;
+      const previous = sessions.find(entry => entry.participants.includes(name))!;
+      carryCheckpoint(name, event, previous);
+      return false;
+    });
     if (participants.length) ports.begin(session.event, { ...session, participants });
     clearEndedSessions(session.event);
     ports.persist();
@@ -411,7 +433,7 @@ export function createEventObservations(
 
   function resumeDeferred(body: EventReport): void {
     const recovery = state.deferred[body.name];
-    if (!recovery || ports.hasCommand(body.name)) return;
+    if (!recovery || ports.hasCommand(body.name) || nextLiveEvent(body.name, recovery.event)) return;
     const atTown = body.map === "main" && Math.hypot(Number(body.x), Number(body.y)) <= 90;
     const revision = invalidateCheckpoint(recovery, body.name);
     if (atTown && !recovery.checkpoint) delete state.deferred[body.name];
@@ -452,7 +474,7 @@ export function createEventObservations(
     if (participating && ports.enabled(body.name, participating))
       participate(body.name, participating);
     reportAnniversaryHandoff(body);
-    releaseSwitchers();
+    releaseLiveMembers();
     beginEndedReturn();
     deferStaleMembers();
     resumeDeferred(body);

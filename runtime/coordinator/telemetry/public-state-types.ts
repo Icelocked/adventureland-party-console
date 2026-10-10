@@ -48,7 +48,7 @@ export const publicStateFields = [
   "gearSets",
   "followers",
   "eventsByCharacter",
-  "eventSelectionsByCharacter", "eventPrioritiesByCharacter",
+  "eventSelectionsByCharacter", "eventPrioritiesByCharacter", "eventLimitsByCharacter", "eventAttendance",
   "monsterFocus",
   "monsterFocusByCharacter",
   "monsterPrioritiesByCharacter",

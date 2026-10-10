@@ -5,6 +5,57 @@
 Changes queued for the next release. The release workflow determines its version
 from the commits merged into `main`.
 
+- Allow merchant item collection after convoy travel has failed, once the party
+  acknowledges a safe stop. Preserve the original travel error and exhausted
+  retry limits instead of repeatedly timing out each nearby collection job.
+
+- Release members held by an event return when another selected event is live.
+  Retire their matching return commands, preserve the original checkpoint, and
+  let followers join their leader's next event. Fresh enabled event reports
+  also exclude members from new ended-event returns. Fixes #93 on `bugfix-1.4`.
+
+- Fix Steam merchants hanging when giveaways, Ponty purchases, ALData purchases
+  or sales, or stand return require another realm. Navigate the Steam game page
+  after the coordinator accepts the switch; retain headless restart behavior.
+  Send Steam merchants a native realm-switch command for coordinator home returns.
+  Steam party realm switches also accept Roman-numeral destinations IV and V.
+  Fixes #86 on `bugfix-1.4`.
+
+- Keep the event dropdown open while editing and saving event settings, so the
+  next event's settings gear remains available immediately.
+
+- Give event priority rows outlined cards, a moving drag preview, and live
+  reordering like merchant routines. Add per-event death and time limits with
+  blank defaults for unlimited attendance. Exceeding a limit skips that event
+  instance, resumes the saved farming task or the next eligible event, and
+  survives CODE reloads and coordinator restarts. Followers inherit the leader's
+  configured limits; Cave remains outside event attendance priorities and limits.
+
+- Remove stale BankBoi storage records when a refreshed account roster confirms
+  the character was deleted outside the console. Recorded inventory no longer
+  disables the confirmation button; existing characters retain deletion safeguards,
+  and failed roster refreshes preserve storage records.
+
+- Show automatic bank, NPC sale, deconstruction, stand, upgrade, compound and
+  exchange rules on bank and Bankboi items. Use “Auto NPC” for automatic sale
+  intent and “NPC sale” for individually marked items.
+- Recover bank NPC-sale withdrawals when rules or merchant settings change.
+  “Marked withdrawals always create merchant jobs” admits even small bank
+  pickups; with it disabled, Automatic item collection also visits the bank
+  once its marked-slot threshold is reached. Rename the delivery setting to
+  “Marked deliveries always create merchant jobs” and preserve deduplicated,
+  protected stock and native withdrawal/sale receipts.
+
+- Add screenshot capture to expanded map views for debugging. Character and
+  Cave maps open an immediate image in a new tab, with the map and camera-center
+  coordinates included in the image footer.
+
+- Make lucky-slot swap restoration best-effort: changed inventory layouts no
+  longer hold subsequent merchant work. Preserve confirmed upgrade outcomes and
+  actual result locations independently of swap-back. Advance unlocked discovery
+  one inventory square per recorded roll with a durable cursor; locked positions
+  keep collecting rolls without moving.
+
 - Run native gameplay CI across 16 isolated runners: one for each of the three
   Cave scenarios and 13 for the remaining suite. Increase retained unit-test CI
   concurrency from two to four isolated test-file workers.

@@ -56,42 +56,47 @@ test('BankBoi deletion refuses stored assets, cooldown and pending work; require
  owned=false;assert.equal((await send()).body.ok,true);assert.equal(t.state.bankbois.bankboi0,undefined);
 });
 
+test('externally deleted BankBoi clears stale local storage only after refreshing its roster',async()=>{
+ const t=fixture(),calls=[];let owned=true;
+ t.state.bankbois.bankboi0.slots={mainhand:{name:'broom'}};
+ t.state.bankbois.bankboi0.gold=500;t.state.bankbois.bankboi0.createdAt=1;
+ t.state.bankboiQueue.push({bankboi:'bankboi0'});
+ const route=createBankboiDeleteRoute(t.state,{now:()=>100,request:async()=>{calls.push('delete');throw Error('must not delete again');},
+  refresh:async()=>{calls.push('refresh');owned=false;},owned:()=>{calls.push('owned');return owned;},persist:()=>calls.push('persist')});
+ const res=response();await route({params:{name:'bankboi0'}},res);
+ assert.equal(res.code,200);assert.deepEqual(res.body,{ok:true,alreadyDeleted:true});
+ assert.equal(t.state.bankbois.bankboi0,undefined);assert.deepEqual(calls,['refresh','owned','persist']);
+});
+
+test('failed initial BankBoi roster refresh preserves stale entry and never deletes or persists',async()=>{
+ const t=fixture(),entry=t.state.bankbois.bankboi0,calls=[];
+ const route=createBankboiDeleteRoute(t.state,{now:()=>100,request:async()=>{calls.push('delete');},
+  refresh:async()=>{calls.push('refresh');throw Error('account unavailable');},owned:()=>false,persist:()=>calls.push('persist')});
+ const res=response();await route({params:{name:'bankboi0'}},res);
+ assert.equal(res.code,502);assert.equal(res.body.error,'account unavailable');
+ assert.equal(t.state.bankbois.bankboi0,entry);assert.deepEqual(calls,['refresh']);
+});
+
+test('owned empty BankBoi deletion refreshes before guards and confirms native deletion afterward',async()=>{
+ const t=fixture(),calls=[];let owned=true;
+ t.state.bankbois.bankboi0.items=[];t.state.bankboiTransaction=null;
+ const route=createBankboiDeleteRoute(t.state,{now:()=>100,request:async()=>{calls.push('delete');owned=false;return {ok:true,statusText:'OK',payload:{}};},
+  refresh:async()=>calls.push('refresh'),owned:()=>owned,persist:()=>calls.push('persist')});
+ const res=response();await route({params:{name:'bankboi0'}},res);
+ assert.equal(res.code,200);assert.deepEqual(res.body,{ok:true});
+ assert.deepEqual(calls,['refresh','delete','refresh','persist']);
+});
+
+test('unknown BankBoi deletion remains 404 without refreshing or mutating account',async()=>{
+ const t=fixture(),calls=[];
+ const route=createBankboiDeleteRoute(t.state,{now:()=>100,request:async()=>calls.push('delete'),refresh:async()=>calls.push('refresh'),owned:()=>false,persist:()=>calls.push('persist')});
+ const res=response();await route({params:{name:'missing'}},res);
+ assert.equal(res.code,404);assert.deepEqual(calls,[]);
+});
+
 test('repeated command completion receipts restore the merchant only once',()=>{
  const t=fixture();const body={character:'bankboi0',commandId:10,items:[]};
  t.send('complete',body);t.state.bankboiTransaction=null;
  assert.equal(t.send('complete',body).body.duplicate,true);
  assert.equal(t.calls.filter(c=>c[0]==='restore').length,1);
-});
-
-// Failure inventory: e2e/bankboi-delete-failures.md. A BankBoi deleted in game made
-// the dashboard's Delete fail with no_character forever.
-test('a BankBoi already deleted in game is forgotten without asking the game, even with stale assets',async()=>{
- const t=fixture();let requested=0;
- const route=createBankboiDeleteRoute(t.state,{now:()=>100,request:async()=>{requested++;return {ok:false,payload:{failed:true,reason:'no_character'},statusText:'no_character'};},
-  refresh:async()=>{},owned:()=>false,persist(){}});
- const res=response();await route({params:{name:'bankboi0'}},res);
- assert.equal(res.body.ok,true);assert.equal(res.body.alreadyDeleted,true);assert.equal(t.state.bankbois.bankboi0,undefined);assert.equal(requested,0);
-});
-test('a failed roster refresh forgets nothing',async()=>{
- const t=fixture();
- const route=createBankboiDeleteRoute(t.state,{now:()=>100,request:async()=>({ok:true,payload:{},statusText:'OK'}),
-  refresh:async()=>{throw new Error('roster unavailable');},owned:()=>false,persist(){}});
- const res=response();await route({params:{name:'bankboi0'}},res);
- assert.equal(res.code,502);assert.ok(t.state.bankbois.bankboi0);
-});
-test('a listed BankBoi the game reports as gone is forgotten once a refreshed roster confirms it',async()=>{
- const t=fixture();let listed=true;
- const route=createBankboiDeleteRoute(t.state,{now:()=>100,request:async()=>({ok:false,payload:{failed:true,reason:'no_character'},statusText:'no_character'}),
-  refresh:async()=>{listed=false;},owned:()=>listed,persist(){}});
- t.state.bankbois.bankboi0={items:[],slots:{},gold:0};t.state.bankboiTransaction=null;t.state.bankboiQueue=[];
- const res=response();await route({params:{name:'bankboi0'}},res);
- assert.equal(res.body.alreadyDeleted,true);assert.equal(t.state.bankbois.bankboi0,undefined);
-});
-test('a game refusal of no_character for a character still listed after refresh keeps the entry',async()=>{
- const t=fixture();
- const route=createBankboiDeleteRoute(t.state,{now:()=>100,request:async()=>({ok:false,payload:{failed:true,reason:'no_character'},statusText:'no_character'}),
-  refresh:async()=>{},owned:()=>true,persist(){}});
- t.state.bankbois.bankboi0={items:[],slots:{},gold:0};t.state.bankboiTransaction=null;t.state.bankboiQueue=[];
- const res=response();await route({params:{name:'bankboi0'}},res);
- assert.equal(res.code,502);assert.ok(t.state.bankbois.bankboi0);
 });

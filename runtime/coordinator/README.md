@@ -1,3 +1,35 @@
+Failed preemptible convoys permit merchant collection through the existing fresh,
+stopped acknowledgement barrier. Collection completion restores the failed hold
+and its diagnostics and retry budget, never another travel attempt. Communication
+loss during this temporary hold cannot admit route recovery. Validate the native
+failed-convoy collection/restart journey and retained interruption/communication
+regressions; see docs/testing-failed-convoy-collection.md. Coordinator-only
+activation uses the supported scripts/start-console.ps1 -CoordinatorOnly restart.
+
+Active event returns release members whose fresh, connected reports show another
+enabled event live. Retire only their matching-cycle exit/continuation commands
+and owned return walk; preserve the saved checkpoint until normal admission
+adopts it. New ended-event returns exclude these members too. Stale reports and
+disabled events retain the return. Validate both native Halloween handoffs and
+checkpoint arrival in `live-event-return-handoff.spec.ts`; failure inventory is
+`docs/testing-event-return-handoff.md`. Coordinator-only activation uses the
+supported `scripts/start-console.ps1 -CoordinatorOnly` restart.
+
+BankBoi deletion refreshes the account roster before applying storage guards.
+If the character is already absent, remove only its stale console storage record
+without requesting native deletion. Failed refreshes preserve the record, and
+existing characters retain asset, pending-work and cooldown safeguards. Validate
+the BankBoi outside-console deletion browser journey and retained route cases;
+see `docs/testing-bankboi-deletion-reconciliation.md`. Coordinator/dashboard-only
+activation uses the supported `scripts/start-console.ps1 -CoordinatorOnly` restart.
+
+Lucky-slot swap-back is best-effort. Keep real production outcomes and spending
+reconciliation independent of inventory layout restoration; never move unrelated
+cargo to satisfy an old journal. Discovery uses a durable sequential cursor,
+advanced only by a deduplicated native upgrade roll. Validate the native
+best-effort lucky restoration cases, then publish character assets with the
+supported full restart when activating this behavior.
+
 Commerce may adopt actual compatible intermediate inventory when an old pending
 upgrade has no linked outcome and its old input is missing. This is explicitly
 logged as an inventory assumption, never a confirmed historical receipt. Paid
@@ -104,6 +136,16 @@ others pre-position for the respawn. Starting a patrol no longer launches a
 party convoy. Failure inventory: `e2e/phoenix-search-failures.md`. Validate
 `live-phoenix-search.spec.ts` and publish character and coordinator assets
 through the ordinary full restart.
+
+Bank automatic-sale rules materialize deduplicated native-bank withdrawals even
+when unrelated requests already exist. Always-on withdrawals admit small visits;
+otherwise `bank collection` uses the automatic item collection routine at its
+marked-cell threshold. Settings and threshold changes reconcile durable intent.
+Specialized production, stand and storage withdrawals keep their own routines.
+Validate `console-bank-automarks.spec.ts`, `live-bank-collection.spec.ts` and the
+retained native bank NPC-sale scenarios. Publish coordinator/dashboard assets
+using the supported CoordinatorOnly restart when activating these changes.
+
 Fishing and mining wait when the merchant has three or fewer empty inventory
 slots. Dispatcher admission and the native gathering loop preserve cooldowns
 while capacity blocks work; logistics shows enabled modes as red BLOCKED rows.
@@ -232,6 +274,12 @@ Validate `live-bank-npc-sales.spec.ts` and the console bank-visit journey.
 
 Merchant realm requests are persisted independently of native home. Global realm
 switches supersede requests; fresh destination observations release ownership.
+Steam merchant jobs navigate their own game page after an accepted realm request.
+Coordinator-owned home recovery publishes a targeted native realm-switch command
+for Steam runtimes instead of stopping their disabled headless worker. Validate
+the Steam realm-hop redispatch and stand-return journey described in
+`docs/testing-steam-merchant-realms.md`. These character changes require the
+supported full restart; a coordinator-only restart does not activate them.
 Each home return attempt has a 60-second arrival window and requires a report
 no older than three seconds. Home returns stop after three attempts and keep affected jobs for explicit Retry;
 unrelated work remains eligible. Cross-realm party visits keep their own bounded
@@ -2012,3 +2060,16 @@ Unsupported catalog events show zero and cannot enter the order; Cave is exclude
 Validate the Halloween console order/inheritance/restart journey and native higher
 priority boss takeover in live-event-runtime-recovery.spec.ts. Publish character
 assets and coordinator/dashboard together through the supported full restart.
+
+
+Event limits are saved per character/event; followers read the leader's settings.
+Blank is unlimited. Deaths strictly greater than the configured integer limit
+exhaust attendance (0 skips after the first death); time accumulates only while
+attending and excludes pauses for another event. Exhaustion is durable for the
+current native ID/realm or continuous live interval for feeds without IDs. Fresh
+native ID changes, or ten seconds of confirmed feed absence for feeds without
+IDs, admit a new instance; the same known ID retains its exhausted budget;
+stale/disconnected observations cannot reset exhaustion. CODE turnover and backend
+restart preserve counters. Cave is excluded. Expired selections use the existing
+/event-disabled exit and checkpoint recovery. Publish character and coordinator
+assets together through the supported full restart when activating this change.
