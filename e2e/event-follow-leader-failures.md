@@ -66,6 +66,19 @@ them.
     the live 409s in the merchant/fighter logs. Releasing a member now retires its
     pending command for that return cycle.
 
+## After upstream dd93497: a failed walk to the left event blocks the next event
+
+Observed in the leave journey after the merge: the Mr. Green walking leg failed
+`owner-lost` when the return replaced it, the return then released both fighters
+for Mr. Pumpkin, and every Mr. Pumpkin walk request was answered with the Mr. Green
+leg's failure every 5 s for the rest of the run. Upstream's `retainedFailure` keeps a
+failed event leg authoritative for any event request from the same navigation
+revision, and `canReplace` only lets runtime turnover replace it.
+
+13. **Other event blocked.** A failed walking leg for one event must not answer, or
+    block replacement by, a walk to a different event. A request for the same event
+    keeps upstream's retained failure and retry budget unchanged.
+
 ## Result
 
 - Follower split: the switch journey fails without the leader-follow change (the
