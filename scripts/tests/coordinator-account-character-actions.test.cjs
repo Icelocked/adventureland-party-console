@@ -28,7 +28,7 @@ test('account guards prevent paid creation and occupied deletion before loading 
  const t=fixture();for(let i=0;i<8;i++)t.names.add('Char'+i);
  assert.equal((await t.invoke(t.service.creation.roster,{name:'NewMage',class:'mage'})).code,409);
  assert.equal((await t.invoke(t.service.creation.bankboi)).code,409);
- t.state.bankbois.B={items:[{name:'leather'}],slots:{},gold:0};
+ t.state.bankbois.B={items:[{name:'leather'}],slots:{},gold:0};t.names.add('B');
  assert.equal((await t.invoke(t.service.deletion,{}, {name:'B'})).code,409);assert.deepEqual(t.calls,[]);
  t.state.bankbois.B={items:[],slots:{},gold:0};t.names.add('B');t.onRefresh(async()=>t.names.delete('B'));
  assert.equal((await t.invoke(t.service.deletion,{}, {name:'B'})).code,200);

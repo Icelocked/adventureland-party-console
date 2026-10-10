@@ -39,24 +39,44 @@ function deletionFailure(payload: unknown, ok: boolean, statusText: string): str
 }
 
 export function createBankboiDeleteRoute(state: DeletionState, ports: DeletionPorts) {
+  function forget(name: string, res: HttpResponse, extra: Record<string, unknown> = {}): unknown {
+    delete state.bankbois[name];
+    ports.persist();
+    return res.json({ ok: true, ...extra });
+  }
   async function remove(name: string, res: HttpResponse): Promise<unknown> {
     try {
       const reply = await ports.request(name),
         failure = deletionFailure(reply.payload, reply.ok, reply.statusText);
+      // Deleted in game since the roster was last read: confirm it is gone instead of failing forever.
+      const gone = failure === "no_character" && (await forgetIfGone(name, res));
+      if (gone) return gone;
       if (failure !== null) throw new Error(failure);
       await ports.refresh();
       if (ports.owned(name)) throw new Error("deletion was not confirmed by the account roster");
-      delete state.bankbois[name];
-      ports.persist();
-      return res.json({ ok: true });
+      return forget(name, res);
     } catch (error) {
       return res.status(502).json({ error: requestText(requestObject(error).message || error) });
     }
+  }
+  /** A BankBoi deleted outside the console is forgotten only once a fresh roster confirms it is gone. */
+  async function forgetIfGone(name: string, res: HttpResponse): Promise<unknown> {
+    await ports.refresh();
+    return ports.owned(name) ? null : forget(name, res, { alreadyDeleted: true });
   }
   return async function deleteBankboi(req: HttpRequest, res: HttpResponse): Promise<unknown> {
     const name = req.params.name!,
       entry = state.bankbois[name];
     if (!entry) return res.status(404).json({ error: "unknown bankboi" });
+    // Missing from the cached roster: its cached assets and cooldown are stale, so they cannot block forgetting it.
+    if (!ports.owned(name)) {
+      try {
+        const gone = await forgetIfGone(name, res);
+        if (gone) return gone;
+      } catch (error) {
+        return res.status(502).json({ error: requestText(requestObject(error).message || error) });
+      }
+    }
     if (
       occupied(entry) ||
       state.bankboiQueue.some((request) => request.bankboi === name) ||
