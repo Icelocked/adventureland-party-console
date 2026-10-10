@@ -67,6 +67,8 @@ interface EventObservationPorts {
   intent(name: string): { revision: number; cancelled?: boolean };
   hasCommand(name: string): boolean;
   command(name: string, command: Record<string, unknown>): void;
+  /** Drop this member's pending command for the given return cycle, if it is still the current one. */
+  retireCommand(name: string, cycleId: string): boolean;
   nextCommand(): number;
   releaseAnniversary?(cycle: AnniversaryReturnCycle): unknown;
 }
@@ -287,13 +289,50 @@ export function createEventObservations(
     );
   }
 
+  /**
+   * A member with another selected event live goes there, not back to the checkpoint: its
+   * live event blocks the return walk, and the return blocks travel to the event, so
+   * holding it in the return deadlocks both (one Halloween boss ending while another is up).
+   */
+  function switchedAway(name: string, event: string): boolean {
+    const status = ports.statuses()[name];
+    if (!status || !(Number(status.seenAt) >= ports.now() - 10000)) return false;
+    return (status.serverLiveEvents || []).some((live) =>
+      !!live && live.name !== event && ports.enabled(name, live.name) && rawLive(live.name));
+  }
+
+  /** Release members whose return could never finish because another selected event is live. */
+  function releaseSwitchers(): void {
+    const recovery = state.current;
+    if (!recovery || recovery.returnCompletedAt) return;
+    const switched = (recovery.participants || []).filter((name) => switchedAway(name, recovery.event));
+    if (!switched.length) return;
+    recovery.participants = recovery.participants.filter((name) => !switched.includes(name));
+    recovery.pending = recovery.pending.filter((name) => !switched.includes(name));
+    for (const name of switched) {
+      // Its Town or route command for this cycle would otherwise be retried forever against
+      // a superseded workflow (409), clearing the member's event on every attempt.
+      ports.retireCommand(name, recovery.cycleId);
+      if (recovery.returnRoutes) delete recovery.returnRoutes[name];
+    }
+    if (!recovery.participants.length) {
+      // Nobody is left to return: the ordinary finish completes it with no route.
+      recovery.returnRoutes = null;
+      recovery.returnDispatchedAt = null;
+    }
+    ports.log(`Event return for ${recovery.event} released ${switched.join(", ")}: another selected event is live`, "info");
+    ports.persist();
+    ports.finishIfReady();
+  }
+
   function beginEndedReturn(): void {
     const session = Object.entries(state.sessions).find(([name, value]) => ended(name, value))?.[1];
     if (!session || state.current) return;
     const sessions = Object.values(state.sessions).filter(
       (entry) => entry?.event === session.event,
     );
-    const participants = [...new Set(sessions.flatMap((entry) => entry.participants))];
+    const participants = [...new Set(sessions.flatMap((entry) => entry.participants))]
+      .filter((name) => !switchedAway(name, session.event));
     if (participants.length) ports.begin(session.event, { ...session, participants });
     clearEndedSessions(session.event);
     ports.persist();
@@ -380,6 +419,7 @@ export function createEventObservations(
     if (participating && ports.enabled(body.name, participating))
       participate(body.name, participating);
     reportAnniversaryHandoff(body);
+    releaseSwitchers();
     beginEndedReturn();
     deferStaleMembers();
     resumeDeferred(body);

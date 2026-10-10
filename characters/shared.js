@@ -12202,8 +12202,19 @@
     });
     goobrawlEvidenceCache={at:Date.now(),map:character.map,live:live};return live;
   }
+  // A follower attends its leader's event whenever it has that event selected and
+  // live too. Choosing alone split the party between simultaneous Halloween bosses,
+  // and a follower on another event than its leader is never walked anywhere.
+  function leaderEventName() {
+    if (!leader || leader === character.name) return null;
+    var entry = (partyPositions || []).find(function (member) { return member && member.name === leader; });
+    if (!entry || entry.rip || entry.server !== reunionRealm()) return null;
+    if (!(Date.now() + coordinatorClockOffset - Number(entry.seenAt) <= 10000)) return null;
+    return entry.activeEvent || null;
+  }
+
   function activeCombatEvent() {
-    var status = eventStatus();
+    var status = eventStatus(), followed = leaderEventName();
     if (manuallySuppressedEvent) {
       var suppressedState = status && status[manuallySuppressedEvent.name];
       var suppressedId = suppressedState && (suppressedState.id || suppressedState.event_id) || null;
@@ -12227,7 +12238,8 @@
       var mapped = G.maps && G.maps[character.map] && G.maps[character.map].event;
       var aCurrent = Number(a.name === mapped || a.name === joinedEvent);
       var bCurrent = Number(b.name === mapped || b.name === joinedEvent);
-      return bCurrent - aCurrent || (Number(a.state.end) || Infinity) - (Number(b.state.end) || Infinity);
+      return Number(b.name === followed) - Number(a.name === followed) || bCurrent - aCurrent ||
+        (Number(a.state.end) || Infinity) - (Number(b.state.end) || Infinity);
     })[0] || null;
   }
 
