@@ -24,12 +24,19 @@ var event_policy_exports = {};
 __export(event_policy_exports, {
   eventDisplayNames: () => eventDisplayNames,
   eventEnabled: () => eventEnabled,
+  eventLimits: () => eventLimits,
   eventPolicy: () => eventPolicy,
   eventPriorityOrder: () => eventPriorityOrder,
   selectedEvents: () => selectedEvents,
-  supportedEvents: () => supportedEvents
+  supportedEvents: () => supportedEvents,
+  validEventLimits: () => validEventLimits
 });
 module.exports = __toCommonJS(event_policy_exports);
+function validEventLimits(value) {
+  if (!value || typeof value !== "object") return false;
+  const { deathLimit, timeLimitMinutes } = value;
+  return (deathLimit === null || Number.isSafeInteger(deathLimit) && deathLimit >= 0) && (timeLimitMinutes === null || typeof timeLimitMinutes === "number" && Number.isFinite(timeLimitMinutes) && timeLimitMinutes > 0);
+}
 var legacyDefaultEvents = ["anniversary", "abtesting", "goobrawl", "crabxx", "franky", "icegolem", "snowman"];
 var supportedEvents = [...legacyDefaultEvents, "slenderman", "mrgreen", "mrpumpkin"];
 var eventDisplayNames = {
@@ -67,4 +74,7 @@ function eventPolicy(party, name) {
 function eventPriorityOrder(party, name) {
   const source = eventPolicy(party, name).source;
   return [.../* @__PURE__ */ new Set([...party.eventPrioritiesByCharacter?.[source] ?? [], ...supportedEvents])].filter((id) => supportedEvents.includes(id));
+}
+function eventLimits(party, name) {
+  return party.eventLimitsByCharacter?.[eventPolicy(party, name).source] ?? {};
 }
