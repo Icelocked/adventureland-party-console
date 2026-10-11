@@ -24,5 +24,5 @@ export function BankItemBanner({item,rules,manualNpc=false}: {item:Item;rules:Ba
     !!rules.autoExchanges?.[`${item.name}@${level}`] && {action:'exchange',automatic:true,label:'Auto exchange'},
     bank && {action:'bank',automatic:true,label:'Auto bank'},
   ],false);
-  return banner ? <span title={banner.title || banner.label} className={`pointer-events-none absolute inset-x-0 top-0 z-20 border-b px-1 text-center font-mono text-[9px] leading-tight [overflow-wrap:anywhere] ${banner.colors} ${banner.border}`}>{banner.label}</span> : null;
+  return banner ? <span title={banner.title || banner.label} className={`pointer-events-none absolute inset-x-0 top-0 z-20 border-b px-1 text-center text-[9px] leading-tight [overflow-wrap:anywhere] ${banner.colors} ${banner.border}`}>{banner.label}</span> : null;
 }
