@@ -1,5 +1,9 @@
 # Safe console reload failure inventory
 
+Interrupted safe waits and failed deployment journals must not render messages
+in the title's reload control, including after reloading the browser. Keep host
+diagnostics durable without copying them into the control or its confirmation.
+
 Local launches without AL_DATA_DIR must pass the host's resolved data directory
 to the coordinator. Otherwise the host renews a lease that the coordinator never
 reads, leaving safe loading pending indefinitely for events and ordinary hunts.

@@ -14,7 +14,6 @@ export function ConsoleBuildControl() {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [menu, setMenu] = useState(false);
   const [menuSelection, setMenuSelection] = useState<Selection | null>(null);
-  const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const requested = useRef<{ id: string; target: string } | null>(null);
   const submittingRef = useRef(false);
@@ -39,7 +38,6 @@ export function ConsoleBuildControl() {
             window.location.reload();
           } else if (value.operation.phase === "failed") {
             requested.current = null;
-            setError(value.operation.error || "Deployment failed; the previous build was restored.");
           }
         }
       } catch { /* Keep polling when activation temporarily interrupts the host. */ }
@@ -59,7 +57,6 @@ export function ConsoleBuildControl() {
     if (!picked || submittingRef.current) return;
     submittingRef.current = true;
     setSubmitting(true);
-    setError("");
     try {
       const response = await fetch("/console-build/deploy", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -71,8 +68,8 @@ export function ConsoleBuildControl() {
       setStatus(previous => previous && { ...previous, operation: reply });
       setSelection(null);
       setMenu(false);
-    } catch (problem) {
-      setError(problem instanceof Error ? problem.message : "Could not start deployment.");
+    } catch {
+      // Deployment diagnostics remain in the host journal, never beside the title.
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
@@ -87,7 +84,7 @@ export function ConsoleBuildControl() {
   return <>
     {(candidate && candidate.id !== status.active || busy) && <Popover open={menu} onOpenChange={open => {
       setMenu(open);
-      if (open && candidate) { setError(""); setMenuSelection({manifest: candidate, changed: (Object.keys(candidate.components) as Component[]).filter(key => candidate.components[key] !== active?.components[key])}); }
+      if (open && candidate) { setMenuSelection({manifest: candidate, changed: (Object.keys(candidate.components) as Component[]).filter(key => candidate.components[key] !== active?.components[key])}); }
     }}><PopoverTrigger render={<Button
       size="icon" variant="outline" disabled={busy}
       aria-label="Deploy new console build" title="New console build ready to deploy"
@@ -108,7 +105,6 @@ export function ConsoleBuildControl() {
           <p>Source: <span className="break-all font-mono">{selection.manifest.sourceHash}</span></p>
           {selection.manifest.commit && <p>Revision: <span className="break-all font-mono">{selection.manifest.commit}</span>{selection.manifest.dirty ? " (includes local changes)" : ""}</p>}
         </div>}
-        {error && <p role="alert" className="text-sm text-rose-200">{error}</p>}
         <div className="flex justify-end gap-2">
           <Button disabled={submitting} className={secondary} onClick={() => setSelection(null)}>Cancel</Button>
           <Button disabled={busy} className="border border-emerald-500 bg-emerald-950 text-emerald-100 hover:bg-emerald-900 hover:text-white" onClick={() => void deploy()}>Load now</Button>

@@ -76,6 +76,12 @@ test('reload menu confirms immediate loading and safely deploys the exact select
     await page.goto(`http://127.0.0.1:${address.port}`);
     await expect(page.getByRole('heading', {name: 'Party Console', exact: true})).toBeVisible();
     await expect(page.getByRole('button', {name: 'Deploy new console build'})).toHaveCount(0);
+    const interruption='The safe reload wait was interrupted; the running build was preserved.';
+    await store.setJournal({id:'interrupted-wait',target:a.id,previous:a.id,startedAt:new Date().toISOString(),mode:'safe',phase:'failed',error:interruption});
+    await page.reload();
+    await expect(page.getByRole('heading', {name:'Party Console',exact:true})).toBeVisible();
+    await expect(page.getByText(interruption,{exact:true})).toHaveCount(0);
+    await info.attach('interrupted-reload-without-title-message',{body:await page.screenshot(),contentType:'image/png'});
     await controller.setBuildState({building: true});
     await expect.poll(async()=>(await controller.status()).building).toBe(true);
     await expect(page.getByText('Building candidate… Running code unchanged.')).toHaveCount(0);

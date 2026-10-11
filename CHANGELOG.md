@@ -5,6 +5,9 @@
 Changes queued for the next release. The release workflow determines its version
 from the commits merged into `main`.
 
+- Keep reload interruption and failure diagnostics in the host journal without
+  displaying messages through the Party Console reload control.
+
 - Fix safe console reloads waiting indefinitely after event or hunt combat on
   local installations by sharing the host's maintenance directory with the
   coordinator, including when AL_DATA_DIR is not explicitly configured.
