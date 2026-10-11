@@ -5,6 +5,9 @@
 Changes queued for the next release. The release workflow determines its version
 from the commits merged into `main`.
 
+- Clarify upgrade menus by showing an offering icon only when the final upgrade
+  step for that destination has a matching rule; earlier-step rules still apply.
+
 - Replace the logs sidebar's character dropdown with individual toggle pills,
   with every character selected by default.
 
