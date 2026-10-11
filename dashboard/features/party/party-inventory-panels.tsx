@@ -60,7 +60,9 @@ export function PartyInventoryPanels({ model }: { model: PartyConsoleModel }) {
 }
 function PartyInventoryPanelsConnected({ base }: { base: PartyConsoleModel }) {
   const [deconstructionSelection, setDeconstructionSelection] = useState<DeconstructionSelection | null>(null);
-  const model = usePanelModel(base, { inventory: true, vitals: true, bank: base.bankOpen, market: base.marketOpen || base.standOpen });
+  // The market and stand count bank stock as owned (Live WTB "You have N"), so they need the bank section too.
+  const market = base.marketOpen || base.standOpen;
+  const model = usePanelModel(base, { inventory: true, vitals: true, bank: base.bankOpen || market, market });
   const { setStandItem, setNpcSaleItem, setAutoNpcSaleItem, removeStandListing, saveStandBid, buyALDataListing,
     buyPontyListing, sellALDataOrder } = useForwardingActions(base, forwardedActions);
   const {

@@ -269,8 +269,8 @@ export const StandSheet = memo(function StandSheet({
 
   const now = useClock();
 
-  // bank?.gold only exists while the Bank panel's own data domain is also loaded;
-  // bankGold is fetched unconditionally and reflects the same balance otherwise.
+  // bank?.gold only exists once the bank data domain has loaded;
+  // bankGold is fetched unconditionally and reflects the same balance until then.
   const availableGold = Number(bank?.gold ?? bankGold ?? 0);
 
   const replacement = useWTBReplacement(catalog);
