@@ -10,7 +10,12 @@ export interface CargoRequest {
   bootstrap?: boolean;
   queuedAt?: number;
 }
+/** items1 slots 35–41 are the BankBoi transfer row only while a BankBoi exists; otherwise ordinary bank space. */
+export function bankStagingReserved(state: { bankbois?: Record<string, unknown> | null }): boolean {
+  return Object.keys(state.bankbois || {}).length > 0;
+}
 interface CargoState {
+  bankbois?: Record<string, unknown>;
   merchantQueue?: { id: string; order?: { bank?: { pack: string; slot?: number }[] } }[];
   merchantCurrent?: { id: string; order?: { bank?: { pack: string; slot?: number }[] } } | null;
   bankSnapshot?: { packs?: { items1?: (InventoryEntry | null)[] } } | null;
@@ -36,6 +41,8 @@ export function createReservedBankboiCargo(state: CargoState, ports: CargoPorts)
 
   function retain(request: CargoRequest, slots: (InventoryEntry | null)[]): boolean {
     if (request.pack !== "items1" || request.slot < 35) return true;
+    // Without a BankBoi the row is ordinary bank space, so nothing there is waiting cargo.
+    if (!bankStagingReserved(state)) return false;
     if (reservedForRetrieval(request.slot)) return false;
     const item = slots[request.slot]?.item;
     return !!item && ports.identity(item) === ports.identity(request.item);
@@ -84,7 +91,7 @@ export function createReservedBankboiCargo(state: CargoState, ports: CargoPorts)
     const previous = JSON.stringify(state.bankboiQueue);
     state.bankboiQueue = state.bankboiQueue.filter((request) => retain(request, slots));
     let changed = previous !== JSON.stringify(state.bankboiQueue);
-    if (adoptStagingRow(slots)) changed = true;
+    if (bankStagingReserved(state) && adoptStagingRow(slots)) changed = true;
     if (!state.bankboiReservedMigrated) {
       state.bankboiReservedMigrated = true;
       changed = true;

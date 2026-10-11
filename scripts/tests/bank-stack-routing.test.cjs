@@ -77,6 +77,7 @@ function runtime(items, bank) {
       return { inv: items.indexOf(existing || item) };
     },
   });
+  vm.runInContext(source.slice(source.indexOf('  // items1 slots 35-41 are the BankBoi transfer row'), source.indexOf('  var bankQueued = false;')), c); // BankBoi staging flag, reserved by default
   for (const [start, end] of [['  async function waitForBankPack(', '  function bankVaultCatalog('],
     ['  function bankStackIdentity(', '  async function bankStoreFully('],
     ['  function normalBankStackFits(', '  async function compoundConfirmed(']]) {

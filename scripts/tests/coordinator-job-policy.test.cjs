@@ -6,6 +6,8 @@ function state() {
   return {merchantCharacter: 'M', merchantRoutinePriorities: {'manual bank exchange': 20, 'stand bid purchases': 40},
     standBids: {first: {priorityOverride: 80}, second: {priorityOverride: 80}, last: {}},
     withdrawals: {M: [{pack: 'items1', slot: 35}]}, bankSnapshot: {packs: {items1: {35: {name: 'leather'}}}},
+    // items1 35-41 is the outbound staging row only while a BankBoi exists.
+    bankbois: {B: {name: 'B'}},
     statuses: {M: {items: [{name: 'occupied'}, null, null, null]}, P: {items: []}}};
 }
 

@@ -10,6 +10,8 @@ export interface StackProtection {
   locations: { pack?: string; slot?: number }[];
   items: { name: string; level?: number }[];
   error?: string;
+  /** items1 slots 35–41 are BankBoi staging only while a BankBoi exists; older coordinators omit this. */
+  staging?: boolean;
 }
 export const stackQuantity = (item?: StackItem | null): number => item ? Number(item.q) || 1 : 0;
 export function stackIdentity(item?: StackItem | null): string {
@@ -17,7 +19,7 @@ export function stackIdentity(item?: StackItem | null): string {
     .map(key => key === 'level' ? Number(item?.level) || 0 : item?.[key] ?? null));
 }
 export function stackProtected(location: StackLocation, protection: StackProtection): boolean {
-  return !!protection.error || (location.pack === 'items1' && location.slot >= 35) ||
+  return !!protection.error || (protection.staging !== false && location.pack === 'items1' && location.slot >= 35) ||
     !!location.item?.b || location.item?.name === 'placeholder' ||
     protection.locations.some(mark => mark.pack === location.pack && (mark.slot === undefined || mark.slot === location.slot)) ||
     protection.items.some(item => item.name === location.item?.name && (item.level || 0) === (location.item?.level || 0));

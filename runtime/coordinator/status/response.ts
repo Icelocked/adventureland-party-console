@@ -3,6 +3,7 @@ import {passingControl} from '../../combat/passing-admission.ts';
 import {requestObject} from '../http/contracts.ts';
 import {outboundHunt} from '../../combat/hunt-travel.ts';
 import { merchantEventRecoveryReserved } from '../merchant/event-control.ts';
+import { bankStagingReserved } from '../inventory/reserved-cargo.ts';
 import type {Member} from '../../combat/grouped.ts';
 import { monsterFocus, needsCatalog, partyResponse } from "./response-party.ts";
 import {
@@ -147,6 +148,7 @@ export function createHeartbeatResponse(state: HeartbeatState, ports: HeartbeatR
       ),
       gatheringModes: state.bankbois[name] ? [] : state.gatheringModes,
       bankboiStorage: !!state.bankbois[name],
+      bankStaging: bankStagingReserved(state),
     };
   }
 

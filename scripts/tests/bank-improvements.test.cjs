@@ -18,7 +18,7 @@ test('bank visits wait for the bank snapshot before checkpointing or running err
 });
 function state(){return {merchantCharacter:'M',statuses:{M:{items:nativeInventory()},F:{items:[]}},autoUpgradeMarks:{F:{'sword@+0':{tiers:3,quantity:1}}},autoCompounds:{F:[{name:'ring',targetTier:3,quantity:-1}]},autoItemMarks:{M:{'sword@+0':'bank','ring@+0':'bank'}},bankSnapshot:{packs:{items0:[entry('sword'),entry('ring'),entry('ring'),entry('ring')]}},bankbois:{},merchantAutomations:{},merchantQueue:[],withdrawals:{}}}
 test('staged improvement stock prioritizes its consuming job ahead of an unrelated bank visit',()=>{
- const s={merchantCharacter:'M',merchantRoutinePriorities:{'manual bank exchange':80,'upgrades and compounds':70},withdrawals:{M:[{pack:'items1',slot:35,improvement:'upgrades and compounds'}]},bankSnapshot:{packs:{items1:{35:entry('sword')}}}};
+ const s={merchantCharacter:'M',merchantRoutinePriorities:{'manual bank exchange':80,'upgrades and compounds':70},withdrawals:{M:[{pack:'items1',slot:35,improvement:'upgrades and compounds'}]},bankSnapshot:{packs:{items1:{35:entry('sword')}}},bankbois:{B:{name:'B'}}};
  assert.ok(coordinatorMerchantPriority(s,{target:'M',reason:'upgrades and compounds'})>coordinatorMerchantPriority(s,{target:'M',reason:'manual bank exchange'}));
  delete s.bankSnapshot.packs.items1[35];assert.equal(coordinatorMerchantPriority(s,{target:'M',reason:'upgrades and compounds'}),70);
 });

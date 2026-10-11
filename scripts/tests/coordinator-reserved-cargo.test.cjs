@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {createReservedBankboiCargo}=require('../../runtime/coordinator/inventory/reserved-cargo.ts');
-function fixture(){const slots=Array(42).fill(null),state={bankSnapshot:{packs:{items1:slots}},bankboiQueue:[],bankboiReservedMigrated:false,withdrawals:{}};let saves=0;
+function fixture(){const slots=Array(42).fill(null),state={bankSnapshot:{packs:{items1:slots}},bankboiQueue:[],bankboiReservedMigrated:false,withdrawals:{},bankbois:{B:{name:'B'}}};let saves=0;
  const service=createReservedBankboiCargo(state,{identity:item=>item.name,now:()=>100,persist:()=>saves++});
  return {state,slots,service,saves:()=>saves};}
 test('reserved cargo adopts the staging row once and refreshes stack quantities',()=>{

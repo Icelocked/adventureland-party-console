@@ -63,6 +63,7 @@ function client(mode='request') {
   gatheringStatus(){},setTimeout:f=>f(),sleep:async()=>{},bankStackIdentity:x=>JSON.stringify(x),
   bankStoreFully:async inv=>{for(const pack of r.bankPacksOnCurrentFloor()){for(let slot=0;slot<42;slot++){if(pack==='items1'&&slot>=35)continue;if(!bank[pack][slot]){bank[pack][slot]=r.character.items[inv];r.character.items[inv]=null;return}}}throw Error('full')}
  });
+ vm.runInContext(source.slice(source.indexOf('  // items1 slots 35-41 are the BankBoi transfer row'), source.indexOf('  var bankQueued = false;')),r); // BankBoi staging flag, reserved by default
  vm.runInContext(source.slice(source.indexOf('  // A visit spans all bank floors'),source.indexOf('  async function bankRetrieveConfirmed(')>0?source.indexOf('  async function bankRetrieveConfirmed('):source.indexOf('  async function sortCurrentBankFloor(')),r);
  vm.runInContext(source.slice(source.indexOf('  var bankStacks ='),source.indexOf('  async function bankStoreFully(')),r);
  installBankStacks(r);

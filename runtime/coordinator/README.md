@@ -357,6 +357,11 @@ merchant class leaves storage marked processing without starting native banking.
 Native stack filling still runs during unload, preserving stack caps and reserved
 stock. Validate `live-bankboi.spec.ts` and activate through the full restart.
 
+The items1 transfer row (slots 35–41) is reserved only while a BankBoi exists;
+otherwise it is ordinary bank space (`docs/bankboi-storage.md`). This changes
+character execution, so publish characters and activate through the full restart;
+validate `live-bank-staging.spec.ts` and `live-bank-sort-gaps.spec.ts`.
+
 Cave travel assembles participants at the leader before departure, shares the
 leader's validated native route, applies the slowest party speed through native
 cruise, and holds members that get ahead in walking progress. Interrupted routes

@@ -347,6 +347,10 @@
   var coordinatorClockOffset = 0;
   var banking = false;
   var bankboiStorage = false;
+  // items1 slots 35-41 are the BankBoi transfer row only while a BankBoi exists; a coordinator
+  // that does not send the flag keeps the row reserved.
+  var bankStaging = true;
+  function bankStagingSlot(pack, slot) { return bankStaging && pack === "items1" && slot >= 35; }
   var bankQueued = false;
   var stocking = false;
   var upgrading = false;
@@ -3831,7 +3835,7 @@
         }
       }
       // Staging is a transfer pane, so compatible deposits must merge here too.
-      if (!compatibleStack && stackLimit > 1 && Array.isArray(character.bank.items1)) {
+      if (bankStaging && !compatibleStack && stackLimit > 1 && Array.isArray(character.bank.items1)) {
         for (var stagedSlot = 35; stagedSlot < 42; stagedSlot += 1) {
           var stagedItem = character.bank.items1[stagedSlot];
           if (stagedItem && bankStackIdentity(stagedItem) === bankStackIdentity(source) &&
@@ -3848,7 +3852,7 @@
           if (!character.bank[packs[ep]][emptyBankSlot]) { destination = { pack: packs[ep], slot: emptyBankSlot }; break; }
         }
       }
-      if (!destination && !compatibleStack && Array.isArray(character.bank.items1)) {
+      if (bankStaging && !destination && !compatibleStack && Array.isArray(character.bank.items1)) {
         for (var reserveSlot = 35; reserveSlot < 42; reserveSlot += 1) {
           if (!character.bank.items1[reserveSlot]) { destination = { pack: "items1", slot: reserveSlot }; break; }
         }
@@ -4168,7 +4172,7 @@
     await consolidateCurrentBankFloor(activity);
     if (!await bankSortAuthorization()) return;
     await cleanupBankSortBuffers();
-    var signature = bankSortLayout + bankSortSignature();
+    var signature = bankSortLayout + bankStaging + bankSortSignature();
     if (bankSortVisit.floors[character.map] === signature) return;
     var packs = bankPacksOnCurrentFloor();
     if (!packs.length) throw new Error("Bank floor data unavailable during sorting");
@@ -4188,7 +4192,7 @@
     var bankItems = [], usableLocations = [];
     packs.forEach(function (pack) {
       for (var slot = 0; slot < 42; slot += 1) {
-        if (pack === "items1" && slot >= 35) continue;
+        if (bankStagingSlot(pack, slot)) continue;
         usableLocations.push({ pack: pack, slot: slot });
         bankItems.push(character.bank[pack][slot] || null);
       }
@@ -4208,7 +4212,7 @@
         for (var p = 0; p < packs.length && !swap; p += 1) {
           var currentPack = packs[p];
           for (var bankSlot = 0; bankSlot < 42; bankSlot += 1) {
-            if (currentPack === "items1" && bankSlot >= 35) continue;
+            if (bankStagingSlot(currentPack, bankSlot)) continue;
             var current = character.bank[currentPack][bankSlot], wanted = desired[currentPack][bankSlot];
             if (!carried) {
               if (current && compareBankItems(current, wanted)) { swap = { pack: currentPack, slot: bankSlot }; break; }
@@ -4236,13 +4240,13 @@
     if (failure) throw failure;
     var stillMisplaced = packs.some(function (pack) {
       for (var slot = 0; slot < 42; slot += 1) {
-        if (pack === "items1" && slot >= 35) continue;
+        if (bankStagingSlot(pack, slot)) continue;
         if (compareBankItems(character.bank[pack][slot] || null, desired[pack][slot] || null)) return true;
       }
       return false;
     });
     if (stillMisplaced) throw new Error("Bank sorting stopped before every item was placed");
-    bankSortVisit.floors[character.map] = bankSortLayout + bankSortSignature();
+    bankSortVisit.floors[character.map] = bankSortLayout + bankStaging + bankSortSignature();
     if (operations) {
       activity.push({ level: "success", message: "Sorted " + packs.length + " bank pack" + (packs.length === 1 ? "" : "s") });
       // Publish the final slot order before a short job can leave the bank;
@@ -4360,7 +4364,7 @@
     var limit = Number(G.items[item.name] && G.items[item.name].s) || 1;
     return limit > 1 && Object.keys(character.bank || {}).find(function (pack) {
       return Array.isArray(character.bank[pack]) && character.bank[pack].some(function (entry, slot) {
-        return !(pack === "items1" && slot >= 35) && entry && bankStackIdentity(entry) === bankStackIdentity(item) &&
+        return !bankStagingSlot(pack, slot) && entry && bankStackIdentity(entry) === bankStackIdentity(item) &&
           Number(entry.q || 1) < limit;
       });
     });
@@ -4452,7 +4456,7 @@
       for (var pack of packs) {
         if (!Array.isArray(character.bank[pack])) continue;
         for (var slot = 0; slot < 42; slot += 1) {
-          if (pack === "items1" && slot >= 35) continue;
+          if (bankStagingSlot(pack, slot)) continue;
           if (!character.bank[pack][slot]) return { pack: pack, slot: slot };
         }
       }
@@ -10893,6 +10897,7 @@
       }
       statusPhase = "apply merchant settings";
       bankboiStorage = state.bankboiStorage === true;
+      bankStaging = state.bankStaging !== false;
       var nextStandListings = state.standListings || gatheringStandListings;
       if (JSON.stringify(nextStandListings) !== JSON.stringify(gatheringStandListings) && gatheringSession)
         gatheringSession.atStandForCooldown = false;

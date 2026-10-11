@@ -5,6 +5,16 @@ items share a preferred home; the seven reserved items1 slots (35–41) are a
 transfer row, not permanent storage. Deposits also merge compatible stacks in
 that row instead of allocating a new slot for every deposit.
 
+The row is reserved only while at least one BankBoi exists
+(`bankStagingReserved` in `runtime/coordinator/inventory/reserved-cargo.ts`). With
+none, it is ordinary bank space: characters learn this from the heartbeat
+(`bankStaging`) and the stack-protection checkpoint (`staging`), deposits and
+sorting use it, nothing there is adopted as cargo, and the dashboard shows no
+RESERVED row. When the first BankBoi is created, items already in the row are
+adopted on the next bank snapshot and move into its storage. A coordinator that
+does not send the flag leaves the row reserved. Validate with
+`e2e/live-bank-staging.spec.ts` (failure inventory `e2e/bank-staging-failures.md`).
+
 Merchant auto-compound rules include BankBoi inventories. When the merchant is
 idle and no withdrawal or storage transaction is pending, the scheduler requests
 only the missing unlocked ingredients for the next complete triple, preferring

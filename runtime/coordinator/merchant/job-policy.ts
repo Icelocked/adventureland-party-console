@@ -2,6 +2,7 @@ import { routineFor } from './routines.ts';
 import { hasMarkedWithdrawals } from './marked-withdrawals.ts';
 import { merchantJobPriority } from "./priority.ts";
 import type { PrioritizedJob } from "./priority.ts";
+import { bankStagingReserved } from "../inventory/reserved-cargo.ts";
 
 interface BankCapacity {
   merchantCharacter: string | null;
@@ -11,6 +12,7 @@ interface PriorityState<Bid extends { priorityOverride?: number }> extends BankC
   merchantRoutinePriorities: Record<string, number>;
   standBids?: Record<string, Bid> | null;
   withdrawals: Record<string, { pack?: string; slot?: number; improvement?: string }[] | undefined>;
+  bankbois?: Record<string, unknown>;
 }
 interface InventoryCapacity extends BankCapacity {
   statuses: Record<string, { items?: unknown } | undefined>;
@@ -20,6 +22,7 @@ function completesStorageHandoff<Bid extends { priorityOverride?: number }>(
   state: PriorityState<Bid>,
   job: PrioritizedJob,
 ): boolean {
+  if (!bankStagingReserved(state)) return false;
   if (job.target !== state.merchantCharacter || !["withdrawals", "bank collection", "manual bank exchange", "upgrades and compounds", "manual upgrades", "auto upgrade", "manual compounds", "auto compound"].includes(job.reason)) return false;
   return (state.withdrawals?.[String(state.merchantCharacter)] || []).some(
     (request) =>

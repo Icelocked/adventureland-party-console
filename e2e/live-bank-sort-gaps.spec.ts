@@ -3,13 +3,14 @@ import { test, expect, type LiveGame } from './live-fixtures';
 // Failure inventory: e2e/bank-sort-gaps-failures.md. A real merchant sorts a real
 // bank with gaps, then sorts again after one new item type that belongs near the
 // front, and the moves are counted from the server's own bank before and after.
+// Without a BankBoi the last row of items1 is ordinary bank space, so all 42 slots count.
 const merchant = 'E2EMerchant';
 type Cell = { pack: string; slot: number; item: any };
 
 async function nativeBank(live: LiveGame): Promise<Cell[]> {
   return live.admin(`output=(async()=>{const p=get_player('${merchant}'),user=p.user||(await db.collection('user').findOne({_id:p.owner})).info;
     return Object.keys(user).filter(k=>/^items\\d+$/.test(k)&&bank_packs[k]&&bank_packs[k][0]==='bank')
-      .sort((a,b)=>a.slice(5)-b.slice(5)).flatMap(pack=>user[pack].slice(0,pack==='items1'?35:42).map((item,slot)=>({pack,slot,item:item?{name:item.name,level:item.level,q:item.q}:null})))})()`);
+      .sort((a,b)=>a.slice(5)-b.slice(5)).flatMap(pack=>user[pack].slice(0,42).map((item,slot)=>({pack,slot,item:item?{name:item.name,level:item.level,q:item.q}:null})))})()`);
 }
 const sequence = (cells: Cell[]) => cells.filter(c => c.item).map(c => `${c.item.name}:${c.item.level ?? ''}:${c.item.q ?? 1}`);
 const changed = (a: Cell[], b: Cell[]) => a.filter((cell, i) => JSON.stringify(cell.item) !== JSON.stringify(b[i]?.item)).length;
@@ -34,7 +35,7 @@ test('gapped bank sorting keeps sorted order and moves few items for a new type'
     const packs=Object.keys(user.info).filter(k=>/^items\\d+$/.test(k)&&bank_packs[k]&&bank_packs[k][0]==='bank').sort((a,b)=>a.slice(5)-b.slice(5));
     const types=['ring','earring','amulet','belt','gloves','shoes','material','pot'];
     const items=types.flatMap(t=>Object.keys(G.items).filter(n=>G.items[n].type===t&&!G.items[n].ignore).sort().slice(0,5)).map(name=>({name,...(G.items[name].upgrade||G.items[name].compound?{level:0}:{q:1})})).reverse();
-    const slots=packs.flatMap(pack=>Array.from({length:pack==='items1'?35:42},(_,slot)=>[pack,slot]));
+    const slots=packs.flatMap(pack=>Array.from({length:42},(_,slot)=>[pack,slot]));
     const patch={};for(const [pack,slot] of slots)patch['info.'+pack+'.'+slot]=null;
     items.forEach((item,i)=>{patch['info.'+slots[i][0]+'.'+slots[i][1]]=item;});
     await db.collection('user').updateOne({_id:p.owner},{$set:patch});
@@ -58,7 +59,7 @@ test('gapped bank sorting keeps sorted order and moves few items for a new type'
   const added = await live.admin(`output=(async()=>{
     const p=get_player('${merchant}'),user=await db.collection('user').findOne({_id:p.owner});
     const name=Object.keys(G.items).filter(n=>G.items[n].type==='helmet'&&!G.items[n].ignore).sort()[0];
-    const free=${JSON.stringify(seeded.packs)}.flatMap(pack=>Array.from({length:pack==='items1'?35:42},(_,slot)=>[pack,slot])).filter(([pack,slot])=>!user.info[pack][slot]).pop();
+    const free=${JSON.stringify(seeded.packs)}.flatMap(pack=>Array.from({length:42},(_,slot)=>[pack,slot])).filter(([pack,slot])=>!user.info[pack][slot]).pop();
     await db.collection('user').updateOne({_id:p.owner},{$set:{['info.'+free[0]+'.'+free[1]]:{name,level:0}}});
     return {name,pack:free[0],slot:free[1]};
   })()`);

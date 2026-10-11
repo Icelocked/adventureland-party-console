@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { requestObject, type HttpRequest, type HttpResponse } from "../http/contracts.ts";
 import { craftProtection, type CraftReservationState } from './craft-reservations.ts';
+import { bankStagingReserved } from '../inventory/reserved-cargo.ts';
 
 export interface BankSortRequest {
   id: string;
@@ -74,6 +75,7 @@ function updatePending(state: BankSortState, body: Record<string, unknown>): boo
 /** A request is a durable intent; a runtime/visit lease is never portable to another runner. */
 export function createBankSortRoutes(state: BankSortState & CraftReservationState & {
   withdrawals?: Record<string, {pack?: string; slot?: number}[]>;
+  bankbois?: Record<string, unknown>;
 }, ports: Ports) {
   function reconcile() {
     const pending = state.bankSortRequest;
@@ -103,6 +105,7 @@ export function createBankSortRoutes(state: BankSortState & CraftReservationStat
       return res.json({ protection: {
         locations: Object.values(state.withdrawals || {}).flat().map(({pack, slot}) => ({pack, slot})),
         items: protection.requirements.map(need => ({name: need.id, level: need.level})),
+        staging: bankStagingReserved(state),
         ...(protection.error ? {error: protection.error} : {}),
       } });
     }
