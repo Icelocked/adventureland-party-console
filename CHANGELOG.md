@@ -5,7 +5,8 @@
 Changes queued for the next release. The release workflow determines its version
 from the commits merged into `main`.
 
-- Match bank-item action banner typography to player inventory banners.
+- Match bank-item action banner fonts, wrapping, and border styling to player
+  inventory banners.
 
 - Disable legacy coordinator-file and TypeScript watchers in managed console
   processes so source changes cannot restart characters outside explicit loading.
