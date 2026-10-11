@@ -675,8 +675,8 @@ export const InventoryPanel = memo(function InventoryPanel({
               const autoCompoundPending =
                 !!autoCompoundMark && Number(entry.item.level || 0) < autoCompoundMark.targetTier && Number(autoCompoundMark.quantity) !== 0;
               const autoExchangeKey = `${entry.item.name}@${entry.item.level || 0}`;
-              const autoExchangeMarked =
-                character.name === merchant && !!autoExchanges[autoExchangeKey];
+              // Party collection brings exchange stock to the merchant, so every holder shows the rule.
+              const autoExchangeMarked = !!merchant && !!autoExchanges[autoExchangeKey];
               const automaticSaleKey = automaticCommerceRuleKey(entry.item);
               const autoNpcSaleMarked =
                 !!autoNpcSales[sharedRules || character.name === merchant ? automaticSaleKey : JSON.stringify([character.name, automaticSaleKey])];

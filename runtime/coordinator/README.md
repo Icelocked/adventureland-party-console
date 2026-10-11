@@ -445,6 +445,12 @@ sale, upgrade, compound, deconstruction and exchange rules retain rewards for
 normal merchant work. `/merchant/exchange-progress` returns current reward routing
 after bank travel. Auto exchange rules persist for future complete batches and
 allow nested boxes to queue another exchange; locked stacks are excluded.
+Party members' stock under an Auto exchange rule is picked up by party collection
+like auto compound and upgrade stock (`merchant/collection-pickups.ts`), so no
+merchant mark is needed (one would retire the exchange rule); it stays with its
+owner while automatic exchange is disabled, and the dashboard labels it on every
+holder. Validate with `e2e/live-exchange-collection.spec.ts`
+(failure inventory `e2e/exchange-collection-failures.md`).
 Manual exchange is always enabled. Automatic exchange has its own checkbox and
 priority; legacy Exchange priority/enable settings migrate to the new routines.
 Validate the exchange reward console journey and the native exchange actions and

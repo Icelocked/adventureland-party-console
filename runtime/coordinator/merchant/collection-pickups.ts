@@ -13,6 +13,7 @@ export interface PickupState extends ConflictState, CraftReservationState {
   upgrades?: Record<string, unknown[] | undefined>;
   compounds?: Record<string, unknown[] | undefined>;
   statScrolls?: Record<string, unknown[] | undefined>;
+  autoExchanges?: Record<string, unknown>;
   npcSaleMarks?: {id: string; auto?: boolean; source?: string; character?: string; state?: string}[];
 }
 function mark(value: unknown): ItemMark {
@@ -53,13 +54,16 @@ function processing(state: PickupState, name: string): ItemMark[] {
   if (name === state.merchantCharacter || !sharedMember(state, name)) return [];
   const rules = enabled(state, 'auto compound') ? state.autoCompounds?.[ruleOwner(state, name)] || [] : [];
   const upgrades = upgradeMarks(state, name);
+  const exchanges = enabled(state, 'automatic exchange') ? state.autoExchanges || {} : {};
   const stock = availableCraftStock((state.statuses?.[name]?.items || []).map((entry, index) => entry && {...entry, slot: entry.slot ?? index, craftLocation: 'inventory:' + name}), craftProtection(state));
   return stock.flatMap(entry => {
     if (protectedEntry(state, name, entry)) return [];
     const item = entry!.item!, slot = entry!.slot;
     const upgrade = upgrades.some(m => m.slot === slot && sameMarkedItem(m.item, item));
     const compound = rules.some(rule => rule.name === item.name && Number(rule.quantity) !== 0 && Number(item.level || 0) < Number(rule.targetTier || 1));
-    return upgrade || compound ? [{slot, item, quantity: Number(item.q) || 1, automaticPickup: true}] : [];
+    // Exchange happens at the merchant, so party stock under an exchange rule comes in like compound stock.
+    const exchange = !!exchanges[`${item.name}@${Number(item.level) || 0}`];
+    return upgrade || compound || exchange ? [{slot, item, quantity: Number(item.q) || 1, automaticPickup: true}] : [];
   });
 }
 function manualSalePickups(state: PickupState, name: string) {
