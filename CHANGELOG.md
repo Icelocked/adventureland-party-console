@@ -5,6 +5,9 @@
 Changes queued for the next release. The release workflow determines its version
 from the commits merged into `main`.
 
+- Replace the logs sidebar's character dropdown with individual toggle pills,
+  with every character selected by default.
+
 - Resume gameplay before reporting reload completion, without waiting for build
   history cleanup. Park safe-reload movement without cancelling farm, hunt or
   event journeys, keep held heartbeats healthy, and permit CODE replacement

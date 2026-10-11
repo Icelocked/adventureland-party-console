@@ -1482,3 +1482,45 @@ test('Steam bridge reserves a free native CODE slot without overwriting saved co
 
   } finally {await page.close();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
+
+test('log character pills default to all and independently filter live updates across tabs',async({page},info)=>{
+  // Declared log transport boundary; exercise the real sidebar and query cache.
+  let newer=false;
+  await page.route('**/party-api/state?**',async route=>{
+    const url=new URL(route.request().url());
+    if(url.searchParams.get('section')!=='logs')return route.continue();
+    const event=(name:string,seq=1)=>({session:'pill-probe',seq,at:Date.now(),message:`Log probe ${name} ${seq}`,color:''});
+    await route.fulfill({json:{gameLogs:{W:[event('W'),...(newer?[event('W',2)]:[])],P:[event('P')],M:[event('M')],...(newer?{Retained:[event('Retained')]}:{})},combatLogs:{W:[{at:Date.now(),message:'Combat probe W',type:'info'}],P:[{at:Date.now(),message:'Combat probe P',type:'info'}]},merchantActivity:[]}});
+  });
+  await page.goto('/');
+  // A shared development server may finish initial module discovery and reload.
+  await page.waitForTimeout(2000);
+  await page.getByRole('button',{name:'Show logs'}).click();
+  const sidebar=page.getByRole('complementary',{name:'Live logs'}),pills=sidebar.getByRole('group',{name:'Log characters'});
+  await expect(sidebar.getByRole('combobox',{name:'Log character',exact:true})).toHaveCount(0);
+  for(const name of ['W','P','M']){
+    await expect(pills.getByRole('button',{name,exact:true})).toHaveAttribute('aria-pressed','true');
+    await expect(sidebar.getByText(`Log probe ${name} 1`,{exact:true})).toBeVisible();
+  }
+  await pills.getByRole('button',{name:'W',exact:true}).click();
+  await pills.getByRole('button',{name:'M',exact:true}).click();
+  await expect(sidebar.getByText('Log probe W 1',{exact:true})).toHaveCount(0);
+  await expect(sidebar.getByText('Log probe M 1',{exact:true})).toHaveCount(0);
+  await expect(sidebar.getByText('Log probe P 1',{exact:true})).toBeVisible();
+  newer=true;
+  await expect(pills.getByRole('button',{name:'Retained',exact:true})).toHaveAttribute('aria-pressed','true');
+  await expect(sidebar.getByText('Log probe Retained 1',{exact:true})).toBeVisible();
+  await expect(sidebar.getByText('Log probe W 2',{exact:true})).toHaveCount(0);
+  await sidebar.getByRole('tab',{name:'Dashboard logs'}).click();
+  await expect(sidebar.getByText('Combat probe W',{exact:true})).toHaveCount(0);
+  await expect(sidebar.getByText('Combat probe P',{exact:true})).toBeVisible();
+  await pills.getByRole('button',{name:'W',exact:true}).click();
+  await expect(sidebar.getByText('Combat probe W',{exact:true})).toBeVisible();
+  await sidebar.getByRole('tab',{name:'Game logs'}).click();
+  await expect(sidebar.getByText('Log probe W 2',{exact:true})).toBeVisible();
+  for(const pill of await pills.getByRole('button').all())if(await pill.getAttribute('aria-pressed')==='true')await pill.click();
+  await expect(sidebar.getByText('No matching logs yet.',{exact:true})).toBeVisible();
+  await pills.getByRole('button',{name:'P',exact:true}).click();
+  await page.setViewportSize({width:1000,height:800});
+  await info.attach('log-character-pills',{body:await page.screenshot(),contentType:'image/png'});
+});
