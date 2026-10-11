@@ -5,6 +5,9 @@
 Changes queued for the next release. The release workflow determines its version
 from the commits merged into `main`.
 
+- Show the deployed artifact hash below the header version without changing
+  header sizing or page layout.
+
 - Match bank-item action banner fonts, wrapping, and border styling to player
   inventory banners.
 

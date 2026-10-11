@@ -9,7 +9,7 @@ import type { CandidateManifest, Component, ConsoleBuildStatus, DeploymentJourna
 const secondary = "border border-slate-500 bg-slate-950 text-slate-100 hover:bg-slate-800 hover:text-white";
 type Selection = { manifest: CandidateManifest; changed: Component[] };
 
-export function ConsoleBuildControl() {
+export function ConsoleBuildControl({onActiveChange}:{onActiveChange?:(id:string|undefined)=>void} = {}) {
   const [status, setStatus] = useState<ConsoleBuildStatus | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [menu, setMenu] = useState(false);
@@ -29,6 +29,7 @@ export function ConsoleBuildControl() {
         const value = await response.json() as ConsoleBuildStatus;
         if (controller.signal.aborted) return;
         setStatus(value);
+        onActiveChange?.(value.active);
         if (!requested.current && value.operation && ['waiting-safe', 'activating', 'rolling-back'].includes(value.operation.phase))
           requested.current = {id: value.operation.id, target: value.operation.target};
         const own = requested.current;
@@ -51,7 +52,7 @@ export function ConsoleBuildControl() {
       clearInterval(timer);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, []);
+  }, [onActiveChange]);
 
   async function deploy(mode: 'now' | 'safe' = 'now', picked = selection) {
     if (!picked || submittingRef.current) return;
