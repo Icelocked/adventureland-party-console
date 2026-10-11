@@ -5,6 +5,9 @@
 Changes queued for the next release. The release workflow determines its version
 from the commits merged into `main`.
 
+- Fix staged console builds on Linux and macOS by installing isolated dependency
+  caches without npm executable symlinks and bypassing older linked caches.
+
 - Show the deployed artifact hash below the header version without changing
   header sizing or page layout.
 
