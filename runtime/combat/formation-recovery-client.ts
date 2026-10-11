@@ -1,6 +1,6 @@
 import type {FormationRecovery, FormationRecoveryReport, RecoveryPoint} from './formation-recovery.ts';
 import {errorReason} from '../characters/roles/types.ts';
-import {recoveryRoute} from './recovery-route.ts';
+import {recoveryRoute,createCombatApproachRoute} from './recovery-route.ts';
 interface Waypoint extends RecoveryPoint {map:string;town?:boolean;transport?:boolean}
 interface NativeSmart {on_done:unknown;found:boolean;plot:Waypoint[];searching?:boolean}
 interface Owner {tick():void}
@@ -22,6 +22,7 @@ interface Ports {
 function routeKey(c:FormationRecovery|undefined):string {return JSON.stringify([c?.id,c?.phase,c?.attempt]);}
 /** The native scheduler remains the only walker; combat owns its gate during a detour. */
 export function createFormationRecoveryClient(p:Ports) {
+  const approachRoute=createCombatApproachRoute();
   let control:FormationRecovery|undefined, proposal:FormationRecoveryReport|undefined;
   let outcome:FormationRecoveryReport|undefined, route:Route|null=null, seenId='', drawings:Drawing[]=[];
   let movementBlock:string|undefined;
@@ -156,6 +157,8 @@ export function createFormationRecoveryClient(p:Ports) {
   }
   return {accept,tick,report,movement,blocks:()=>valid(),
     followPoint,
+    approachPoint:approachRoute.next,
+    approachStatus:approachRoute.status,
     propose(target:string,goals:RecoveryPoint[]){if(!control && goals.length && p.context().allowed)proposal={target,goals,at:p.now()};},
-    stop(){cancel();control=undefined;proposal=undefined;outcome=undefined;}};
+    stop(){approachRoute.reset();cancel();control=undefined;proposal=undefined;outcome=undefined;}};
 }

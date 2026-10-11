@@ -5,6 +5,9 @@
 Changes queued for the next release. The release workflow determines its version
 from the commits merged into `main`.
 
+- Route combat approaches around multiple terrain corners immediately when the
+  direct path is blocked, retaining collision and healing-coverage safeguards.
+
 - Clarify upgrade menus by showing an offering icon only when the final upgrade
   step for that destination has a matching rule; earlier-step rules still apply.
 

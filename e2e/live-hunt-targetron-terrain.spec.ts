@@ -8,6 +8,8 @@ test('warrior recovers a blocked Targetron approach in the reported UHills layou
   // Failure inventory: docs/testing-targetron-terrain-recovery.md.
   await live.post('/merchant/force-stand',{enabled:true});
   await live.post('/formation',{leader:W});
+  // Isolate the declared terrain encounter from randomized roaming spawns.
+  await live.admin(`output=(()=>{for(const m of Object.values(instances.uhills.monsters))remove_monster(m,{method:'disappear',nospawn:true});for(let i=monster_respawns.length-1;i>=0;i--)if(monster_respawns[i][0]?.map==='uhills')monster_respawns.splice(i,1);return true;})()`);
   const geometry=await live.clients[W].run(`(()=>{
     const origin={x:character.real_x,y:character.real_y},points=[];
     for(const radius of [0,32,64,96,128])for(let i=0;i<(radius?16:1);i++){
@@ -44,7 +46,7 @@ test('warrior recovers a blocked Targetron approach in the reported UHills layou
     await expect.poll(async()=>{
       samples.push(await live.clients[W].run(`(()=>{const t=parent.entities[${JSON.stringify(seed.id)}];return {
         at:Date.now(),x:character.real_x,y:character.real_y,target:character.target,
-        distance:t?distance(character,t):null,positioning:globalThis.partyCombatPosition||null,
+        approachStatus:globalThis.partyQueueClient?.formation?.approachStatus?.(),enemies:Object.values(parent.entities).filter(e=>e.type==='monster'&&e.visible).map(e=>({id:e.id,x:e.x,y:e.y,target:e.target,mtype:e.mtype})),distance:t?distance(character,t):null,positioning:globalThis.partyCombatPosition||null,
         segmentClear:(()=>{const d=globalThis.partyCombatPosition?.destination;return d?
           can_move({map:character.map,x:character.real_x,y:character.real_y,going_x:d.x,going_y:d.y,base:character.base}):null;})()};})()`));
       return (await live.clients[W].events()).some((event:any)=>event.event==='hit'&&String(event.data?.id)===seed.id&&event.data?.hid===W&&event.data?.source!=='taunt'&&event.data?.damage>1);

@@ -15509,8 +15509,8 @@
       return true;
     } finally { formationFrame.self = saved; }
   }
-  // A bounded local detour, not smart_move/A*. One owner keeps the waypoint
-  // until reached; the full formation optimizer cannot fight it each tick.
+  // A persistent same-map combat route. Each issued step still passes the
+  // formation safety and healing gates; ordinary positioning cannot fight it.
   function recoverFormationCorner(reference, priest, selfPriest, members, step) {
     var approachRange = formationDesiredRange(reference, priest, selfPriest, members, step);
     var goal = combatApproachPoint(reference, approachRange);
@@ -15546,7 +15546,7 @@
       tracking = formationState.approachProgress = { target: reference.id, gap: gap, at: now };
     }
     if (gap < 12) { formationState.recovery = null; return false; }
-    if (now - tracking.at < 1500 && !formationState.recovery) return false;
+    if (now - tracking.at < 1500 && !formationState.recovery && can_move_to(goal.x,goal.y)) return false;
     var recovery = formationState.recovery;
     var goalAnchor = regroupPriest ? priest : reference;
     if (!recovery || !recovery.targetPoint || recovery.target !== reference.id || recovery.regroupPriest !== regroupPriest ||
@@ -15559,7 +15559,7 @@
     }
     if (recovery.point && (Math.hypot(recovery.point.x - character.x, recovery.point.y - character.y) < 8 ||
         !can_move_to(recovery.point.x, recovery.point.y) || !formationSegmentSafe(character, recovery.point, obstacles))) recovery.point = null;
-    if (!recovery.point && now >= recovery.retryAt) {
+    if (!recovery.point && !recovery.multi && now >= recovery.retryAt) {
       recovery.retryAt = now + 1000;
       var goals = [recovery.goal], best = Infinity;
       if (Math.hypot(recovery.goal.x-goal.x,recovery.goal.y-goal.y)>1) goals.push(goal);
@@ -15570,7 +15570,7 @@
           var radians = side * Math.PI / 8;
           var open = terrainRecoveryPoint(reference, approachRange, radians);
           if (!open) continue;
-          if (can_move({ map: character.map, x: reference.x, y: reference.y,
+          if (can_move({ map: character.map, x: open.x, y: open.y,
               going_x: open.x, going_y: open.y, base: character.base })) sides.push(open);
         }
         sides.sort(function (a, b) { return Math.hypot(a.x-character.x,a.y-character.y)-Math.hypot(b.x-character.x,b.y-character.y); });
@@ -15597,6 +15597,39 @@
       }
       if (recovery.point) recovery.selected = true;
     }
+    var routeClient=root.partyQueueClient && root.partyQueueClient.formation;
+    if ((!recovery.point || recovery.multi) && routeClient && routeClient.approachPoint && typeof can_move === "function") {
+      recovery.multi=true;
+      var goals=regroupPriest ? regroupGoals.slice() : [];
+      if(!regroupPriest){
+        // The preferred range circle can lie entirely inside walls or on the
+        // far side of a narrow corridor. Consider nearer legal attack positions
+        // too, while preserving the selected monster's clearance for casters.
+        var minimum=Math.min(approachRange,formationMonsterSafety(reference)+12);
+        var reaches=[approachRange,(approachRange+minimum)/2,minimum];
+        reaches= reaches.filter(function(reach,index){return index===0 || Math.abs(reach-reaches[index-1])>1;});
+        reaches.forEach(function(reach){for(var side=0;side<16;side++){
+          var candidate=terrainRecoveryPoint(reference,reach,side*Math.PI/8);
+          if(candidate)goals.push(candidate);
+        }});
+      }
+      goals.unshift(goal);
+      goals=goals.filter(function(point){return can_move({map:character.map,x:point.x,y:point.y,going_x:point.x,going_y:point.y,base:character.base}) && formationSegmentSafe(point,point,obstacles);});
+      var coverageRange=Number(priest.range)-Math.min(20,Math.max(8,Number(priest.range)*0.1));
+      var maySeparate=!selfPriest && formationMelee(character) && !formationFrame.attackers.length &&
+        Number(character.max_hp)>0 && Number(character.hp)>=Number(character.max_hp)*0.6 &&
+        members.some(function(ally){return ally.name!==character.name && ally.name===reference.target && !ally.rip;});
+      recovery.point=routeClient.approachPoint(identity+JSON.stringify([recovery.targetPoint,recovery.referencePoint,recovery.reach]),character,goals,function(from,to){
+        // Admit live segments within the next-step coverage envelope. Future
+        // nodes can exceed today's envelope because the healer moves too.
+        var body=formationBody(character,to);
+        if (Math.hypot(from.x-character.x,from.y-character.y)<6 && !maySeparate && !(selfPriest ? members.every(function(ally){return ally.name===character.name ||
+          formationDistance(body,ally)<=Math.max(coverageRange,formationDistance(character,ally))+0.01;}) :
+          formationDistance(body,priest)<=Math.max(coverageRange,formationDistance(character,priest))+0.01)) return false;
+        return can_move({map:character.map,x:from.x,y:from.y,going_x:to.x,going_y:to.y,base:character.base}) && formationSegmentSafe(from,to,obstacles);
+      }) || null;
+      if (routeClient.approachStatus() === 'arrived') { formationState.recovery = null; return false; }
+    }
     if (recovery.point) {
       var dx = recovery.point.x - character.x, dy = recovery.point.y - character.y;
       var fraction = Math.min(1, step / Math.hypot(dx, dy));
@@ -15608,8 +15641,9 @@
     }
     // Keep immediate defensive movement available, but don't oscillate merely
     // because the straight-line range objective is unreachable around a wall.
-    if (formationFrame.attackers.length) return false;
-    return {blocked:true,reason:can_move_to(goal.x, goal.y) ? "monster-blocked approach" : "terrain-blocked approach"};
+    var planning=routeClient && routeClient.approachStatus && routeClient.approachStatus()==='planning';
+    if (formationFrame.attackers.length && !planning) return false;
+    return {blocked:true,planning:planning,reason:can_move_to(goal.x, goal.y) ? "monster-blocked approach" : "terrain-blocked approach"};
   }
   function terrainRecoveryContext() {
     var g=groupedCombat,t=g && g.target;
@@ -15967,7 +16001,7 @@
       holdFormation(reference,"no safe local detour; waiting for an opening");
       root.partyCombatPosition.mode="formation-blocked";
       root.partyCombatPosition.constraint=recoveryCandidate.reason;
-      proposeTerrainRecovery(reference,desired);
+      if(!recoveryCandidate.planning)proposeTerrainRecovery(reference,desired);
       return true;
     }
 
