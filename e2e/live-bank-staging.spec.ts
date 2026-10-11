@@ -27,7 +27,7 @@ const staging = (cells: Cell[]) => cells.filter(cell => cell.pack === 'items1' &
 async function openBank(page: Page) {
   const pane = page.getByRole('dialog', { name: 'Bank', exact: true });
   await expect(async () => {
-    await page.getByRole('button', { name: 'Inspect bank', exact: true }).click();
+    await page.getByRole('button', { name: 'Bank', exact: true }).click();
     await expect(pane).toBeVisible({ timeout: 3000 });
   }).toPass({ timeout: 60_000 });
   await expect(pane.getByText('items1', { exact: true })).toBeVisible({ timeout: 30_000 });
