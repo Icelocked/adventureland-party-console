@@ -1252,7 +1252,7 @@
     return JSON.stringify(["name", "level", "p", "stat_type", "data", "rid", "b", "m", "l"].map((key2) => key2 === "level" ? Number(item?.level) || 0 : item?.[key2] ?? null));
   }
   function stackProtected(location, protection) {
-    return !!protection.error || location.pack === "items1" && location.slot >= 35 || !!location.item?.b || location.item?.name === "placeholder" || protection.locations.some((mark) => mark.pack === location.pack && (mark.slot === void 0 || mark.slot === location.slot)) || protection.items.some((item) => item.name === location.item?.name && (item.level || 0) === (location.item?.level || 0));
+    return !!protection.error || protection.staging !== false && location.pack === "items1" && location.slot >= 35 || !!location.item?.b || location.item?.name === "placeholder" || protection.locations.some((mark) => mark.pack === location.pack && (mark.slot === void 0 || mark.slot === location.slot)) || protection.items.some((item) => item.name === location.item?.name && (item.level || 0) === (location.item?.level || 0));
   }
   function stackLocations(bank, protection) {
     return Object.keys(bank).filter((pack) => /^items\d+$/.test(pack) && Array.isArray(bank[pack])).sort((a, b) => Number(a.slice(5)) - Number(b.slice(5))).flatMap((pack) => Array.from({ length: 42 }, (_, slot) => ({ pack, slot, item: bank[pack][slot] }))).filter((location) => !stackProtected(location, protection));
