@@ -5,6 +5,9 @@
 Changes queued for the next release. The release workflow determines its version
 from the commits merged into `main`.
 
+- Disable legacy coordinator-file and TypeScript watchers in managed console
+  processes so source changes cannot restart characters outside explicit loading.
+
 - Route combat approaches around multiple terrain corners immediately when the
   direct path is blocked, retaining collision and healing-coverage safeguards.
 

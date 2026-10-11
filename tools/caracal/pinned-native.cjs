@@ -10,6 +10,17 @@ if (artifact && installed) {
   const modules = path.join(source, 'node_modules');
   const builtins = new Set(Module.builtinModules.map(name => name.replace(/^node:/, '')));
   const original = Module._resolveFilename;
+  const load = Module._load;
+  const config = path.join(source, 'config.js');
+  // Legacy account files can retain development watchers. Managed generations
+  // are selected only by explicit console activation, never native file changes.
+  Module._load = function (request, parent, ...options) {
+    const value = load.call(this, request, parent, ...options);
+    if (parent?.filename && inside(source, parent.filename) &&
+        Module._resolveFilename(request, parent) === config)
+      return {...value, watch_CODE: false, enable_TYPECODE: false};
+    return value;
+  };
   const inside = (base, filename) => {
     const relative = path.relative(base, filename);
     return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));

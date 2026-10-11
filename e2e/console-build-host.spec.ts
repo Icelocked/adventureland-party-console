@@ -250,6 +250,33 @@ test('interrupted console deployment recovers prior executable and retention pro
   } finally { await host.stop(); }
 });
 
+test('managed launcher ignores legacy coordinator watchers after executable changes',async({},info)=>{
+  const root=path.resolve('.build/p79',randomUUID().slice(0,8)),store=new ConsoleBuildStore(root);
+  const dependency=await dependencyCache(store,'watcher-isolation'),candidate=await stage(store,root,'watcher-policy',1,false,dependency.id);
+  const observations=[];
+  for(const managed of [false,true]){
+    const installed=path.join(root,managed?'managed':'unmanaged');await mkdir(path.join(installed,'src'),{recursive:true});
+    await writeFile(path.join(installed,'main.js'),await readFile('.caracal/main.js','utf8'));
+    await writeFile(path.join(installed,'config.js'),'module.exports={watch_CODE:true,enable_TYPECODE:false,log_sinks:[]};');
+    await writeFile(path.join(installed,'src/ConfigUtil.js'),'exports.interactive=async()=>{};');
+    await writeFile(path.join(installed,'src/CONSTANTS.js'),'exports.COORDINATOR_MODULE_PATH="./coordinator.cjs";');
+    await writeFile(path.join(installed,'src/StreamMultiplexer.js'),'exports.setup_log_pipes=(_s,file)=>require("node:child_process").fork(file,[],{stdio:["ignore","ignore","ignore","ipc"]});');
+    const executable=path.join(installed,'coordinator.cjs'),receipt=path.join(installed,'lifecycle.jsonl');
+    await writeFile(executable,`require('node:fs').appendFileSync(${JSON.stringify(receipt)},JSON.stringify({pid:process.pid})+'\\n');process.on('message',m=>{if(m.type==='coordinator_shutdown')process.exit(0)});setInterval(()=>{},1000);`);
+    const env={...Object.fromEntries(Object.entries(process.env).filter(([name])=>! /^(AL_|E2E_|NODE_OPTIONS$)/.test(name))),...(managed?{AL_CONSOLE_ARTIFACT:candidate.directory,AL_CONSOLE_NATIVE_DIR:installed,NODE_OPTIONS:`--require ${JSON.stringify(path.join(candidate.directory,'tools/caracal/pinned-native.cjs'))}`}:{})};
+    const child=spawn(process.execPath,['main.js'],{cwd:installed,env,stdio:'pipe',windowsHide:true});let output='';child.stdout.on('data',b=>output+=b);child.stderr.on('data',b=>output+=b);
+    const pids=async()=>readFile(receipt,'utf8').then(s=>s.trim().split('\n').map(s=>JSON.parse(s).pid)).catch(()=>[]);
+    try{
+      await expect.poll(async()=>(await pids()).length).toBe(1);
+      await writeFile(executable,(await readFile(executable,'utf8'))+'\n// rebuilt executable\n');
+      if(!managed)await expect.poll(async()=>(await pids()).length).toBe(2);
+      else {await new Promise(r=>setTimeout(r,1800));expect(await pids()).toHaveLength(1);}
+      observations.push({managed,pids:await pids(),output});
+    }finally{await stopChild(child);}
+  }
+  await info.attach('native-launcher-watcher-isolation',{body:JSON.stringify(observations),contentType:'application/json'});
+});
+
 test('managed native preload pins external packages while preserving installed state imports', async ({}, info) => {
   const root = path.resolve('.build/p79', randomUUID().slice(0, 8)), store = new ConsoleBuildStore(root);
   const dependency = await dependencyCache(store, 'selected-artifact-package');
@@ -258,10 +285,11 @@ test('managed native preload pins external packages while preserving installed s
   await mkdir(path.join(installed, 'node_modules/declared-pkg'), {recursive: true});
   await writeFile(path.join(installed, 'node_modules/declared-pkg/index.js'), 'module.exports = "unactivated-installed-package";');
   await writeFile(path.join(installed, 'config.cjs'), 'module.exports = { checkpoint: "current-account-checkpoint" };');
+  await writeFile(path.join(installed, 'config.js'), 'module.exports = {watch_CODE:true,enable_TYPECODE:true,checkpoint:"saved-account"};');
   const executable = path.join(installed, 'main.cjs');
   await writeFile(executable, `
     const path = require('node:path');
-    console.log(JSON.stringify({external: require('declared-pkg'), absoluteExternal: require(path.join(__dirname,'node_modules/declared-pkg')), state: require('./config.cjs'), builtin: typeof require('node:fs').readFileSync}));
+    console.log(JSON.stringify({external: require('declared-pkg'), absoluteExternal: require(path.join(__dirname,'node_modules/declared-pkg')), state: require('./config.cjs'), policy:require('./config'), builtin: typeof require('node:fs').readFileSync}));
   `);
   const preload = path.join(candidate.directory, 'tools/caracal/pinned-native.cjs');
   const child = spawn(process.execPath, [executable], {cwd: installed, stdio: 'pipe', windowsHide: true,
@@ -274,7 +302,8 @@ test('managed native preload pins external packages while preserving installed s
     const exit = await new Promise<number | null>((resolve, reject) => { child.once('error', reject); child.once('exit', resolve); });
     expect(exit, errors).toBe(0);
     const observed = JSON.parse(output.trim());
-    expect(observed).toEqual({external: 'selected-artifact-package', absoluteExternal: 'selected-artifact-package', state: {checkpoint: 'current-account-checkpoint'}, builtin: 'function'});
+    expect(observed).toEqual({external: 'selected-artifact-package', absoluteExternal: 'selected-artifact-package', state: {checkpoint: 'current-account-checkpoint'}, policy:{watch_CODE:false,enable_TYPECODE:false,checkpoint:'saved-account'}, builtin: 'function'});
+    expect(await readFile(path.join(installed,'config.js'),'utf8')).toBe('module.exports = {watch_CODE:true,enable_TYPECODE:true,checkpoint:"saved-account"};');
     await info.attach('pinned-native-package-resolution', {body: JSON.stringify({observed, errors, candidate: candidate.manifest, nativeDirectory: installed, preload}), contentType: 'application/json'});
   } finally { await stopChild(child); }
 });

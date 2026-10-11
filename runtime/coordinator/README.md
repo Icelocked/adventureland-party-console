@@ -1453,6 +1453,14 @@ character-only changes use the existing CODE handoff. Choose a suitable moment
 before confirming deployment. Packaged release updates retain their existing flow.
 
 Direct build commands write checkout outputs for development and tests. Managed
+native processes force legacy `watch_CODE` and `enable_TYPECODE` off through the
+artifact's preload, including the launcher's coordinator-file watcher. Saved
+account config is preserved. Validate the native launcher file-change and preload
+scenarios in `console-build-host.spec.ts`; see
+`docs/testing-managed-launcher-watchers.md`. Apply this guard through the explicit
+console load action, which starts the managed launcher with the selected preload.
+
+Managed
 services resolve executable code from `.build/console/releases/<id>/app` and serve
 character assets from the separate deployed CODE store, so those commands do not
 activate a build. The store retains twenty completed builds plus active, previous,
