@@ -5,9 +5,90 @@
 Changes queued for the next release. The release workflow determines its version
 from the commits merged into `main`.
 
+- Show the deployed artifact hash below the header version without changing
+  header sizing or page layout.
+
+- Match bank-item action banner fonts, wrapping, and border styling to player
+  inventory banners.
+
+- Disable legacy coordinator-file and TypeScript watchers in managed console
+  processes so source changes cannot restart characters outside explicit loading.
+
+- Route combat approaches around multiple terrain corners immediately when the
+  direct path is blocked, retaining collision and healing-coverage safeguards.
+
+- Clarify upgrade menus by showing an offering icon only when the final upgrade
+  step for that destination has a matching rule; earlier-step rules still apply.
+
+- Replace the logs sidebar's character dropdown with individual toggle pills,
+  with every character selected by default.
+
+- Disable filesystem-triggered CODE reloads in managed consoles. Headless and
+  browser characters adopt code only from an explicit host activation record.
+
+- Resume gameplay before reporting reload completion, without waiting for build
+  history cleanup. Park safe-reload movement without cancelling farm, hunt or
+  event journeys, keep held heartbeats healthy, and permit CODE replacement
+  during travel and combat while retaining inventory safeguards.
+  Add a lower-left refresh badge for completed builds since
+  deployment, showing at least one whenever the icon is visible.
+
+- Shorten the Party Console controls to Stand, Market and Bank.
+
+- Keep reload interruption and failure diagnostics in the host journal without
+  displaying messages through the Party Console reload control.
+
+- Fix safe console reloads waiting indefinitely after event or hunt combat on
+  local installations by sharing the host's maintenance directory with the
+  coordinator, including when AL_DATA_DIR is not explicitly configured.
+  Remove build and deployment status messages beside the refresh icon.
+
+- Deliver pending reload holds through fast combat updates, block successor
+  handoffs and recheck attack eligibility so queued targets stay unengaged.
+  Show only the spinning reload icon while deployment is pending. Exclude
+  machine-specific font caches from console artifacts to restore dashboard fonts.
+  Retry brief Windows file-sharing conflicts when saving deployment journals.
+
+- Fix first console-artifact activation rejecting its managed native dependency
+  junction before starting the coordinator.
+
+- Add Load now and Load when safe to the console reload menu. Immediate loading
+  warns about combat deaths; safe loading finishes current fights while blocking
+  new targets, then deploys after three continuous seconds of fresh combat-free
+  acknowledgements, restarting the window if combat resumes. Animate
+  the refresh icon throughout the pending reload.
+
+- Recover combat approaches blocked by terrain by choosing a reachable side of
+  the target and retaining that detour until it completes. Healthy, unattacked
+  melee fighters may briefly separate from healing coverage for that detour.
+  Use native hitbox distance for recovery goals, admit mage attack range before
+  preferred target spacing, and retire old movement when switching targets.
+  Addresses #75, #83 and #85 on `bugfix-1.4`.
+
+- Stage complete console builds in the background and add a refresh control
+  beside Party Console to deploy a completed build at a chosen moment. Builds
+  and tests no longer replace running source-development code automatically;
+  restarts resume the active build, with retained history and rollback on failed
+  activation. Addresses #79 on `bugfix-1.4`.
+
+- Resolve coordinator and native CODE lifecycle support from the selected
+  immutable console artifact, retaining installed native dependencies and mutable
+  storage. Activate only changed components and verify running coordinator,
+  dashboard and character bundle acknowledgements before completing deployment.
+
 - Allow merchant item collection after convoy travel has failed, once the party
   acknowledges a safe stop. Preserve the original travel error and exhausted
   retry limits instead of repeatedly timing out each nearby collection job.
+
+- Return event participants independently when a follow-mode change leaves them
+  with different saved destinations, without waiting for an unrelated leader route.
+  Keep ordinary following paused until the active return cycle finishes.
+- Keep timestamp-based event identities stable across clock synchronization and
+  CODE reloads. Crab attendance no longer resets its timer on clock updates;
+  limits added during attendance include time already spent in that instance.
+  Treat fully exhausted selections as disabled and recover open event trips
+  even when CODE replacement has lost the local join marker.
+  Include members whose later heartbeat exceeds the limit in the same return.
 
 - Release members held by an event return when another selected event is live.
   Retire their matching return commands, preserve the original checkpoint, and

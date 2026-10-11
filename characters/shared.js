@@ -18,7 +18,7 @@
   var movement = root.installPartyMovement(root, {
     now: Date.now,
     context: function() { return { runtime: convoyRuntimeId || String(runtimeGeneration), revision: Number(navigationIntent && navigationIntent.revision) || 0,
-      current: runtimeCurrent() && (!parent.socket || parent.socket.connected !== false), paused: !!root.__partyMovementPaused || !!(dungeonClient && !dungeonClient.canMove()) }; },
+      current: runtimeCurrent() && (!parent.socket || parent.socket.connected !== false), paused: consoleMovementPaused() || !!root.__partyMovementPaused || !!(dungeonClient && !dungeonClient.canMove()) }; },
     request: request,
     townReady: function() { return !departureCombatPending() && eligibleDepartureChests().length === 0; },
     transitionReady: function() { return eligibleDepartureChests().length === 0; },
@@ -2254,11 +2254,51 @@
     } catch (_error) { return null; }
   }
 
-  function consoleMaintenanceBusy() {
+  function consoleMaintenanceBusy(includeCombat) {
     return !!(root.__partyUpgradePreviewInFlight || banking || stocking || upgrading || gatheringActive || anniversaryBusy ||
       root.__merchantActiveJob || merchantIdleActive || root.__merchantInventoryTidy ||
       luckyUpgradeService && luckyUpgradeService.pending() ||
-      character.q && Object.keys(character.q).length || currentTravelAttackers().length);
+      character.q && Object.keys(character.q).length || includeCombat !== false && currentTravelAttackers().length);
+  }
+  function consoleDraining() {
+    var pause = root.__partyConsoleMaintenance;
+    if (pause && pause.mode === 'draining' && pause.expires <= Date.now() + coordinatorClockOffset) {
+      root.__partyConsoleMaintenance = null; root.__partyConsoleDrainTargets = null; return false;
+    }
+    return !!(pause && pause.mode === 'draining' && pause.expires > Date.now() + coordinatorClockOffset);
+  }
+  function consoleDrainKey(target) {
+    return [reunionRealm(), character.map, character.in, target && target.id].join(':');
+  }
+  function consoleDrainAllows(target) {
+    return !consoleDraining() || !!(target && ((root.__partyConsoleDrainTargets || {})[consoleDrainKey(target)] || isAttackingPartyMember(target)));
+  }
+  function consoleDrainCombatActive() {
+    return consoleDraining() && Object.values(parent.entities || {}).some(function(target) {
+      return target && target.type === 'monster' && target.visible && !target.dead && target.hp > 0 && consoleDrainAllows(target);
+    });
+  }
+  function consoleMovementPaused() {
+    // Finish already-owned inventory/merchant work before parking its route.
+    // Freezing that route while also waiting for the job would deadlock readiness.
+    return consoleDraining() && !consoleDrainCombatActive() && !consoleMaintenanceBusy();
+  }
+  function receiveConsoleMaintenance(pause, serverNow) {
+    if (serverNow && serverNow < (root.__partyConsoleMaintenanceAt || 0)) return;
+    root.__partyConsoleMaintenanceAt = serverNow || root.__partyConsoleMaintenanceAt || 0;
+    if (pause && pause.mode === 'draining' && pause.id !== (root.__partyConsoleMaintenance || {}).id) {
+      // Snapshot the current red-circle fight before enabling the acquisition gate.
+      var targets = {};
+      var markers = queueMarkers().filter(function(marker) { return marker.role === 'current' && marker.visible; });
+      markers.forEach(function(marker) {
+        targets[consoleDrainKey(marker)] = true;
+      });
+      var active = activeCombatTarget();
+      if (active && !markers.length) targets[consoleDrainKey(active)] = true;
+      root.__partyConsoleDrainTargets = targets;
+    }
+    root.__partyConsoleMaintenance = pause;
+    if (!pause) root.__partyConsoleDrainTargets = null;
   }
   function previewSuppliesKey() { return "party-preview-supplies:"+character.name; }
   async function previewTravel(destination) {
@@ -2354,8 +2394,9 @@
   }
   function consoleMaintenanceReport() {
     var pause = root.__partyConsoleMaintenance;
-    return pause ? { id: pause.id, ready: !consoleMaintenanceBusy() && !character.moving &&
-      !(typeof smart !== 'undefined' && smart.moving) } : null;
+    var combat = consoleDrainCombatActive();
+    return pause ? { id: pause.id, mode: pause.mode, combat: combat, ready: !combat && !consoleMaintenanceBusy() && !character.moving &&
+      (consoleMovementPaused() || !(typeof smart !== 'undefined' && smart.moving)) } : null;
   }
   var dungeonClient;
   // Dungeon ownership replaces farm/event targeting, not the class combat runner.
@@ -2647,6 +2688,7 @@
       codeGeneration: runtimeGeneration,
       dashboardRuntime: convoyRuntimeId,
       loaderGeneration: Number(root.__partyLoaderGeneration) || 0,
+      codeHash: root.__partyCodeHash || null,
       codeRevision: "realm-logistics-v3",
       consoleMaintenance: consoleMaintenanceReport(),
       bankSortProtocol: 1,
@@ -10730,9 +10772,15 @@
       statusPhase = "request status";
       var state = await request("/status", { method: "POST", body: statusBody });
       if (!runtimeCurrent()) return;
-      root.__partyConsoleMaintenance = state.consoleMaintenance || null;
-      if (root.__partyConsoleMaintenance) {
-        if (!consoleMaintenanceBusy() && typeof stop === 'function') await stop('smart');
+      receiveConsoleMaintenance(state.consoleMaintenance || null, state.serverNow);
+      if (root.__partyConsoleMaintenance && (!consoleDraining() || !consoleDrainCombatActive())) {
+        // A held character still has a healthy heartbeat. Otherwise Steam's
+        // stale-runner recovery replaces its CODE after twenty seconds of waiting.
+        root.__partyStatusSuccessAt = Date.now();
+        if (dashboardSampler) dashboardSampler.renew(state.dashboardLease);
+        // Park native movement without rejecting the managed journey. Its farm,
+        // hunt or event continuation resumes when the maintenance lease clears.
+        if (!consoleMaintenanceBusy() && character.moving) await move(character.x, character.y);
         return;
       }
       mapTelemetryEnabled = !!state.mapTelemetry;
@@ -10851,6 +10899,8 @@
         eventSelectionRevision++;
         pendingEventDisables = root.__partyPendingEventDisables = Array.from(new Set(pendingEventDisables.concat(previousSelections.filter(function(id) { return !eventSelected(id); }))));
       }
+      if (!previousSelections && state.eventTrip && !state.eventTrip.endedAt && !eventSelected(state.eventTrip.event))
+        pendingEventDisables = root.__partyPendingEventDisables = Array.from(new Set(pendingEventDisables.concat(state.eventTrip.event)));
       if (pendingEventDisables.length) {
         for (var disabledEvent of pendingEventDisables.slice()) {
           if (eventSelected(disabledEvent)) { pendingEventDisables.splice(pendingEventDisables.indexOf(disabledEvent), 1); continue; }
@@ -10864,8 +10914,11 @@
             anniversaryStage = "anniversary disabled; resuming previous activity";
             var disabledResult = await request("/event-disabled", { method: "POST", body: { character: character.name, event: disabledEvent } });
             if (disabledResult.anniversary) anniversaryPlan = disabledResult.anniversary;
-          } else if (disabledEvent === joinedEvent || disabledEvent === partyEventHint || disabledEvent === travellingEventName) {
-            if (!convoyTraveling && !forceTraveling && !townTraveling) { try { await stop("smart"); await stop(); } catch (_disabledTravel) {} }
+          } else if (disabledEvent === joinedEvent || disabledEvent === partyEventHint || disabledEvent === travellingEventName ||
+              state.eventTrip && !state.eventTrip.endedAt && state.eventTrip.event === disabledEvent) {
+            if (!convoyTraveling && !forceTraveling && !townTraveling && !eventExitOwnsMovement() && !reunion) {
+              try { await stop("smart"); await stop(); } catch (_disabledTravel) {}
+            }
             await request("/event-disabled", { method: "POST", body: { character: character.name, event: disabledEvent } });
             eventTargetTypes = []; joinedEvent = null; root.__partyJoinedEvent = null;
           }
@@ -11028,8 +11081,11 @@
     }
   }
 
+  function nativeEventStatus() {
+    return typeof server !== "undefined" && server && server.status || parent.server && parent.server.status || parent.S || {};
+  }
   function eventStatus() {
-    var raw = typeof server !== "undefined" && server && server.status || parent.server && parent.server.status || parent.S || {};
+    var raw = nativeEventStatus();
     if (!eventClockOffset) return raw;
     var corrected = {};
     Object.keys(raw).forEach(function(name) {
@@ -11115,7 +11171,9 @@
   }
 
   function rawServerLiveEvents() {
-    var status = eventStatus();
+    // Instance identity must not change when clock synchronization adjusts the
+    // local deadline. Crab and other timestamp-only feeds use this fallback.
+    var status = nativeEventStatus();
     return supportedEventNames().filter(function (name) {
       var state = status && status[name];
       return eventIsSupported(name) && state && (halloweenEvent(name)
@@ -13104,7 +13162,10 @@
   }
   function beginFarmReunion(command) {
     if (dungeonOwned()) return;
-    if (eventExitOwnsMovement()) return;
+    if (eventExitOwnsMovement()) {
+      if (command) throw new Error("Waiting for event exit to release movement");
+      return;
+    }
     if (character.ctype === "merchant") return;
     if (typeof lastDeathInfo !== "undefined" && lastDeathInfo) root.__partyRecoveredDeathAt = parent.__partyRecoveredDeathAt = lastDeathInfo.at;
     if (combatRecoveryActive()) return;
@@ -13241,13 +13302,18 @@
     }
     // A full wipe has no survivor to rendezvous with. Use the authorized
     // waypoint itself so everyone can return instead of waiting on each other.
-    var member = reunionMembers()[0] || (partyLocation && Object.assign({name:"the saved farming waypoint"},partyLocation));
+    // Individually dispatched returns own their destination. A leader returning
+    // elsewhere cannot rendezvous with them or authorize a shared walk there.
+    var independentReturn = token.command && !token.command.convoyHandoff;
+    var member = independentReturn
+      ? Object.assign({name:"the saved farming waypoint"},farmingEntryPoint(token.command.location))
+      : reunionMembers()[0] || (partyLocation && Object.assign({name:"the saved farming waypoint"},partyLocation));
     if (!member) { token.phase = "waiting-for-party-near-farm"; token.retryAt = Date.now() + 5000; return; }
     var distance = character.map === member.map ? Math.hypot(character.x - member.x, character.y - member.y) : Infinity;
     var commandArrived = !token.command || !!token.command.convoyHandoff || (token.command.location.shapes || token.command.location.allOf
       ? inFarmArea(character,token.command.location,0) : character.map === token.command.location.map &&
         Math.hypot(character.x-token.command.location.x,character.y-token.command.location.y)<=150);
-    if (distance <= 150 && commandArrived &&
+    if (distance <= (independentReturn ? 55 : 150) && commandArrived &&
         (character.in == null || member.in == null || character.in === member.in) && can_move_to(member.x, member.y)) {
       if (token.moving) {token.moving=false; try {await stop("smart");} catch (_) {}}
       if (!reunionCurrent(token)) return;
@@ -13266,7 +13332,7 @@
     token.destination = { map: member.map, x: member.x, y: member.y };
     if (token.command && distance <= 150 && !commandArrived) token.destination = token.command.location;
     if (token.portExpires && Date.now() < token.portExpires) return;
-    if (!token.portAttempted && distance > 300 && reunionOrdinaryMap(character.map)) {
+    if (!independentReturn && !token.portAttempted && distance > 300 && reunionOrdinaryMap(character.map)) {
       var mage = reunionMembers().find(function (entry) { return entry.ctype === "mage"; });
       if (mage) {
         token.portAttempted = true; token.mage = mage.name; token.portExpires = Date.now() + 10000;
@@ -13306,7 +13372,7 @@
         if (!token.command && character.map === member.map && Math.hypot(character.x - member.x, character.y - member.y) <= 150) return;
       }
       if (!reunionCurrent(token) || reunionBlocked()) return;
-      if(!reunionMembers().length && leader && farmingMode!=="scatter")
+      if(!independentReturn && !reunionMembers().length && leader && farmingMode!=="scatter")
         await sharedPartyWalk(farmingEntryPoint(token.destination),"farm-recovery","farming",token.command,function(){return reunionCurrent(token);});
       else await anniversaryWithTimeout(smart_move(farmingEntryPoint(destination)), 90000, "Farming reunion travel");
     } catch (error) {
@@ -13816,6 +13882,14 @@
       {id:String(e.id),map:character.map,in:character.in,server:reunionRealm(),at:Date.now()+coordinatorClockOffset} : null;
   }
   function queueMarkers() {
+    return queueMarkersUnfiltered().map(function(marker) {
+      // A planned successor may lead the coordinator queue after the old fight
+      // dies; the drain still keeps it yellow instead of admitting a red target.
+      return marker.role === 'current' && consoleDraining() && !consoleDrainAllows(get_entity(marker.id))
+        ? Object.assign({}, marker, {role:'next'}) : marker;
+    });
+  }
+  function queueMarkersUnfiltered() {
     if(!character.cave && typeof returnCombatActive==='function' && returnCombatActive()) {
       var attacker=returnDefenseTarget();
       return attacker ? [{id:String(attacker.id),map:character.map,in:character.in,server:reunionRealm(),role:'current',state:'engaged',radius:Math.max(18,(Number(attacker.awidth)||24)/2+4),visible:true}] : [];
@@ -13928,6 +14002,7 @@
         anchorVisible:groupedAnchorVisible(),state:groupedCombat}};
   }
   function acceptCombatControl(state) {
+    if ('consoleMaintenance' in state) receiveConsoleMaintenance(state.consoleMaintenance || null, state.serverNow);
     if(state.passingControl && (!state.serverNow || state.serverNow>=(root.__partyHuntTravelAt||0))) {
       var beforeHunt=root.__partyHuntTravel, nextHunt=state.passingControl.hunt || null;
       if(nextHunt && nextHunt.primary && (!beforeHunt || !beforeHunt.primary || passingKey(beforeHunt.primary)!==passingKey(nextHunt.primary)) && typeof game_log==='function')
@@ -14036,6 +14111,7 @@
       Math.hypot(character.x-anchor.x,character.y-anchor.y) <= groupedCombat.range;
   }
   function groupedAttackAllowed(target) {
+    if (!consoleDrainAllows(target)) return false;
     if (dungeonOwned()) return !!(character.cave && !character.cave.paused && dungeonTargetAllowed(target) && groupedFresh() &&
       groupedCombat.target?.id === target.id && groupedCombat.committed);
     if(typeof returnCombatActive==='function' && returnCombatActive())return returnAttacker(target);
@@ -14262,6 +14338,7 @@
   }
 
   function isAllowedTarget(target, huntTravelCommand, diagnostic) {
+    if (!consoleDrainAllows(target)) { if (diagnostic) diagnostic.reason = 'waiting for safe console reload'; return false; }
     if (character.cave || typeof root !== "undefined" && root.__partyDungeonRuntime && root.__partyDungeonRuntime.owns()) return dungeonTargetAllowed(target);
     if(typeof returnCombatActive==='function' && returnCombatActive())return returnAttacker(target);
     function reject(reason) { if (diagnostic) diagnostic.reason = reason; return false; }
@@ -15833,13 +15910,33 @@
       return true;
     } finally { formationFrame.self = saved; }
   }
-  // A bounded local detour, not smart_move/A*. One owner keeps the waypoint
-  // until reached; the full formation optimizer cannot fight it each tick.
+  // A persistent same-map combat route. Each issued step still passes the
+  // formation safety and healing gates; ordinary positioning cannot fight it.
   function recoverFormationCorner(reference, priest, selfPriest, members, step) {
-    var goal = combatApproachPoint(reference, formationDesiredRange(reference, priest, selfPriest, members, step));
-    var approaching = true;
-    if (!selfPriest && character.ctype === "mage" && formationDistance(character, priest) > Number(priest.range) * 0.9) { goal = priest; approaching = false; }
+    var approachRange = formationDesiredRange(reference, priest, selfPriest, members, step);
+    var goal = combatApproachPoint(reference, approachRange);
+    var regroupPriest = !selfPriest && character.ctype === "mage" && formationDistance(character, priest) > Number(priest.range) * 0.9;
+    if (regroupPriest) goal = priest;
     var obstacles = formationFrame.enemies.filter(function (e) { return e.id !== reference.id || !formationMelee(character); });
+    var regroupGoals = [];
+    if (regroupPriest && typeof can_move === "function") {
+      // An attacked priest can stand inside the selected monster's safety
+      // radius. Regroup into healing coverage, not onto that unsafe center.
+      var healingCoverage = Number(priest.range) - Math.min(20, Math.max(8, Number(priest.range) * 0.1));
+      var regroupReach = Math.min(Number(character.range) - 3,
+        Math.max(approachRange, formationMonsterSafety(reference) + 12));
+      for (var regroupSide = 0; regroupSide < 16; regroupSide++) {
+        var regroupPoint = terrainRecoveryPoint(reference, regroupReach, regroupSide * Math.PI / 8);
+        if (!regroupPoint || formationDistance(formationBody(character, regroupPoint), priest) > healingCoverage ||
+            !can_move({ map: character.map, x: regroupPoint.x, y: regroupPoint.y,
+              going_x: regroupPoint.x, going_y: regroupPoint.y, base: character.base }) ||
+            obstacles.some(function (enemy) { return formationDistance(formationBody(character, regroupPoint), enemy) <= formationMonsterSafety(enemy); })) continue;
+        regroupGoals.push(regroupPoint);
+      }
+      regroupGoals.sort(function (a, b) { return Math.hypot(a.x-character.x,a.y-character.y)-Math.hypot(b.x-character.x,b.y-character.y); });
+      regroupGoals = regroupGoals.slice(0, 4);
+      if (regroupGoals.length) goal = regroupGoals[0];
+    }
     var identity = [reference.id, priest.name, character.map, character.in, joinedEvent, eventTraveling].join(":");
     if (formationState.approachIdentity !== identity) {
       formationState.approachIdentity = identity; formationState.approachProgress = null; formationState.recovery = null;
@@ -15850,52 +15947,89 @@
       tracking = formationState.approachProgress = { target: reference.id, gap: gap, at: now };
     }
     if (gap < 12) { formationState.recovery = null; return false; }
-    if (now - tracking.at < 1500 && !formationState.recovery) return false;
-    var directClear = can_move_to(goal.x, goal.y) && formationSegmentSafe(character, goal, obstacles);
+    if (now - tracking.at < 1500 && !formationState.recovery && can_move_to(goal.x,goal.y)) return false;
     var recovery = formationState.recovery;
-    if (!recovery || recovery.target !== reference.id || Math.hypot(recovery.goal.x - goal.x, recovery.goal.y - goal.y) > 80) {
-      recovery = formationState.recovery = { target: reference.id, goal: { x: goal.x, y: goal.y }, retryAt: 0, point: null };
+    var goalAnchor = regroupPriest ? priest : reference;
+    if (!recovery || !recovery.targetPoint || recovery.target !== reference.id || recovery.regroupPriest !== regroupPriest ||
+        Math.hypot(recovery.targetPoint.x-goalAnchor.x,recovery.targetPoint.y-goalAnchor.y)>12 ||
+        regroupPriest && (!recovery.referencePoint || Math.hypot(recovery.referencePoint.x-reference.x,recovery.referencePoint.y-reference.y)>12) ||
+        Math.abs(recovery.reach-approachRange)>8) {
+      recovery = formationState.recovery = { target: reference.id, targetPoint: {x:goalAnchor.x,y:goalAnchor.y},
+        referencePoint: {x:reference.x,y:reference.y},
+        reach:approachRange,regroupPriest:regroupPriest,goal: { x: goal.x, y: goal.y }, retryAt: 0, point: null };
     }
     if (recovery.point && (Math.hypot(recovery.point.x - character.x, recovery.point.y - character.y) < 8 ||
         !can_move_to(recovery.point.x, recovery.point.y) || !formationSegmentSafe(character, recovery.point, obstacles))) recovery.point = null;
-    if (!recovery.point && now >= recovery.retryAt) {
+    if (!recovery.point && !recovery.multi && now >= recovery.retryAt) {
       recovery.retryAt = now + 1000;
-      var best = directClear ? gap : Infinity;
-      if (directClear) recovery.point = { x: goal.x, y: goal.y };
-      var goals = [goal];
-      // A wall on our side of the target hides the approach point on our bearing
-      // (#83). Also aim at the nearest points around the target that the target
-      // itself can walk to, so a detour can reach its open side.
-      if (approaching && !directClear && !can_move_to(goal.x, goal.y) && typeof can_move === "function") {
-        var around = Math.hypot(goal.x - reference.x, goal.y - reference.y), sides = [];
+      var goals = [recovery.goal], best = Infinity;
+      if (Math.hypot(recovery.goal.x-goal.x,recovery.goal.y-goal.y)>1) goals.push(goal);
+      if (regroupPriest) goals = goals.concat(regroupGoals);
+      if (!regroupPriest && !can_move_to(goal.x, goal.y) && typeof can_move === "function") {
+        var sides = [];
         for (var side = 0; side < 16; side++) {
-          var bearing = side * Math.PI / 8;
-          var open = { x: reference.x + Math.cos(bearing) * around, y: reference.y + Math.sin(bearing) * around };
-          if (Math.hypot(open.x - goal.x, open.y - goal.y) < 1 || !can_move({ map: character.map, x: reference.x, y: reference.y,
-              going_x: open.x, going_y: open.y, base: character.base })) continue;
-          sides.push(open);
+          var radians = side * Math.PI / 8;
+          var open = terrainRecoveryPoint(reference, approachRange, radians);
+          if (!open) continue;
+          if (can_move({ map: character.map, x: open.x, y: open.y,
+              going_x: open.x, going_y: open.y, base: character.base })) sides.push(open);
         }
-        sides.sort(function (a, b) { return Math.hypot(a.x - character.x, a.y - character.y) - Math.hypot(b.x - character.x, b.y - character.y); });
+        sides.sort(function (a, b) { return Math.hypot(a.x-character.x,a.y-character.y)-Math.hypot(b.x-character.x,b.y-character.y); });
         goals = goals.concat(sides.slice(0, 4));
-        for (var g = 1; g < goals.length; g++) {
-          var span = Math.hypot(goals[g].x - character.x, goals[g].y - character.y);
-          if (span < best && can_move_to(goals[g].x, goals[g].y) && formationSegmentSafe(character, goals[g], obstacles)) {
-            recovery.point = { x: goals[g].x, y: goals[g].y }; best = span;
-          }
-        }
       }
-      if (typeof can_move === "function") for (var ring = 0; ring < 4; ring++) for (var angle = 0; angle < 16; angle++) {
-        var radius = 80 * Math.pow(2, ring), radians = angle * Math.PI / 8;
-        var point = { x: character.x + Math.cos(radians) * radius, y: character.y + Math.sin(radians) * radius };
-        if (radius >= best || !can_move_to(point.x, point.y) || !formationSegmentSafe(character, point, obstacles)) continue;
-        for (var k = 0; k < goals.length; k++) {
-          var score = radius + Math.hypot(goals[k].x - point.x, goals[k].y - point.y);
-          if (score >= best || !can_move({ map: character.map, x: point.x, y: point.y,
-              going_x: goals[k].x, going_y: goals[k].y, base: character.base }) ||
-              !formationSegmentSafe(point, goals[k], obstacles)) continue;
-          recovery.point = point; best = score;
+      for (var goalIndex = 0; goalIndex < goals.length; goalIndex++) {
+        var approach = goals[goalIndex];
+        var distance = Math.hypot(approach.x-character.x,approach.y-character.y);
+        if (distance < best && can_move_to(approach.x,approach.y) && formationSegmentSafe(character,approach,obstacles)) {
+          recovery.point = { x: approach.x, y: approach.y }; recovery.goal = approach; best = distance;
         }
+        if (typeof can_move === "function") for (var ring = 0; ring < 4; ring++) for (var angle = 0; angle < 16; angle++) {
+          var radius = 80 * Math.pow(2, ring), radians = angle * Math.PI / 8;
+          var point = { x: character.x + Math.cos(radians) * radius, y: character.y + Math.sin(radians) * radius };
+          var score = radius + Math.hypot(approach.x - point.x, approach.y - point.y);
+          if (score >= best || !can_move_to(point.x, point.y) || !can_move({ map: character.map, x: point.x, y: point.y,
+              going_x: approach.x, going_y: approach.y, base: character.base }) ||
+              !formationSegmentSafe(character, point, obstacles) || !formationSegmentSafe(point, approach, obstacles)) continue;
+          recovery.point = point; recovery.goal = approach; best = score;
+        }
+        // Once selected, keep the same open side while it still has a safe
+        // two-leg route. Reconsider alternatives only when that route fails.
+        if (goalIndex === 0 && recovery.selected && recovery.point) break;
       }
+      if (recovery.point) recovery.selected = true;
+    }
+    var routeClient=root.partyQueueClient && root.partyQueueClient.formation;
+    if ((!recovery.point || recovery.multi) && routeClient && routeClient.approachPoint && typeof can_move === "function") {
+      recovery.multi=true;
+      var goals=regroupPriest ? regroupGoals.slice() : [];
+      if(!regroupPriest){
+        // The preferred range circle can lie entirely inside walls or on the
+        // far side of a narrow corridor. Consider nearer legal attack positions
+        // too, while preserving the selected monster's clearance for casters.
+        var minimum=Math.min(approachRange,formationMonsterSafety(reference)+12);
+        var reaches=[approachRange,(approachRange+minimum)/2,minimum];
+        reaches= reaches.filter(function(reach,index){return index===0 || Math.abs(reach-reaches[index-1])>1;});
+        reaches.forEach(function(reach){for(var side=0;side<16;side++){
+          var candidate=terrainRecoveryPoint(reference,reach,side*Math.PI/8);
+          if(candidate)goals.push(candidate);
+        }});
+      }
+      goals.unshift(goal);
+      goals=goals.filter(function(point){return can_move({map:character.map,x:point.x,y:point.y,going_x:point.x,going_y:point.y,base:character.base}) && formationSegmentSafe(point,point,obstacles);});
+      var coverageRange=Number(priest.range)-Math.min(20,Math.max(8,Number(priest.range)*0.1));
+      var maySeparate=!selfPriest && formationMelee(character) && !formationFrame.attackers.length &&
+        Number(character.max_hp)>0 && Number(character.hp)>=Number(character.max_hp)*0.6 &&
+        members.some(function(ally){return ally.name!==character.name && ally.name===reference.target && !ally.rip;});
+      recovery.point=routeClient.approachPoint(identity+JSON.stringify([recovery.targetPoint,recovery.referencePoint,recovery.reach]),character,goals,function(from,to){
+        // Admit live segments within the next-step coverage envelope. Future
+        // nodes can exceed today's envelope because the healer moves too.
+        var body=formationBody(character,to);
+        if (Math.hypot(from.x-character.x,from.y-character.y)<6 && !maySeparate && !(selfPriest ? members.every(function(ally){return ally.name===character.name ||
+          formationDistance(body,ally)<=Math.max(coverageRange,formationDistance(character,ally))+0.01;}) :
+          formationDistance(body,priest)<=Math.max(coverageRange,formationDistance(character,priest))+0.01)) return false;
+        return can_move({map:character.map,x:from.x,y:from.y,going_x:to.x,going_y:to.y,base:character.base}) && formationSegmentSafe(from,to,obstacles);
+      }) || null;
+      if (routeClient.approachStatus() === 'arrived') { formationState.recovery = null; return false; }
     }
     if (recovery.point) {
       var dx = recovery.point.x - character.x, dy = recovery.point.y - character.y;
@@ -15908,8 +16042,9 @@
     }
     // Keep immediate defensive movement available, but don't oscillate merely
     // because the straight-line range objective is unreachable around a wall.
-    if (formationFrame.attackers.length) return false;
-    return {blocked:true,reason:can_move_to(goal.x, goal.y) ? "monster-blocked approach" : "terrain-blocked approach"};
+    var planning=routeClient && routeClient.approachStatus && routeClient.approachStatus()==='planning';
+    if (formationFrame.attackers.length && !planning) return false;
+    return {blocked:true,planning:planning,reason:can_move_to(goal.x, goal.y) ? "monster-blocked approach" : "terrain-blocked approach"};
   }
   function terrainRecoveryContext() {
     var g=groupedCombat,t=g && g.target;
@@ -15938,26 +16073,40 @@
       return clearance>=Math.min(before,safety)-0.01;
     });
   }
+  function terrainRecoveryPoint(reference,reach,angle) {
+    var target=formationBody(reference),self=formationBody(character),dx=Math.cos(angle),dy=Math.sin(angle);
+    if(![target.x,target.y,reach,angle].every(Number.isFinite) || reach<0)return null;
+    // Reach and safety are native box-to-box gaps, not center radii. Native
+    // distance also accounts for the asymmetric height above each entity's feet.
+    var low=0,high=Math.max(1,reach+target.awidth+target.aheight+self.awidth+self.aheight);
+    function gap(radius) {
+      return formationDistance(formationBody(character,{x:target.x+dx*radius,y:target.y+dy*radius}),target);
+    }
+    var outerGap=gap(high);
+    for(var expansion=0;expansion<8 && Number.isFinite(outerGap) && outerGap<reach;expansion++) {
+      high*=2;outerGap=gap(high);
+    }
+    if(!Number.isFinite(outerGap) || outerGap<reach)return null;
+    for(var step=0;step<24;step++) {
+      var middle=(low+high)/2;
+      var middleGap=gap(middle);
+      if(!Number.isFinite(middleGap))return null;
+      if(middleGap<reach)low=middle;else high=middle;
+    }
+    return {x:target.x+dx*high,y:target.y+dy*high};
+  }
   function terrainRecoveryGoals(reference,desired) {
     if(!reference)return [];
-    // The reach is an edge distance, but the circle is centred on the target: widen it
-    // by both hitboxes in each direction, or a large target (Phoenix, 61x55) swallows
-    // every point and a melee mover gets no goals at all.
-    var reach=Math.max(desired,formationMonsterSafety(reference)+12),goals=[];
-    var own=formationBody(character),target=formationBody(reference);
+    // Coordinator encounter reports omit renderer hitboxes. Prefer the matching
+    // visible native entity so edge-distance goals use the actual monster body.
+    var local=reference.id!=null && get_entity(reference.id);
+    if(local && local.visible && !local.dead && local.hp!==0 &&
+        (!local.map || local.map===character.map) && (local.in==null || local.in===character.in))reference=local;
+    var reach=Number(character.range),radius=Math.min(reach-1,Math.max(desired,formationMonsterSafety(reference)+12)),goals=[];
+    if(!Number.isFinite(radius) || radius<0)return goals;
     for(var i=0;i<16;i++) {
-      var angle=i*Math.PI/8,cos=Math.cos(angle),sin=Math.sin(angle);
-      // Solve for the centre distance whose box-to-box gap equals the reach. Positions
-      // are feet: a point above the target clears its height, one below clears ours.
-      var low=0,high=reach+(own.awidth+target.awidth)/2+Math.max(own.aheight,target.aheight);
-      for(var step=0;step<24;step++) {
-        var radius=(low+high)/2;
-        var across=Math.max(0,Math.abs(cos)*radius-(own.awidth+target.awidth)/2);
-        var along=Math.max(0,Math.abs(sin)*radius-(sin<0?target.aheight:own.aheight));
-        if(Math.hypot(across,along)<reach)low=radius;else high=radius;
-      }
-      var p={x:reference.x+cos*high,y:reference.y+sin*high};
-      if(terrainRecoverySafe(p,true))goals.push(p);
+      var p=terrainRecoveryPoint(reference,radius,i*Math.PI/8);
+      if(p && terrainRecoverySafe(p,true))goals.push(p);
     }
     goals.sort(function(a,b){return Math.hypot(a.x-character.x,a.y-character.y)-Math.hypot(b.x-character.x,b.y-character.y);});
     return goals;
@@ -16067,10 +16216,13 @@
   function formationStepSafe(point, reference, priest, selfPriest, members, safeRange, separate) {
     if(!safeCombatPoint(point,reference))return false;
     var body=formationBody(character,point);
-    var covered=!!separate || (selfPriest ? members.every(function(ally){return ally.name===character.name ||
+    var covered=selfPriest ? members.every(function(ally){return ally.name===character.name ||
       formationDistance(body,ally)<=Math.max(safeRange,formationDistance(character,ally))+0.01;}) :
-      formationDistance(body,priest)<=Math.max(safeRange,formationDistance(character,priest))+0.01);
-    if(!covered)return false;
+      formationDistance(body,priest)<=Math.max(safeRange,formationDistance(character,priest))+0.01;
+    var otherPartyTarget=members.some(function(ally){return ally.name!==character.name && ally.name===reference.target && !ally.rip;});
+    var canSeparate=separate && !selfPriest && formationMelee(character) && !formationFrame.attackers.length &&
+      Number(character.max_hp)>0 && Number(character.hp)>=Number(character.max_hp)*0.6 && otherPartyTarget;
+    if(!covered && !canSeparate)return false;
     var obstacles=formationFrame.enemies.filter(function(e){return e.id!==reference.id || !formationMelee(character);});
     return priestSecondaryClearance(point,obstacles).risk<=priestSecondaryClearance(character,obstacles).risk+0.01;
   }
@@ -16132,6 +16284,9 @@
     var reference = target || attackers.sort(function (a, b) { return combatDistance(a) - combatDistance(b); })[0];
     if (!reference) return false;
     if (formationState.priest !== priest.name || formationState.targetId !== reference.id) {
+      // Retire only our previous combat-owned segment before adopting a new
+      // target. Every class must shed the old approach and hold state.
+      resetCombatMovement();
       formationState.priest = priest.name; formationState.targetId = reference.id; formationState.direction = 1;
       formationState.secondaryDirection = 0; formationState.secondaryMoving = false;
       formationState.warriorPhase = null; formationState.warriorSegment = null;
@@ -16165,9 +16320,6 @@
     }
     var closing = warrior && formationState.warriorPhase === "approaching";
     var secondary = selfPriest || mage ? formationFrame.enemies.filter(function (enemy) {
-      // The selected target is scored separately (targetRisk below): its safety radius plus
-      // 0.6 s of a fast target's motion can exceed a mage's range, and as ordinary secondary
-      // risk it held the mage out of range for the whole fight (#75).
       if (enemy.id === reference.id) return false;
       // Keep every enemy capable of entering the swept safety area, with a
       // nearby clearance preference zone. Distant mobs must
@@ -16208,7 +16360,9 @@
       var turn = formationState.heading == null ? 0 : 1 - Math.cos(heading - formationState.heading);
       var clearance = avoiding ? priestSecondaryClearance(point, secondary) : null;
       var secondaryRisk = clearance ? clearance.risk : 0;
-      // A mage keeps away from its own target only as far as its attack range allows.
+      // The selected target's swept safety radius must not keep the mage
+      // permanently outside its own range. Retain that spacing preference
+      // after attack-range admission; other enemies still outrank admission.
       var targetRisk = mage ? priestSecondaryClearance(point, [reference]).risk : 0;
       var orbitCross = (character.x - reference.x) * (point.y - character.y) -
         (character.y - reference.y) * (point.x - character.x);
@@ -16228,11 +16382,7 @@
           selfPriest ? 0 : -formationDistance(candidate, priest), turn] };
     }
     var current = metrics(character);
-    // A melee fighter nothing is attacking may leave healing coverage to get around a
-    // wall while its target fights someone else (#83); any attacker or low HP ends it.
-    var separate=!selfPriest && formationMelee(character) && !attackers.length &&
-      Number(character.hp) >= Number(character.max_hp) * 0.6 && !!reference.target && reference.target !== character.name;
-    if(recoveryCandidate && !recoveryCandidate.blocked && formationStepSafe(recoveryCandidate,reference,priest,selfPriest,members,safeRange,separate)) {
+    if(recoveryCandidate && !recoveryCandidate.blocked && formationStepSafe(recoveryCandidate,reference,priest,selfPriest,members,safeRange,true)) {
       sendCombatMove(reference,recoveryCandidate,"formation-regrouping");
       root.partyCombatPosition.reason="local detour around blocked approach";
       root.partyCombatPosition.coverageDeficit=metrics(recoveryCandidate).coverage;
@@ -16252,7 +16402,7 @@
       holdFormation(reference,"no safe local detour; waiting for an opening");
       root.partyCombatPosition.mode="formation-blocked";
       root.partyCombatPosition.constraint=recoveryCandidate.reason;
-      proposeTerrainRecovery(reference,desired);
+      if(!recoveryCandidate.planning)proposeTerrainRecovery(reference,desired);
       return true;
     }
 
@@ -16454,6 +16604,7 @@
     root.partyCombatPosition = { at: Date.now(), mode: "idle", movementOwner: null, target: null,
       reason: "no valid target or immediate threat" };
     formationState.warriorPhase = null; formationState.warriorSegment = null;
+    formationState.heading = null; formationState.meleeProgress = null;
     formationState.approachProgress = null; formationState.approachIdentity = null; formationState.recovery = null;
     kiteState.targetId = null; kiteState.destination = null; kiteState.mode = "idle";
   }
@@ -17026,6 +17177,9 @@
       if (root.on_party_request === acceptConfiguredPartyRequest) root.on_party_request = previousPartyRequestHandler;
     },
     isBanking: function () { return banking || bankQueued; },
+    // CODE replacement retires and replays travel ownership. A maintenance
+    // movement hold must not prevent the very replacement it is waiting for.
+    canReload: function () { return !consoleMaintenanceBusy(false); },
     merchantEventCombatActive: function () {
       return character.ctype === "merchant" && !!joinedEvent && eventSelected(joinedEvent) &&
         !eventReturnPending && !root.__merchantActiveJob;
@@ -17041,9 +17195,9 @@
     returnMovementTick: cancelReturnTownUnderAttack,
     isOccupied: function () {
       if (character.cave || root.__partyDungeonRuntime && root.__partyDungeonRuntime.owns())
-        return !runtimeCurrent() || !!root.__partyConsoleMaintenance || !!character.cave?.paused;
+        return !runtimeCurrent() || !!root.__partyConsoleMaintenance && (!consoleDraining() || !consoleDrainCombatActive()) || !!character.cave?.paused;
       if (root.__partyUpgradePreviewInFlight) return true;
-      if (root.__partyConsoleMaintenance) return true;
+      if (root.__partyConsoleMaintenance && (!consoleDraining() || !consoleDrainCombatActive())) return true;
       if(typeof returnCombatActive==='function' && returnCombatActive()) {
         cancelReturnTownUnderAttack();
         return !!(character.c && character.c.town);
@@ -17137,6 +17291,7 @@
     },
     terrainRecoveryPorts: terrainRecoveryPorts,
     successorAllowed: function(grant) {
+      if(consoleDraining())return false;
       if(!groupedFarming() || !groupedFresh() || navigationIntent.cancelled || character.rip || partyConvoyActive || convoyTraveling ||
           eventTraveling || joinedEvent || eventTargetTypes.length || combatRecoveryActive() || travelCombatActive() ||
           root.partyLootClient && root.partyLootClient.huntPending())return false;
@@ -17245,6 +17400,7 @@
     },
     shouldFollowLeader: function () {
       if (navigationIntent.cancelled && !activeCombatEvent()) return false;
+      if (root.__partyEventRecoveryCycleId && !activeCombatEvent()) return false;
       if (typeof groupedFarming === "function" && groupedFarming() && groupedCombat && groupedCombat.protocol === 4) return groupedFollower();
       if (!(followLeader && leader && leader !== character.name)) return false;
       if (!isLiveAbtesting()) return true;

@@ -12,6 +12,8 @@
 - Read [the coordinator README](runtime/coordinator/README.md) before changing coordinator behavior or build/deployment wiring. It maps domains and documents manual validation and activation.
 - Edit maintained TypeScript under `runtime/coordinator/`; do not edit generated `.build/runtime/coordinator-*.cjs` bundles or the installed caracAL launcher. The launcher template lives under `tools/caracal/`.
 - Building and activating are different operations. Follow the README's supported restart workflow; do not claim a build has reloaded the live coordinator without verifying it. Preserve current character assets when deploying coordinator-only changes.
+- After every code or UI change, always produce a completed immutable console artifact before finishing the task. An existing background build may satisfy this requirement, but wait for completion and verify that the candidate contains the final changes; pushing commits or starting a build alone is insufficient.
+- Do not deploy or activate an artifact, or restart the running console, unless the user explicitly instructs you to do so for that action. By default, leave the completed candidate staged for the user to load through the Party Console. Report the staged artifact and distinguish it from the active build.
 
 # Game TypeScript types
 

@@ -136,6 +136,7 @@ export interface RoleRunner {
   stop(): void;
 }
 export interface CombatRoot {
+  __partyConsoleMaintenance?: {id: string; expires: number; mode?: 'draining'} | null;
   partyPorcupineEquipment?: ReturnType<typeof import("./porcupine-equipment.ts").createPorcupineEquipment>;
   partyKillLuckSwap?: ReturnType<typeof import("./kill-luck-swap.ts").createKillLuckSwap>;
   /** Saved gear sets per character, from the coordinator status response. */

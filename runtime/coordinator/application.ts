@@ -106,7 +106,7 @@ export function startCoordinatorApplication(
     });
     let version = initialVersion;
     let clientRevision = await game_files.get_revision?.(version) || String(version);
-    const movementPlanner = coordinatorPolicies.createPlannerService(__dirname + '/../../.build/runtime/movement-planner.cjs');
+    const movementPlanner = coordinatorPolicies.createPlannerService((platform.codeDirectory || __dirname) + '/../../.build/runtime/movement-planner.cjs');
     const movementFingerprints = new Map<number, string>();
     let canStand: (x: number, y: number) => boolean = () => false;
     async function prepareMovement(gameVersion: number) {
@@ -1039,9 +1039,10 @@ export function startCoordinatorApplication(
         response: (name, mode) => {
           dungeons.reconcile();
           const maintenance = consoleUpdate.current();
-          if (maintenance) return { serverNow: Date.now(), consoleMaintenance: maintenance };
+          if (maintenance && maintenance.mode !== 'draining') return { serverNow: Date.now(), consoleMaintenance: maintenance };
           const lease = mode ? undefined : dashboardStream.lease(name);
           return { ...(soloFor(name)?.heartbeatResponse || heartbeatResponse).response(name, mode),
+            consoleMaintenance: maintenance,
             ...(dungeonOwns(party, name) ? { groupedCombat: groupedCombatSnapshot() } : {}),
             ...(party.dailyDungeons ? { dailyDungeon: dungeons.control(name) } : {}),
             merchantVisibility: merchantVisibility(party, name, Date.now()),
@@ -1230,7 +1231,8 @@ export function startCoordinatorApplication(
     }
 
     function eventsEnabledFor(name: string, event?: string) {
-      const enabled = event ? eventEnabled(party, name, event) : eventPolicy(party, name).enabled;
+      const enabled = event ? eventEnabled(party, name, event)
+        : selectedEvents(party, name).some(selected => eventInstanceAllowed(party, name, selected));
       if (!enabled || event && !eventInstanceAllowed(party, name, event)) return false;
       const report = party.statuses[name];
       const live = !!report && Date.now() - report.seenAt < 3000 && (event === 'anniversary'
@@ -1812,7 +1814,7 @@ export function startCoordinatorApplication(
           prepare: members => members,
           evaluate: evaluateGroup,
           finalize: group => group,
-          blocksPulls: () => false,
+          blocksPulls: () => !!consoleUpdate.current(),
         });
       }
 
@@ -2239,7 +2241,14 @@ export function startCoordinatorApplication(
       cfg.web_app,
       cfg.enable_TYPECODE,
       {
-        createRouter: () => express(),
+        createRouter: () => {
+          const router = express();
+          router.get('/party-api/build-identity', (_request, response) => response.json({
+            artifactId: process.env.AL_CONSOLE_ARTIFACT_ID || null,
+            hash: process.env.AL_CONSOLE_COORDINATOR_HASH || null,
+          }));
+          return router;
+        },
         createMonitor: (options) => new bwi(options),
         retainMonitor: (monitor) => {
           bwi_instance = monitor;
@@ -2393,7 +2402,7 @@ export function startCoordinatorApplication(
         prepare: (members) => combatDisengagement.prepare(members),
         evaluate: evaluateGroup,
         finalize: (group) => combatDisengagement.finalize(group),
-        blocksPulls: () => rareControl.blocksPulls(),
+        blocksPulls: () => !!consoleUpdate.current() || rareControl.blocksPulls(),
         patrolAcquisitionAllowed: () => rareControl.patrolAcquisitionAllowed?.() || false,
       });
     }

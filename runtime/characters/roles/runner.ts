@@ -98,7 +98,8 @@ export function installRoleRunner(
     if (character.ctype === "merchant" || !active || character.rip || !resolvedRole().combat || ["pending","feed"].includes(sharedRoutine.getAbtestingMode())) return null;
     // Boss attendance permits only the boss; passing attacks would pull adds or the map.
     if (sharedRoutine.bossCombatActive?.()) return null;
-    return (sharedRoutine as any).getPassingTarget?.() || null;
+    const target = (sharedRoutine as any).getPassingTarget?.() || null;
+    return target && sharedRoutine.allowsTarget(target) ? target : null;
   }
   function attackTarget(): Target | null {
     const current = currentTarget(), passing = passingTarget();
@@ -165,6 +166,7 @@ export function installRoleRunner(
       return;
     }
     const current = currentTarget();
+    if (root.__partyConsoleMaintenance?.mode === 'draining' && current) return;
     const closer = !exclusiveCombat() && current && !attacks.hasStarted(current.id) && sharedRoutine.getCloserHuntTarget?.(current);
     if (closer) {
       root.sharedRoutine?.resetCombatMovement?.();

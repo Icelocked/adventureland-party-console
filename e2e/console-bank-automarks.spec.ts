@@ -18,7 +18,7 @@ test('bank tiles show every automatic action and distinguish manual NPC sales',a
   });
   await page.goto('/');
   await expect(page.getByRole('heading',{name:'M',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Inspect bank',exact:true}).click();
+  await page.getByRole('button',{name:'Bank',exact:true}).click();
   const bank=page.getByRole('dialog',{name:'Bank',exact:true});
   await expect(bank).toBeVisible();
   for(const [index,label] of ['Auto bank','Auto NPC','Auto deconstruction','Auto upgrade → +2','Auto compound → +2','Auto stand','NPC sale'].entries()){

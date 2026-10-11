@@ -1,3 +1,33 @@
+Safe console loading uses an expiring host maintenance lease with mode `draining`.
+Normal combat heartbeats, attacks and healing continue for the captured current
+red-circle fight and genuine attackers; the character eligibility gate rejects
+new pulls across farming, events and dungeons. Once combat ends, movement stops
+and participants acknowledge a combat-free hold. The host requires fresh matching
+acknowledgements for three continuous seconds before activation; renewed combat
+resets this window, and missing reports never imply
+safety. Interrupted waits preserve the active build and expire/release the hold.
+Validate `console-build.spec.ts`, `console-build-safe-host.spec.ts` and
+`live-console-safe-reload.spec.ts`; see `docs/testing-safe-console-reload.md`.
+Activate dashboard, coordinator and character assets together for this protocol.
+Fast combat snapshots carry the same ordered maintenance lease as full status;
+successor promotion and the final attack gate reject new targets during the hold.
+Safe holds park managed movement without cancelling its journey; release resumes
+the existing farm, hunt or event continuation. CODE reload eligibility excludes
+inventory mutations but permits a parked journey and ordinary combat. Host
+activation releases its maintenance lease before publishing completion and before
+history cleanup. Host controller changes require the supported explicit host
+restart to replace the implementation loaded at startup; building does not do so.
+
+Immutable console activation sets `AL_CONSOLE_ARTIFACT` to the selected release's
+`app` directory. The maintained launcher resolves repository bundles and support
+code from that artifact while native dependencies and mutable caracAL storage
+remain installed separately. Set `AL_CONSOLE_ARTIFACT_ID` and
+`AL_CONSOLE_COORDINATOR_HASH`; `/party-api/build-identity` reports the running
+coordinator identity. The activation driver waits for this identity, dashboard
+hash and actual connected-character CODE hashes; a successful spawn is not an
+activation acknowledgement. CODE-only changes preserve native connections.
+See `docs/testing-console-build-runtime.md` for failure and rollback validation.
+
 Failed preemptible convoys permit merchant collection through the existing fresh,
 stopped acknowledgement barrier. Collection completion restores the failed hold
 and its diagnostics and retry budget, never another travel attempt. Communication
@@ -5,6 +35,18 @@ loss during this temporary hold cannot admit route recovery. Validate the native
 failed-convoy collection/restart journey and retained interruption/communication
 regressions; see docs/testing-failed-convoy-collection.md. Coordinator-only
 activation uses the supported scripts/start-console.ps1 -CoordinatorOnly restart.
+
+Individual event return commands can own a different saved destination from the
+leader. Character recovery must travel independently to that authorized waypoint;
+it cannot require a leader rendezvous or a shared walk to another checkpoint.
+Ordinary following waits until the participant's return cycle finishes, so an
+early arrival cannot leave its saved waypoint while another member is returning.
+Native timestamp-based event identities use uncorrected server timestamps so
+clock synchronization never resets the attendance ledger. Validate the follower
+handoff and fixed-end timer journeys. Activation requires publishing character
+assets as well as restarting the coordinator with the supported full workflow.
+Matching forced event returns include members who exceed their limit on later
+heartbeats; capture their waypoints and complete their Town exit before redispatch.
 
 Active event returns release members whose fresh, connected reports show another
 enabled event live. Retire only their matching-cycle exit/continuation commands
@@ -89,6 +131,18 @@ collision-free local approach is available. Visibility across terrain retains
 the maintained route and formation ownership. Validate the native terrain gap
 case in `live-event-runtime-recovery.spec.ts`; activate character assets and
 coordinator together. Failure inventory: `docs/testing-event-terrain-approach.md`.
+
+Combat corner recovery samples reachable sides of the selected target using native
+hitbox distance, retaining a selected side until arrival or a meaningful target
+change. Its bounded local detour may separate a healthy, unattacked melee fighter
+from priest coverage only while the target attacks another living formation member.
+Ordinary positioning retains coverage checks. Mage positioning prioritizes entering
+attack range over spacing from its selected target, while other enemy safety retains
+priority. Target changes retire only combat-owned movement and reset approach state.
+Validate `live-hunt-mage-range`, `live-hunt-engaged-terrain`,
+`live-hunt-planned-terrain`, `live-hunt-targetron-terrain` and
+`live-hunt-targetron-mage`; retain native damage,
+movement timelines and terrain evidence. Publish character assets to activate.
 
 Startup uses the account's unanimous native home as the initial realm default,
 falling back to saved worker configuration when homes are absent or mixed.
@@ -1487,9 +1541,10 @@ require the full restart. An already exhausted return uses the existing
 `/party-api/monster-hunt/retry-return` action after fresh runtimes connect.
 
 For coordinator/dashboard-only changes, use `scripts/start-console.ps1 -CoordinatorOnly`.
-This verifies the installed launcher, builds the coordinator, and restarts services
-without installing or publishing character assets or starting their build watcher.
-Use the ordinary restart when character changes must also be published.
+This restarts the selected active console artifact. The flag remains accepted for
+compatibility; restarting never selects a newly built candidate. Source/development
+launchers stage complete builds in the background. Use the refresh control beside
+Party Console to confirm deployment of the exact completed candidate when ready.
 
 Steam-to-headless releases also poll the authoritative account roster: a last
 primary may lose its bridge acknowledgement while disconnecting. Every released
@@ -1502,21 +1557,34 @@ The Steam bridge disables native auto_reload, clears character_to_load and pendi
 reload_state, and persists its receipt before intentionally disconnecting the
 primary. An updated bridge can finish a previously interrupted headless release
 when that primary's CODE reconnects. Publish browser assets with
-`npm run build:runtime -- --publish`, then use the coordinator-only restart to
-preserve the currently installed character generation. Existing stopped Steam
+the staged build pipeline, then deploy the completed candidate from the console.
+Existing stopped Steam
 CODE must be Engaged once to load the updated bridge; subsequent transfers require
 only the Party Console button.
 
-The start script builds before stopping the previous supervisor, installs the
-launcher, publishes character/browser assets, and starts the services. Use that
-supported restart path to activate a manual coordinator change. It restarts the
-party services, so choose an appropriate moment in gameplay.
+The start script restarts the active artifact; an installation without an active
+artifact performs one initial verified build. Compilation occurs in private source
+snapshots with separate dependency caches. Deployment performs no compilation,
+waits for actual readiness and character CODE hashes, and restores the previous
+artifact on failure. Coordinator changes briefly reconnect headless characters;
+character-only changes use the existing CODE handoff. Choose a suitable moment
+before confirming deployment. Packaged release updates retain their existing flow.
 
-For coordinator bundles, `--publish` is unnecessary: they are always written to
-`.build/runtime/`. The runtime builder's `--publish` additionally copies browser
-outputs into `characters/`. Changing the installed launcher can trigger the
-supervisor's file watcher; a supervisor restart also reloads the coordinator.
-Neither is equivalent to merely building a bundle.
+Direct build commands write checkout outputs for development and tests. Managed
+native processes force legacy `watch_CODE` and `enable_TYPECODE` off through the
+artifact's preload, including the launcher's coordinator-file watcher. Saved
+account config is preserved. Validate the native launcher file-change and preload
+scenarios in `console-build-host.spec.ts`; see
+`docs/testing-managed-launcher-watchers.md`. Apply this guard through the explicit
+console load action, which starts the managed launcher with the selected preload.
+
+Managed
+services resolve executable code from `.build/console/releases/<id>/app` and serve
+character assets from the separate deployed CODE store, so those commands do not
+activate a build. The store retains twenty completed builds plus active, previous,
+in-progress and live component pins. `npm run builds -- list console` shows history;
+`deploy console <id>` and `rollback console <id>` request the same deliberate host
+activation as the refresh control. No build is selected merely because it is latest.
 
 After a restart, valid ordinary party travel can rebuild automatically after
 fresh compatible reports arrive. Hunt and event returns keep their own recovery;

@@ -844,7 +844,7 @@ test('Live WTB counts bank stock after empty slots without withdrawing it', asyn
   });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'M', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'View market', exact: true }).click();
+  await page.getByRole('button', { name: 'Market', exact: true }).click();
   await page.getByRole('button', { name: /^Live WTB/ }).click();
   await expect(page.getByText(/2 offers match exact items currently held by M/)).toBeVisible();
   const bankRow = page.getByRole('button', { name: /E2EBankBuyer/ }).locator('..');
@@ -948,7 +948,7 @@ test('bank context marks pair automatic actions and retain a source-specific upg
   expect(checkpoint.ok()).toBe(true);
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'M', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Inspect bank', exact: true }).click();
+  await page.getByRole('button', { name: 'Bank', exact: true }).click();
   const pane = page.getByRole('dialog', { name: 'Bank', exact: true });
   const item = pane.getByLabel(sword.meta.definition.name || 'sword', { exact: true });
   await item.click({ button: 'right' });
@@ -1074,7 +1074,7 @@ test.describe('configured merchant dialog names', () => {
     const donation=page.getByRole('dialog',{name:'Donate gold for merchant XP'});
     await expect(donation).toContainText('M will withdraw any shortage');
     await donation.getByRole('button',{name:'Cancel',exact:true}).click();
-    await page.getByRole('button',{name:'View market',exact:true}).click();
+    await page.getByRole('button',{name:'Market',exact:true}).click();
     await page.getByRole('button',{name:/^Live WTB/}).click();
     await expect(page.getByText(/match exact items currently held by M or recorded/)).toBeVisible();
     await page.getByRole('button',{name:/^Ponty \(/}).click();
@@ -1084,7 +1084,7 @@ test.describe('configured merchant dialog names', () => {
     await info.attach('configured-merchant-ponty',{body:await page.screenshot(),contentType:'image/png'});
     await purchase.getByRole('button',{name:'Cancel',exact:true}).click();
     await page.keyboard.press('Escape');
-    await page.getByRole('button',{name:'Inspect bank',exact:true}).click();
+    await page.getByRole('button',{name:'Bank',exact:true}).click();
     const bank=page.getByRole('dialog',{name:'Bank',exact:true});
     await bank.getByRole('button',{name:/^Unlock items1/}).click();
     const vault=page.getByRole('dialog',{name:'Unlock bank vault?'});
@@ -1106,7 +1106,7 @@ test.describe('unassigned merchant dialog names', () => {
     expect((await app.state()).merchantCharacter).toBeNull();
     await page.goto('/');
     await expect(page.getByRole('heading', {name:'W',exact:true})).toBeVisible();
-    await page.getByRole('button',{name:'View market',exact:true}).click();
+    await page.getByRole('button',{name:'Market',exact:true}).click();
     await page.getByRole('button',{name:/^Live WTB/}).click();
     await expect(page.getByText(/match exact items currently held by the merchant or recorded/)).toBeVisible();
     await info.attach('unassigned-merchant-market',{body:await page.screenshot(),contentType:'image/png'});
@@ -1126,7 +1126,7 @@ test('market affordability uses core bank gold and active WTB prices open the fu
   });
   await page.goto('/');
   await expect(page.getByRole('heading',{name:'M',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'View market',exact:true}).click();
+  await page.getByRole('button',{name:'Market',exact:true}).click();
   await expect(page.getByRole('button',{name:'New WTB order',exact:true})).toBeVisible();
   const active=page.getByRole('button',{name:/^Active WTB orders/});
   if(await active.getAttribute('aria-expanded') !== 'true') await active.click();
@@ -1486,4 +1486,46 @@ test('Steam bridge reserves a free native CODE slot without overwriting saved co
     }
 
   } finally {await page.close();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
+
+test('log character pills default to all and independently filter live updates across tabs',async({page},info)=>{
+  // Declared log transport boundary; exercise the real sidebar and query cache.
+  let newer=false;
+  await page.route('**/party-api/state?**',async route=>{
+    const url=new URL(route.request().url());
+    if(url.searchParams.get('section')!=='logs')return route.continue();
+    const event=(name:string,seq=1)=>({session:'pill-probe',seq,at:Date.now(),message:`Log probe ${name} ${seq}`,color:''});
+    await route.fulfill({json:{gameLogs:{W:[event('W'),...(newer?[event('W',2)]:[])],P:[event('P')],M:[event('M')],...(newer?{Retained:[event('Retained')]}:{})},combatLogs:{W:[{at:Date.now(),message:'Combat probe W',type:'info'}],P:[{at:Date.now(),message:'Combat probe P',type:'info'}]},merchantActivity:[]}});
+  });
+  await page.goto('/');
+  // A shared development server may finish initial module discovery and reload.
+  await page.waitForTimeout(2000);
+  await page.getByRole('button',{name:'Show logs'}).click();
+  const sidebar=page.getByRole('complementary',{name:'Live logs'}),pills=sidebar.getByRole('group',{name:'Log characters'});
+  await expect(sidebar.getByRole('combobox',{name:'Log character',exact:true})).toHaveCount(0);
+  for(const name of ['W','P','M']){
+    await expect(pills.getByRole('button',{name,exact:true})).toHaveAttribute('aria-pressed','true');
+    await expect(sidebar.getByText(`Log probe ${name} 1`,{exact:true})).toBeVisible();
+  }
+  await pills.getByRole('button',{name:'W',exact:true}).click();
+  await pills.getByRole('button',{name:'M',exact:true}).click();
+  await expect(sidebar.getByText('Log probe W 1',{exact:true})).toHaveCount(0);
+  await expect(sidebar.getByText('Log probe M 1',{exact:true})).toHaveCount(0);
+  await expect(sidebar.getByText('Log probe P 1',{exact:true})).toBeVisible();
+  newer=true;
+  await expect(pills.getByRole('button',{name:'Retained',exact:true})).toHaveAttribute('aria-pressed','true');
+  await expect(sidebar.getByText('Log probe Retained 1',{exact:true})).toBeVisible();
+  await expect(sidebar.getByText('Log probe W 2',{exact:true})).toHaveCount(0);
+  await sidebar.getByRole('tab',{name:'Dashboard logs'}).click();
+  await expect(sidebar.getByText('Combat probe W',{exact:true})).toHaveCount(0);
+  await expect(sidebar.getByText('Combat probe P',{exact:true})).toBeVisible();
+  await pills.getByRole('button',{name:'W',exact:true}).click();
+  await expect(sidebar.getByText('Combat probe W',{exact:true})).toBeVisible();
+  await sidebar.getByRole('tab',{name:'Game logs'}).click();
+  await expect(sidebar.getByText('Log probe W 2',{exact:true})).toBeVisible();
+  for(const pill of await pills.getByRole('button').all())if(await pill.getAttribute('aria-pressed')==='true')await pill.click();
+  await expect(sidebar.getByText('No matching logs yet.',{exact:true})).toBeVisible();
+  await pills.getByRole('button',{name:'P',exact:true}).click();
+  await page.setViewportSize({width:1000,height:800});
+  await info.attach('log-character-pills',{body:await page.screenshot(),contentType:'image/png'});
 });

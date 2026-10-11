@@ -11,7 +11,7 @@ test('BankBoi deleted outside the console can be forgotten despite stale storage
   expect(before.upgradeOfferingStock.offeringp).toBe(2);
   await page.goto('/');
   await expect(page.getByRole('heading',{name:'M',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Inspect bank',exact:true}).click();
+  await page.getByRole('button',{name:'Bank',exact:true}).click();
   const bank=page.getByRole('dialog',{name:'Bank',exact:true});
   await expect(bank).toBeVisible();
   await expect(bank.getByText(name,{exact:true})).toBeVisible();
@@ -30,7 +30,7 @@ test('BankBoi deleted outside the console can be forgotten despite stale storage
   expect(after.upgradeOfferingStock.offeringp).toBe(0);
   await page.reload();
   await expect(page.getByRole('heading',{name:'M',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Inspect bank',exact:true}).click();
+  await page.getByRole('button',{name:'Bank',exact:true}).click();
   await expect(page.getByRole('dialog',{name:'Bank',exact:true}).getByText(name,{exact:true})).toHaveCount(0);
   await info.attach('stale-bankboi-removal-after-restart',{body:await page.screenshot(),contentType:'image/png'});
   await info.attach('stale-bankboi-deletion-ledger',{body:JSON.stringify({name,before,response:{status:response.status(),body},after}),contentType:'application/json'});
@@ -69,4 +69,35 @@ test('BankBoi-only boosters enable upgrade choices and manual confirmation',asyn
     }
   }
   await info.attach('bankboi-derived-offering-availability',{body:JSON.stringify(evidence),contentType:'application/json'});
+});
+
+test('ordinary upgrade menus label only the destination offering step and scroll price',async({page,app,request},info)=>{
+  await page.goto('/');
+  await expect(page.getByRole('heading',{name:'M',exact:true})).toBeVisible();
+  expect((await request.post(app.url+'/party-api/command',{headers:{Origin:app.url},data:{character:'M',type:'upgrade-offering-rule',rule:{name:'sword',floor:0,ceiling:1,offering:'offeringp',required:true}}})).ok()).toBe(true);
+  expect((await request.post(app.url+'/party-api/command',{headers:{Origin:app.url},data:{character:'M',type:'upgrade-offering-rule',rule:{name:'sword',floor:1,ceiling:2,offering:'offering',required:false}}})).ok()).toBe(true);
+  await page.goto('/');
+  const card=page.locator('article').filter({has:page.getByRole('heading',{name:'M',exact:true})});
+  for(const menu of ['Mark for upgrade','Auto mark for upgrade']){
+    await card.getByText('sword',{exact:true}).click({button:'right'});
+    await page.getByRole('menuitem',{name:menu,exact:true}).hover();
+    const row=page.getByRole('menuitem').filter({hasText:'+0 → +2'});
+    await expect(row.getByRole('img',{name:'Primling',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('menuitem').filter({hasText:'+0 → +1'}).getByRole('img',{name:'Primling',exact:true})).toBeVisible();
+    await expect(page.getByRole('menuitem').filter({hasText:'+0 → +3'}).getByRole('img')).toHaveCount(0);
+    await expect(row.getByRole('img',{name:'Primordial Essence',exact:true})).toBeVisible();
+    for(const name of ['Primordial Essence']) expect(await row.getByRole('img',{name,exact:true}).evaluate(async root=>{
+      const sheet=root.querySelector<HTMLElement>('[style*="background-image"]');
+      if(!sheet) return false;
+      const url=JSON.parse(sheet.style.backgroundImage.slice(4,-1));
+      const image=new Image();image.src=url;await image.decode();return image.naturalWidth>0;
+    })).toBe(true);
+    await expect(row).not.toContainText('·');
+    await expect(row.locator('[title="Scroll cost"]')).toHaveText('80,000g');
+    await expect(row).toContainText('(');
+    await expect(row).toContainText(')');
+    await info.attach(menu+'-offering-steps',{body:await page.screenshot(),contentType:'image/png'});
+    await page.keyboard.press('Escape');await page.keyboard.press('Escape');
+  }
+  await info.attach('offering-menu-rules',{body:JSON.stringify(await app.state()),contentType:'application/json'});
 });
