@@ -55,6 +55,8 @@ async function publishCode(app:string,deployed:string,signal:AbortSignal):Promis
     signal.throwIfAborted();const source=path.join(directory,name);if(await lstat(source).catch(()=>undefined))await atomicCopy(source,path.join(deployed,name));
   }
   signal.throwIfAborted();await atomicCopy(path.join(directory,'manifest.json'),path.join(deployed,'manifest.json'));
+  // Only explicit host publication authorizes running characters to adopt CODE.
+  signal.throwIfAborted();await atomicJson(path.join(deployed,'activation.json'),{id:randomUUID(),manifest});
   return manifest;
 }
 /** Host gateway owns authorization; this module owns immutable code activation. */

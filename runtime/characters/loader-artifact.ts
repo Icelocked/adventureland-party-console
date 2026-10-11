@@ -2,7 +2,9 @@ import type { Artifact, GameManifest, CharacterClass } from "../../tools/game/ma
 type ReadSource = (file: string) => Promise<string>;
 
 export async function classArtifact(read: ReadSource, name: string): Promise<Artifact> {
-  const manifest = JSON.parse(await read("manifest.json")) as GameManifest;
+  return manifestClass(JSON.parse(await read("manifest.json")) as GameManifest,name);
+}
+export function manifestClass(manifest: GameManifest, name: string): Artifact {
   const entry = manifest.classes?.[name as CharacterClass];
   if (manifest.schema !== 1 || !entry || !/^generated\/[a-f0-9]{64}\/[a-z]+\.js$/.test(entry.file))
     throw new Error("Invalid compiled class manifest");

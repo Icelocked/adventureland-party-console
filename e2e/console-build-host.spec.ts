@@ -278,3 +278,41 @@ test('managed native preload pins external packages while preserving installed s
     await info.attach('pinned-native-package-resolution', {body: JSON.stringify({observed, errors, candidate: candidate.manifest, nativeDirectory: installed, preload}), contentType: 'application/json'});
   } finally { await stopChild(child); }
 });
+
+test('managed headless generations require explicit activation and retain the selected generation across busy retry',async({},info)=>{
+  const {fork}=await import('node:child_process');
+  const {watchGenerations,classScript}=await import('../runtime/lifecycle/generations');
+  const {classes}=await import('../tools/game/manifest');
+  const directory=path.resolve('.build/e2e','explicit-code-'+randomUUID()),code=path.join(directory,'code');
+  await mkdir(code,{recursive:true});
+  async function generation(label:string){
+    const entries:any={};
+    for(const name of classes){const source=`globalThis.executed=${JSON.stringify(label+':'+name)};`,sha256=hash(source),file=`generated/${sha256}/${name}.js`;await mkdir(path.dirname(path.join(code,file)),{recursive:true});await writeFile(path.join(code,file),source);entries[name]={file,sha256,inputs:[]};}
+    return {schema:1 as const,generation:hash(classes.map(name=>name+':'+entries[name].sha256).join('\n')),classes:entries};
+  }
+  const a=await generation('A'),b=await generation('B'),c=await generation('C');
+  const manifestFile=path.join(code,'manifest.json'),activationFile=path.join(code,'activation.json');
+  await writeFile(manifestFile,JSON.stringify(a));
+  const workerFile=path.join(directory,'worker.cjs');
+  await writeFile(workerFile,`const fs=require('node:fs'),path=require('node:path');let busy=true;process.on('message',m=>{if(m.type!=='reload_code')return;if(busy){busy=false;process.send({type:'observed',status:'busy',generation:m.generation});process.send({type:'code_reload_result',id:m.id,generation:m.generation,status:'busy'});return;}const source=fs.readFileSync(path.join(${JSON.stringify(code)},m.script.replace('adventure_land/','')),'utf8');eval(source);process.send({type:'observed',status:'ready',generation:m.generation,executed:globalThis.executed});process.send({type:'code_reload_result',id:m.id,generation:m.generation,status:'ready'});});`);
+  const worker=fork(workerFile,[],{stdio:['ignore','pipe','pipe','ipc']}),ledger:any[]=[],reports:any[]=[];
+  worker.on('message',m=>{if((m as any)?.type==='observed')ledger.push(m);});
+  const liveWorker={name:'W',className:'warrior',process:worker,script:'adventure_land/'+a.classes.warrior.file};
+  const activator=watchGenerations({directory:code,activationFile,workers:()=>[liveWorker],current:()=>true,activated:(_w,script)=>{liveWorker.script=script;},restart:async()=>{throw Error('Unexpected native restart');},report:(message,detail)=>reports.push({message,detail})});
+  try{
+    await writeFile(manifestFile,JSON.stringify(b));
+    await new Promise(resolve=>setTimeout(resolve,2500));
+    expect(ledger).toHaveLength(0);
+    const {atomicJson}=await import('../tools/build-store');
+    await atomicJson(activationFile,{id:'explicit-B',manifest:b});
+    await expect.poll(()=>ledger.some(e=>e.status==='busy'),{timeout:5000}).toBe(true);
+    await writeFile(manifestFile,JSON.stringify(c));
+    await expect.poll(()=>ledger.some(e=>e.executed==='B:warrior'),{timeout:8000}).toBe(true);
+    expect(liveWorker.script).toBe('adventure_land/'+b.classes.warrior.file);
+    expect(classScript(code,'warrior'),'Worker recovery must use the explicitly selected generation').toBe(liveWorker.script);
+    expect(ledger.some(e=>e.generation===c.classes.warrior.sha256)).toBe(false);
+    await atomicJson(activationFile,{id:'explicit-rollback',manifest:a});
+    await expect.poll(()=>ledger.some(e=>e.executed==='A:warrior'),{timeout:5000}).toBe(true);
+    await info.attach('explicit-headless-activation-and-busy-retry',{body:JSON.stringify({a,b,c,ledger,reports}),contentType:'application/json'});
+  }finally{activator.dispose();await stopChild(worker);}
+});

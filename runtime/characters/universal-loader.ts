@@ -1,4 +1,5 @@
-import { classArtifact, compileArtifact } from "./loader-artifact.ts";
+import { classArtifact, manifestClass, compileArtifact } from "./loader-artifact.ts";
+import type { GameManifest } from "../../tools/game/manifest.ts";
 import { initializeConnection, needsSteamBridge, steamBootstrap } from "../steam/connection.ts";
 const server = initializeConnection();
 const baseUrl = server + "/CODE/adventure_land/";
@@ -77,7 +78,13 @@ async function refresh(force = false): Promise<void> {
   if (loading || !current()) return;
   loading = true;
   try {
-    const entry = await classArtifact(source, root.character.ctype);
+    // Subsequent generations require the host's explicit activation record.
+    // Standalone startup can still load a manifest; periodic polling cannot.
+    let activation: {id: string; manifest: GameManifest} | null = null;
+    try { activation = JSON.parse(await source("activation.json")); }
+    catch (error) { if (lastSource !== null) return; }
+    if (activation && (typeof activation.id !== 'string' || !activation.id)) throw Error('Invalid CODE activation');
+    const entry = activation ? manifestClass(activation.manifest,root.character.ctype) : await classArtifact(source, root.character.ctype);
     if (entry.sha256 === lastSource && !force) return;
     const compiled = await compileArtifact(source, entry, baseUrl);
     if (!current()) return;

@@ -55,7 +55,7 @@ test('loader URL wins over stale globals and preserves the gateway prefix',()=>{
  assert.equal(needsSteamBridge({version:steamBridgeVersion,server:'http://pi:924'},'http://pi:924'),false);
 });
 
-test('jQuery loads the real bundle, retaining its address through bridge setup and hot reload',async()=>{
+test('jQuery loads the real bundle, retaining its address through bridge setup and explicit activation',async()=>{
  const loader=fs.readFileSync('.build/runtime/universal-loader.js','utf8');
  for(const base of ['http://127.0.0.1:924','http://192.168.1.50:3010','http://pi:3010/bridge/abc']) {
   const scriptRequests=[],requests=[],errors=[],starts=[];
@@ -73,6 +73,7 @@ test('jQuery loads the real bundle, retaining its address through bridge setup a
    setInterval:fn=>{interval=fn;return 1;},clearInterval(){},start_runner:(id,source)=>starts.push(source),
    fetch:async url=>{requests.push(url);return {ok:true,text:async()=>url.includes('steam-bridge.js')
     ? `globalThis.bridgeInstalls=(globalThis.bridgeInstalls||0)+1;globalThis.__partySteamBridge={version:${steamBridgeVersion},server:globalThis.__partyServer};`
+    :url.includes('activation.json')?JSON.stringify({id:'explicit-'+revision,manifest:{schema:1,classes:{warrior:{file:`generated/${hash()}/warrior.js`,sha256:hash()}}}})
     :url.includes('manifest.json')?JSON.stringify({schema:1,classes:{warrior:{file:`generated/${hash()}/warrior.js`,sha256:hash()}}}):code()};}});
   const until=async predicate=>{for(let i=0;i<100&&!predicate();i++)await new Promise(r=>setTimeout(r,10));assert.ok(predicate());};
   try {

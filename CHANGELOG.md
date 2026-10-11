@@ -8,6 +8,9 @@ from the commits merged into `main`.
 - Replace the logs sidebar's character dropdown with individual toggle pills,
   with every character selected by default.
 
+- Disable filesystem-triggered CODE reloads in managed consoles. Headless and
+  browser characters adopt code only from an explicit host activation record.
+
 - Resume gameplay before reporting reload completion, without waiting for build
   history cleanup. Park safe-reload movement without cancelling farm, hunt or
   event journeys, keep held heartbeats healthy, and permit CODE replacement

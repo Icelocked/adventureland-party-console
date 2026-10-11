@@ -1,5 +1,14 @@
 # Console artifact staging failure inventory
 
+Managed CODE must ignore script and manifest filesystem edits without an explicit
+host activation record. Browser polling must also ignore an unpublished generation.
+The host writes the activation record only after all selected files are published;
+busy workers retry that selected generation, never a later unrequested manifest.
+Worker reconnect/startup must also select the last explicit activation, so recovery
+cannot adopt an unrequested manifest edit indirectly.
+Explicit immediate/safe activation and rollback must still acknowledge native
+hashes, preserve stopped characters and resume configured activity.
+
 Recorded before implementation. Source edits, generated build outputs and tests
 must never replace running code. A candidate must contain a consistent snapshot
 of dashboard, coordinator, character and support code; secrets and account state
