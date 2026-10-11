@@ -1795,7 +1795,7 @@ export const StandSheet = memo(function StandSheet({
 
           <DialogHeader className="relative shrink-0 pr-12">
 
-            <DialogTitle className="sr-only">Inspect stand</DialogTitle>
+            <DialogTitle className="sr-only">Stand</DialogTitle>
 
             <DialogDescription className="sr-only">Manage sales and buy orders.</DialogDescription>
 

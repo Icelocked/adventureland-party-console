@@ -839,7 +839,7 @@ test('Live WTB counts bank stock after empty slots without withdrawing it', asyn
   });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'M', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'View market', exact: true }).click();
+  await page.getByRole('button', { name: 'Market', exact: true }).click();
   await page.getByRole('button', { name: /^Live WTB/ }).click();
   await expect(page.getByText(/2 offers match exact items currently held by M/)).toBeVisible();
   const bankRow = page.getByRole('button', { name: /E2EBankBuyer/ }).locator('..');
@@ -943,7 +943,7 @@ test('bank context marks pair automatic actions and retain a source-specific upg
   expect(checkpoint.ok()).toBe(true);
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'M', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Inspect bank', exact: true }).click();
+  await page.getByRole('button', { name: 'Bank', exact: true }).click();
   const pane = page.getByRole('dialog', { name: 'Bank', exact: true });
   const item = pane.getByLabel(sword.meta.definition.name || 'sword', { exact: true });
   await item.click({ button: 'right' });
@@ -1069,7 +1069,7 @@ test.describe('configured merchant dialog names', () => {
     const donation=page.getByRole('dialog',{name:'Donate gold for merchant XP'});
     await expect(donation).toContainText('M will withdraw any shortage');
     await donation.getByRole('button',{name:'Cancel',exact:true}).click();
-    await page.getByRole('button',{name:'View market',exact:true}).click();
+    await page.getByRole('button',{name:'Market',exact:true}).click();
     await page.getByRole('button',{name:/^Live WTB/}).click();
     await expect(page.getByText(/match exact items currently held by M or recorded/)).toBeVisible();
     await page.getByRole('button',{name:/^Ponty \(/}).click();
@@ -1079,7 +1079,7 @@ test.describe('configured merchant dialog names', () => {
     await info.attach('configured-merchant-ponty',{body:await page.screenshot(),contentType:'image/png'});
     await purchase.getByRole('button',{name:'Cancel',exact:true}).click();
     await page.keyboard.press('Escape');
-    await page.getByRole('button',{name:'Inspect bank',exact:true}).click();
+    await page.getByRole('button',{name:'Bank',exact:true}).click();
     const bank=page.getByRole('dialog',{name:'Bank',exact:true});
     await bank.getByRole('button',{name:/^Unlock items1/}).click();
     const vault=page.getByRole('dialog',{name:'Unlock bank vault?'});
@@ -1101,7 +1101,7 @@ test.describe('unassigned merchant dialog names', () => {
     expect((await app.state()).merchantCharacter).toBeNull();
     await page.goto('/');
     await expect(page.getByRole('heading', {name:'W',exact:true})).toBeVisible();
-    await page.getByRole('button',{name:'View market',exact:true}).click();
+    await page.getByRole('button',{name:'Market',exact:true}).click();
     await page.getByRole('button',{name:/^Live WTB/}).click();
     await expect(page.getByText(/match exact items currently held by the merchant or recorded/)).toBeVisible();
     await info.attach('unassigned-merchant-market',{body:await page.screenshot(),contentType:'image/png'});
@@ -1121,7 +1121,7 @@ test('market affordability uses core bank gold and active WTB prices open the fu
   });
   await page.goto('/');
   await expect(page.getByRole('heading',{name:'M',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'View market',exact:true}).click();
+  await page.getByRole('button',{name:'Market',exact:true}).click();
   await expect(page.getByRole('button',{name:'New WTB order',exact:true})).toBeVisible();
   const active=page.getByRole('button',{name:/^Active WTB orders/});
   if(await active.getAttribute('aria-expanded') !== 'true') await active.click();

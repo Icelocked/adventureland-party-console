@@ -80,7 +80,7 @@ export function PartyHeader({ model, onLogs }: { model: PartyConsoleModel; onLog
               className="border-amber-700 bg-transparent text-amber-300"
             >
               <ShoppingCart className="mr-2 h-4 w-4" />
-              Inspect stand · <StandCount name={state.merchantCharacter || ""} listings={state.standListings} nativeStand={state.nativeStand} bids={state.standBids} />/16
+              Stand · <StandCount name={state.merchantCharacter || ""} listings={state.standListings} nativeStand={state.nativeStand} bids={state.standBids} />/16
             </Button>
             <Button
               variant="outline"
@@ -88,7 +88,7 @@ export function PartyHeader({ model, onLogs }: { model: PartyConsoleModel; onLog
               className="border-cyan-700 bg-transparent text-cyan-300"
             >
               <ShoppingCart className="mr-2 h-4 w-4" />
-              View market
+              Market
             </Button>
             <Button
               variant="outline"
@@ -96,7 +96,7 @@ export function PartyHeader({ model, onLogs }: { model: PartyConsoleModel; onLog
               className="border-emerald-700 bg-transparent text-emerald-300"
             >
               <Landmark className="mr-2 h-4 w-4" />
-              Inspect bank
+              Bank
             </Button>
             <Button onClick={onLogs} aria-label="Show logs" className="border border-slate-600 bg-slate-950 text-slate-100 hover:bg-slate-800"><ListCode className="mr-2 size-4" />Logs</Button>
             <Button

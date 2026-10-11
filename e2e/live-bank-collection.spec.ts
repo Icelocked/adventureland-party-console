@@ -17,7 +17,7 @@ for(const scenario of ['toggle','already enabled','threshold'] as const){
     await live.post('/merchant/routine-priorities',{priorities:{},enabled:{'auto npc sales':true}});
     await page.goto(live.url);
     await expect(page.getByRole('heading',{name:merchant,exact:true})).toBeVisible();
-    await page.getByRole('button',{name:'Inspect bank',exact:true}).click();
+    await page.getByRole('button',{name:'Bank',exact:true}).click();
     const bank=page.getByRole('dialog',{name:'Bank',exact:true});
     await bank.getByLabel('Helmet',{exact:true}).first().click({button:'right'});
     await page.getByRole('menuitem',{name:'Auto sell to NPC…',exact:true}).click();

@@ -11,7 +11,7 @@ test('BankBoi deleted outside the console can be forgotten despite stale storage
   expect(before.upgradeOfferingStock.offeringp).toBe(2);
   await page.goto('/');
   await expect(page.getByRole('heading',{name:'M',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Inspect bank',exact:true}).click();
+  await page.getByRole('button',{name:'Bank',exact:true}).click();
   const bank=page.getByRole('dialog',{name:'Bank',exact:true});
   await expect(bank).toBeVisible();
   await expect(bank.getByText(name,{exact:true})).toBeVisible();
@@ -30,7 +30,7 @@ test('BankBoi deleted outside the console can be forgotten despite stale storage
   expect(after.upgradeOfferingStock.offeringp).toBe(0);
   await page.reload();
   await expect(page.getByRole('heading',{name:'M',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Inspect bank',exact:true}).click();
+  await page.getByRole('button',{name:'Bank',exact:true}).click();
   await expect(page.getByRole('dialog',{name:'Bank',exact:true}).getByText(name,{exact:true})).toHaveCount(0);
   await info.attach('stale-bankboi-removal-after-restart',{body:await page.screenshot(),contentType:'image/png'});
   await info.attach('stale-bankboi-deletion-ledger',{body:JSON.stringify({name,before,response:{status:response.status(),body},after}),contentType:'application/json'});

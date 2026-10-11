@@ -5,6 +5,8 @@
 Changes queued for the next release. The release workflow determines its version
 from the commits merged into `main`.
 
+- Shorten the Party Console controls to Stand, Market and Bank.
+
 - Keep reload interruption and failure diagnostics in the host journal without
   displaying messages through the Party Console reload control.
 
