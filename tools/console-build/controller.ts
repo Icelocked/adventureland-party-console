@@ -22,7 +22,7 @@ export class ConsoleBuildController {
     const builder = await readJson<{building: boolean; error?: string}>(path.join(this.store.directory, 'builder.json'));
     const builds = await this.store.history();
     const latest = builds.find(item => item.id === refs.latest), active = builds.find(item => item.id === refs.active);
-    return {...refs, builds, operation: await this.store.journal(), building: builder?.building || false,
+    return {...refs, builds, pendingBuildCount: await this.store.completedSince(refs.active, builds), operation: await this.store.journal(), building: builder?.building || false,
       buildError: builder?.error, available: latest && latest.id !== refs.active && (!active || latest.createdAt >= active.createdAt) ? latest.id : undefined};
   }
   /** Accepted operation runs asynchronously; its exact target is durably pinned first. */
@@ -87,6 +87,8 @@ export class ConsoleBuildController {
       }
       const target = await this.store.verify(operation.target), previous = await this.prior(operation);
       await this.timed(signal => this.driver.activate(target, previous, signal));
+      // Gameplay resumes before success is published; history cleanup may be slow.
+      await this.driver.releaseSafeWait?.(operation.id);
       await this.store.locked(async () => {
         const refs = await this.store.references();
         await this.store.setReferences({...refs, active: operation.target, previous: operation.previous});

@@ -1,5 +1,14 @@
 # Safe console reload failure inventory
 
+Completion must release the acquisition hold before reporting success, even if
+history cleanup is slow or fails. Pausing must retain a movement journey rather
+than reject its promise and strand its farm, hunt or event owner. Releasing or
+expiring the hold must resume that journey and permit defense against roaming
+attackers. Reload must preserve configured activity and deliberately stopped
+characters. Validate real attacks and travel before/after both reload modes.
+The badge counts completed candidates since active deployment, survives history
+pruning, resets after activation, and never shows below one on a visible icon.
+
 Interrupted safe waits and failed deployment journals must not render messages
 in the title's reload control, including after reloading the browser. Keep host
 diagnostics durable without copying them into the control or its confirmation.

@@ -179,6 +179,11 @@ export class ConsoleBuildStore {
         await this.verify(manifest.id);
       }
       const refs = await this.references();
+      const countsFile = path.join(this.directory, 'completion-counts.json');
+      const counts = await readJson<{total: number; numbers: Record<string, number>}>(countsFile) || {total: 0, numbers: {}};
+      // Seed legacy history once; retain ordinals when release directories are pruned.
+      for (const item of await this.history()) if (counts.numbers[item.id] === undefined) counts.numbers[item.id] = ++counts.total;
+      await atomicJson(countsFile, counts);
       const current = refs.latest ? await this.metadata(refs.latest) : undefined;
       if (!current || manifest.createdAt >= current.createdAt) await this.setReferences({...refs, latest: manifest.id});
       return {manifest: await this.metadata(manifest.id), directory: path.join(this.release(manifest.id), 'app')};
@@ -191,6 +196,12 @@ export class ConsoleBuildStore {
   }
   journal() { return readJson<DeploymentJournal>(path.join(this.directory, 'deployment.json')); }
   setJournal(value: DeploymentJournal) { return atomicJson(path.join(this.directory, 'deployment.json'), value); }
+  async completedSince(active: string | undefined, history: CandidateManifest[]): Promise<number> {
+    const counts = await readJson<{total: number; numbers: Record<string, number>}>(path.join(this.directory, 'completion-counts.json'));
+    if (counts && active && counts.numbers[active] !== undefined) return Math.max(0, counts.total - counts.numbers[active]);
+    const baseline = history.find(item => item.id === active);
+    return history.filter(item => item.id !== active && (!baseline || item.createdAt > baseline.createdAt)).length;
+  }
   async history(): Promise<CandidateManifest[]> {
     const names = await readdir(path.join(this.directory, 'releases')).catch((error: NodeJS.ErrnoException) => {
       if (error.code === 'ENOENT') return []; throw error;

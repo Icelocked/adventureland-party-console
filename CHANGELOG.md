@@ -5,6 +5,13 @@
 Changes queued for the next release. The release workflow determines its version
 from the commits merged into `main`.
 
+- Resume gameplay before reporting reload completion, without waiting for build
+  history cleanup. Park safe-reload movement without cancelling farm, hunt or
+  event journeys, keep held heartbeats healthy, and permit CODE replacement
+  during travel and combat while retaining inventory safeguards.
+  Add a lower-left refresh badge for completed builds since
+  deployment, showing at least one whenever the icon is visible.
+
 - Shorten the Party Console controls to Stand, Market and Bank.
 
 - Keep reload interruption and failure diagnostics in the host journal without

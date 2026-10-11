@@ -34,6 +34,7 @@ export interface ConsoleBuildStatus extends References {
   building?: boolean;
   buildError?: string;
   available?: string;
+  pendingBuildCount?: number;
   operation?: DeploymentJournal;
   builds: CandidateManifest[];
 }

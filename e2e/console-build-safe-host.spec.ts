@@ -26,6 +26,9 @@ test('safe reload requires fresh combat-free acknowledgements and preserves inte
     await store.complete(directory,manifest);return id;
   }
   const a=await stage('A'),b=await stage('B');await store.setReferences({active:a,latest:b});
+  const cleanup=store.cleanup.bind(store);
+  let finishCleanup:(()=>void)|undefined;
+  store.cleanup=async()=>{await new Promise<void>(resolve=>{finishCleanup=resolve;});await cleanup();};
   try{
     const request=await controller.deploy(b,'safe');
     await expect.poll(()=>maintenance.current()?.id).toBe(request.id);
@@ -48,6 +51,12 @@ test('safe reload requires fresh combat-free acknowledgements and preserves inte
     finish?.();await expect.poll(async()=>(await store.journal())?.phase).toBe('complete');
     await expect.poll(()=>readJson(path.join(root,'updates/pause.json'))).toBeUndefined();
     expect((await store.references()).active).toBe(b);
+    await expect.poll(()=>!!finishCleanup).toBe(true);
+    expect((await store.journal())?.phase).toBe('complete');
+    // Cleanup is still blocked, but the real host lease has already released.
+    expect(await readJson(path.join(root,'updates/pause.json'))).toBeUndefined();
+    finishCleanup?.();store.cleanup=cleanup;
+    await new Promise(resolve=>setTimeout(resolve,300));
     combat=true;
     const waiting=await controller.deploy(a,'safe');await expect.poll(()=>maintenance.current()?.id).toBe(waiting.id);
     controller.stopWaiting();await expect.poll(async()=>(await store.journal())?.phase).toBe('failed');
@@ -57,5 +66,5 @@ test('safe reload requires fresh combat-free acknowledgements and preserves inte
     await controller.recover();
     expect((await store.journal())?.phase).toBe('failed');expect((await store.references()).active).toBe(b);
     await info.attach('safe-host-journals-and-activation',{body:JSON.stringify({ledger,status:await controller.status()}),contentType:'application/json'});
-  }finally{controller.stopWaiting();finish?.();}
+  }finally{controller.stopWaiting();finish?.();finishCleanup?.();}
 });

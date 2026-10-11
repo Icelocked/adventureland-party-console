@@ -11,6 +11,12 @@ Validate `console-build.spec.ts`, `console-build-safe-host.spec.ts` and
 Activate dashboard, coordinator and character assets together for this protocol.
 Fast combat snapshots carry the same ordered maintenance lease as full status;
 successor promotion and the final attack gate reject new targets during the hold.
+Safe holds park managed movement without cancelling its journey; release resumes
+the existing farm, hunt or event continuation. CODE reload eligibility excludes
+inventory mutations but permits a parked journey and ordinary combat. Host
+activation releases its maintenance lease before publishing completion and before
+history cleanup. Host controller changes require the supported explicit host
+restart to replace the implementation loaded at startup; building does not do so.
 
 Immutable console activation sets `AL_CONSOLE_ARTIFACT` to the selected release's
 `app` directory. The maintained launcher resolves repository bundles and support

@@ -94,6 +94,7 @@ test('reload menu confirms immediate loading and safely deploys the exact select
     const b = await stage('B', 2);
     const refresh = page.getByRole('button', {name: 'Deploy new console build'});
     await expect(refresh).toBeVisible();
+    await expect(refresh.getByLabel('1 completed builds since deployment')).toHaveText('1');
     await refresh.click();
     await page.getByRole('button', {name:'Load now',exact:true}).click();
     const dialog = page.getByRole('dialog', {name: 'Load console build now?'});
@@ -106,6 +107,7 @@ test('reload menu confirms immediate loading and safely deploys the exact select
     await expect.poll(()=>page.locator('[data-slot="popover-content"]').evaluate(element=>getComputedStyle(element).opacity)).toBe('1');
     await info.attach('reload-options-context-window',{body:await page.screenshot(),contentType:'image/png'});
     const c = await stage('C', 3);
+    await expect(refresh.getByLabel('2 completed builds since deployment')).toHaveText('2');
     await page.getByRole('button', {name:'Load when safe',exact:true}).click();
     await expect(refresh).toBeDisabled();
     await expect(page.getByText('Waiting for combat to finish; new targets paused…')).toHaveCount(0);
@@ -131,6 +133,7 @@ test('reload menu confirms immediate loading and safely deploys the exact select
     await expect.poll(async () => (await store.references()).active).toBe(b.id);
     await expect.poll(() => documents).toBeGreaterThan(beforeReload);
     await expect(refresh).toBeVisible();
+    await expect(refresh.getByLabel('1 completed builds since deployment')).toHaveText('1');
     rejectActivation = true;
     await refresh.click();
     await page.getByRole('button', {name:'Load now',exact:true}).click();
@@ -150,6 +153,12 @@ test('reload menu confirms immediate loading and safely deploys the exact select
     await expect(refresh).toBeDisabled();
     expect((await store.references()).active).toBe(b.id);
     expect((await store.journal())?.phase).toBe('rolling-back');
+    // Complete more candidates than retained history; the durable count must
+    // include pruned releases and not merely the twenty visible manifests.
+    for(let n=4;n<=25;n++)await stage('history-'+n,n);
+    await store.cleanup();
+    await expect.poll(async()=>(await controller.status()).pendingBuildCount).toBe(23);
+    await expect(refresh.getByLabel('23 completed builds since deployment')).toHaveText('23');
     await info.attach('deployment-rollback-readiness-failure', {body: await page.screenshot(), contentType: 'image/png'});
     await info.attach('console-build-deployment-ledger', {body: JSON.stringify({ledger, documents, status: await controller.status()}), contentType: 'application/json'});
   } finally {

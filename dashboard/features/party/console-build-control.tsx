@@ -81,6 +81,7 @@ export function ConsoleBuildControl() {
   const active = status.builds.find(build => build.id === status.active);
   const operation = status.operation;
   const busy = submitting || operation?.phase === "waiting-safe" || operation?.phase === "activating" || operation?.phase === "rolling-back";
+  const buildCount = Math.max(1, status.pendingBuildCount ?? status.builds.filter(build => build.id !== status.active && (!active || build.createdAt > active.createdAt)).length);
   return <>
     {(candidate && candidate.id !== status.active || busy) && <Popover open={menu} onOpenChange={open => {
       setMenu(open);
@@ -88,8 +89,8 @@ export function ConsoleBuildControl() {
     }}><PopoverTrigger render={<Button
       size="icon" variant="outline" disabled={busy}
       aria-label="Deploy new console build" title="New console build ready to deploy"
-      className="ml-3 border-emerald-500 bg-emerald-950 text-emerald-100 hover:bg-emerald-900 hover:text-white"
-      />}><RefreshCw className={`size-4 ${busy ? 'animate-spin' : ''}`} /></PopoverTrigger>
+      className="relative ml-3 border-emerald-500 bg-emerald-950 text-emerald-100 hover:bg-emerald-900 hover:text-white"
+      />}><RefreshCw className={`size-4 ${busy ? 'animate-spin' : ''}`} /><span aria-label={`${buildCount} completed builds since deployment`} className="pointer-events-none absolute bottom-0.5 left-0.5 z-10 min-w-3 rounded bg-black/85 px-0.5 text-center font-mono text-[10px] leading-3 text-emerald-300">{buildCount}</span></PopoverTrigger>
       <PopoverContent align="start" className="w-48 border border-gray-300 bg-white p-1 text-black shadow-xl data-open:animate-none data-closed:animate-none" aria-label="Load console build">
         <Button className="justify-start rounded-sm border-0 bg-white text-black hover:bg-gray-100 hover:text-black" disabled={busy} onClick={() => { setSelection(menuSelection); setMenu(false); }}>Load now</Button>
         <Button className="justify-start rounded-sm border-0 bg-white text-black hover:bg-gray-100 hover:text-black" disabled={busy} onClick={() => void deploy('safe', menuSelection)}>Load when safe</Button>

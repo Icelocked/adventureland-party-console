@@ -18,7 +18,7 @@
   var movement = root.installPartyMovement(root, {
     now: Date.now,
     context: function() { return { runtime: convoyRuntimeId || String(runtimeGeneration), revision: Number(navigationIntent && navigationIntent.revision) || 0,
-      current: runtimeCurrent() && (!parent.socket || parent.socket.connected !== false), paused: !!root.__partyMovementPaused || !!(dungeonClient && !dungeonClient.canMove()) }; },
+      current: runtimeCurrent() && (!parent.socket || parent.socket.connected !== false), paused: consoleMovementPaused() || !!root.__partyMovementPaused || !!(dungeonClient && !dungeonClient.canMove()) }; },
     request: request,
     townReady: function() { return !departureCombatPending() && eligibleDepartureChests().length === 0; },
     transitionReady: function() { return eligibleDepartureChests().length === 0; },
@@ -2159,11 +2159,11 @@
     } catch (_error) { return null; }
   }
 
-  function consoleMaintenanceBusy() {
+  function consoleMaintenanceBusy(includeCombat) {
     return !!(root.__partyUpgradePreviewInFlight || banking || stocking || upgrading || gatheringActive || anniversaryBusy ||
       root.__merchantActiveJob || merchantIdleActive || root.__merchantInventoryTidy ||
       luckyUpgradeService && luckyUpgradeService.pending() ||
-      character.q && Object.keys(character.q).length || currentTravelAttackers().length);
+      character.q && Object.keys(character.q).length || includeCombat !== false && currentTravelAttackers().length);
   }
   function consoleDraining() {
     var pause = root.__partyConsoleMaintenance;
@@ -2182,6 +2182,11 @@
     return consoleDraining() && Object.values(parent.entities || {}).some(function(target) {
       return target && target.type === 'monster' && target.visible && !target.dead && target.hp > 0 && consoleDrainAllows(target);
     });
+  }
+  function consoleMovementPaused() {
+    // Finish already-owned inventory/merchant work before parking its route.
+    // Freezing that route while also waiting for the job would deadlock readiness.
+    return consoleDraining() && !consoleDrainCombatActive() && !consoleMaintenanceBusy();
   }
   function receiveConsoleMaintenance(pause, serverNow) {
     if (serverNow && serverNow < (root.__partyConsoleMaintenanceAt || 0)) return;
@@ -2296,7 +2301,7 @@
     var pause = root.__partyConsoleMaintenance;
     var combat = consoleDrainCombatActive();
     return pause ? { id: pause.id, mode: pause.mode, combat: combat, ready: !combat && !consoleMaintenanceBusy() && !character.moving &&
-      !(typeof smart !== 'undefined' && smart.moving) } : null;
+      (consoleMovementPaused() || !(typeof smart !== 'undefined' && smart.moving)) } : null;
   }
   var dungeonClient;
   // Dungeon ownership replaces farm/event targeting, not the class combat runner.
@@ -10505,7 +10510,13 @@
       if (!runtimeCurrent()) return;
       receiveConsoleMaintenance(state.consoleMaintenance || null, state.serverNow);
       if (root.__partyConsoleMaintenance && (!consoleDraining() || !consoleDrainCombatActive())) {
-        if (!consoleMaintenanceBusy() && typeof stop === 'function') await stop('smart');
+        // A held character still has a healthy heartbeat. Otherwise Steam's
+        // stale-runner recovery replaces its CODE after twenty seconds of waiting.
+        root.__partyStatusSuccessAt = Date.now();
+        if (dashboardSampler) dashboardSampler.renew(state.dashboardLease);
+        // Park native movement without rejecting the managed journey. Its farm,
+        // hunt or event continuation resumes when the maintenance lease clears.
+        if (!consoleMaintenanceBusy() && character.moving) await move(character.x, character.y);
         return;
       }
       mapTelemetryEnabled = !!state.mapTelemetry;
@@ -16497,6 +16508,9 @@
       if (root.on_party_request === acceptConfiguredPartyRequest) root.on_party_request = previousPartyRequestHandler;
     },
     isBanking: function () { return banking || bankQueued; },
+    // CODE replacement retires and replays travel ownership. A maintenance
+    // movement hold must not prevent the very replacement it is waiting for.
+    canReload: function () { return !consoleMaintenanceBusy(false); },
     merchantEventCombatActive: function () {
       return character.ctype === "merchant" && !!joinedEvent && eventSelected(joinedEvent) &&
         !eventReturnPending && !root.__merchantActiveJob;
