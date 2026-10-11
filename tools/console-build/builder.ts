@@ -104,7 +104,9 @@ async function dependencyCache(root:string,app:string,store:ConsoleBuildStore,si
   const names={root:'',dashboard:'dashboard',caracal:'.caracal'};
   const locks:Record<string,string>={};
   for(const [name,relative] of Object.entries(names))locks[name]=digest(await readFile(path.join(app,relative,'package-lock.json')));
-  const id=digest(JSON.stringify({locks,platform:process.platform,arch:process.arch,abi:process.versions.modules}));
+  // The store refuses links, and npm links node_modules/.bin on Linux and macOS; the build calls tools
+  // by path, so caches install without bin links. The mode is part of the ID so older linked caches are not reused.
+  const id=digest(JSON.stringify({locks,platform:process.platform,arch:process.arch,abi:process.versions.modules,binLinks:false}));
   await store.pinDependencies([id]);
   await dependencyLocked(store,id,async()=>{
     const cache=path.join(store.directory,'dependencies',id);
@@ -124,7 +126,7 @@ async function dependencyCache(root:string,app:string,store:ConsoleBuildStore,si
       const actual=hidden?JSON.parse(hidden):undefined;
       const compatible=actual&&Object.entries(expected.packages||{}).every(([key,value])=>!key||JSON.stringify(value)===JSON.stringify(actual.packages?.[key]));
       if(compatible)await cp(existing,path.join(destination,'node_modules'),{recursive:true,dereference:true});
-      else await command(destination,[await npmCli(),'ci','--no-audit','--no-fund'],{},signal);
+      else await command(destination,[await npmCli(),'ci','--no-audit','--no-fund','--no-bin-links'],{},signal);
     }
     const files=await inventory(stage,true);
     await writeFile(path.join(stage,'complete.json'),JSON.stringify({id,files,manifestHash:digest(JSON.stringify({id,files}))}));
