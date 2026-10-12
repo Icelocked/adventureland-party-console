@@ -1124,10 +1124,16 @@ test('Cave assembly regroups displaced completed participants before departure',
   })()`);
   await info.attach('declared-native-cave-safe-staging',{body:JSON.stringify(staging),contentType:'application/json'});
   expect(staging.found,'The actual connected native floor must provide both required safe displacements').toBe(true);
-  await live.admin(`output=['E2EWarrior','E2EPriest'].map(name=>{const p=get_player(name);
+  const stagingDelivery=await live.admin(`output=['E2EWarrior','E2EPriest'].map(name=>{const p=get_player(name);
     if(p.map!==${JSON.stringify(staging.map)})throw Error('Native staging floor changed');
-    p.x=${staging.x};p.y=${staging.y};p.going_x=p.x;p.going_y=p.y;p.moving=false;resend(p,'u+cid+reopen');
-    return {name,map:p.map,x:p.x,y:p.y};})`);
+    const context=()=>({map:p.map,in:p.in,generated:G.maps[p.map].generated,info:instances[p.in].info,duel:p.duel,team:p.team,action:p.c});
+    const before=JSON.parse(JSON.stringify(context()));
+    const instance=p.in;transport_player_to(p,instance,[${staging.x},${staging.y}]);
+    if(p.in!==instance||p.map!==${JSON.stringify(staging.map)})throw Error('Initial native staging changed instance or floor');
+    const after=JSON.parse(JSON.stringify(context()));
+    if(JSON.stringify(before)!==JSON.stringify(after))throw Error('Initial native staging changed cave action context');
+    return {name,map:p.map,x:p.x,y:p.y,before,after};})`);
+  await info.attach('native-cave-staging-delivery-context',{body:JSON.stringify(stagingDelivery),contentType:'application/json'});
   await expect.poll(async()=>Promise.all(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].run(
     `character.map===${JSON.stringify(staging.map)}&&Math.hypot(character.real_x-(${staging.x}),character.real_y-(${staging.y}))<5`))),
     {timeout:20_000,message:'Both actual native clients must observe the declared initial staging seed'}).toEqual([true,true]);

@@ -11,6 +11,11 @@ test.describe('native Hunt travel combat and death ownership',()=>{
     let outboundConvoyId:string|undefined,returningConvoyId:string|undefined;
     try {
     const setup=await prepareHunt(live);
+    const townCooldown=await Promise.all([W,P].map(name=>live.clients[name].run("(()=>{parent.skill_timeout_singular('use_town',600000);return {name:character.name,until:+parent.next_skill.use_town,now:Date.now()};})()")));
+    expect(townCooldown.every(value=>Number.isFinite(value.until)&&value.until-value.now>=590000)).toBe(true);
+    const townReadiness=await Promise.all([W,P].map(name=>live.clients[name].run("can_use('use_town')&&!is_on_cooldown('use_town')")));
+    expect(townReadiness.every(ready=>ready===false),'Passing encounters require genuine walking without a Town shortcut').toBe(true);
+    await info.attach('declared-passing-native-town-cooldown',{body:JSON.stringify({townCooldown,townReadiness}),contentType:'application/json'});
     await live.post('/rare-hunting',{rules:{goo:{enabled:true,keepMoving:true,priority:100}},useFieldGenerators:false});
     await beginHunt(live,setup);
     await expect.poll(async()=>{

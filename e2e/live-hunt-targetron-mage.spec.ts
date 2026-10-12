@@ -76,13 +76,21 @@ test('mage reengages a blocked Targetron from the reported UHills screenshot',as
   })()`);
   const samples:any[]=[];
   await live.clients[W].run(`(()=>{
-    const observation={samples:[],timer:null};globalThis.__e2eTargetronMageSampler=observation;
+    const observation={samples:[],timer:null,previous:null};globalThis.__e2eTargetronMageSampler=observation;
     const sample=()=>{const t=parent.entities[${JSON.stringify(seed.id)}],p=globalThis.partyCombatPosition;
-      observation.samples.push({at:Date.now(),map:character.map,rip:!!character.rip,x:character.real_x,y:character.real_y,target:character.target,
+      const current={at:Date.now(),map:character.map,in:character.in,rip:!!character.rip,x:character.real_x,y:character.real_y,target:character.target,
         moving:!!character.moving,going:{x:character.going_x,y:character.going_y},
         segmentClear:character.moving?can_move_to(character.going_x,character.going_y):null,
         distance:t?distance(character,t):null,positioning:p?{at:p.at,mode:p.mode,movementOwner:p.movementOwner,target:p.target,
-          reason:p.reason,constraint:p.constraint,healingDistance:p.healingDistance,healingRange:p.healingRange}:null});
+          reason:p.reason,constraint:p.constraint,healingDistance:p.healingDistance,healingRange:p.healingRange}:null};
+      const previous=observation.previous,displacement=previous?Math.hypot(current.x-previous.x,current.y-previous.y):0;
+      const ownedDisplacement=displacement>1&&previous.map===current.map&&previous.in===current.in&&
+        previous.positioning?.movementOwner==='combat'&&current.positioning?.movementOwner==='combat'&&
+        String(previous.positioning?.target)===${JSON.stringify(seed.id)}&&String(current.positioning?.target)===${JSON.stringify(seed.id)};
+      observation.samples.push({...current,previous:previous?{at:previous.at,map:previous.map,in:previous.in,x:previous.x,y:previous.y,positioning:previous.positioning}:null,
+        displacement,ownedDisplacement,observedSegmentClear:ownedDisplacement?can_move({map:current.map,x:previous.x,y:previous.y,
+          going_x:current.x,going_y:current.y,base:character.base}):null});
+      observation.previous=current;
       if(observation.samples.length>600)observation.samples.shift();};
     sample();observation.timer=setInterval(sample,100);return true;
   })()`);
@@ -106,7 +114,8 @@ test('mage reengages a blocked Targetron from the reported UHills screenshot',as
     },{timeout:60000,intervals:[100,250],message:'The mage must recover around native UHills terrain and damage Targetron'}).toBe(true);
     expect(samples.some(sample=>sample.distance!==null&&sample.distance<=geometry.range),
       'The mage must reach native attack range').toBe(true);
-    expect(samples.some(sample=>sample.moving&&sample.segmentClear&&sample.positioning?.movementOwner==='combat'&&sample.positioning?.target===seed.id),
+    expect(samples.some(sample=>sample.ownedDisplacement&&sample.observedSegmentClear||
+      sample.moving&&sample.segmentClear&&sample.positioning?.movementOwner==='combat'&&sample.positioning?.target===seed.id),
       'The selected native encounter must own collision-clear combat movement').toBe(true);
     expect(samples.some(sample=>Math.hypot(sample.x-geometry.origin.x,sample.y-geometry.origin.y)>10),
       'The mage must actually leave its initially blocked position').toBe(true);
