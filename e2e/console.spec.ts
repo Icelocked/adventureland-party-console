@@ -1249,6 +1249,14 @@ test('expanded character and Cave maps capture real canvas pixels with map and c
     }
     expect(imageRequests).toBeGreaterThan(0);
     await info.attach('map-capture-ledger',{body:JSON.stringify({map,imageRequests,captures}),contentType:'application/json'});
+  } finally {
+    await page.unrouteAll({behavior:'wait'});
+    images.closeAllConnections();
+    await new Promise<void>((resolve,reject)=>images.close(error=>error?reject(error):resolve()));
+  }
+});
+
+test('fixed-origin map image proxy returns native Dreams tiles and rejects external origins',async({page},info)=>{
     // Actual dashboard server boundary: fetch the verified native Dreams
     // tileset through the maintained fixed-origin proxy, without intercepting it.
     const nativeUrl='https://adventure.land/images/tiles/map/dreams-v3.png?v=3';
@@ -1264,10 +1272,6 @@ test('expanded character and Cave maps capture real canvas pixels with map and c
     expect(rejected.status()).toBe(400);
     await info.attach('native-dreams-proxy-image',{body:nativeBytes,contentType:'image/png'});
     await info.attach('map-image-proxy-ledger',{body:JSON.stringify({nativeUrl,status:proxied.status(),headers:proxied.headers(),bytes:nativeBytes.length,rejectedExternalStatus:rejected.status()}),contentType:'application/json'});
-  } finally {
-    images.closeAllConnections();
-    await new Promise<void>((resolve,reject)=>images.close(error=>error?reject(error):resolve()));
-  }
 });
 
 test('Cave map survives stale reports without allowing stale waypoint actions',async({page},info)=>{
