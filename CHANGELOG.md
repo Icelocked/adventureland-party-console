@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Keep authoritative entity reconciliation active for retained combat targets even when no role target is currently attackable.
+- Make native Cave scenarios wait for boss completion before starting the next encounter, and preserve test evidence during character reconnects.
+
 - Preserve newer fast-channel convoy ownership against delayed full status responses, preventing interrupted event return journeys.
 - Preserve selected upgrade offerings through production authorization and reserve merchant ownership during independent realm transitions.
 - Refactor coordinator predicates without changing behavior to satisfy strict CI lint checks.

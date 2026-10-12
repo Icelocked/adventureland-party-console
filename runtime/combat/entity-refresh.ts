@@ -2,6 +2,8 @@ export interface EntityRefreshSample {
   enabled: boolean;
   context: string;
   target: string | null;
+  // Coordinator selection is a reconciliation hint, never attack authorization.
+  retainedTarget?: string | null;
   accepted: number;
 }
 export interface EntityRefreshDiagnostic {
@@ -22,7 +24,8 @@ export function createEntityRefresh(ports: Ports) {
   let requestedAt = -Infinity, requests = 0;
   function tick(sample: EntityRefreshSample): void {
     const now = ports.now();
-    if (!sample.enabled || !sample.target) { stalledAt = null; return; }
+    const target=sample.target || sample.retainedTarget;
+    if (!sample.enabled || !target) { stalledAt = null; return; }
     if (context !== sample.context || accepted !== sample.accepted || stalledAt === null) {
       context = sample.context; accepted = sample.accepted; stalledAt = now;
     }
@@ -30,7 +33,7 @@ export function createEntityRefresh(ports: Ports) {
     if (now - stalledAt < 5000 || now - requestedAt < 10000) return;
     requestedAt = now;
     if (!ports.request()) return;
-    ports.report({ at: now, target: sample.target, requests: ++requests,
+    ports.report({ at: now, target, requests: ++requests,
       reason: 'no accepted basic attack for five seconds; requested full entity snapshot' });
   }
   return { tick };

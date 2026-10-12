@@ -632,6 +632,22 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     }
     console.log('[Cave verified] Both characters arrived at Lockbreaker');
     await info.attach('native-cave-lockbreaker-arrival',{body:JSON.stringify({dungeon:await dungeon(),state:await live.state()}),contentType:'application/json'});
+    // Arrival is not native encounter completion. A new artificial vote must
+    // not replace encounter ownership while its real boss is still fighting.
+    let completedBoss:any;
+    try{
+      await expect.poll(async()=>{
+        completedBoss=await live.admin(`output=(()=>{
+          const p=get_player('E2EWarrior'),run=generated_entry(p).record;
+          const room=run.cave.rooms.find(r=>r.id===${JSON.stringify(second.room)});
+          if(!room)throw Error('Native Lockbreaker room missing');
+          const enemies=room.actors.filter(a=>['enemy','predator'].includes(a.zone_actor?.side));
+          return {room:room.id,done:room.done,enemies:enemies.map(a=>({id:String(a.id),dead:!!a.dead,hp:a.hp}))};
+        })()`);
+        return completedBoss.done&&completedBoss.enemies.every((actor:any)=>actor.dead||actor.hp<=0);
+      },{timeout:120_000,message:'The native Lockbreaker must actually finish before creating the next encounter'}).toBe(true);
+    }finally{await info.attach('native-cave-lockbreaker-completion',{body:JSON.stringify(completedBoss??null),contentType:'application/json'});}
+
   }
   // Native encounter factory, bounded initial difficulty. Neither attacks,
   // deaths, receipts nor room completion are fabricated by this fixture.

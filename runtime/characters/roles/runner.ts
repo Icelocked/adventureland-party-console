@@ -228,7 +228,8 @@ export function installRoleRunner(
       if (selectedTarget && !currentTarget()) { invalidated = true; void selectTarget(); }
       const target = currentTarget();
       entityRefresh.tick({ enabled: combatAllowed(), context: JSON.stringify([character.map, character.in]),
-        target: selectedTarget, accepted: root.partyCombatState.attackTiming?.accepted || 0 });
+        target: selectedTarget, retainedTarget: sharedRoutine.sharedTargetId?.() || null,
+        accepted: root.partyCombatState.attackTiming?.accepted || 0 });
       if (target) missingSince = 0;
       else if (!missingSince) missingSince = Date.now();
       attacks.wake();
