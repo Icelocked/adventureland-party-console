@@ -7,9 +7,17 @@ test('merchant gathering waits at capacity without resetting cooldowns',async({l
   for(const mode of ['fishing','mining'])await live.post('/merchant/gather',{mode,enabled:false});
   const standDeadline=Date.now()+90_000;
   async function standReady(){await expect.poll(async()=>{
-    const state=await live.state();
-    return state.characters[name]?.standOpen && state.pendingCommands?.[name]?.type!=='merchant-idle';
+    const [state,response]=await Promise.all([live.state(),fetch(live.url+'/party-api/state?section=fast',{signal:AbortSignal.timeout(15_000)})]);
+    expect(response.ok).toBe(true);
+    const fast=await response.json();expect(fast.pendingCommands).toEqual(expect.any(Object));
+    return state.characters[name]?.standOpen && fast.pendingCommands[name]?.type!=='merchant-idle';
   },{timeout:Math.max(1,standDeadline-Date.now()),message:'Native stand return and reconciliation must finish before the capacity-only fixture'}).toBe(true);}
+  const standTool=await live.admin(`output=(()=>{const p=get_player('${name}');
+    if(!G.items.stand0.stand)throw new Error('Native stand0 definition missing');
+    p.items[12]={name:'stand0'};cache_player_items(p);resend(p,'reopen+cid');return p.items[12];})()`);
+  expect(standTool).toEqual({name:'stand0'});
+  await info.attach('declared-native-stand-tool',{body:JSON.stringify(standTool),contentType:'application/json'});
+  await expect.poll(async()=>(await live.state()).characters[name]?.items?.some((entry:any)=>entry?.item?.name==='stand0')).toBe(true);
   await live.post('/merchant/force-stand',{enabled:true});
   await standReady();
   const seed=await live.admin(`output=(()=>{const p=get_player('${name}');
