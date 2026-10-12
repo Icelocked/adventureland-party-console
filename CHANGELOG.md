@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Preserve native Steam companion launch flags and CODE slots across realm navigation so saved merchant work can resume.
+- Record combat-recovery latency inside native clients and wait for discovered monster catalogs before configuring native hunt scenarios.
+
 - Keep authoritative entity reconciliation active for retained combat targets even when no role target is currently attackable.
 - Make native Cave scenarios wait for boss completion before starting the next encounter, and preserve test evidence during character reconnects.
 

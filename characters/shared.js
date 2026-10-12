@@ -8092,8 +8092,13 @@
 
   function realmPagePath(realm) {
     var match = String(realm || "").match(/^SR_(US|EU|ASIA)([IVX]+|PVP)$/);
-    return match ? "/character/" + encodeURIComponent(character.name) +
-      "/in/" + match[1] + "/" + match[2] + "/" : null;
+    if (!match) return null;
+    // Native companions require their bot flags and managed CODE slot after
+    // navigation; a bare character URL changes the window's startup behavior.
+    var launch = String(parent.window.location.search || "").replace(/^\?/, "").split("&")
+      .filter(function (entry) { return /^(no_html|is_bot|code)=/.test(entry); }).join("&");
+    return "/character/" + encodeURIComponent(character.name) +
+      "/in/" + match[1] + "/" + match[2] + "/" + (launch ? "?" + launch : "");
   }
 
   async function awaitRealmRestart(realm) {
