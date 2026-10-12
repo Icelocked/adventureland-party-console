@@ -104,14 +104,25 @@ export class ConsoleBuildStore {
     let detached = false;
     try {
       await atomicJson(path.join(claim, 'owner.json'), {pid: process.pid, token});
-      const owner = await readJson<{token: string}>(path.join(lock, 'owner.json')).catch(() => undefined);
-      if (owner?.token !== token) return;
       const released = lock + '.released-' + token;
-      await rename(lock, released);
+      if (!await this.detachOwnedLock(lock, released, token)) return;
       detached = true;
       await this.removeReleased(released);
     } finally {
       if (!detached) await removeOwnedClaim(claim, token);
+    }
+  }
+  private async detachOwnedLock(lock: string, released: string, token: string): Promise<boolean> {
+    // The caller holds the recovery auditor claim through every bounded retry.
+    for (let attempt = 0; ; attempt++) {
+      const owner = await readJson<{token: string}>(path.join(lock, 'owner.json')).catch(() => undefined);
+      if (owner?.token !== token) return false;
+      try { await rename(lock, released); return true; }
+      catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (!['EBUSY', 'EPERM'].includes(code || '') || attempt >= 5) throw error;
+        await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
+      }
     }
   }
   private async removeReleased(released: string): Promise<void> {

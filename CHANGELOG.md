@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Retry transient Windows sharing failures when releasing a console build lock, while preserving ownership and bounded failure handling.
+
 - Preserve newly admitted Hunt and shared walking journeys when delayed respawn recovery falls back to farming.
 
 - Repair native walking routes whose final goal connection crosses terrain, retaining the exact owned destination and validating every repaired segment against native collision geometry.
