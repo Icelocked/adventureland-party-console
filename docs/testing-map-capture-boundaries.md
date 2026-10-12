@@ -8,3 +8,5 @@ Before changing the regression:
 - A failed upstream request must remain a failure, not become a skipped or mocked success.
 
 Run: `npm run test:e2e:console -- --grep "expanded character and Cave maps|fixed-origin map image proxy"`.
+
+Repeated CI evidence identifies ECONNRESET in duplicated route.fetch state interception; model persistent character coordinates at the declared game observation boundary instead. Keep real coordinator state and dashboard streams. Scope mapCapture to the canvas journey so other cases retain Main observations.

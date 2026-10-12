@@ -1170,6 +1170,8 @@ test('market affordability uses core bank gold and active WTB prices open the fu
   await info.attach('market-core-bank-gold-affordability',{body:await page.screenshot(),contentType:'image/png'});
 });
 
+test.describe('declared map capture observations',()=>{
+  test.use({mapCapture:true});
 test('expanded character and Cave maps capture real canvas pixels with map and camera-center footers',async({page,app},info)=>{
   // Declared map/read fixture only: real browser image loading, canvas drawing,
   // CORS, popup creation and PNG serialization remain the production path.
@@ -1188,16 +1190,7 @@ test('expanded character and Cave maps capture real canvas pixels with map and c
     const map='zone_abc123_0',name='W',x=31,y=47;
     const definition={name:map,min_x:-100,min_y:-200,max_x:500,max_y:400,default:0,
       tiles:[['capture',0,0,16,16]],placements:[],groups:[],tilesets:{capture:{file:`http://127.0.0.1:${address.port}/tile.png`}}};
-    const initial=await app.state();
-    await app.deliverStatus({...initial.characters.W,name,map,x,y});
-    // Keep the declared map position stable across fixture status emissions.
-    // Aborting the dashboard stream exercises its normal HTTP read fallback.
-    await page.route('**/party-api/dashboard-stream',route=>route.abort());
-    await page.route('**/party-api/state*',async route=>{
-      const response=await route.fetch(),state=await response.json();
-      await route.fulfill({response,json:{...state,characters:{...state.characters,
-        W:{...initial.characters.W,...state.characters?.W,name,map,x,y}}}});
-    });
+    await expect.poll(async()=>{const state=await app.state();return {map:state.characters.W.map,x:state.characters.W.x,y:state.characters.W.y};}).toEqual({map,x,y});
     await page.route('**/party-api/map-stream/*',route=>route.fulfill({contentType:'text/event-stream',body:'data: '+JSON.stringify({name,map,x,y,at:Date.now(),entities:[],definition})+'\n\n'}));
     await page.route('**/party-api/daily-dungeons',route=>route.fulfill({json:{state:{phase:'active',run:'abc123',participants:[name],protectFromEvents:true,commands:{},operations:[],progress:{enabled:false,serial:0}},members:[{name,fresh:true,observation:{protocol:1,at:Date.now(),supported:true,alive:true,ready:true,members:[name],cave:{run:'abc123',floor:0,expires:Date.now()+600000,remainingMs:600000,paused:false,gold:0,amber:0,points:[]}}}]}}));
     await page.goto('/');
@@ -1250,10 +1243,12 @@ test('expanded character and Cave maps capture real canvas pixels with map and c
     expect(imageRequests).toBeGreaterThan(0);
     await info.attach('map-capture-ledger',{body:JSON.stringify({map,imageRequests,captures}),contentType:'application/json'});
   } finally {
-    await page.unrouteAll({behavior:'wait'});
+    if(!page.isClosed())await page.unrouteAll({behavior:'wait'});
     images.closeAllConnections();
     await new Promise<void>((resolve,reject)=>images.close(error=>error?reject(error):resolve()));
   }
+});
+
 });
 
 test('fixed-origin map image proxy returns native Dreams tiles and rejects external origins',async({page},info)=>{

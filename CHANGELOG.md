@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Verify map screenshot pixels and the real image proxy in separate E2E journeys, draining intercepted requests before teardown to avoid timing interference.
+- Verify map screenshot pixels and the real image proxy in separate E2E journeys, using stable game observations and real dashboard state instead of duplicated status fetches.
 
 - Keep the full Cave map dialog accessibly named across encounter updates and allow its native waypoint test the existing bounded UI readiness window.
 

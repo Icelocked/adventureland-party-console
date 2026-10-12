@@ -52,7 +52,7 @@ function createGameFixture(directory) {
       name, ctype, level: 80, runtime: 'native', steamPrimary: name === 'W',
       clientVersion: version, runtimeId: 'e2e-' + name, clientInstance: 'e2e-' + name,
       statusSequence: sample, connected: true, map: 'main', in: 'main', server: 'USII',
-      x: 0, y: 0, moving: false, rip: false, hp: 1000, max_hp: 1000, mp: 1000, max_mp: 1000,
+      ...(name === 'W' && process.env.E2E_MAP_CAPTURE === 'true' ? {map:'zone_abc123_0',in:'zone_abc123_0',x:31,y:47} : {x:0,y:0}), moving: false, rip: false, hp: 1000, max_hp: 1000, mp: 1000, max_mp: 1000,
       gold: 1000000, speed: 50, range: 100, attack: 100, frequency: 1,
       gameParty: ['W', 'P'], threats: [], conditions: [], slots: name === 'M' && process.env.E2E_MARKET_STAND === 'true' ? {trade1:{slot:1,item:{name:'sword',level:8,b:true,price:1000,q:3},meta:itemMeta('sword')}} : {},
       monsterHunt: name === 'W' ? { id: 'goo', count: 10, remainingMs: 600000, server: 'USII' } : null,
