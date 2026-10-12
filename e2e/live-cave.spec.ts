@@ -609,14 +609,30 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
       await info.attach('native-cave-choice-continuation',{body:JSON.stringify(ledger),contentType:'application/json'});
     }
   };
-  await acceptRoom(farm);
+  let farmTravel=await acceptRoom(farm);
+  expect(farmTravel?.travel?.target.id).toBe(farm.id);
+  const farmArrivals=new Map<string,unknown>();
+  const recordFarmArrival=(native:any,status:any,observedAt:number)=>{
+    const expected='cave-travel:'+cave.run+':'+farmTravel.travel.serial+':'+native.name;
+    if(farmArrivals.has(native.name)||!status||observedAt-status.seenAt>3000||status.seenAt>observedAt+500||
+      Date.now()-native.at>3000||native.at>Date.now()+500||status.rip||!(status.hp>0)||
+      status.dungeon?.cave?.run!==cave.run||status.dungeon.cave.floor!==cave.floor||
+      native.rip||!(native.hp>0)||native.cave?.run!==cave.run||native.cave.floor!==cave.floor||
+      native.map!==farm.map||String(native.in??native.map)!==farm.map||
+      native.runtime?.travel?.id!==expected||Math.hypot(native.x-farm.x,native.y-farm.y)>=70)return;
+    farmArrivals.set(native.name,{at:native.at,id:expected,map:native.map,in:native.in,x:native.x,y:native.y});
+  };
   const farmCombatSamples:unknown[]=[];
   let farmSampledAt=0;
   try {
   await expect.poll(async()=>{
     const s=await live.state();
-    if(Math.max(...['E2EWarrior','E2EPriest'].map(name=>Math.hypot(s.characters[name].x-farm.x,s.characters[name].y-farm.y)))>=70)
-      await continueRoomChoice(farm);
+    if(farmArrivals.size<2){
+      const continued=await continueRoomChoice(farm);
+      if(continued?.travel?.serial!==undefined&&continued.travel.serial!==farmTravel.travel.serial){
+        farmTravel=continued;farmArrivals.clear();
+      }
+    }
     if(Date.now()-farmSampledAt>=5_000&&farmCombatSamples.length<125){
       farmSampledAt=Date.now();
       const native=await Promise.all(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].frame.evaluate(()=>{
@@ -624,7 +640,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
         const c=w.character,control=w.__partyGroupedCombat,entity=control?.target?.id?w.get_entity(control.target.id):null;
         const clock=w.__partyTravelTransport?.clock,now=Date.now(),selected=w.sharedRoutine?.getDungeonTarget?.();
         const raw=entity?Object.fromEntries(['id','type','visible','dead','hp','map','in','x','y','real_x','real_y','range','target','cave'].map(key=>[key,entity[key]])):null;
-        return {at:now,name:c.name,map:c.map,in:c.in,x:c.real_x,y:c.real_y,cave:c.cave,
+        return {at:now,name:c.name,map:c.map,in:c.in,x:c.real_x,y:c.real_y,rip:c.rip,hp:c.hp,cave:c.cave,
           clock,adjustedAge:control?now+(clock?.offset||0)-control.seenAt:null,
           control:control?Object.fromEntries(['key','seenAt','target','committed','selection','members','caveScope'].map(key=>[key,control[key]])):null,
           entity:raw,selected:selected?.id||null,knownDead:entity?!!w.partyRoleRunner?.isKnownDead(entity.id):null,
@@ -632,12 +648,16 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
           attackAllowed:entity?!!w.sharedRoutine?.groupedAttackAllowed?.(entity):null,
           runtime:w.__partyDungeonRuntime?.report(),occupied:w.sharedRoutine?.isOccupied?.()};
       })));
+      for(const member of native)recordFarmArrival(member,s.characters[member.name],farmSampledAt);
       farmCombatSamples.push({at:farmSampledAt,native,characters:Object.fromEntries(['E2EWarrior','E2EPriest'].map(name=>[name,{dungeon:s.characters[name].dungeon,movement:s.characters[name].movement}]))});
     }
-    return Math.max(...['E2EWarrior','E2EPriest'].map(name=>Math.hypot(s.characters[name].x-farm.x,s.characters[name].y-farm.y)));
-  },{timeout:600_000,message:'Both characters must reach the original native farm after manual waypoint travel'}).toBeLessThan(70);
+    return ['E2EWarrior','E2EPriest'].every(name=>farmArrivals.has(name));
+  },{timeout:600_000,message:'Both characters must reach the original native farm after manual waypoint travel'}).toBe(true);
   console.log('[Cave verified] Both characters arrived at the original native farm');
-  }finally{await info.attach('native-cave-farm-combat-samples',{body:JSON.stringify(farmCombatSamples),contentType:'application/json'});}
+  }finally{
+    await info.attach('native-cave-farm-combat-samples',{body:JSON.stringify(farmCombatSamples),contentType:'application/json'});
+    await info.attach('native-cave-farm-arrivals',{body:JSON.stringify({arrivals:Object.fromEntries(farmArrivals),travel:farmTravel}),contentType:'application/json'});
+  }
   await controls.getByRole('button',{name:'Stop travel',exact:true}).click();
   await waitForStoppedTravel();
   await info.attach('native-cave-manual-travel', { body: JSON.stringify({ dungeon: await dungeon(), state: await live.state() }), contentType: 'application/json' });
