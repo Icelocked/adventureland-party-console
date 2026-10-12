@@ -221,7 +221,7 @@ test('production journal storage echoes retain the current native attempt owners
   const order=await live.post('/merchant/order',{buys:[{id:'helmet',quantity:2,level:3}],crafts:[]});
   await expect.poll(async()=>{
     const state=await live.state();
-    return ![state.merchantCurrent,...state.merchantQueue].some((job:any)=>job?.commerceOrderId===order.jobId);
+    return ![state.merchantCurrent,...state.merchantQueue].some((job:any)=>job?.id===order.jobId||job?.commerceOrderId===order.jobId);
   },{timeout:300_000}).toBe(true);
   expect(await live.clients[merchant].run('globalThis.__e2eProductionEchoes')).toBeGreaterThan(0);
   const after=await economy(live);
