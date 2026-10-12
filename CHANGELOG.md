@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Keep the full Cave map dialog accessibly named across encounter updates so waypoint controls remain reliably discoverable.
+- Keep the full Cave map dialog accessibly named across encounter updates and allow its native waypoint test the existing bounded UI readiness window.
 
 - Supply compiled character CODE in isolated console fixtures and keep opt-in Docker journeys out of the default CI selection, preserving complete regression evidence.
 
