@@ -4,8 +4,8 @@ import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 
-test('Docker Linux install recovers a linked dependency cache and explicitly loads an update',async({},info)=>{
-  test.skip(process.env.RUN_DOCKER_DEPENDENCY_UPDATE!=='1','Opt-in Docker install/update regression');
+// Optional Docker journeys are not selected by the default console suite.
+if(process.env.RUN_DOCKER_DEPENDENCY_UPDATE==='1')test('Docker Linux install recovers a linked dependency cache and explicitly loads an update',async({},info)=>{
   test.setTimeout(30*60_000);
   const root=path.resolve('.build/issue102',randomUUID()),context=path.join(root,'context');
   await mkdir(context,{recursive:true});

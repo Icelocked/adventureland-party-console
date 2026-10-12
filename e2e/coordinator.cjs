@@ -16,6 +16,9 @@ if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
 const port = Number(process.env.E2E_COORDINATOR_PORT || 18080);
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid E2E_COORDINATOR_PORT');
 fs.mkdirSync(directory, { recursive: true });
+// Managed character admission reads the real compiled class manifest, even
+// when this console fixture simulates the external account transport.
+fs.cpSync(path.join(root, '.build/game'), path.join(directory, 'CODE/adventure_land'), { recursive: true });
 const game = createGameFixture(directory);
 // Legacy migration and game-cache reads are relative to cwd. Keep them away from live caracAL data.
 process.chdir(directory);

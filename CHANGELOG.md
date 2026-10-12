@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Supply compiled character CODE in isolated console fixtures and keep opt-in Docker journeys out of the default CI selection, preserving complete regression evidence.
+
 - Run the prepared-runtime deployment benchmark in CI without requiring a local artifact, preserving complete executable-installation evidence.
 
 - Prepare console artifacts before pausing gameplay and publish prevalidated coordinator runtime files, reducing deployment interruptions while preserving readiness checks and rollback.
