@@ -68,6 +68,19 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
       const observed:WeakSet<object>=game.__e2eObservedSockets ||= new WeakSet();
       if(observed.has(socket))return;
       observed.add(socket);
+      // Passive Socket.IO outgoing observation; preserve every native method and packet.
+      socket.onAnyOutgoing?.((event:string,...args:any[])=>{
+        if(event!=='attack')return;
+        const c=game.character,runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+        if(!c?.name || game.socket!==socket || args[0]?.id==null)return;
+        let candidate:any;
+        try { candidate=runner?.sharedRoutine?.getWalkingPassiveTarget?.(true); } catch { return; }
+        game.__e2eEvents.push({sequence:++game.__e2eEventSequence,at:Date.now(),event:'attack-issued',
+          data:{id:String(args[0]?.id),actor:c.name},motion:{map:c.map,in:c.in??c.map,server:String(game.server_region||'')+String(game.server_identifier||''),
+            x:c.real_x??c.x,y:c.real_y??c.y,moving:!!c.moving,owner:runner?.__partyCombatOwner,
+            candidate:candidate&&{id:String(candidate.id),mtype:candidate.mtype}}});
+        if(game.__e2eEvents.length>2000)game.__e2eEvents.shift();
+      });
       // Passive observations only; no native method replacement or synthetic packet.
       for(const event of ['hit','death','game_response','game_log','chest_opened','disappear','new_map','party_update','player'])socket.on(event,(data:unknown)=>{
         game.__e2eEvents.push({sequence:++game.__e2eEventSequence,at:Date.now(),event,data:JSON.parse(JSON.stringify(data ?? null))});

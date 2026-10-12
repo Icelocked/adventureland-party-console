@@ -19,9 +19,10 @@ test.describe('native Hunt travel combat and death ownership',()=>{
     },{timeout:90000,intervals:[100,250],message:'Introduce the outbound Goo during native walking, after any Town cast'}).toBe(true);
     // Seed ahead on the actual walking leg so native visibility and the party's
     // reservation exchange can precede reaching melee range on slower hosts.
+    const outboundStartedAt=Date.now();
     const outbound=await spawnGoo(live,W,0,400);
     await info.attach('outbound-passing-goo-seed',{body:JSON.stringify(outbound),contentType:'application/json'});
-    const outboundKill=await killedByParty(live,String(outbound.id),45000,passingObservations);
+    const outboundKill=await killedByParty(live,String(outbound.id),45000,passingObservations,{passingGoo:true,startedAt:outboundStartedAt});
     expect((await observed(live))[W].quest?.id).toBe('armadillo');
     await evidence(live,info,'outbound-passing-goo-killed',{outbound,outboundKill});
     await expect.poll(async()=>{const p=(await observed(live))[W];return p.quest?.id==='armadillo'&&p.quest.c===0;},{timeout:240000,intervals:[100,250]}).toBe(true);
@@ -30,9 +31,10 @@ test.describe('native Hunt travel combat and death ownership',()=>{
       return hunt(s)?.stage==='returning'&&s.activeConvoy?.phase==='travel'&&
         await live.clients[W].run('!!character.moving && !(character.c && character.c.town)');
     },{timeout:90000,intervals:[100,250],message:'Introduce the return Goo during native walking, after any Town cast'}).toBe(true);
+    const returningStartedAt=Date.now();
     const returning=await spawnGoo(live,W,0,400);
     await info.attach('returning-passing-goo-seed',{body:JSON.stringify(returning),contentType:'application/json'});
-    const returningKill=await killedByParty(live,String(returning.id),45000,passingObservations);
+    const returningKill=await killedByParty(live,String(returning.id),45000,passingObservations,{passingGoo:true,startedAt:returningStartedAt});
     await reward(live,setup.before);
     await evidence(live,info,'armadillo-return-goo-and-daisy-reward',{outbound,outboundKill,returning,returningKill});
     } finally {
