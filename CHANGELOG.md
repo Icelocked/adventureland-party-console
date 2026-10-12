@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep the full Cave map dialog accessibly named across encounter updates so waypoint controls remain reliably discoverable.
+
 - Supply compiled character CODE in isolated console fixtures and keep opt-in Docker journeys out of the default CI selection, preserving complete regression evidence.
 
 - Run the prepared-runtime deployment benchmark in CI without requiring a local artifact, preserving complete executable-installation evidence.

@@ -86,7 +86,7 @@ export function CaveMap({
         View full map
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="w-[min(1000px,calc(100vw-2rem))] max-w-none border-emerald-700 bg-[#081713] text-emerald-50 sm:max-w-none [&_[data-slot=dialog-close]]:border [&_[data-slot=dialog-close]]:border-emerald-600 [&_[data-slot=dialog-close]]:bg-slate-950 [&_[data-slot=dialog-close]]:text-emerald-50 [&_[data-slot=dialog-close]]:hover:bg-emerald-950">
+        <DialogContent aria-label={`Cave of Many Dreams — Floor ${cave.floor + 1}`} className="w-[min(1000px,calc(100vw-2rem))] max-w-none border-emerald-700 bg-[#081713] text-emerald-50 sm:max-w-none [&_[data-slot=dialog-close]]:border [&_[data-slot=dialog-close]]:border-emerald-600 [&_[data-slot=dialog-close]]:bg-slate-950 [&_[data-slot=dialog-close]]:text-emerald-50 [&_[data-slot=dialog-close]]:hover:bg-emerald-950">
           <DialogHeader>
             <div className="flex items-center gap-3 pr-8">
               <DialogTitle>

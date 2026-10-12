@@ -93,6 +93,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   const before = await live.state();
   await controls.getByRole('button', {name:'View full map', exact:true}).click();
   const fullMap = page.getByRole('dialog', {name:/Cave of Many Dreams — Floor/});
+  await expect(fullMap).toHaveAccessibleName(/Cave of Many Dreams — Floor \d+/);
   await expect(fullMap.locator('canvas')).toBeVisible();
   await expect(fullMap.getByText('E2EPriest', {exact:true})).toBeVisible();
   await info.attach('native-cave-full-map', {body:await fullMap.screenshot(),contentType:'image/png'});
