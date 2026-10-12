@@ -737,16 +737,36 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   }
   // Native encounter factory, bounded initial difficulty. Neither attacks,
   // deaths, receipts nor room completion are fabricated by this fixture.
-  const duel = await live.admin(`output=(()=>{
+  const duelDeclaration = await live.admin(`output=(()=>{
     const p=get_player('E2EWarrior'),run=generated_entry(p).record;
     const source=G.events.dreams.encounters.find(e=>e.id==='e11');
-    const room={id:'e2e-duel',floor:0,map:p.map,x:p.x,y:p.y,kind:'encounter',required:false,revealed:true,started:false,done:false,actors:[],enemies:[],encounter:{...source,options:source.options.filter(o=>['left','right'].includes(o.id))}};
-    run.cave.rooms.push(room);cave_activate(run,room);
-    for(const a of room.actors){a.hp=a.max_hp=100000;a.zone_stats.attack=1;calculate_monster_stats(a);a.u=true;}
-    cave_begin_vote(run,room);
+    const origin=safe_xy_nearby(p.map,p.x,p.y+48);
+    if(!origin)throw Error('No native safe placement for declared duel');
+    const room={id:'e2e-duel',floor:0,map:p.map,x:origin.x,y:origin.y-48,kind:'encounter',required:true,revealed:true,started:false,done:false,actors:[],enemies:[],encounter:{...source,options:source.options.filter(o=>['left','right'].includes(o.id))}};
+    run.cave.rooms.push(room);
     globalThis.__e2eCaveDuel=room;
-    return {room:room.id,actors:room.actors.map(a=>({id:a.id,name:a.name,hp:a.hp}))};
+    globalThis.__e2eCaveDuelRun=run.key;
+    return {run:run.key,room:room.id,required:room.required,issued:run.cave.issued,liveActors:run.cave.actors.size,origin};
   })()`);
+  const duelAdmission:any[]=[];let duel:any;
+  try{
+    await expect.poll(async()=>{
+      duel=await live.admin(`output=(()=>{
+        const p=get_player('E2EWarrior'),run=generated_entry(p).record,room=globalThis.__e2eCaveDuel;
+        if(run.key!==globalThis.__e2eCaveDuelRun||p.map!==room.map)throw Error('Declared duel native run or floor changed before admission');
+        if(!room.started&&run.cave.actors.size<=52)cave_activate(run,room);
+        const admitted=room.actors.length===2&&!!room.npc&&!!room.rival;
+        if(admitted&&!room.e2eDifficultyDeclared){
+          for(const a of room.actors){a.hp=a.max_hp=100000;a.zone_stats.attack=1;calculate_monster_stats(a);a.u=true;}
+          room.e2eDifficultyDeclared=true;cave_begin_vote(run,room);
+        }
+        return {at:Date.now(),room:room.id,required:room.required,issued:run.cave.issued,liveActors:run.cave.actors.size,
+          admitted,started:room.started,actors:room.actors.map(a=>({id:a.id,name:a.name,hp:a.hp}))};
+      })()`);
+      if(duelAdmission.length<100)duelAdmission.push(duel);
+      return duel.admitted;
+    },{timeout:60_000,message:'Native factory must admit both declared duel NPCs before voting'}).toBe(true);
+  }finally{await info.attach('native-cave-duel-admission',{body:JSON.stringify({declaration:duelDeclaration,observations:duelAdmission}),contentType:'application/json'});}
   await expect(choice).toBeVisible();
   const duelChoice=(await dungeon()).members[0].observation.cave.choice;
   await choice.getByRole('button',{name:duelChoice.options.find((o:any)=>o.id==='left').label,exact:true}).click();
