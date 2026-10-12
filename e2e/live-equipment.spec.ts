@@ -43,15 +43,36 @@ test('merchant gathering waits at capacity without resetting cooldowns',async({l
   for(const mode of ['fishing','mining'])await live.post('/merchant/gather',{mode,enabled:true});
   await page.goto(live.url);await page.getByText(/Merchant logistics ·/).click();
   await expect(page.locator('details').filter({has:page.locator('summary').getByText(/Merchant logistics/)}).getByText('BLOCKED',{exact:true})).toHaveCount(2);
-  await expect.poll(async()=>{
-    try{return await live.clients[name].frame.evaluate(()=>{
+  // Capture real reason transitions in the native document, rather than
+  // repeatedly sampling the same heartbeat phase over CDP.
+  const reasonFrame=live.clients[name].frame;
+  await reasonFrame.evaluate(()=>{
+    const game=window as any,until=Date.now()+15000;
+    const probe={samples:[] as {at:number;reason:string|null}[],timer:null as any};
+    game.__e2eGatheringReasonProbe=probe;
+    probe.timer=setInterval(()=>{
       const root=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
-      return root?.__merchantGatheringBlockedReason;
-    });}catch(error){
-      if(/Execution context was destroyed|Cannot find context|Frame was detached|Native game frame is not present/.test(String(error)))return null;
+      if(probe.samples.length===160)probe.samples.shift();
+      probe.samples.push({at:Date.now(),reason:root?.__merchantGatheringBlockedReason??null});
+      if(Date.now()>=until)clearInterval(probe.timer);
+    },100);
+  });
+  let reasonSamples:{at:number;reason:string|null}[]=[];
+  try{await expect.poll(async()=>{
+    try{reasonSamples=await live.clients[name].frame.evaluate(()=>(window as any).__e2eGatheringReasonProbe?.samples||[]);
+      return reasonSamples.some(sample=>sample.reason==='inventory capacity');
+    }catch(error){
+      if(/Execution context was destroyed|Cannot find context|Frame was detached|Native game frame is not present/.test(String(error)))return false;
       throw error;
     }
-  }).toBe('inventory capacity');
+  },{timeout:15000}).toBe(true);}
+  finally{
+    if(!reasonFrame.isDetached())try{await reasonFrame.evaluate(()=>{
+      const game=window as any,probe=game.__e2eGatheringReasonProbe;
+      if(probe){clearInterval(probe.timer);delete game.__e2eGatheringReasonProbe;}
+    });}catch(error){if(!/Execution context was destroyed|Cannot find context|Frame was detached/.test(String(error)))throw error;}
+    await info.attach('native-gathering-reason-samples',{body:JSON.stringify(reasonSamples),contentType:'application/json'});
+  }
   const after=await live.state();expect(after.gatheringCooldowns).toEqual(before);
   const native=await live.admin(`output=(()=>{const p=get_player('${name}');return {items:p.items,last:{fishing:p.last.fishing,mining:p.last.mining}};})()`);
   expect(Object.values(native.last).map(value=>new Date(value as string).getTime())).toEqual([0,0]);

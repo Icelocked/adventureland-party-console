@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reconsider Town during owned event and Hunt returns when it becomes safe again, instead of reusing a long walking route selected while Town was unavailable.
+
 - Retry transient Windows sharing failures when releasing a console build lock, while preserving ownership and bounded failure handling.
 
 - Preserve newly admitted Hunt and shared walking journeys when delayed respawn recovery falls back to farming.

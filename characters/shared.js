@@ -14683,12 +14683,16 @@
       throw new Error("Follower cannot connect to leader origin");
   }
   function sharedConvoyReusable(command,origin) {
+    /** @type {import('../runtime/characters/shared-route-cache.ts').SharedRouteRemainder | undefined} */
     var saved=root.__partySharedRouteRemainder;
     if(!saved || saved.id!==command.convoyId || saved.revision!==Number(command.navigationRevision||0) ||
         saved.destinationKey!==JSON.stringify(command.location) || saved.runtimeId!==convoyRuntimeId)return null;
     if(!saved.origin || saved.origin.map!==origin.map || saved.origin.in!==origin.in || saved.server!==reunionRealm() ||
         !saved.geometry || saved.geometry.version!==movement.identity.version || saved.geometry.fingerprint!==movement.identity.fingerprint)return null;
     if(!saved.plot.length || saved.transporting)return null;
+    // Fresh Town eligibility must compare candidates instead of freezing the
+    // walking-only route selected while Town was explicitly forbidden.
+    if(command.continuousReturn===1 && !command.disableTown && saved.townAllowed===false)return null;
     if(command.disableTown && saved.plot.some(function(p){return p.town;}))return null;
     if(command.avoidLeave && saved.plot.some(function(p){return p.method === "leave";}))return null;
     var first=saved.plot[0];
@@ -14760,7 +14764,8 @@
       root.__partySharedRouteRemainder={id:command.convoyId,revision:Number(command.navigationRevision)||0,
         runtimeId:convoyRuntimeId,destinationKey:JSON.stringify(command.location),destination:destination,
         origin:sharedConvoyPoint(),server:reunionRealm(),geometry:Object.assign({},movement.identity),
-        transporting:!!is_transporting(character),plot:remaining};
+        transporting:!!is_transporting(character),plot:remaining,
+        townAllowed:command.continuousReturn===1 ? !command.disableTown : undefined};
     }
     convoy.freezeRoute=freeze;
     // Failure retains command ownership while waiting for the coordinator's hold.

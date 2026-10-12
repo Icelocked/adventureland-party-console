@@ -543,6 +543,22 @@ test('paused leader retains the issued waypoint and regroups using native fallba
  assert.equal(sharedRoute(p.activeConvoy).source,'search');assert.equal(sharedRoute(p.activeConvoy).plot.at(-1).x,120);
  await r.cancel();await second.promise;
 });
+test('owned return reevaluates Town only when a forbidden cached route becomes eligible',async()=>{
+ for(const [cachedTown,disabled,source] of [[false,true,'remainder'],[true,false,'remainder'],[false,false,'search'],[undefined,false,'remainder']]){
+  const p=party(),e=engine();Object.assign(p.activeConvoy,{continuousReturn:1,disableTown:disabled});e.step(p,1000);
+  const r=client('L',p,{plan:body=>({...body,ms:0,plot:body.town?[{map:'main',x:0,y:0,town:true},{map:'main',x:120,y:0}]:[{map:'main',x:120,y:0}]})});
+  r.context.__partySharedRouteRemainder={id:p.activeConvoy.id,revision:p.commands.L.navigationRevision,
+   runtimeId:'L',destinationKey:JSON.stringify(p.activeConvoy.location),destination:p.activeConvoy.location,
+   origin:{map:'main',x:0,y:0},server:'USI',geometry:r.context.movement.identity,transporting:false,
+   townAllowed:cachedTown,plot:[{map:'main',x:120,y:0}]};
+  const started=await r.start(p.commands.L);await r.ready();
+  const route=sharedRoute(p.activeConvoy);assert.equal(route.source,source);
+  assert.equal(route.plot.some(point=>point.town),source==='search','eligible fresh search must select actual Town candidate');
+  assert.equal(r.searches,0,'validated candidate comparison must not start native fallback');
+  await r.cancel();await started.promise;
+ }
+});
+
 test('transport and Town waypoints remain native operations on an imported route',async()=>{
  const p=party(),e=engine();p.activeConvoy.location={map:'cave',x:120,y:0};e.step(p,1000);
  const r=client('F',p);r.context.G.maps.main.doors=[[0,0,0,0,'cave',0,0]];
