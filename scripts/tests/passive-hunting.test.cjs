@@ -308,3 +308,14 @@ test('real attack controller hits a passing goo during continuous return without
   assert.equal(c.returnDefenseTarget(),null);assert.equal(c.convoyTraveling,convoy);assert.equal(convoy.phase,'travelling');
  } finally {controller?.stop();for(const key of keys)if(saved[key]===undefined)delete global[key];else global[key]=saved[key];}
 });
+
+test('walking retains an existing passing reservation before a nearer equal-priority newcomer',()=>{
+ const {c,bee}=fixture();c.character.moving=true;bee.x=80;
+ const newcomer=c.parent.entities.newcomer={...bee,id:'nearby',x:20};
+ c.beginPassingAttack(bee,{scope:'route',token:'reserved-first'},true);
+ assert.equal(c.walkingPassiveTarget(),bee,'finish the existing admission exchange while still in range');
+ newcomer.mtype='phoenix';c.passiveHunting.rules.phoenix={enabled:true,keepMoving:true,priority:101};
+ assert.equal(c.walkingPassiveTarget(),newcomer,'higher configured priority remains authoritative');
+ newcomer.mtype='bee';bee.claimed=true;assert.equal(c.walkingPassiveTarget(),newcomer);
+ bee.claimed=false;bee.x=101;assert.equal(c.walkingPassiveTarget(),newcomer,'a reservation never permits chasing');
+});

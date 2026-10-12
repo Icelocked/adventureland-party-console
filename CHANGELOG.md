@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Keep eligible reserved passing encounters ahead of equal-priority newcomers until admission completes, while preserving higher-priority targeting and attack guards.
+- Let stopped, freshly owned party members complete map-transition barriers under bounded network latency, retaining position, identity and walking-lease checks.
+
 - Let respawning event fighters rejoin a roaming boss without recalling allies already actively fighting it at its new position.
 
 - Preserve native Steam companion launch flags and CODE slots across realm navigation so saved merchant work can resume.

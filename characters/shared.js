@@ -3205,6 +3205,9 @@
         (isPassingEncounter(e) || currentPartyList().indexOf(e.target) < 0) &&
         !(root.partyRoleRunner && root.partyRoleRunner.isKnownDead(e.id));
     }).sort(function(a,b) { return monsterPriority(b)-monsterPriority(a) ||
+      // Complete an existing cohort reservation before starting another equal
+      // priority handshake; neither reservation may change walking ownership.
+      Number(isPassingEncounter(b))-Number(isPassingEncounter(a)) ||
       Math.hypot(character.x-a.x,character.y-a.y)-Math.hypot(character.x-b.x,character.y-b.y) || String(a.id).localeCompare(String(b.id)); })[0] || null;
   }
   function beginPassingAttack(target, admission, reserveOnly) {
