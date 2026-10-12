@@ -1167,16 +1167,18 @@ export function startCoordinatorApplication(
       return rosterProjection.owned(name);
     }
 
+    function liveEventFor(name:string,event?:string):boolean {
+      const report=party.statuses[name];
+      return !!report && Date.now()-report.seenAt<3000 && (event==='anniversary'
+        ? !!report.anniversaryServer?.live
+        : !!report.serverLiveEvents?.some(entry=>entry.name===event) || stagingEventLive(name,event));
+    }
+
     function eventsEnabledFor(name: string, event?: string) {
       const enabled = event ? eventEnabled(party, name, event)
         : selectedEvents(party, name).some(selected => eventInstanceAllowed(party, name, selected));
       if (!enabled || event && !eventInstanceAllowed(party, name, event)) return false;
-      const report = party.statuses[name];
-      const live = !!report && Date.now() - report.seenAt < 3000 && (event === 'anniversary'
-        ? !!report.anniversaryServer?.live
-        : !!report.serverLiveEvents?.some(entry => entry.name === event) ||
-          stagingEventLive(name, event));
-      return dungeons.eventAllowed(name, event, live);
+      return dungeons.eventAllowed(name, event, liveEventFor(name,event));
 
     }
 

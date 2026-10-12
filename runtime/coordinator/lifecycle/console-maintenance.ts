@@ -15,6 +15,18 @@ export function consoleMaintenance(directory: string | undefined, now = Date.now
         ...(['string','number'].includes(typeof target.in)?{in:target.in as string|number}:{}),...(typeof target.server==='string'?{server:target.server}:{})});
     }
   }
+  function parseLease(input:Record<string,unknown>):typeof lease {
+    if (typeof input.id!=='string' || typeof input.expires!=='number' || input.expires<now()) return null;
+    return {id:input.id,expires:input.expires,...(input.mode==='draining'?{mode:'draining' as const}:{}),
+      ...(['now','safe','main'].includes(String(input.loadMode))?{loadMode:input.loadMode as 'now'|'safe'|'main'}:{}),
+      ...(typeof input.phase==='string'?{phase:input.phase}:{})};
+  }
+  function waitingForMain(report:Record<string,unknown>,active:NonNullable<typeof lease>):boolean {
+    return active.loadMode==='main' && (report.ctype||report.type)!=='merchant' && report.map!=='main';
+  }
+  function merchantContinues(report:Record<string,unknown>,active:NonNullable<typeof lease>):boolean {
+    return active.loadMode==='main' && active.phase!=='holding' && (report.ctype||report.type)==='merchant';
+  }
   function current(statuses?:Record<string,unknown>): (NonNullable<typeof lease>&{fightTargets?:typeof fightTargets})|null {
     if(statuses){const active=current();capture(statuses,active);return active?{...active,fightTargets}:null;}
     if (!directory) return null;
@@ -22,10 +34,10 @@ export function consoleMaintenance(directory: string | undefined, now = Date.now
     checked = now();
     try {
       const input = requestObject(JSON.parse(readFileSync(path.join(directory, 'updates/pause.json'), 'utf8')));
-      if (typeof input.id !== 'string' || typeof input.expires !== 'number' || input.expires < now()) { lease = null; return null; }
-      if (input.id !== lease?.id) participants.clear();
-      return lease = { id: input.id, expires: input.expires, ...(input.mode === 'draining' ? {mode: 'draining' as const} : {}),
-        ...(['now','safe','main'].includes(String(input.loadMode))?{loadMode:input.loadMode as 'now'|'safe'|'main'}:{}),...(typeof input.phase==='string'?{phase:input.phase}:{}) };
+      const parsed=parseLease(input);
+      if (!parsed) { lease = null; return null; }
+      if (parsed.id !== lease?.id) participants.clear();
+      return lease = parsed;
     } catch { lease = null; return null; }
   }
   function status(statuses: Record<string, unknown>, expected: readonly (string | null)[] = [], blocked = false) {
@@ -38,10 +50,10 @@ export function consoleMaintenance(directory: string | undefined, now = Date.now
     }
     const waiting = [...participants].filter(name => {
       const report = requestObject(statuses[name]), ack = requestObject(report.consoleMaintenance);
-      if(active.loadMode==='main'&&active.phase!=='holding'&&(report.ctype||report.type)==='merchant')return false;
+      if(merchantContinues(report,active))return false;
       return Number(report.seenAt) < now() - 5000 || ack.id !== active.id || ack.ready !== true ||
         active.mode === 'draining' && (ack.mode !== 'draining' || ack.combat !== false) ||
-        active.loadMode==='main'&&(report.ctype||report.type)!=='merchant'&&report.map!=='main';
+        waitingForMain(report,active);
     });
     if (blocked) waiting.push('active Steam handoff');
     return { id: active.id, ready: waiting.length === 0, waiting };

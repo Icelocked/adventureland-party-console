@@ -57,6 +57,11 @@ test('readiness, active inventory work and bank transactions gate handoffs', () 
   assert.throws(() => f.service.validateParticipants(['A']), /bankboi transaction/);
   assert.throws(() => f.service.validateParticipants(['A', 'A']), /maximum characters/);
   assert.throws(() => f.service.validateParticipants(['A', 'B', 'C', 'D', 'E']), /maximum characters/);
+  f.state.bankboiTransaction=null;f.state.merchantCurrent={id:'realm-owned-job'};
+  f.state.statuses.M={seenAt:0,runtime:'native'};
+  assert.equal(f.service.characterBusy('M'),true,'A stale realm-transition heartbeat cannot release merchant job ownership');
+  assert.throws(()=>f.service.validateParticipants(['M']),/active inventory operation/);
+  f.state.merchantCurrent=null;assert.equal(f.service.characterBusy('M'),false);
 });
 
 test('roster groups use leader membership and lexical secondary selection, excluding bankbois', () => {

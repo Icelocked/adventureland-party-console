@@ -1,0 +1,5 @@
+# Merchant realm and offering failure inventory
+
+- `merchantImprove` selects an offering and passes it as upgradeConfirmed's sixth argument. The old wrapper accepts only five arguments, silently dropping the choice before both the production authorization request and native operation. Automatic required-offering attempts therefore fail HTTP 409 even with delivered stock. Exercise the actual wrapper and verify both production and operation receive the same choice.
+- Steam companion realm navigation temporarily removes fresh status. Ownership currently treats a merchant job as busy only while status is fresh. A primary restore after the eight-second missing-companion grace period consequently releases the companion and resets it to the party realm during its still-owned job. A current job must fence roster handoff across stale/missing heartbeat windows, and release that fence once the job ends.
+- Preserve inventory-only freshness semantics, unrelated character admission, and headless controls. Do not import unrelated audio or manual-bank UI changes.

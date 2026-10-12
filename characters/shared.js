@@ -2902,6 +2902,18 @@
     group.currentAttackers = currentTravelAttackers();
     group.currentAttackersAt = travelObservationAt();
   }
+  function convoyActivityFromStatus(state) {
+    if (state.partyConvoyActive) return true;
+    // Full status can yield while a newer fast heartbeat renews the owned
+    // journey. Only newer authoritative inactivity may retire that journey.
+    var signal=convoySignal,travel=convoyTraveling;
+    return !!(signal && travel && Number.isFinite(Number(state.serverNow)) &&
+      Number(state.serverNow)<Number(root.__partyTravelSignalAt || 0) &&
+      Number.isFinite(signal.localDeadline) && !convoySignalExpired(signal) &&
+      signal.id===travel.id && signal.epoch===travel.epoch && signal.commandId===travel.commandId &&
+      signal.runtimeId===convoyRuntimeId && signal.routeVersion===(travel.routeVersion || 0) &&
+      signal.navigationRevision===travel.navigationRevision);
+  }
   function acceptTravelResponse(state, started, fast) {
     var received = convoyDiagnosticClock(), wall = Date.now(), timing = state.transportTiming;
     var sentAt = timing && Number(timing.sentAt) || Number(state.serverNow);
@@ -4668,13 +4680,13 @@
     try{return await trackedProduction("compound",[first,second,third],automatic,function(){return observedCompoundConfirmed(first,second,third,scrollSlot);});}
     finally{root.__partyConsoleAtomic--;}
   }
-  async function upgradeConfirmed(itemSlot, scrollSlot, expectedName, expectedLevel, automatic) {
+  async function upgradeConfirmed(itemSlot, scrollSlot, expectedName, expectedLevel, automatic, offeringAttempt) {
     await consoleAtomicBoundary();
     root.__partyConsoleAtomic=(root.__partyConsoleAtomic||0)+1;
     try{
     if (character.items[scrollSlot] && !/^scroll[0-9]+$/.test(character.items[scrollSlot].name))
       return await observedUpgradeConfirmed(itemSlot,scrollSlot,expectedName,expectedLevel);
-    return await trackedProduction("upgrade",[itemSlot],automatic,function(){return observedUpgradeConfirmed(itemSlot,scrollSlot,expectedName,expectedLevel);});
+    return await trackedProduction("upgrade",[itemSlot],automatic,function(){return observedUpgradeConfirmed(itemSlot,scrollSlot,expectedName,expectedLevel,offeringAttempt);},offeringAttempt);
     }finally{root.__partyConsoleAtomic--;}
   }
   async function observedCompoundConfirmed(first, second, third, scrollSlot) {
@@ -10634,7 +10646,7 @@
       // Transport receipt already installed clock timing and the walking lease.
       // Install the new convoy barrier before releasing Escape. stop() yields,
       // so role timers can otherwise begin an independent route in this gap.
-      partyConvoyActive = !!state.partyConvoyActive;
+      partyConvoyActive = convoyActivityFromStatus(state);
       if(!partyConvoyActive)root.__partyConvoyDefense=null;
       partyTownActive = character.ctype !== "merchant" && !!state.partyTownActive;
       root.__partyTownCycleId=state.partyTownCycleId || null;
@@ -10673,7 +10685,7 @@
       partyTownActive = character.ctype !== "merchant" && !!state.partyTownActive;
       root.__partyTownCycleId=state.partyTownCycleId || null;
       root.__partyReturnProgress=state.returnProgress || null;
-      partyConvoyActive = !!state.partyConvoyActive;
+      partyConvoyActive = convoyActivityFromStatus(state);
       if(!partyConvoyActive)root.__partyConvoyDefense=null;
       var releasedHuntTurnIn = huntTurnInPriority && !state.huntTurnInPriority;
       huntTurnInPriority = !!state.huntTurnInPriority;

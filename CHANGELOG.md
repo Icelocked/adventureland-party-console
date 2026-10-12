@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Preserve newer fast-channel convoy ownership against delayed full status responses, preventing interrupted event return journeys.
+- Preserve selected upgrade offerings through production authorization and reserve merchant ownership during independent realm transitions.
+- Refactor coordinator predicates without changing behavior to satisfy strict CI lint checks.
+
 - Recover collision-blocked walking routes through safe forward segments, select reachable formation-recovery positions, and wait for escape movement to settle before resuming.
 - Preserve passing-target admission during travel while respecting combat-drain holds.
 - Refresh retained regression fixtures for current inventory, deployment and account contracts, and make native readiness and fault-injection checks match actual game boundaries.

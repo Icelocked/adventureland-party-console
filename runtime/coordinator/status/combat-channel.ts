@@ -27,7 +27,7 @@ export function createCombatChannel(response: (name: string, mode?: "combat") =>
       convoySignal: full.convoySignal || null,
       combatRecovery: full.combatRecovery,
       travelCombat: full.travelCombat,
-      combatResetAt: full.combatResetByCharacter?.[name] || 0,
+      combatResetAt: combatResetAt(full.combatResetByCharacter,name),
 
     };
     const revisionControl = {...control, consoleMaintenance: control.consoleMaintenance && {...control.consoleMaintenance,expires:undefined}, convoySignal: control.convoySignal && {...control.convoySignal, validUntil: undefined}};
@@ -82,3 +82,5 @@ export function createCombatChannel(response: (name: string, mode?: "combat") =>
   }
   return { snapshot, flush, wait };
 }
+
+function combatResetAt(resets:Record<string,number>|undefined,name:string):number {return resets?.[name] || 0;}

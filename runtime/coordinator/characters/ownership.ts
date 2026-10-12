@@ -143,7 +143,9 @@ export function createCoordinatorOwnershipPorts<Block extends { enabled?: boolea
     !!(
       state.bankboiTransaction ||
       ((state.statuses[name]?.seenAt ?? 0) > ports.now() - 5000 && inventoryBusy(state.statuses[name])) ||
-      ((state.statuses[name]?.seenAt ?? 0) > ports.now() - 5000 && name === state.merchantCharacter && state.merchantCurrent)
+      // Realm navigation intentionally loses heartbeats. Persisted job ownership
+      // still fences Steam restoration until completion or worker recovery.
+      (name === state.merchantCharacter && state.merchantCurrent)
     );
   return {
     now: ports.now,

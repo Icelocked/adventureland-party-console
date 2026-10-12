@@ -16,7 +16,7 @@ export function markedBankSlots(state: BankCollectionState): number {
     const request = requestObject(value);
     if (!hasMarkedWithdrawals([value])) continue;
     if (request.autoNpcRuleKey && state.merchantAutomations?.['auto npc sales'] === false) continue;
-    slots.add(`${request.pack}:${request.slot}`);
+    slots.add(`${String(request.pack)}:${String(request.slot)}`);
   }
   return slots.size;
 }
