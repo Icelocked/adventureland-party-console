@@ -34,6 +34,32 @@ test('stale destination reports do not satisfy the sixty-second arrival deadline
   assert.match(operation.error,/within 60 seconds/);assert.equal(effects.includes('dispatch'),false);
 });
 
+test('verified distinct realm arrivals preserve a progressing native group through a late seventy-five-second follower',async()=>{
+ const f=fixture();let elapsed=0;
+ f.ports.sleep=async ms=>{elapsed+=ms;for(const [name,arrivesAt] of [['M',20000],['S',40000],['P',75000]])
+   f.statuses[name]={seenAt:1000+elapsed,server:elapsed>=arrivesAt?'EUI':'USI'};};
+ f.ports.now=()=>1000+elapsed;
+ await f.service.run(f.operation);assert.equal(f.operation.phase,'complete');
+ assert.equal(f.operation.completedAt,76000);assert.ok(f.operation.characters.every(c=>c.arrived));
+});
+
+test('a repeated destination member cannot renew realm progress forever or replace missing followers',async()=>{
+ const f=fixture();let elapsed=0;
+ f.ports.sleep=async ms=>{elapsed+=ms;f.statuses.M={seenAt:1000+elapsed,server:elapsed>=10000?'EUI':'USI'};
+  f.statuses.P={seenAt:999,server:'EUI'};f.statuses.S={seenAt:1000+elapsed,server:'USI'};};
+ f.ports.now=()=>1000+elapsed;
+ await f.service.run(f.operation);assert.equal(f.operation.phase,'failed');assert.equal(f.operation.completedAt,71000);
+ assert.equal(f.effects.includes('dispatch'),false);
+});
+
+test('superseded realm operation cannot complete or clear its successor commands',async()=>{
+ const f=fixture();let owned=true;
+ f.ports.ownsOperation=()=>owned;
+ f.ports.sleep=async()=>{owned=false;for(const name of f.operation.participants)f.statuses[name]={seenAt:1001,server:'EUI'};};
+ await f.service.run(f.operation);assert.notEqual(f.operation.phase,'complete');
+ assert.equal(f.effects.includes('dispatch'),false);assert.equal(f.effects.filter(e=>Array.isArray(e)&&e[0]==='realm').length,0);
+});
+
 test('all-headless participants reconnect to the destination without a native command',async()=>{
  for(const setHome of [false,true]) {
   const {operation,service,ports,statuses,effects,blocks}=fixture();

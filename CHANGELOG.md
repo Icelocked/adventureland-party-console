@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep realm switches active while distinct characters make verified arrival progress, with bounded no-progress and total deadlines; superseded operations cannot clear successor commands.
+
 - Bound verified native pathfinding search slices to keep combat and coordinator heartbeats responsive, preserving native routes, deadlines and freshness checks.
 - Skip unnecessary Town and bank trips after item-only merchant service when no bank cargo or positive gold deposit remains.
 
