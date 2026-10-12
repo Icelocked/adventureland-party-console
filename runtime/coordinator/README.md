@@ -1,3 +1,32 @@
+Market display ignores are account settings keyed by item name and exact level;
+omitted native levels normalize to +0. They filter all marketplace tabs without
+changing merchant automation or trade intent. The ignored-item mutation route
+persists add/remove/clear operations and participates in dashboard export/import.
+Freshness is the existing 120-second observation window; classifieds use their
+last successful ALData feed refresh, not publication edit age. Filter Ponty and
+live WTS observations before combining quantities. Validate the market browser
+journeys in docs/testing-market-preferences.md and retain screenshots and saved
+preference ledgers. Build the candidate; activation remains an explicit user action.
+
+Console deployment accepts and journals an operation before expensive verification.
+Verification, dashboard prewarming and CODE staging finish before gameplay is held.
+The builder publishes a transformed, syntax-validated native runtime marker;
+activation installs those verified executables without repeating syntax subprocesses.
+Older artifacts retain the full installer fallback. A renewable host lease then
+fences new pulls and captures actual engaged combat targets. The hold survives CODE replacement until coordinator, dashboard
+and every required client acknowledge readiness. Main mode saves fighter
+checkpoints and waits for Town arrival; the merchant continues until the final
+atomic-operation hold. Cave permits immediate loading only. Progress survives
+refreshing; gameplay-only loads preserve the document, while dashboard loads
+preserve log filters, sidebar state, expanded maps and scroll position.
+The stable host serves maintenance control and CODE during coordinator restart.
+History cleanup follows completion outside the operation lock.
+Validate the transaction, browser-recovery, Main and mixed-client E2E journeys in
+docs/testing-deployment-transaction.md. Build candidates without activating them.
+For an existing installation, activate the new candidate explicitly, then perform
+the supported explicit host restart to install the host implementation; a restart
+resumes the selected active artifact, not an undeployed newest candidate.
+
 Safe console loading uses an expiring host maintenance lease with mode `draining`.
 Normal combat heartbeats, attacks and healing continue for the captured current
 red-circle fight and genuine attackers; the character eligibility gate rejects
@@ -190,6 +219,15 @@ others pre-position for the respawn. Starting a patrol no longer launches a
 party convoy. Failure inventory: `e2e/phoenix-search-failures.md`. Validate
 `live-phoenix-search.spec.ts` and publish character and coordinator assets
 through the ordinary full restart.
+
+Pane 1's final seven bank cells are reserved for transfers only while a saved
+BankBoi exists, including an offline worker. Without BankBois, native sorting,
+deposits, stack homes and the dashboard use the full pane. Adding the first
+worker adopts existing transfer-row contents; removing the last worker clears
+only transfer-row cargo intent. Older heartbeat/protection payloads retain the
+conservative reservation. Validate `live-bank-staging.spec.ts` and retained
+bank/storage regressions; see `docs/testing-bank-staging.md`. Activation needs
+the supported full restart for character, coordinator and dashboard changes.
 
 Bank automatic-sale rules materialize deduplicated native-bank withdrawals even
 when unrelated requests already exist. Always-on withdrawals admit small visits;
@@ -411,11 +449,6 @@ merchant class leaves storage marked processing without starting native banking.
 Native stack filling still runs during unload, preserving stack caps and reserved
 stock. Validate `live-bankboi.spec.ts` and activate through the full restart.
 
-The items1 transfer row (slots 35–41) is reserved only while a BankBoi exists;
-otherwise it is ordinary bank space (`docs/bankboi-storage.md`). This changes
-character execution, so publish characters and activate through the full restart;
-validate `live-bank-staging.spec.ts` and `live-bank-sort-gaps.spec.ts`.
-
 Cave travel assembles participants at the leader before departure, shares the
 leader's validated native route, applies the slowest party speed through native
 cruise, and holds members that get ahead in walking progress. Interrupted routes
@@ -504,12 +537,6 @@ sale, upgrade, compound, deconstruction and exchange rules retain rewards for
 normal merchant work. `/merchant/exchange-progress` returns current reward routing
 after bank travel. Auto exchange rules persist for future complete batches and
 allow nested boxes to queue another exchange; locked stacks are excluded.
-Party members' stock under an Auto exchange rule is picked up by party collection
-like auto compound and upgrade stock (`merchant/collection-pickups.ts`), so no
-merchant mark is needed (one would retire the exchange rule); it stays with its
-owner while automatic exchange is disabled, and the dashboard labels it on every
-holder. Validate with `e2e/live-exchange-collection.spec.ts`
-(failure inventory `e2e/exchange-collection-failures.md`).
 Manual exchange is always enabled. Automatic exchange has its own checkbox and
 priority; legacy Exchange priority/enable settings migrate to the new routines.
 Validate the exchange reward console journey and the native exchange actions and
@@ -2152,3 +2179,13 @@ stale/disconnected observations cannot reset exhaustion. CODE turnover and backe
 restart preserve counters. Cave is excluded. Expired selections use the existing
 /event-disabled exit and checkpoint recovery. Publish character and coordinator
 assets together through the supported full restart when activating this change.
+
+Party inventory exposes Exchange and Auto exchange as merchant-owned end states.
+Automatic exchange stock participates in protected party collection while the
+routine is enabled, independently of automatic compound. Auto merchant remains
+exclusive: it only hands stock to the merchant. One-time Exchange persists a
+separate manual exchange pickup and a blocked exchange job; only its matching
+full kept-item handoff receipt releases the merchant exchange, including after
+restart. Validate `live-exchange-collection.spec.ts`; see
+`docs/testing-party-exchange.md`. Coordinator/dashboard-only activation requires
+the explicitly requested supported CoordinatorOnly restart.

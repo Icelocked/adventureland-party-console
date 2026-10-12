@@ -1,4 +1,6 @@
+import './market-preferences.case';
 import { test, expect } from './fixtures';
+import './tracktrix-drilldown.case';
 import { createServer } from 'node:http';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { transform, build } from 'esbuild';
@@ -1173,6 +1175,8 @@ test('market affordability uses core bank gold and active WTB prices open the fu
   await info.attach('market-core-bank-gold-affordability',{body:await page.screenshot(),contentType:'image/png'});
 });
 
+test.describe('declared map capture observations',()=>{
+  test.use({mapCapture:true});
 test('expanded character and Cave maps capture real canvas pixels with map and camera-center footers',async({page,app},info)=>{
   // Declared map/read fixture only: real browser image loading, canvas drawing,
   // CORS, popup creation and PNG serialization remain the production path.
@@ -1191,16 +1195,7 @@ test('expanded character and Cave maps capture real canvas pixels with map and c
     const map='zone_abc123_0',name='W',x=31,y=47;
     const definition={name:map,min_x:-100,min_y:-200,max_x:500,max_y:400,default:0,
       tiles:[['capture',0,0,16,16]],placements:[],groups:[],tilesets:{capture:{file:`http://127.0.0.1:${address.port}/tile.png`}}};
-    const initial=await app.state();
-    await app.deliverStatus({...initial.characters.W,name,map,x,y});
-    // Keep the declared map position stable across fixture status emissions.
-    // Aborting the dashboard stream exercises its normal HTTP read fallback.
-    await page.route('**/party-api/dashboard-stream',route=>route.abort());
-    await page.route('**/party-api/state*',async route=>{
-      const response=await route.fetch(),state=await response.json();
-      await route.fulfill({response,json:{...state,characters:{...state.characters,
-        W:{...initial.characters.W,...state.characters?.W,name,map,x,y}}}});
-    });
+    await expect.poll(async()=>{const state=await app.state();return {map:state.characters.W.map,x:state.characters.W.x,y:state.characters.W.y};}).toEqual({map,x,y});
     await page.route('**/party-api/map-stream/*',route=>route.fulfill({contentType:'text/event-stream',body:'data: '+JSON.stringify({name,map,x,y,at:Date.now(),entities:[],definition})+'\n\n'}));
     await page.route('**/party-api/daily-dungeons',route=>route.fulfill({json:{state:{phase:'active',run:'abc123',participants:[name],protectFromEvents:true,commands:{},operations:[],progress:{enabled:false,serial:0}},members:[{name,fresh:true,observation:{protocol:1,at:Date.now(),supported:true,alive:true,ready:true,members:[name],cave:{run:'abc123',floor:0,expires:Date.now()+600000,remainingMs:600000,paused:false,gold:0,amber:0,points:[]}}}]}}));
     await page.goto('/');
@@ -1252,6 +1247,16 @@ test('expanded character and Cave maps capture real canvas pixels with map and c
     }
     expect(imageRequests).toBeGreaterThan(0);
     await info.attach('map-capture-ledger',{body:JSON.stringify({map,imageRequests,captures}),contentType:'application/json'});
+  } finally {
+    if(!page.isClosed())await page.unrouteAll({behavior:'wait'});
+    images.closeAllConnections();
+    await new Promise<void>((resolve,reject)=>images.close(error=>error?reject(error):resolve()));
+  }
+});
+
+});
+
+test('fixed-origin map image proxy returns native Dreams tiles and rejects external origins',async({page},info)=>{
     // Actual dashboard server boundary: fetch the verified native Dreams
     // tileset through the maintained fixed-origin proxy, without intercepting it.
     const nativeUrl='https://adventure.land/images/tiles/map/dreams-v3.png?v=3';
@@ -1267,18 +1272,17 @@ test('expanded character and Cave maps capture real canvas pixels with map and c
     expect(rejected.status()).toBe(400);
     await info.attach('native-dreams-proxy-image',{body:nativeBytes,contentType:'image/png'});
     await info.attach('map-image-proxy-ledger',{body:JSON.stringify({nativeUrl,status:proxied.status(),headers:proxied.headers(),bytes:nativeBytes.length,rejectedExternalStatus:rejected.status()}),contentType:'application/json'});
-  } finally {
-    images.closeAllConnections();
-    await new Promise<void>((resolve,reject)=>images.close(error=>error?reject(error):resolve()));
-  }
 });
 
 test('Cave map survives stale reports without allowing stale waypoint actions',async({page},info)=>{
   // Declared read-boundary fixture: no native receipts, combat, or ownership is forged.
-  let run='read-fixture-a',floor=0,fresh=true;
+  let run='read-fixture-a',floor=0,fresh=true,operations=0;
   const name='M';
   const view=()=>({state:{phase:'active',run,participants:[name],protectFromEvents:true,commands:{},operations:[],progress:{enabled:false,serial:0}},members:[{name,fresh,observation:{protocol:1,at:Date.now(),supported:true,alive:true,ready:true,members:[name],cave:{run,floor,expires:Date.now()+600000,remainingMs:600000,paused:false,gold:0,amber:0,points:[]}}}]});
-  await page.route('**/party-api/daily-dungeons',route=>route.fulfill({json:view()}));
+  await page.route('**/party-api/daily-dungeons',route=>{
+    if(route.request().method()==='POST')operations++;
+    return route.fulfill({json:view()});
+  });
   await page.route('**/party-api/map-stream/*',route=>{
     const map='zone_'+run+'_'+floor;
     return route.fulfill({contentType:'text/event-stream',body:'data: '+JSON.stringify({name,map,at:Date.now(),x:100,y:100,entities:[],definition:{name:map,min_x:0,min_y:0,max_x:200,max_y:200,tiles:[],placements:[],groups:[],tilesets:{}}})+'\n\n'});
@@ -1294,6 +1298,12 @@ test('Cave map survives stale reports without allowing stale waypoint actions',a
   fresh=false;
   await expect(set).toBeDisabled();
   await expect(map.getByRole('status')).toHaveText('Waiting for fresh participant reports.');
+  await expect(map.getByRole('button',{name:'Add waypoint',exact:true})).toBeEnabled();
+  await map.getByRole('button',{name:'Add waypoint',exact:true}).click();
+  await expect(map.getByText('Click the map to place your waypoint.',{exact:true})).toBeVisible();
+  await map.locator('canvas').click({position:{x:120,y:100}});
+  await expect(set).toBeDisabled();
+  expect(operations,'Local placement must not dispatch a stale native operation').toBe(0);
   await expect.poll(async()=>{
     const box=await map.locator('canvas').boundingBox();
     return box && freshCanvas && Math.abs(box.y-freshCanvas.y)+Math.abs(box.height-freshCanvas.height);
@@ -1313,7 +1323,7 @@ test('Cave map survives stale reports without allowing stale waypoint actions',a
   await expect(next.getByRole('button',{name:'Set waypoint',exact:true})).toBeDisabled();
   run='read-fixture-b';
   await expect(next).not.toBeVisible();
-  await info.attach('cave-map-read-fixture-ledger',{body:JSON.stringify({transitions:['fresh','stale','fresh','floor 2','new run'],run,floor,fresh}),contentType:'application/json'});
+  await info.attach('cave-map-read-fixture-ledger',{body:JSON.stringify({transitions:['fresh','stale local placement without dispatch','fresh','floor 2','new run'],run,floor,fresh,operations}),contentType:'application/json'});
 });
 
 

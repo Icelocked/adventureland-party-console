@@ -4,7 +4,7 @@ const source=fs.readFileSync('characters/shared.js','utf8');
 function fn(name,next){return source.slice(source.indexOf('  function '+name+'('),source.indexOf('  function '+next+'('));}
 test('client reports enabled out-of-area rares from followers but excludes disabled, dead and claimed monsters',()=>{
  const entities={};for(const mtype of ['phoenix','tinyp','goldenbat','cutebee','hen','rooster','boar'])entities[mtype]={id:mtype,mtype,type:'monster',visible:true,x:20,y:0,hp:100};
- const c=vm.createContext({parent:{entities},character:{name:'M'},leader:'W',root:{},partyConvoyActive:false,navigationIntent:{},groupedFarming:()=>true,selectFarmCandidates:targets=>targets,
+ const c=require('./helpers/shared-context.cjs').createSharedContext({parent:{entities},character:{name:'M'},leader:'W',root:{},partyConvoyActive:false,navigationIntent:{},groupedFarming:()=>true,selectFarmCandidates:targets=>targets,
   isPassingEncounter:()=>false,passiveHunting:{rules:{}},passiveRareHunts:{phoenix:true,tinyp:true,goldenbat:false,cutebee:true,hen:true,rooster:true},monsterFocus:['boar'],monsterPriorities:{},rareActive:()=>false,
   groupedEntityReport:e=>({...e,map:'main',in:'main'}),inFarmArea:()=>false,isExternallyClaimedMonster:e=>e.claimed,farmApproach:{failed:{}}});
  vm.runInContext(require('./helpers/named-function.cjs').namedFunction(source, 'passiveLevelAllowed'), c);
@@ -19,17 +19,17 @@ test('actual coordinator snapshot retains a rare-owned queue and all clients der
  const party={leader:'W',partyFarmingMode:'default',headlessSlots:['W','P','M'],steamMembers:[],followers:{P:true,M:true},statuses:{},combatLogs:{}};
  for(const name of ['W','P','M'])party.statuses[name]={name,ctype:name==='P'?'priest':'warrior',seenAt:1000,map:'main',in:'main',server:'USII',x:0,y:0,hp:100,range:200,
   combatSelection:{runtimeId:name},groupedCombat:{protocol:4,anchorVisible:true,candidates:name==='M'?[rare]:[]}};
- const c=vm.createContext({coordinatorPolicies:require('../../runtime/coordinator/navigation/grouped-snapshot.ts'),party,Date:{now:()=>1000},farmingNavigation:{intent:()=>({revision:1})},ownedCharacter:()=>null,
+ const c=require('./helpers/shared-context.cjs').createSharedContext({consoleUpdate:{current:()=>null},coordinatorPolicies:require('../../runtime/coordinator/navigation/grouped-snapshot.ts'),party,Date:{now:()=>1000},farmingNavigation:{intent:()=>({revision:1})},ownedCharacter:()=>null,
   rareControl:{owns:()=>true,blocksPulls:()=>false},combatDisengagement:{tick(){},active:()=>false,prepare:m=>m,finalize:g=>g},evaluateGroup});
  vm.runInContext(require('./helpers/named-function.cjs').namedFunction(host, 'groupedCombatSnapshot'),c);
  const group=c.groupedCombatSnapshot();assert.equal(group.target.id,'R');assert.equal(group.queue.length,1);
- const client=vm.createContext({groupedFarming:()=>true,groupedCombat:group,navigationIntent:{},character:{map:'main',in:'main'},reunionRealm:()=> 'USII',get_entity:()=>({...rare,visible:true})});
+ const client=require('./helpers/shared-context.cjs').createSharedContext({groupedFarming:()=>true,groupedCombat:group,navigationIntent:{},character:{map:'main',in:'main'},reunionRealm:()=> 'USII',get_entity:()=>({...rare,visible:true})});
  vm.runInContext(fn('queueMarkers','acceptQueue'),client);assert.equal(client.queueMarkers()[0].visible,true);
 });
 
 test('claim reports preserve cooperative bosses and are completely disabled during events',()=>{
  const entities={};for(const mtype of ['franky','icegolem','crabxx','phoenix','boar'])entities[mtype]={id:mtype,mtype,type:'monster',visible:true,x:0,y:0,hp:100,target:'Stranger'};
- const c=vm.createContext({parent:{entities},character:{map:'main',in:'main'},groupedFarming:()=>true,Date:{now:()=>1000},coordinatorClockOffset:0,
+ const c=require('./helpers/shared-context.cjs').createSharedContext({parent:{entities},character:{map:'main',in:'main'},groupedFarming:()=>true,Date:{now:()=>1000},coordinatorClockOffset:0,
   groupedCombat:{queue:Object.keys(entities).map(id=>({id,map:'main',in:'main',server:'USII'}))},reunionRealm:()=> 'USII',get_entity:id=>entities[id],
   G:{monsters:Object.fromEntries(['franky','icegolem','crabxx','phoenix'].map(id=>[id,{cooperative:true}]))},eventTargetTypes:[],currentPartyList:()=>['W','M','P']});
  vm.runInContext(fn('queueClaims','groupedNomination')+fn('isExternallyClaimedMonster','groupedFarming'),c);

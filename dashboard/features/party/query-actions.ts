@@ -52,6 +52,7 @@ export const actionDomains = {
   '/merchant/job/retry': commerce,
   '/merchant/routine-priorities': core,
   '/merchant/blacklist': core,
+  '/market/ignored-items': core,
   '/merchant/stale-orders/clear': commerce,
   '/merchant/activity/clear': ['logs'],
   '/merchant/auto-npc-sale': core,

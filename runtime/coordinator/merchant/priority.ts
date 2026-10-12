@@ -1,5 +1,7 @@
 import { migrateRoutinePriorities, routineFor } from './routines.ts';
 export interface PrioritizedJob {
+  exchangePickupId?: string;
+  exchangeDeliveryId?: string;
   autoExchangeKeys?: string[];
   realmBlockedReason?: string;
   reason: string;

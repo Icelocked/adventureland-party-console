@@ -303,11 +303,15 @@ export function createEventObservations(
       );
   }
 
+  function liveFeedReady(report: ReturnStatus | undefined): report is ReturnStatus {
+    const at = Number(report?.seenAt);
+    return !!report && Number.isFinite(at) && ports.now() - at <= 10000 && at <= ports.now() + 500 &&
+      report.eventFeedConnected !== false && !report.eventClockStale;
+  }
+
   function nextLiveEvent(name: string, returningFrom: string): string | null {
     const report = ports.statuses()[name];
-    const at = Number(report?.seenAt);
-    if (!report || !Number.isFinite(at) || ports.now() - at > 10000 || at > ports.now() + 500 ||
-        report.eventFeedConnected === false || report.eventClockStale || ports.intent(name).cancelled) return null;
+    if (!liveFeedReady(report) || ports.intent(name).cancelled) return null;
     return report.serverLiveEvents?.find(entry => entry.name !== returningFrom &&
       ports.enabled(name, entry.name) && rawLive(entry.name) &&
       !(entry.name === 'slenderman' && report.slendermanSearchExhausted))?.name || null;

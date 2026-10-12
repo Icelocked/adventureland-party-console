@@ -53,7 +53,7 @@ function client(mode='request') {
  const c=coordinator();c.call('configure',{mode});const calls=[];
  const bank={items0:[{name:'z'},{name:'a'}],items1:Array(42).fill(null),items8:[{name:'z'},{name:'a'}]};
  bank.items1[35]={name:'reserved'};
- const r=vm.createContext({character:{name:'M',ctype:'merchant',map:'main',items:Array(42).fill(null),bank,x:0,y:0},root:{},
+ const r=vm.createContext({bankStaging:true,bankStagingSlot:(pack,slot)=>pack==="items1"&&slot>=35,character:{name:'M',ctype:'merchant',map:'main',items:Array(42).fill(null),bank,x:0,y:0},root:{},
   parent:{socket:{emit(type,{pack,str,inv}){calls.push('swap');[bank[pack][str],r.character.items[inv]]=[r.character.items[inv],bank[pack][str]]}}},
   convoyRuntimeId:'R',coordinatorClockOffset:0,runtimeCurrent:()=>true,
   bank_packs:{items0:['bank'],items1:['bank'],items8:['bank_b']},
@@ -63,7 +63,6 @@ function client(mode='request') {
   gatheringStatus(){},setTimeout:f=>f(),sleep:async()=>{},bankStackIdentity:x=>JSON.stringify(x),
   bankStoreFully:async inv=>{for(const pack of r.bankPacksOnCurrentFloor()){for(let slot=0;slot<42;slot++){if(pack==='items1'&&slot>=35)continue;if(!bank[pack][slot]){bank[pack][slot]=r.character.items[inv];r.character.items[inv]=null;return}}}throw Error('full')}
  });
- vm.runInContext(source.slice(source.indexOf('  // items1 slots 35-41 are the BankBoi transfer row'), source.indexOf('  var bankQueued = false;')),r); // BankBoi staging flag, reserved by default
  vm.runInContext(source.slice(source.indexOf('  // A visit spans all bank floors'),source.indexOf('  async function bankRetrieveConfirmed(')>0?source.indexOf('  async function bankRetrieveConfirmed('):source.indexOf('  async function sortCurrentBankFloor(')),r);
  vm.runInContext(source.slice(source.indexOf('  var bankStacks ='),source.indexOf('  async function bankStoreFully(')),r);
  installBankStacks(r);

@@ -58,7 +58,7 @@ export function createMerchantProgressRoutes(state: ProgressState, ports: Progre
       targetStatus: state.statuses[String(target)] || null,
       nextCollectionTarget: nextTarget(current),
       craftProtection: craftProtection(state),
-      ...(collectsPartyItems(current.reason) ? {collectionPickups: collectionPickups(state, String(target))} : {}),
+      ...(collectsPartyItems(current.reason) ? {collectionPickups: collectionPickups(state, String(target), current.reason)} : {}),
     });
   }
   function heartbeat(req: HttpRequest, res: HttpResponse): unknown {

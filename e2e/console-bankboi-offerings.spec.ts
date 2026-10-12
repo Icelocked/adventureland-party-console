@@ -72,6 +72,8 @@ test('BankBoi-only boosters enable upgrade choices and manual confirmation',asyn
 });
 
 test('ordinary upgrade menus label only the destination offering step and scroll price',async({page,app,request},info)=>{
+  const browserErrors:string[]=[];
+  page.on('pageerror',error=>browserErrors.push(error.message));
   await page.goto('/');
   await expect(page.getByRole('heading',{name:'M',exact:true})).toBeVisible();
   expect((await request.post(app.url+'/party-api/command',{headers:{Origin:app.url},data:{character:'M',type:'upgrade-offering-rule',rule:{name:'sword',floor:0,ceiling:1,offering:'offeringp',required:true}}})).ok()).toBe(true);
@@ -99,5 +101,6 @@ test('ordinary upgrade menus label only the destination offering step and scroll
     await info.attach(menu+'-offering-steps',{body:await page.screenshot(),contentType:'image/png'});
     await page.keyboard.press('Escape');await page.keyboard.press('Escape');
   }
-  await info.attach('offering-menu-rules',{body:JSON.stringify(await app.state()),contentType:'application/json'});
+  expect(browserErrors).toEqual([]);
+  await info.attach('offering-menu-rules',{body:JSON.stringify({state:await app.state(),browserErrors}),contentType:'application/json'});
 });

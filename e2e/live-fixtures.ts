@@ -20,12 +20,15 @@ export type LiveGame = {
   url: string;
   clients: Record<string, LiveClient>;
   state(catalogs?: boolean): Promise<any>;
+  savedTownCycle(): {id:string;pending:string[];revisions?:Record<string,number>} | null;
   post(route: string, body: unknown): Promise<any>;
   admin(code: string): Promise<any>;
   adminRealm(realm:'USI'|'USII', code:string):Promise<any>;
   holdMerchantStatus(hold:boolean):void;
-  consoleDrainLease(id: string | null, expires?: number): void;
+  consoleDrainLease(id: string | null, expires?: number, options?:{loadMode?:'now'|'safe'|'main';phase?:string}): void;
   restartCoordinator(): Promise<void>;
+  restartCoordinatorIdentity(artifactId:string,hash:string):Promise<void>;
+  deploymentPaths:{directory:string;apiUrl:string;codeRoots:string[]};
   restoreHistoricalSettings(restore: (settings: any) => any): Promise<void>;
   reconnectClient(name: string): Promise<void>;
 };
@@ -56,6 +59,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
     await testInfo.attach('live-seed', { body: JSON.stringify({ ...manifest, auth: '[disposable credential omitted]' }, null, 2), contentType: 'application/json' });
     const port = await unusedPort(), log = path.join(directory, 'coordinator.log');
     let coordinator: ChildProcess | undefined;
+    let identityEnvironment:NodeJS.ProcessEnv={};
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 },
       recordVideo: { dir: testInfo.outputPath('native-video'), size: { width: 960, height: 675 } } });
     const nativePages = new Set<Page>();
@@ -81,7 +85,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
     async function start() {
       coordinator = child(path.join(root, 'e2e/live-coordinator.cjs'), [], root,
         environment({ E2E_COORDINATOR_PORT: String(port), E2E_DATA_DIR: directory,
-          E2E_GAME_WEB_URL: manifest.webUrl, E2E_GAME_AUTH: manifest.auth, E2E_MERCHANT_DEFAULT: JSON.stringify(merchantDefault), E2E_ALLOW_HEADLESS: String(liveHeadless), E2E_STALE_WORKER_REALM: staleWorkerRealm || '' }), log);
+          E2E_GAME_WEB_URL: manifest.webUrl, E2E_GAME_AUTH: manifest.auth, E2E_MERCHANT_DEFAULT: JSON.stringify(merchantDefault), E2E_ALLOW_HEADLESS: String(liveHeadless), E2E_STALE_WORKER_REALM: staleWorkerRealm || '',...identityEnvironment }), log);
       const current = coordinator;
       await new Promise<void>((resolve, reject) => {
         const details = () => existsSync(log) ? readFileSync(log, 'utf8').slice(-16000) : 'No coordinator output';
@@ -105,6 +109,14 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           const response = await fetch(url + '/party-api/state' + (catalogs ? '' : '?catalog=0'), { signal: AbortSignal.timeout(15_000) });
           if (!response.ok) throw Error('Live state failed: ' + response.status);
           return response.json();
+        },
+        savedTownCycle() {
+          const journal=readFileSync(path.join(directory,'state.jsonl'),'utf8');
+          const complete=journal.slice(0,journal.lastIndexOf('\n'));
+          const stored=Object.assign({},...complete.split('\n').filter(Boolean).map(line=>JSON.parse(line)));
+          const settings=stored[stateKeys.settings];
+          const decoded=typeof settings==='string'?JSON.parse(settings):settings;
+          return decoded?.townCycle || null;
         },
         async post(route, body) {
           const endpoint = route.startsWith('/party-api/') ? route : '/party-api' + route;
@@ -131,14 +143,16 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           else rmSync(marker,{force:true});
           exchanges.push({at:Date.now(),transportFault:'merchant-status',hold});
         },
-        consoleDrainLease(id, expires = Date.now()+180000) {
+        consoleDrainLease(id, expires = Date.now()+180000, options={}) {
           const file = path.join(directory,'updates/pause.json');
           mkdirSync(path.dirname(file),{recursive:true});
-          if (id) writeFileSync(file,JSON.stringify({id,mode:'draining',expires}));
+          if (id) writeFileSync(file,JSON.stringify({id,mode:'draining',expires,...options}));
           else rmSync(file,{force:true});
           exchanges.push({at:Date.now(),hostMaintenanceLease:id,expires});
         },
         async restartCoordinator() { await stop(coordinator!, true); await start(); },
+        deploymentPaths:{directory,apiUrl:`http://127.0.0.1:${port}`,codeRoots:[path.join(root,'.build/CODE/adventure_land'),path.join(directory,'CODE/adventure_land')]},
+        async restartCoordinatorIdentity(artifactId,hash){identityEnvironment={AL_CONSOLE_ARTIFACT_ID:artifactId,AL_CONSOLE_COORDINATOR_HASH:hash};await stop(coordinator!,true);await start();},
         async restoreHistoricalSettings(restore) {
           await stop(coordinator!, true);
           const journal = path.join(directory, 'state.jsonl');
@@ -175,7 +189,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
             ownership.characters[member]?.runtime === 'native');
           if (!steamNames.includes(name)) throw Error('Native browser reconnect requires current Steam ownership: ' + name);
           const companions = steamNames.filter(member=>member!==primaryName);
-          const previous = companions.map(member=>clients[member]);
+          const previous = companions.map(member=>clients[member].frame);
           if (name === primaryName) {
             await clients[name].page.close();
             await expect.poll(async () => game.admin(`output=Object.values(players).concat(Object.values(dc_players)).filter(p=>${JSON.stringify(steamNames)}.includes(p.name)).length`), { timeout: 45_000 }).toBe(0);
@@ -184,7 +198,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           } else {
             await clients[primaryName].frame.evaluate(name => (window as any).stop_character_runner(name), name);
             await live!.post('/steam/restore', {});
-            await expect.poll(() => previous.every(client => client.frame.isDetached()), { timeout: 30_000 }).toBe(true);
+            await expect.poll(() => previous.every(frame => frame.isDetached()), { timeout: 30_000 }).toBe(true);
           }
           for (const companion of companions)
             clients[companion] = await launchGameClient(context, optionsFor(companion));

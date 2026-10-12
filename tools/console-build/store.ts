@@ -1,9 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { mkdir, rename, readdir, lstat, realpath, rm, unlink } from 'node:fs/promises';
+import { mkdir, rename, readdir, lstat, realpath, rm, unlink, readlink } from 'node:fs/promises';
 import path from 'node:path';
 import { atomicJson, readJson, inspectRemoval, applyRemovals } from '../build-store.ts';
-import type { Candidate, CandidateManifest, DeploymentJournal, References } from './contracts.ts';
+import {deploymentPending, type Candidate, type CandidateManifest, type CandidateSummary, type DeploymentJournal, type References} from './contracts.ts';
 
 const validId = (id: string) => /^[a-f0-9]{64}$/.test(id);
 async function fileHash(file: string): Promise<string> {
@@ -127,9 +127,9 @@ export class ConsoleBuildStore {
     if (!validId(id)) throw new Error('Invalid console candidate ID');
     return path.join(this.directory, 'releases', id);
   }
-  async verify(id: string): Promise<Candidate> {
+  async verify(id: string, dependencies = new Set<string>()): Promise<Candidate> {
     const manifest = await this.metadata(id);
-    await this.verifyDirectory(path.join(this.release(id), 'app'), manifest);
+    await this.verifyDirectory(path.join(this.release(id), 'app'), manifest, dependencies);
     return {manifest, directory: path.join(this.release(id), 'app')};
   }
   private async metadata(id: string): Promise<CandidateManifest> {
@@ -140,10 +140,14 @@ export class ConsoleBuildStore {
     if (complete.manifestHash !== createHash('sha256').update(JSON.stringify(manifest)).digest('hex')) throw new Error('Candidate manifest changed: ' + id);
     return manifest;
   }
-  private async verifyDirectory(directory: string, manifest: CandidateManifest) {
+  describe(id: string) { return this.metadata(id); }
+  private async verifyDirectory(directory: string, manifest: CandidateManifest, dependencies = new Set<string>()) {
     validateManifest(manifest);
     if (await realpath(directory) !== path.resolve(directory)) throw new Error('Candidate directory is redirected');
-    if (manifest.dependencyId) await this.verifyDependencies(manifest.dependencyId);
+    if (manifest.dependencyId && !dependencies.has(manifest.dependencyId)) {
+      await this.verifyDependencies(manifest.dependencyId);
+      dependencies.add(manifest.dependencyId);
+    }
     const observed = await observedFiles(directory, name => this.verifyDependencyLink(directory, manifest, name));
     await verifyFiles(directory, manifest.files, observed);
   }
@@ -168,8 +172,9 @@ export class ConsoleBuildStore {
   }
   /** stage contains app/. Caller must finish all writes before this method. */
   async complete(stage: string, manifest: CandidateManifest): Promise<Candidate> {
+    // The builder owns this unpublished stage. Hashing must not hold admission.
+    await this.verifyDirectory(path.join(stage, 'app'), manifest);
     return this.locked(async () => {
-      await this.verifyDirectory(path.join(stage, 'app'), manifest);
       await atomicJson(path.join(stage, 'manifest.json'), manifest);
       await atomicJson(path.join(stage, 'complete.json'), {id: manifest.id, manifestHash: createHash('sha256').update(JSON.stringify(manifest)).digest('hex')});
       await mkdir(path.join(this.directory, 'releases'), {recursive: true});
@@ -186,6 +191,8 @@ export class ConsoleBuildStore {
       await atomicJson(countsFile, counts);
       const current = refs.latest ? await this.metadata(refs.latest) : undefined;
       if (!current || manifest.createdAt >= current.createdAt) await this.setReferences({...refs, latest: manifest.id});
+      const summaries = Object.fromEntries((await this.history()).map(({files: _files, ...summary}) => [summary.id, summary]));
+      await atomicJson(path.join(this.directory, 'summaries.json'), summaries);
       return {manifest: await this.metadata(manifest.id), directory: path.join(this.release(manifest.id), 'app')};
     });
   }
@@ -196,7 +203,7 @@ export class ConsoleBuildStore {
   }
   journal() { return readJson<DeploymentJournal>(path.join(this.directory, 'deployment.json')); }
   setJournal(value: DeploymentJournal) { return atomicJson(path.join(this.directory, 'deployment.json'), value); }
-  async completedSince(active: string | undefined, history: CandidateManifest[]): Promise<number> {
+  async completedSince(active: string | undefined, history: CandidateSummary[]): Promise<number> {
     const counts = await readJson<{total: number; numbers: Record<string, number>}>(path.join(this.directory, 'completion-counts.json'));
     if (counts && active && counts.numbers[active] !== undefined) return Math.max(0, counts.total - counts.numbers[active]);
     const baseline = history.find(item => item.id === active);
@@ -209,6 +216,18 @@ export class ConsoleBuildStore {
     const result: CandidateManifest[] = [];
     for (const id of names.filter(validId)) result.push(await this.metadata(id));
     return result.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+  async summaries(): Promise<CandidateSummary[]> {
+    const names = await readdir(path.join(this.directory, 'releases')).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return []; throw error;
+    });
+    const index = await readJson<Record<string, CandidateSummary>>(path.join(this.directory, 'summaries.json')) || {};
+    const result: CandidateSummary[] = [];
+    for (const id of names.filter(validId)) {
+      if (index[id]?.id === id) result.push(index[id]);
+      else { const {files: _files, ...summary} = await this.metadata(id); result.push(summary); }
+    }
+    return result.sort((a,b) => a.createdAt.localeCompare(b.createdAt));
   }
   async pin(ids: string[]) {
     await this.locked(async () => {
@@ -227,13 +246,43 @@ export class ConsoleBuildStore {
     await this.locked(async () => {
       const history = await this.history(), refs = await this.references(), journal = await this.journal();
       const keep = new Set([...history.slice(-20).map(item => item.id), ...Object.values(refs)]);
-      if (journal && ['waiting-safe', 'activating', 'rolling-back'].includes(journal.phase)) { keep.add(journal.target); keep.add(journal.previous); }
+      if (journal && deploymentPending(journal.phase)) { keep.add(journal.target); keep.add(journal.previous); }
       for (const id of await this.livePins(/^live-\d+\.json$/)) keep.add(id);
-      for (const item of history) if (!keep.has(item.id)) await this.removeCandidate(item.id);
+      const trash=path.join(this.directory,'trash');await mkdir(trash,{recursive:true});
+      if(await realpath(trash)!==trash)throw Error('Cleanup trash is redirected');
+      for (const item of history) if (!keep.has(item.id)) {
+        const source=this.release(item.id);if((await lstat(source)).isSymbolicLink())throw Error('Cleanup refuses redirected release');
+        await rename(source,path.join(trash,'release-'+item.id+'-'+randomUUID()));
+      }
       const dependencies = new Set(history.filter(item => keep.has(item.id)).map(item => item.dependencyId).filter((id): id is string => !!id));
       for (const id of await this.livePins(/^dependency-live-\d+\.json$/)) dependencies.add(id);
-      await this.removeUnusedDependencies(dependencies);
+      const caches=await readdir(path.join(this.directory,'dependencies')).catch((error:NodeJS.ErrnoException)=>{if(error.code==='ENOENT')return [];throw error;});
+      for(const id of caches.filter(validId))if(!dependencies.has(id)){
+        const source=path.join(this.directory,'dependencies',id);if((await lstat(source)).isSymbolicLink())throw Error('Cleanup refuses redirected dependency');
+        await rename(source,path.join(trash,'dependencies-'+id+'-'+randomUUID()));
+      }
     });
+    // Only selection/quarantine uses the operation lock. Slow tree inspection
+    // and deletion never block a new deployment or its completion journal.
+    const trash=path.join(this.directory,'trash');
+    for(const name of await readdir(trash)){
+      if(!/^(release|dependencies)-[a-f0-9]{64}-[a-f0-9-]+$/.test(name))continue;
+      const directory=path.join(trash,name);
+      try{
+        if(name.startsWith('release-')){
+          const manifest=await readJson<CandidateManifest>(path.join(directory,'manifest.json'));
+          for(const [link,component] of Object.entries({'node_modules':'root','dashboard/node_modules':'dashboard','.caracal/node_modules':'caracal'})){
+            const file=path.join(directory,'app',link),info=await lstat(file).catch((error:NodeJS.ErrnoException)=>{if(error.code==='ENOENT')return undefined;throw error;});
+            if(info?.isSymbolicLink()){
+              const target=path.resolve(path.dirname(file),await readlink(file));
+              const expected=manifest?.dependencyId&&validId(manifest.dependencyId)?path.join(this.directory,'dependencies',manifest.dependencyId,component,'node_modules'):null;
+              if(target!==expected)throw Error('Cleanup refuses unexpected dependency link');await unlink(file);
+            }
+          }
+        }
+        await applyRemovals(this.directory,[await inspectRemoval(this.directory,'trash/'+name)]);
+      }catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
+    }
   }
   private async livePins(pattern: RegExp): Promise<string[]> {
     const pins: string[] = [];
@@ -245,20 +294,5 @@ export class ConsoleBuildStore {
       catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
     }
     return pins;
-  }
-  private async removeCandidate(id: string) {
-    // Verify known links, then unlink references without following dependency caches.
-    const candidate = await this.verify(id);
-    for (const name of ['node_modules', 'dashboard/node_modules', '.caracal/node_modules']) {
-      const link = path.join(candidate.directory, name);
-      const info = await lstat(link).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return undefined; throw error; });
-      if (info?.isSymbolicLink()) await unlink(link);
-    }
-    await applyRemovals(this.directory, [await inspectRemoval(this.directory, 'releases/' + id)]);
-  }
-  private async removeUnusedDependencies(keep: Set<string>) {
-    const caches = await readdir(path.join(this.directory, 'dependencies')).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return []; throw error; });
-    for (const id of caches.filter(validId)) if (!keep.has(id))
-      await applyRemovals(this.directory, [await inspectRemoval(this.directory, 'dependencies/' + id)]);
   }
 }

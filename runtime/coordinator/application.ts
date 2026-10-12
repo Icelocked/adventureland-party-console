@@ -6,6 +6,7 @@ import { consoleMaintenance } from './lifecycle/console-maintenance.ts';
 import { createUpgradePreviews } from './merchant/upgrade-preview.ts';
 import { merchantVisibility } from './merchant/visibility.ts';
 import { loadCoordinatorDependencies } from "./infrastructure/dependencies.ts";
+import {marketIgnoredItemsRoute} from "./http/market-ignored-items.ts";
 import * as coordinatorPolicies from "./index.ts";
 import { realmOperationOwnsCharacter } from "./characters/realm-switch.ts";
 import type { CatalogDefinitions } from './status/catalog-validation.ts';
@@ -292,6 +293,7 @@ export function startCoordinatorApplication(
       now: () => Date.now(),
       sleep,
       pauseMerchant: pauseMerchantForRealmSwitch,
+      retireConvoys: retireConvoysForRealmSwitch,
       native: nativeName,
       block: ensureCharacterBlock,
       stop: softkill_block,
@@ -499,6 +501,7 @@ export function startCoordinatorApplication(
     const upgradePreviews = createUpgradePreviews(party, {persist:persistSettings, dispatch:dispatchMerchant, stamp:stampMerchantJob});
     const heartbeatResponse = coordinatorPolicies.createCoordinatorHeartbeatResponse(party, {
       now: () => Date.now(),
+      persist: persistSettings,
       activeNames: () => activeNames().filter(n => n === party.merchantCharacter || farmingScopes.owner(n) === party.leader),
       enabled: eventsEnabledFor,
       intent: (name) => farmingNavigation.intent(name),
@@ -1038,7 +1041,7 @@ export function startCoordinatorApplication(
         merchantScheduling: merchantScheduling.observe,
         response: (name, mode) => {
           dungeons.reconcile();
-          const maintenance = consoleUpdate.current();
+          const maintenance = consoleUpdate.current(party.statuses);
           if (maintenance && maintenance.mode !== 'draining') return { serverNow: Date.now(), consoleMaintenance: maintenance };
           const lease = mode ? undefined : dashboardStream.lease(name);
           return { ...(soloFor(name)?.heartbeatResponse || heartbeatResponse).response(name, mode),
@@ -1230,16 +1233,18 @@ export function startCoordinatorApplication(
       return rosterProjection.owned(name);
     }
 
+    function liveEventFor(name:string,event?:string):boolean {
+      const report=party.statuses[name];
+      return !!report && Date.now()-report.seenAt<3000 && (event==='anniversary'
+        ? !!report.anniversaryServer?.live
+        : !!report.serverLiveEvents?.some(entry=>entry.name===event) || stagingEventLive(name,event));
+    }
+
     function eventsEnabledFor(name: string, event?: string) {
       const enabled = event ? eventEnabled(party, name, event)
         : selectedEvents(party, name).some(selected => eventInstanceAllowed(party, name, selected));
       if (!enabled || event && !eventInstanceAllowed(party, name, event)) return false;
-      const report = party.statuses[name];
-      const live = !!report && Date.now() - report.seenAt < 3000 && (event === 'anniversary'
-        ? !!report.anniversaryServer?.live
-        : !!report.serverLiveEvents?.some(entry => entry.name === event) ||
-          stagingEventLive(name, event));
-      return dungeons.eventAllowed(name, event, live);
+      return dungeons.eventAllowed(name, event, liveEventFor(name,event));
 
     }
 
@@ -1661,7 +1666,7 @@ export function startCoordinatorApplication(
     }
 
     function dispatchMerchant() {
-      if (consoleUpdate.current() || realmOwnsMerchant()) return;
+      if (consoleUpdate.blocksMerchant() || realmOwnsMerchant()) return;
       merchantRecovery.expire(String(party.merchantCharacter));
       if (coordinatorPolicies.pruneIneligibleCollections(party, () => Date.now())) persistSettings();
       merchantDispatcher.dispatch();
@@ -1680,7 +1685,7 @@ export function startCoordinatorApplication(
     }
 
     function dispatchMerchantIdle() {
-      if (consoleUpdate.current() || realmOwnsMerchant()) return;
+      if (consoleUpdate.blocksMerchant() || realmOwnsMerchant()) return;
       merchantIdle.idle();
     }
 
@@ -1708,6 +1713,16 @@ export function startCoordinatorApplication(
 
     function pauseMerchantForRealmSwitch() {
       coordinatorPolicies.pauseMerchantForRealm(party, () => Date.now(), stampMerchantJob);
+    }
+
+    function retireConvoysForRealmSwitch(participants: string[]) {
+      // Keep saved farming destinations intact; only departed travel loses its owner.
+      if (party.activeConvoy?.participants.some(name => participants.includes(name)))
+        partyConvoys.cancel("party departed for another realm");
+      for (const service of independentServices()) {
+        if (service.state.activeConvoy?.participants.some(name => participants.includes(name)))
+          service.partyConvoys.cancel("party departed for another realm");
+      }
     }
 
     function resolveAbtestingStrategy() {
@@ -1891,6 +1906,7 @@ export function startCoordinatorApplication(
 
     const heartbeatResponse = coordinatorPolicies.createCoordinatorHeartbeatResponse(party, {
       now: () => Date.now(),
+      persist: persistSettings,
       activeNames,
       enabled: eventsEnabledFor,
       intent: (name) => farmingNavigation.intent(name),
@@ -2232,7 +2248,7 @@ export function startCoordinatorApplication(
     }
 
     function dispatchBank() {
-      if (consoleUpdate.current()) return;
+      if (consoleUpdate.blocksMerchant()) return;
       bankQueueService.dispatch();
     }
 
@@ -2335,8 +2351,15 @@ export function startCoordinatorApplication(
                 upgradePreviews.install(router);
                 router.get('/party-api/console-maintenance', (_req, res) => res.json(consoleUpdate.status(party.statuses,
                   [...party.headlessSlots, ...party.steamMembers], !!party.steamSwitch && party.steamSwitch.phase !== 'complete')));
+                router.get('/party-api/console-deployment',(_req,res)=>res.json({serverNow:Date.now(),consoleMaintenance:consoleUpdate.current()}));
+                router.get('/party-api/console-runtime', (_req,res)=>res.json({characters:Object.fromEntries(Object.entries(party.statuses).map(([name,report])=>[name,{
+                  name,seenAt:report.seenAt,connected:report.connected,ctype:report.ctype,type:report.type,codeHash:report.codeHash,rip:report.rip,
+                  consoleMaintenance:report.consoleMaintenance,map:report.map,in:report.in,x:report.x,y:report.y,
+                  dungeon:{cave:{run:coordinatorPolicies.requestObject(coordinatorPolicies.requestObject(report.dungeon).cave).run}},
+                }]))}));
                 coordinatorPolicies.installMovementRoutes(router, movementPlanner, ownedCharacter);
                 installProductionRoutes(router, party, () => persistence.settings(), merchantLog);
+                router.post('/party-api/market/ignored-items',marketIgnoredItemsRoute(party,persistSettings));
                 router.post('/party-api/merchant/stand-location', standLocationRoute(party, (x,y) => canStand(x,y), persistSettings));
                 installSharedRuleRoutes(router, party, persistSettings);
                 router.post("/party-api/merchant/native-stand", coordinatorPolicies.createNativeStandRoute(party, { fulfill: fulfillStandBid, persist: persistSettings, dispatch: dispatchMerchant, stamp: stampMerchantJob }));

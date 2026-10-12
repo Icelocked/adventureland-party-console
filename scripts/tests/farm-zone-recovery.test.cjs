@@ -183,6 +183,7 @@ test('convoy announced before local command blocks independent zone searching',(
 });
 test('Escape release installs convoy ownership before its first asynchronous stop',async()=>{
  const r=movement();r.c.state={partyConvoyActive:true,escape:null};r.c.partyConvoyActive=false;
+ vm.runInContext(require('./helpers/named-function.cjs').namedFunction(shared,'convoyActivityFromStatus'),r.c);
  r.c.applyEscape=async()=>{assert.equal(r.c.recoverFarmApproach(null),true);assert.equal(r.calls(),0);};
  vm.runInContext(shared.slice(shared.indexOf('  async function applyEventReturnOwner('),shared.indexOf('  async function merchantSendMail(')),r.c);
  const start=shared.indexOf('      // Install the new convoy barrier');
@@ -225,4 +226,13 @@ test('a pending conflict is cancelled if monsters reappear before departure',()=
  const t=controlFixture();t.party.statuses.W.farmAreaEvidence=[{key:'kill',actor:'Other',mtype:'bee',map:'main',x:50,y:50,at:t.now(),kill:true}];
  t.party.statuses.W.map='main';t.party.statuses.W.groupedCombat.currentAttackers=[{id:'enemy',map:'main',target:'W',hp:100}];
  t.c.farmAreaTick();assert.ok(t.party.farmAreaState.pending);t.party.statuses.P.farmCompetition.monsters.bee=1;t.advance();t.c.farmAreaTick();assert.equal(t.party.farmAreaState.pending,null);assert.equal(t.starts.length,0);
+});
+
+test('retained backend event exit after CODE turnover prevents empty-zone farming until cycle retires',()=>{
+ const r=movement();r.c.partyLocation.map='winterland';r.c.eventReturnPending=false;r.c.__partyEventRecoveryCycleId='event-1';
+ vm.runInContext(require('./helpers/named-function.cjs').namedFunction(shared,'eventExitOwnsMovement'),r.c);
+ for(let i=0;i<20;i++){r.now(13000+i*1000);assert.equal(r.c.recoverFarmApproach(null),true);}
+ assert.equal(r.calls(),0);assert.equal(r.stops(),0);
+ r.c.__partyEventRecoveryCycleId=null;r.now(40000);r.c.recoverFarmApproach(null);
+ assert.equal(r.calls(),1,'native farming continuation resumes after actual cycle retirement');
 });

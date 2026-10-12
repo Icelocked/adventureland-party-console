@@ -20,8 +20,9 @@ for(const variant of ['leaving Green','following a Pumpkin leader','restoring a 
         E[type]={live:true,id:String(m.id),map:m.map,x:m.x,y:m.y,hp:m.hp,max_hp:m.max_hp};}catch(error){G.monsters[type]=original;throw error;}}
       broadcast_e();return result;})()`);
     const samples:any[]=[];
-    const hits=async(name:string,event:string,after=0)=>(await live.clients[name].events()).some(packet=>
-      packet.event==='hit'&&String(packet.data?.id)===seeds[event].id&&packet.data?.hid===name&&packet.data?.damage>0&&packet.at>=after);
+    const hits=async(name:string,event:string,after=0)=>live.clients[name].frame.evaluate(({name,id,after})=>
+      ((window as any).__e2eEvents || []).some((packet:any)=>packet.event==='hit'&&String(packet.data?.id)===id&&
+        packet.data?.hid===name&&packet.data?.damage>0&&packet.at>=after),{name,id:seeds[event].id,after});
     try{
       if(variant!=='following a Pumpkin leader'){
         await live.post('/formation',{character:W,eventSelections:['mrgreen']});
@@ -32,10 +33,9 @@ for(const variant of ['leaving Green','following a Pumpkin leader','restoring a 
         await expect.poll(async()=>await hits(W,'mrpumpkin')&&await hits(P,'mrgreen'),{timeout:120_000}).toBe(true);
       }
       const transitionAt=Date.now();
-      const beforeTransition=await live.state();
-      // Following captures the leader's current location as the new destination.
-      const checkpoints=Object.fromEntries(fighters.map(name=>[name,variant==='following a Pumpkin leader'&&name===P?
-        {map:beforeTransition.characters[W].map,x:beforeTransition.characters[W].x,y:beforeTransition.characters[W].y}:checkpoint]));
+      // Follow remains enabled after attendance. Its event rendezvous is not a
+      // new independent farm: both members must return to the saved party farm.
+      const checkpoints=Object.fromEntries(fighters.map(name=>[name,checkpoint]));
       if(variant==='restoring a held Green return'||variant==='interrupting a checkpoint return'){
         // Declare the persisted failure state, never a successful exit or hit.
         // Its dispatched timestamp must not strand an empty recovery.

@@ -12,6 +12,7 @@ import { receiveMapFrame, type MapRenderBuffer } from "./map-render-buffer";
 import { useCharacterData } from './dashboard-live';
 import { committedLiveRecord } from './live-metrics';
 import { MapCaptureButton, type MapCaptureState } from './map-capture-button';
+import {useSessionState} from './session-state';
 
 // Beyond the initial fallback, only `char.name` matters here: map/x/y come
 // from this component's own live `position` subscription below, so a fresh
@@ -24,8 +25,8 @@ export const CharacterMapSection = memo(function CharacterMapSection({ char: bas
   const char = { ...base, ...position };
   const caveMap = /^zone_[a-f0-9]+_\d+$/.test(char.map);
   const mapLabel = caveMap ? 'Cave of Many Dreams' : char.map;
-  const [open, setOpen] = useState(false),
-    [large, setLarge] = useState(false);
+  const [open, setOpen] = useSessionState('map-open:'+base.name,false),
+    [large, setLarge] = useSessionState('map-large:'+base.name,false);
   const [streamDefinition, setStreamDefinition] = useState<MapDefinition | null>(null);
   const definitionQuery = useMapDefinition(char.map, open && !caveMap);
   const definition = caveMap ? (streamDefinition?.name === char.map ? streamDefinition : null) : definitionQuery.data || null;

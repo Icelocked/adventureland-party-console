@@ -347,8 +347,7 @@
   var coordinatorClockOffset = 0;
   var banking = false;
   var bankboiStorage = false;
-  // items1 slots 35-41 are the BankBoi transfer row only while a BankBoi exists; a coordinator
-  // that does not send the flag keeps the row reserved.
+  // Older coordinators omit the flag: retain their conservative reservation.
   var bankStaging = true;
   function bankStagingSlot(pack, slot) { return bankStaging && pack === "items1" && slot >= 35; }
   var bankQueued = false;
@@ -2255,6 +2254,9 @@
   }
 
   function consoleMaintenanceBusy(includeCombat) {
+    var lease=root.__partyConsoleMaintenance;
+    if(character.ctype==='merchant'&&lease&&(lease.phase==='holding'||lease.loadMode!=='main'))return !!(root.__partyConsoleAtomic||activeUpgrade||root.__partyUpgradePreviewInFlight||
+      character.q&&Object.keys(character.q).length||includeCombat!==false&&currentTravelAttackers().length);
     return !!(root.__partyUpgradePreviewInFlight || banking || stocking || upgrading || gatheringActive || anniversaryBusy ||
       root.__merchantActiveJob || merchantIdleActive || root.__merchantInventoryTidy ||
       luckyUpgradeService && luckyUpgradeService.pending() ||
@@ -2262,10 +2264,9 @@
   }
   function consoleDraining() {
     var pause = root.__partyConsoleMaintenance;
-    if (pause && pause.mode === 'draining' && pause.expires <= Date.now() + coordinatorClockOffset) {
-      root.__partyConsoleMaintenance = null; root.__partyConsoleDrainTargets = null; return false;
-    }
-    return !!(pause && pause.mode === 'draining' && pause.expires > Date.now() + coordinatorClockOffset);
+    // A stale local clock cannot release a transaction. The coordinator observes
+    // host lease expiry and sends an ordered null; defense remains permitted.
+    return !!(pause && pause.mode === 'draining');
   }
   function consoleDrainKey(target) {
     return [reunionRealm(), character.map, character.in, target && target.id].join(':');
@@ -2281,23 +2282,63 @@
   function consoleMovementPaused() {
     // Finish already-owned inventory/merchant work before parking its route.
     // Freezing that route while also waiting for the job would deadlock readiness.
+    if(root.__partyConsoleMaintenance?.loadMode==='main'&&character.ctype!=='merchant'&&character.map!=='main')return false;
     return consoleDraining() && !consoleDrainCombatActive() && !consoleMaintenanceBusy();
+  }
+  function consoleCheckpointKey(){return 'party-console-return:'+character.name;}
+  function consoleMainTick(){
+    var lease=root.__partyConsoleMaintenance;
+    if(lease&&lease.loadMode==='main'&&character.ctype!=='merchant'){
+      if(character.map!=='main'&&!consoleDrainCombatActive()&&!root.__partyConsoleTownPromise){
+        var townPromise=smart_move('main').catch(function(error){game_log('Console Main travel retry: '+String(error.message||error),'red');}).finally(function(){if(root.__partyConsoleTownPromise===townPromise)root.__partyConsoleTownPromise=null;});
+        root.__partyConsoleTownPromise=townPromise;
+      }
+      return true;
+    }
+    var saved;
+    try{saved=JSON.parse(root.localStorage.getItem(consoleCheckpointKey())||'null');}catch(_error){return false;}
+    if(!lease&&saved&&character.ctype!=='merchant'){
+      if(!root.__partyConsoleReturnPromise){
+        forceTraveling=true;
+        var returnPromise=smart_move(saved).then(function(){if(runtimeCurrent())root.localStorage.removeItem(consoleCheckpointKey());})
+          .catch(function(error){game_log('Console checkpoint return retry: '+String(error.message||error),'red');})
+          .finally(function(){if(root.__partyConsoleReturnPromise===returnPromise){root.__partyConsoleReturnPromise=null;forceTraveling=false;}});
+        root.__partyConsoleReturnPromise=returnPromise;
+      }
+      return true;
+    }
+    return false;
+  }
+  async function consoleAtomicBoundary(){
+    while(runtimeCurrent()&&root.__partyConsoleMaintenance&&character.ctype==='merchant')await sleep(100);
+    if(!runtimeCurrent())throw Error('Merchant continuation replaced during console loading');
   }
   function receiveConsoleMaintenance(pause, serverNow) {
     if (serverNow && serverNow < (root.__partyConsoleMaintenanceAt || 0)) return;
     root.__partyConsoleMaintenanceAt = serverNow || root.__partyConsoleMaintenanceAt || 0;
+    if(pause&&pause.loadMode==='main'&&pause.phase!=='holding'&&character.ctype==='merchant')pause=null;
     if (pause && pause.mode === 'draining' && pause.id !== (root.__partyConsoleMaintenance || {}).id) {
       // Snapshot the current red-circle fight before enabling the acquisition gate.
       var targets = {};
-      var markers = queueMarkers().filter(function(marker) { return marker.role === 'current' && marker.visible; });
+      var markers = queueMarkers().filter(function(marker) { return marker.role === 'current' && marker.visible &&
+        (root.partyRoleRunner && root.partyRoleRunner.hasStartedTarget && root.partyRoleRunner.hasStartedTarget(marker.id) || isAttackingPartyMember(get_entity(marker.id))); });
       markers.forEach(function(marker) {
         targets[consoleDrainKey(marker)] = true;
       });
-      var active = activeCombatTarget();
-      if (active && !markers.length) targets[consoleDrainKey(active)] = true;
+      var active = engagedCombatTarget();
+      if (active && !markers.length && (root.partyRoleRunner && root.partyRoleRunner.hasStartedTarget && root.partyRoleRunner.hasStartedTarget(active.id) ||
+          isAttackingPartyMember(get_entity(active.id)))) targets[consoleDrainKey(active)] = true;
       root.__partyConsoleDrainTargets = targets;
+      if(pause.loadMode==='main'&&character.ctype!=='merchant'&&!root.localStorage.getItem(consoleCheckpointKey())){
+        root.localStorage.setItem(consoleCheckpointKey(),JSON.stringify({map:character.map,in:character.in,x:character.x,y:character.y}));
+      }
     }
     root.__partyConsoleMaintenance = pause;
+    if(pause&&Array.isArray(pause.fightTargets))pause.fightTargets.forEach(function(target){
+      if(target.map===character.map&&String(target.in||target.map)===String(character.in||character.map)&&(!target.server||target.server===reunionRealm()))
+        (root.__partyConsoleDrainTargets||= {})[consoleDrainKey(target)]=true;
+    });
+    parent.__partyConsoleMaintenance=pause;parent.__partyConsoleMaintenanceAt=root.__partyConsoleMaintenanceAt;
     if (!pause) root.__partyConsoleDrainTargets = null;
   }
   function previewSuppliesKey() { return "party-preview-supplies:"+character.name; }
@@ -2395,7 +2436,8 @@
   function consoleMaintenanceReport() {
     var pause = root.__partyConsoleMaintenance;
     var combat = consoleDrainCombatActive();
-    return pause ? { id: pause.id, mode: pause.mode, combat: combat, ready: !combat && !consoleMaintenanceBusy() && !character.moving &&
+    return pause ? { id: pause.id, mode: pause.mode,phase:pause.phase, combat: combat, ready: !combat && !consoleMaintenanceBusy() && !character.moving &&
+      (pause.loadMode!=='main'||character.ctype==='merchant'||character.map==='main') &&
       (consoleMovementPaused() || !(typeof smart !== 'undefined' && smart.moving)) } : null;
   }
   var dungeonClient;
@@ -2423,7 +2465,11 @@
   function getDungeonTarget() {
     if (!character.cave || character.cave.paused || !groupedFresh() || !groupedCombat.target) return null;
     var target = get_entity(groupedCombat.target.id);
-    return dungeonCombatThreat(target) ? target : null;
+    // A committed fight owns combat recovery even when terrain blocks its
+    // direct bearing. Keep the stricter threat test for new travel handoffs.
+    var committed = groupedCombat.caveScope === character.cave.run + ':' + character.cave.floor &&
+      groupedCombat.committed === true && groupedCombat.target.state === 'engaged';
+    return dungeonTargetAllowed(target) && (committed || dungeonCombatThreat(target)) ? target : null;
   }
   function dungeonCombatThreat(target) {
     if (!dungeonTargetAllowed(target)) return false;
@@ -2709,6 +2755,7 @@
       movement: movement.report() || movement.last(),
       convoyNavigation: convoyNavigationReport(),
       activeCombatTarget: activeCombatTarget(),
+      engagedCombatTarget:engagedCombatTarget(),
       combatTrace: root.__partyCombatTrace || [],
       recovery: root.partyCombatState && root.partyCombatState.recovery || null,
       eventWalkFailure: root.__partyEventWalkFailure || null,
@@ -2955,6 +3002,18 @@
     group.currentAttackers = currentTravelAttackers();
     group.currentAttackersAt = travelObservationAt();
   }
+  function convoyActivityFromStatus(state) {
+    if (state.partyConvoyActive) return true;
+    // Full status can yield while a newer fast heartbeat renews the owned
+    // journey. Only newer authoritative inactivity may retire that journey.
+    var signal=convoySignal,travel=convoyTraveling;
+    return !!(signal && travel && Number.isFinite(Number(state.serverNow)) &&
+      Number(state.serverNow)<Number(root.__partyTravelSignalAt || 0) &&
+      Number.isFinite(signal.localDeadline) && !convoySignalExpired(signal) &&
+      signal.id===travel.id && signal.epoch===travel.epoch && signal.commandId===travel.commandId &&
+      signal.runtimeId===convoyRuntimeId && signal.routeVersion===(travel.routeVersion || 0) &&
+      signal.navigationRevision===travel.navigationRevision);
+  }
   function acceptTravelResponse(state, started, fast) {
     var received = convoyDiagnosticClock(), wall = Date.now(), timing = state.transportTiming;
     var sentAt = timing && Number(timing.sentAt) || Number(state.serverNow);
@@ -3168,7 +3227,8 @@
   }
   function returnCombatActive() {
     if(character.rip || navigationIntent.cancelled || escapeOwns() || combatRecoveryActive())return false;
-    return !!(convoyTraveling && convoyTraveling.continuousReturn === 1 || root.__partyAnniversaryStagingOperation && !root.__partyAnniversaryStagingOperation.cancelled);
+    return !!(convoyTraveling && convoyTraveling.continuousReturn === 1 || root.__partyAnniversaryStagingOperation && !root.__partyAnniversaryStagingOperation.cancelled ||
+      typeof root.__partyEventRecoveryCycleId === "string" && root.__partyEventRecoveryCycleId);
   }
   function returnAttacker(target) {
     return !!(target && target.type==='monster' && target.visible!==false && !target.dead && target.hp>0 &&
@@ -3246,6 +3306,9 @@
         (isPassingEncounter(e) || currentPartyList().indexOf(e.target) < 0) &&
         !(root.partyRoleRunner && root.partyRoleRunner.isKnownDead(e.id));
     }).sort(function(a,b) { return monsterPriority(b)-monsterPriority(a) ||
+      // Complete an existing cohort reservation before starting another equal
+      // priority handshake; neither reservation may change walking ownership.
+      Number(isPassingEncounter(b))-Number(isPassingEncounter(a)) ||
       Math.hypot(character.x-a.x,character.y-a.y)-Math.hypot(character.x-b.x,character.y-b.y) || String(a.id).localeCompare(String(b.id)); })[0] || null;
   }
   function beginPassingAttack(target, admission, reserveOnly) {
@@ -3829,10 +3892,10 @@
     return bankStacks;
   }
   async function finishBankStacks(activity) {
-    var signature = JSON.stringify([bankSortVisit && bankSortVisit.id, character.bank]);
+    var signature = JSON.stringify([bankStaging, bankSortVisit && bankSortVisit.id, character.bank]);
     if (bankStackVisitSignature === signature) return;
     var result = await bankStackService().compact();
-    if (!result.deferred) bankStackVisitSignature = JSON.stringify([bankSortVisit && bankSortVisit.id, character.bank]);
+    if (!result.deferred) bankStackVisitSignature = JSON.stringify([bankStaging, bankSortVisit && bankSortVisit.id, character.bank]);
     if (result.moved) {
       activity.push({ level: "info", message: "Combined " + result.moved + " bank stacks" });
       await request("/status", { method: "POST", body: snapshot() });
@@ -3962,7 +4025,7 @@
     if (!await bankSortAuthorization()) throw new Error("Bank sorting cancelled");
   }
   function bankSortSignature() {
-    return JSON.stringify(bankPacksOnCurrentFloor().map(function(pack) { return [pack, character.bank[pack]]; }));
+    return JSON.stringify([bankStaging, bankPacksOnCurrentFloor().map(function(pack) { return [pack, character.bank[pack]]; })]);
   }
   function accessibleBankSortFloors() {
     var floors = [character.map], keys = {};
@@ -4214,7 +4277,7 @@
     await consolidateCurrentBankFloor(activity);
     if (!await bankSortAuthorization()) return;
     await cleanupBankSortBuffers();
-    var signature = bankSortLayout + bankStaging + bankSortSignature();
+    var signature = bankSortLayout + bankSortSignature();
     if (bankSortVisit.floors[character.map] === signature) return;
     var packs = bankPacksOnCurrentFloor();
     if (!packs.length) throw new Error("Bank floor data unavailable during sorting");
@@ -4288,7 +4351,7 @@
       return false;
     });
     if (stillMisplaced) throw new Error("Bank sorting stopped before every item was placed");
-    bankSortVisit.floors[character.map] = bankSortLayout + bankStaging + bankSortSignature();
+    bankSortVisit.floors[character.map] = bankSortLayout + bankSortSignature();
     if (operations) {
       activity.push({ level: "success", message: "Sorted " + packs.length + " bank pack" + (packs.length === 1 ? "" : "s") });
       // Publish the final slot order before a short job can leave the bank;
@@ -4419,6 +4482,8 @@
   }
 
   async function bankRetrieveConfirmed(pack, slot) {
+    await consoleAtomicBoundary();root.__partyConsoleAtomic=(root.__partyConsoleAtomic||0)+1;
+    try{
     var item = character.bank && character.bank[pack] && character.bank[pack][slot];
     if (!item) throw new Error("Bank withdrawal source is missing");
     var identity = bankStackIdentity(item), quantity = Number(item.q || 1);
@@ -4435,9 +4500,12 @@
       await sleep(100);
     }
     throw new Error("Bank withdrawal was not confirmed: " + item.name);
+    }finally{root.__partyConsoleAtomic--;}
   }
 
   async function bankStageConfirmed(inventorySlot, pack, slot) {
+    await consoleAtomicBoundary();root.__partyConsoleAtomic=(root.__partyConsoleAtomic||0)+1;
+    try{
     var item = character.items[inventorySlot];
     if (!item || character.bank[pack][slot]) throw new Error("Bank transfer slots changed before deposit");
     var identity = bankStackIdentity(item), quantity = Number(item.q || 1);
@@ -4449,6 +4517,7 @@
       await sleep(100);
     }
     throw new Error("Bank transfer deposit was not confirmed: " + item.name);
+    }finally{root.__partyConsoleAtomic--;}
   }
 
   async function runBankboiService(command) {
@@ -4849,12 +4918,18 @@
     return result;
   }
   async function compoundConfirmed(first, second, third, scrollSlot, automatic) {
-    return trackedProduction("compound",[first,second,third],automatic,function(){return observedCompoundConfirmed(first,second,third,scrollSlot);});
+    await consoleAtomicBoundary();root.__partyConsoleAtomic=(root.__partyConsoleAtomic||0)+1;
+    try{return await trackedProduction("compound",[first,second,third],automatic,function(){return observedCompoundConfirmed(first,second,third,scrollSlot);});}
+    finally{root.__partyConsoleAtomic--;}
   }
   async function upgradeConfirmed(itemSlot, scrollSlot, expectedName, expectedLevel, automatic, offeringAttempt) {
+    await consoleAtomicBoundary();
+    root.__partyConsoleAtomic=(root.__partyConsoleAtomic||0)+1;
+    try{
     if (character.items[scrollSlot] && !/^scroll[0-9]+$/.test(character.items[scrollSlot].name))
-      return observedUpgradeConfirmed(itemSlot,scrollSlot,expectedName,expectedLevel);
-    return trackedProduction("upgrade",[itemSlot],automatic,function(){return observedUpgradeConfirmed(itemSlot,scrollSlot,expectedName,expectedLevel,offeringAttempt);},offeringAttempt);
+      return await observedUpgradeConfirmed(itemSlot,scrollSlot,expectedName,expectedLevel);
+    return await trackedProduction("upgrade",[itemSlot],automatic,function(){return observedUpgradeConfirmed(itemSlot,scrollSlot,expectedName,expectedLevel,offeringAttempt);},offeringAttempt);
+    }finally{root.__partyConsoleAtomic--;}
   }
   async function observedCompoundConfirmed(first, second, third, scrollSlot) {
     await verifyMerchantItemMarks();
@@ -8277,8 +8352,13 @@
 
   function realmPagePath(realm) {
     var match = String(realm || "").match(/^SR_(US|EU|ASIA)([IVX]+|PVP)$/);
-    return match ? "/character/" + encodeURIComponent(character.name) +
-      "/in/" + match[1] + "/" + match[2] + "/" : null;
+    if (!match) return null;
+    // Native companions require their bot flags and managed CODE slot after
+    // navigation; a bare character URL changes the window's startup behavior.
+    var launch = String(parent.window.location.search || "").replace(/^\?/, "").split("&")
+      .filter(function (entry) { return /^(no_html|is_bot|code)=/.test(entry); }).join("&");
+    return "/character/" + encodeURIComponent(character.name) +
+      "/in/" + match[1] + "/" + match[2] + "/" + (launch ? "?" + launch : "");
   }
 
   async function awaitRealmRestart(realm) {
@@ -10375,7 +10455,10 @@
           if (character.map !== "main") {
             await prepareReturnExit(command,"town",function(){return runtimeCurrent() && !escapeOwns() && root.__partyTownGeneration===townGeneration;});
             try { await sharedPartyWalk(townPoint,"town-return",command.cycleId,command,function(){return root.__partyTownGeneration===townGeneration;}); }
-            catch (townRouteError) { root.__partyNavigationDetail=String(townRouteError.message||townRouteError);await sleep(3000); }
+            catch (townRouteError) {
+              if (returnWorkflowSuperseded(townRouteError)) throw townRouteError;
+              root.__partyNavigationDetail=String(townRouteError.message||townRouteError);await sleep(3000);
+            }
           } else if (Date.now() - (Number(root.__partyTownLastAttempt) || 0) >= 4000) {
             await saveReturnPhase(command,"town","main-town");
             root.__partyTownLastAttempt = Date.now();
@@ -10389,6 +10472,9 @@
         await request("/town-complete", { method: "POST", body: {
           character: character.name, commandId: command.id, cycleId: command.cycleId,
         }});
+      } catch (townError) {
+        if (returnWorkflowSuperseded(townError)) return;
+        throw townError;
       } finally {
         townTraveling = false;
         departurePending = false;
@@ -10635,6 +10721,11 @@
     }
   }
 
+  function returnWorkflowSuperseded(error) {
+    var context = error && error.partyRequest;
+    return !!context && context.path === "/return-progress" && context.status === 409 &&
+      context.reason === "return workflow superseded";
+  }
   function returnPhaseRecord(command, kind) {
     var revision=Number(navigationIntent.revision)||0;
     var saved=[root.__partyReturnProgress,parent.__partyReturnProgress].find(function(p){
@@ -10773,6 +10864,10 @@
       var state = await request("/status", { method: "POST", body: statusBody });
       if (!runtimeCurrent()) return;
       receiveConsoleMaintenance(state.consoleMaintenance || null, state.serverNow);
+      if(consoleMainTick()){
+        root.__partyStatusSuccessAt=Date.now();if(dashboardSampler)dashboardSampler.renew(state.dashboardLease);
+        return;
+      }
       if (root.__partyConsoleMaintenance && (!consoleDraining() || !consoleDrainCombatActive())) {
         // A held character still has a healthy heartbeat. Otherwise Steam's
         // stale-runner recovery replaces its CODE after twenty seconds of waiting.
@@ -10824,7 +10919,7 @@
       // Transport receipt already installed clock timing and the walking lease.
       // Install the new convoy barrier before releasing Escape. stop() yields,
       // so role timers can otherwise begin an independent route in this gap.
-      partyConvoyActive = !!state.partyConvoyActive;
+      partyConvoyActive = convoyActivityFromStatus(state);
       if(!partyConvoyActive)root.__partyConvoyDefense=null;
       partyTownActive = character.ctype !== "merchant" && !!state.partyTownActive;
       root.__partyTownCycleId=state.partyTownCycleId || null;
@@ -10865,7 +10960,7 @@
       partyTownActive = character.ctype !== "merchant" && !!state.partyTownActive;
       root.__partyTownCycleId=state.partyTownCycleId || null;
       root.__partyReturnProgress=state.returnProgress || null;
-      partyConvoyActive = !!state.partyConvoyActive;
+      partyConvoyActive = convoyActivityFromStatus(state);
       if(!partyConvoyActive)root.__partyConvoyDefense=null;
       var releasedHuntTurnIn = huntTurnInPriority && !state.huntTurnInPriority;
       huntTurnInPriority = !!state.huntTurnInPriority;
@@ -13122,7 +13217,8 @@
   }
   function eventExitOwnsMovement() {
     return typeof eventReturnPending !== "undefined" && eventReturnPending ||
-      !!(root.__partySharedWalking && root.__partySharedWalking.activity === "event-return");
+      !!(root.__partySharedWalking && root.__partySharedWalking.activity === "event-return") ||
+      !!(typeof root.__partyEventRecoveryCycleId === "string" && root.__partyEventRecoveryCycleId);
   }
   function reunionBlocked() {
     if (dungeonOwned()) return true;
@@ -13875,6 +13971,11 @@
     if (!groupedFarming()) return false;
     return !!groupedDefensiveTarget() || !!(groupedFresh() && groupedCombat.threats && groupedCombat.threats.length);
   }
+  function engagedCombatTarget(){
+    var id=root.partyRoleRunner&&root.partyRoleRunner.engagedTargetId&&root.partyRoleRunner.engagedTargetId(),entity=id&&get_entity(id);
+    return entity&&entity.visible&&!entity.dead&&entity.hp>0?{id:String(id),map:character.map,in:character.in,server:reunionRealm(),at:Date.now()+coordinatorClockOffset}:null;
+  }
+
   function activeCombatTarget() {
     var id=root.partyCombatState && root.partyCombatState.selectedTarget;
     var e=id && get_entity(id);
@@ -15672,6 +15773,10 @@
       cancelFarmApproach("defending visible party attackers");
       return false;
     }
+    if (typeof eventExitOwnsMovement === "function" && eventExitOwnsMovement()) {
+      cancelFarmApproach("event return owns movement");
+      return !target;
+    }
     if (!target && typeof rareActive === "function" && rareActive()) {
       cancelFarmApproach("rare encounter owns movement; waiting for combat selection");
       return true;
@@ -17180,6 +17285,7 @@
     // CODE replacement retires and replays travel ownership. A maintenance
     // movement hold must not prevent the very replacement it is waiting for.
     canReload: function () { return !consoleMaintenanceBusy(false); },
+    receiveConsoleMaintenance:receiveConsoleMaintenance,
     merchantEventCombatActive: function () {
       return character.ctype === "merchant" && !!joinedEvent && eventSelected(joinedEvent) &&
         !eventReturnPending && !root.__merchantActiveJob;
@@ -17640,6 +17746,9 @@
     getNearestPartyTarget: getNearestPartyTarget,
     isAttackingPartyMember: isAttackingPartyMember,
     allowsTarget: isAllowedTarget,
+    // Passing selection and cohort admission own travel eligibility; retain the
+    // independent deployment drain gate without applying farm acquisition locks.
+    allowsPassingTarget: consoleDrainAllows,
     getEventTarget: nearestEventTarget,
     escapeOwnsRevival: function () { return escapeOwns() && escapeState.stage === "recovering"; },
     frankyCombatActive: frankyCombatActive,

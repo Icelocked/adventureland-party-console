@@ -42,13 +42,13 @@ test('newly unlocked sparse pane schedules all 26 overflow items and blocks no-p
 });
 test('unload planning allocates slots once and respects withdrawal reservations and stack limits', () => {
   const worker={name:'B',items:[entry(5),entry(9),{item:{name:'sword'}}]};
-  const party={withdrawals:{M:[{pack:'items2',slot:1},{pack:'bankboi:B',item:{name:'sword'}}]},
+  const party={bankbois:{B:worker},withdrawals:{M:[{pack:'items2',slot:1},{pack:'bankboi:B',item:{name:'sword'}}]},
     bankSnapshot:{packs:{items1:Array(35).fill(entry(9999)),items2:[entry(9990),null,...Array(40).fill(entry(9999))]}}};
   assert.equal(routing.unloadPlan(party,worker).length,1);
 });
 function runtime(items, bank) {
   const calls = [];
-  const c = vm.createContext({ character: { items, bank, slots: {}, gold: 0, name: 'bankboi0' }, G: { items: { leather: { s: 9999 } } },
+  const c = require('./helpers/shared-context.cjs').createSharedContext({ bankStaging:true, bankStagingSlot:(pack,slot)=>pack==="items1"&&slot>=35, character: { items, bank, slots: {}, gold: 0, name: 'bankboi0' }, G: { items: { leather: { s: 9999 } } },
     findItem: wanted => items.findIndex(item => item?.name === wanted.name),
     parent: { bank_packs: {} }, bankStackHomes: {}, smart_move: async () => {}, freeInventorySlots: () => items.filter(x => !x).length,
     sleep: async () => {}, swap: async (a, b) => { [items[a], items[b]] = [items[b], items[a]]; },
@@ -77,7 +77,6 @@ function runtime(items, bank) {
       return { inv: items.indexOf(existing || item) };
     },
   });
-  vm.runInContext(source.slice(source.indexOf('  // items1 slots 35-41 are the BankBoi transfer row'), source.indexOf('  var bankQueued = false;')), c); // BankBoi staging flag, reserved by default
   for (const [start, end] of [['  async function waitForBankPack(', '  function bankVaultCatalog('],
     ['  function bankStackIdentity(', '  async function bankStoreFully('],
     ['  function normalBankStackFits(', '  async function compoundConfirmed(']]) {

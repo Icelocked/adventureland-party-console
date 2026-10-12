@@ -437,7 +437,7 @@ export const BankSheet = memo(function BankSheet({
 
                       const occupied = items.filter(Boolean).length;
 
-                      const usableItems = pack === "items1" && bankbois.length ? items.slice(0, 35) : items;
+                      const usableItems = bankbois.length > 0 && pack === "items1" ? items.slice(0, 35) : items;
 
                       const free = usableItems.length - usableItems.filter(Boolean).length;
 
@@ -471,8 +471,7 @@ export const BankSheet = memo(function BankSheet({
 
                     {items.map((entry, i) => {
 
-                      // The transfer row is reserved only while a BankBoi exists.
-                      const reserved = pack === "items1" && i >= 35 && bankbois.length > 0;
+                      const reserved = bankbois.length > 0 && pack === "items1" && i >= 35;
 
                       return entry ? (
 
@@ -859,7 +858,7 @@ export const BankSheet = memo(function BankSheet({
 
             <DialogContent className="border border-cyan-700 bg-[#071315] text-slate-100">
 
-              <DialogHeader><DialogTitle>Create first BankBoi?</DialogTitle><DialogDescription className="text-slate-200">This will reserve 7 slots (the last row of items1) for BankBoi logistics; items already there move into the BankBoi.</DialogDescription></DialogHeader>
+              <DialogHeader><DialogTitle>Create first BankBoi?</DialogTitle><DialogDescription className="text-slate-200">This will reserve the final 7 slots of bank pane 1 for BankBoi logistics. Items already in those slots will be moved into BankBoi storage.</DialogDescription></DialogHeader>
 
               {bankboiCreateResult?.ok === false && <p role="alert" className="text-rose-200">{bankboiCreateResult.message}</p>}
 
@@ -1150,7 +1149,7 @@ export const BankSheet = memo(function BankSheet({
 
                 <p className="py-4 text-center text-xs text-slate-500">
 
-                  No bankbois yet. The last row of items1 stays ordinary bank space until one is created.
+                  No BankBois yet. All bank slots are available for ordinary storage.
 
                 </p>
 

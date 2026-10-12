@@ -94,7 +94,9 @@ export function createAttackController(ports: AttackPorts) {
     return !!target && !!ports.passing?.(target);
   }
   function permitted(target: Target): boolean {
-    if (!sharedRoutine.allowsTarget(target)) {
+    const eligible = ports.passing?.(target)
+      ? sharedRoutine.allowsPassingTarget(target) : sharedRoutine.allowsTarget(target);
+    if (!eligible) {
       ports.state().skippedAttack = "target no longer eligible";
       return false;
     }
@@ -269,6 +271,7 @@ export function createAttackController(ports: AttackPorts) {
   return {
     pending() { return !!flight; },
     hasStarted(targetId: string) { return flight?.targetId === targetId || lastSuccessfulTarget === targetId; },
+    engagedTargetId(){return flight?.targetId||lastSuccessfulTarget||null;},
     reset() { cancelSlots(); flight = null; lastSuccessfulTarget = null; retryAt = 0; recovery.reset("runtime reset"); },
     start() { running = true; schedule(Math.max(1, remaining() - 2)); },
     stop() { running = false; cancelSlots(); flight = null; if (timer !== null) clearTimeout(timer); timer = null; },

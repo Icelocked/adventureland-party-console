@@ -6,7 +6,7 @@ const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../../characters/shared.js'), 'utf8');
 const extract = (start, end) => source.slice(source.indexOf(start), source.indexOf(end));
 test('upgrade and compound placeholders expose real server chance, smoke and level transition', () => {
-  const r = vm.createContext({ activeUpgrade: { slot: 0, item: { name: 'wshoes', level: 6, stat_type: 'int' } },
+  const r = require('./helpers/shared-context.cjs').createSharedContext({ activeUpgrade: { slot: 0, item: { name: 'wshoes', level: 6, stat_type: 'int' } },
     fingerprint: item => item && { ...item }, itemDefinition: item => ({ sprite: { name: item.name } }) });
   vm.runInContext(extract('  function inventoryOperationEntry(', '  async function compoundConfirmed('), r);
   for (const [scroll, type] of [['scroll0', 'upgrade'], ['cscroll0', 'compound']]) {
@@ -21,7 +21,7 @@ test('upgrade and compound placeholders expose real server chance, smoke and lev
 test('placeholder remains pending even when queue proxy disappears before the result', async () => {
   let now = 0;
   const character = { items: [{ name: 'wshoes', level: 3 }], q: {} };
-  const r = vm.createContext({ character, activeUpgrade: null, fingerprint: item => item && { ...item },
+  const r = require('./helpers/shared-context.cjs').createSharedContext({ character, activeUpgrade: null, fingerprint: item => item && { ...item },
     Date: { now: () => now }, setTimeout: (cb, ms) => { now += ms; if (now >= 2500) character.items[0] = { name: 'wshoes', level: 4 }; cb(); },
     upgrade: () => { character.items[0] = { name: 'placeholder', p: { name: 'wshoes', level: 3 } }; return Promise.resolve({ success: true, num: 0 }); } });
   require('./helpers/client-dependencies.cjs').merchantGuards(r,{journal:true});
@@ -33,7 +33,7 @@ test('placeholder remains pending even when queue proxy disappears before the re
 function loopRuntime(operation) {
   const character = { items: [{ name: 'wshoes', level: 0 }, { name: 'wshoes', level: 0 }] };
   const calls = [];
-  const r = vm.createContext({ character, G: { items: { wshoes: {} } }, maximumItemLevel: () => 13, merchantOperationStage: async () => {},
+  const r = require('./helpers/shared-context.cjs').createSharedContext({ character, G: { items: { wshoes: {} } }, maximumItemLevel: () => 13, merchantOperationStage: async () => {},
     sameItem: (a, b) => a && a.name === b.name && a.level === b.level, fingerprint: item => item && { ...item },
     item_grade: () => 0, findInventoryItemByName: () => 9, find_npc: () => 'upgrade', smart_move: async () => {},
     upgradeConfirmed: async slot => { calls.push(slot); return operation(character, slot, calls.length); } });
@@ -84,7 +84,7 @@ test('partial progress does not match an unrelated item in the marked slot', () 
 for(const response of [{failed:true,success:false,num:0},undefined,{failed:true,success:false,num:1}])
 test('destruction needs a matching server failure: '+JSON.stringify(response),async()=>{
  let now=0;const character={items:[{name:'coat',level:2}],q:{}};
- const c=vm.createContext({character,activeUpgrade:null,fingerprint:i=>i&&({...i}),merchantMassBuff:async()=>false,
+ const c=require('./helpers/shared-context.cjs').createSharedContext({character,activeUpgrade:null,fingerprint:i=>i&&({...i}),merchantMassBuff:async()=>false,
   Date:{now:()=>now},setTimeout:(cb,ms)=>{now+=ms;cb();},
   upgrade:()=>{character.items[0]=null;return Promise.resolve(response);}});
  vm.runInContext(require('./helpers/named-function.cjs').namedFunction(source,'upgradeAtSlotConfirmed'),c);
@@ -97,12 +97,12 @@ test('destruction needs a matching server failure: '+JSON.stringify(response),as
 
 test('upgrade preparation follows an item relocated during the protection checkpoint',async()=>{
  const items=[{name:'coat',level:2},null,{name:'scroll0',q:2}],calls=[];
- const c=vm.createContext({character:{ctype:'merchant',items},luckyUpgradeSlot:0,
+ const c=require('./helpers/shared-context.cjs').createSharedContext({character:{ctype:'merchant',items},luckyUpgradeSlot:0,
   verifyMerchantItemMarks:async()=>{items[5]=items[0];items[0]=null;},
   findInventoryItemByName:name=>items.findIndex(i=>i?.name===name),
   luckySlotTracking:()=>({begin(){}}),
   merchantLuckyUpgrade:()=>({run:async(from,scroll,_selected,action)=>action(from,scroll)}),
-  upgradeAtSlotConfirmed:async(slot,scroll)=>{calls.push([slot,scroll]);return {slot,item:{name:'coat',level:3}};}});
+  upgradeAtSlotConfirmed:async(slot,scroll)=>{calls.push([slot,scroll]);items[slot]={name:'coat',level:3};return {slot,item:items[slot]};}});
  require('./helpers/client-dependencies.cjs').productionJournalContext(c);
  vm.runInContext(require('./helpers/named-function.cjs').namedFunction(source,'observedUpgradeConfirmed'),c);
  const result=await c.observedUpgradeConfirmed(0,2,'coat',3);

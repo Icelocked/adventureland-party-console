@@ -4,8 +4,17 @@ import { expect } from '../live-fixtures';
 export const W='E2EWarrior', P='E2EPriest', M='E2EMerchant';
 export const quantity=(items:any[],id:string)=>items.reduce((n,item)=>n+(item?.name===id?item.q||1:0),0);
 export async function world(live:LiveGame) {
-  return live.admin(`output={anniversary:E.anniversary||null,players:Object.fromEntries(${JSON.stringify([W,P,M])}.map(name=>{const p=get_player(name);return [name,{map:p.map,x:p.x,y:p.y,moving:!!p.moving,hp:p.hp,items:p.items,gold:p.gold,xp:p.xp,quest:p.s.monsterhunt||null,conditions:p.s}]}))}`);
+  let observed:any;
+  await expect.poll(async()=>{
+    observed=await live.admin(`output=(()=>{const names=${JSON.stringify([W,P,M])};
+      if(names.some(name=>!get_player(name)))return null;
+      return {anniversary:E.anniversary||null,players:Object.fromEntries(names.map(name=>{const p=get_player(name);
+        return [name,{map:p.map,x:p.x,y:p.y,moving:!!p.moving,hp:p.hp,items:p.items,gold:p.gold,xp:p.xp,quest:p.s.monsterhunt||null,conditions:p.s}]}))};})()`);
+    return !!observed;
+  },{timeout:30_000,message:'Native Hunt world observations require all account characters to be present'}).toBe(true);
+  return observed;
 }
+
 export async function prepareHunt(live:LiveGame) {
   await live.post('/formation',{leader:W});
   await live.post('/formation',{character:P,follow:true});

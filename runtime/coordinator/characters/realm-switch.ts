@@ -32,6 +32,7 @@ interface RealmPorts {
   now(): number;
   sleep(ms: number): Promise<void>;
   pauseMerchant(): void;
+  retireConvoys?(participants: string[]): void;
   clearCommand(name: string): void;
   native(): string | null;
   steamMembers(): readonly string[];
@@ -71,6 +72,7 @@ export function createRealmSwitch(ports: RealmPorts) {
 
   async function depart(operation: RealmOperation): Promise<void> {
     ports.pauseMerchant();
+    ports.retireConvoys?.(operation.participants);
     operation.participants.forEach((name) => ports.clearCommand(name));
     const native = ports.native();
     const headless = operation.participants.filter((name) => !ports.steamMembers().includes(name));

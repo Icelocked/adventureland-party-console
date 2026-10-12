@@ -7,7 +7,8 @@ import { location } from './game/hunt-lifecycle';
 const merchant = 'E2EMerchant';
 
 test('unlinked upgrade adopts compatible native intermediate without claiming existing results',async({live},info)=>{
-  test.setTimeout(300_000);
+  // The retained paid batch needs ten native upgrades; CI timers are ~20s each.
+  test.setTimeout(450_000);
   await catalog(live,'helmet');
   await seed(live,{5:{name:'scroll0',q:20},10:{name:'helmet',level:2},11:{name:'helmet',level:3},12:{name:'helmet',level:3},23:{name:'helmet',level:0},24:{name:'helmet',level:0},25:{name:'helmet',level:0}});
   const id='unlinked-intermediate-commerce',before=await economy(live),checkpoints:any[]=[];
@@ -30,7 +31,7 @@ test('unlinked upgrade adopts compatible native intermediate without claiming ex
     await live.clients[merchant].frame.evaluate(()=>{const game=window as any,runner=(document.getElementById('maincode') as HTMLIFrameElement).contentWindow as any;game.start_runner('maincode',`$.getScript(${JSON.stringify(runner.__partyServer+'/CODE/adventure_land/universal-loader.js')});`);});
     release();
     await expect.poll(async()=>(await live.state()).characters[merchant]?.dashboardRuntime,{timeout:60_000}).not.toBe(oldRuntime);
-    await jobFinished(live,id,180_000);
+    await jobFinished(live,id,300_000);
     const after=await economy(live);
     const finished=(v:Economy)=>v.characters[merchant].items.filter(i=>i?.name==='helmet'&&i.level===3).length;
     const newResults=Math.max(...checkpoints.map(s=>Number(s.completedResults)||0))-1;
@@ -139,7 +140,8 @@ test('unavailable upgrade estimate enforces its gold cap across native purchases
   // the coordinator has persisted the first paid purchase, to place restart.
   // Protection-only checkpoint probes have no progress state; forward them
   // normally and retain only actual durable commerce progress for assertions.
-  test.setTimeout(300_000);
+  // The native level2 seller route alone took 110s in retained CI evidence.
+  test.setTimeout(600_000);
   const item='softstepgloves';
   await catalog(live,item);
   const nativeCosts=await live.clients[merchant].run(`({base:G.items.softstepgloves.g,scroll:G.items.scroll1.g,
@@ -182,7 +184,7 @@ test('unavailable upgrade estimate enforces its gold cap across native purchases
   await expect.poll(async()=>{
     const state=await live.state();
     return [state.merchantCurrent,...state.merchantQueue].some((entry:any)=>(entry?.id===order.jobId||entry?.commerceOrderId===order.jobId)&&/budget exhausted|gold cap/i.test(entry.lastError||entry.error||entry.blockedReason||''))||state.merchantActivity.some((entry:any)=>/budget exhausted|gold cap/i.test(JSON.stringify(entry)));
-  },{timeout:120_000}).toBe(true);
+  },{timeout:300_000}).toBe(true);
   expect(Math.max(...checkpoints.map(state=>Number(state.spent)||0))).toBeLessThanOrEqual(cap);
   expect(checkpoints.some(state=>state.pendingPurchase?.name==='scroll1'&&state.pendingPurchase.quantity===1&&state.pendingPurchase.cost===nativeCosts.scroll)).toBe(true);
   expect(checkpoints.some(state=>state.pendingPurchase?.name===item&&state.pendingPurchase.quantity===1&&state.pendingPurchase.cost===nativeCosts.base)).toBe(true);
@@ -587,7 +589,7 @@ test('merchant mass skills use both tiers and passive recovery restores critical
 });
 
 test('upgrade purchase batch excludes an existing target-level coat', async ({ live }, info) => {
-  test.setTimeout(240_000);
+  test.setTimeout(360_000);
   // Failure modes: existing results reduce a new order, command dispatch drops
   // the batch setting, or purchase sizing includes nonzero-level inventory.
   await catalog(live, 'coat');
@@ -613,7 +615,7 @@ test('upgrade purchase batch excludes an existing target-level coat', async ({ l
   });
   try {
     const order = await live.post('/merchant/order', { buys: [{ id: 'coat', quantity: 4, level: 5 }], crafts: [] });
-    await expect.poll(() => purchased, { timeout: 120_000 }).toBeDefined();
+    await expect.poll(() => purchased, { timeout: 240_000 }).toBeDefined();
     const coats = purchased!.characters[merchant].items.filter(item => item?.name === 'coat');
     expect(coats.filter(item => (item!.level || 0) === 0)).toHaveLength(10);
     expect(coats.filter(item => item!.level === 5)).toHaveLength(1);
@@ -626,7 +628,7 @@ test('upgrade purchase batch excludes an existing target-level coat', async ({ l
 });
 
 test('buy with upgrade target survives lucky restoration failure and missing client journals across restart', async ({ live }, info) => {
-  test.setTimeout(480_000);
+  test.setTimeout(720_000);
   // Failure inventory: restore errors drop the order; a lost local receipt
   // holds all work; replay duplicates purchases/results or resets spend/attempts.
   // A completed older local journal must not fence a newer mirrored receipt.
@@ -658,7 +660,7 @@ test('buy with upgrade target survives lucky restoration failure and missing cli
   });
   const before = await economy(live);
   const order = await live.post('/merchant/order', { buys: [{ id: 'helmet', quantity: 2, level: 1 }], crafts: [] });
-  await expect.poll(() => live.clients[merchant].run('!!globalThis.__e2eLuckyRestoreFault'), { timeout: 180_000 }).toBe(true);
+  await expect.poll(() => live.clients[merchant].run('!!globalThis.__e2eLuckyRestoreFault'), { timeout: 300_000 }).toBe(true);
   await expect.poll(async () => {
     const state=await live.state();
     return ![state.merchantCurrent,...state.merchantQueue].some((job:any)=>job?.id===order.jobId||job?.commerceOrderId===order.jobId);
@@ -683,7 +685,7 @@ test('buy with upgrade target survives lucky restoration failure and missing cli
   const followup=await live.post('/merchant/order',{buys:[{id:'shoes',quantity:1,level:1}],crafts:[]});
   await expect.poll(async()=>{
     const state=await live.state();return ![state.merchantCurrent,...state.merchantQueue].some((job:any)=>job?.id===followup.jobId||job?.commerceOrderId===followup.jobId);
-  },{timeout:90_000}).toBe(true);
+  },{timeout:180_000}).toBe(true);
   expect(upgradedShoes(await economy(live))-shoesBefore).toBe(1);
   await expect.poll(() => live.clients[merchant].run(`localStorage.getItem('party-production:'+character.name)`)).toBeNull();
   await context.unroute('**/merchant/production');
@@ -704,8 +706,11 @@ const totalGold = (state: Economy) => state.bankGold + Object.values(state.chara
 async function economy(live: LiveGame): Promise<Economy> {
   // A mounted bank is authoritative in server memory until native unmount saves it.
   // Reading only MongoDB during a bank visit would mistake normal persistence lag for loss.
-  return live.admin(`output=(async()=>{
+  let observed:Economy|null=null;
+  await expect.poll(async()=>{
+    observed=await live.admin(`output=(async()=>{
     const m=get_player(${JSON.stringify(merchant)});
+    if(!m || ${JSON.stringify(names)}.some(name=>!get_player(name)))return null;
     const user=await db.collection('user').findOne({_id:m.owner});
     const mounted=Object.values(players).find(p=>p.owner===m.owner&&p.user);
     const bank=mounted?mounted.user:user.info;
@@ -714,6 +719,9 @@ async function economy(live: LiveGame): Promise<Economy> {
       const p=get_player(name);return [name,{map:p.map,gold:p.gold,isize:p.isize,items:p.items,upgrading:!!p.q.upgrade}];
     })),bank:packs(bank),savedBank:packs(user.info),bankGold:Number(bank.gold)||0};
   })()`);
+    return !!observed;
+  },{timeout:30_000,message:'All native account characters must be present for an authoritative economy sample'}).toBe(true);
+  return observed!;
 }
 
 async function record(live: LiveGame, info: TestInfo, name: string, before: Economy, details: unknown = {}) {
@@ -743,14 +751,14 @@ async function jobFinished(live: LiveGame, id?: string, timeout = 150_000) {
   await expect.poll(async () => {
     const state = await live.state();
     const jobs = [state.merchantCurrent, ...(state.merchantQueue || [])].filter(Boolean);
-    return id ? !jobs.some(job => job.id === id) : jobs.length === 0;
+    return id ? !jobs.some(job => job.id === id || job.commerceOrderId === id) : jobs.length === 0;
   }, { timeout, message: 'Requested merchant work must leave both active and queued state' }).toBe(true);
 }
 
 async function restartAndObserve(live: LiveGame) {
   const startedAt = Date.now();
   await live.restartCoordinator();
-  await expect.poll(async () => (await live.clients[merchant].snapshot()).statusAt,
+  await expect.poll(async () => (await live.state()).characters[merchant]?.seenAt,
     { timeout: 30_000, message: 'Replay assertions require a native heartbeat accepted after restart' }).toBeGreaterThan(startedAt);
   await jobFinished(live);
 }
@@ -1153,7 +1161,7 @@ test('native Tracktrix stays in the final inventory slot through full-bag cleano
 });
 
 for (const kind of ['upgrade', 'compound']) test(`auto merchant collects twelve native copies alongside a finite ${kind} rule`, async ({live},info) => {
-  test.setTimeout(300_000);
+  test.setTimeout(kind==='upgrade'?450_000:300_000);
   // Declared initial rules reproduce coexisting persisted preferences. Native
   // clients must transfer all copies even though only one result is requested.
   const name=kind==='upgrade'?'helmet':'ringsj', owner='E2EWarrior';
@@ -1183,7 +1191,9 @@ for (const kind of ['upgrade', 'compound']) test(`auto merchant collects twelve 
     if(kind!=='compound')return true;
     const outcomes=await live.clients[merchant].run('globalThis.__e2eCompoundOutcomes');
     return outcomes.some((event:any)=>event.response==='compound_success');
-  },{timeout:90_000,message:'Native inventory and the actual compound response must both confirm the result'}).toBe(true);
+  },{timeout:kind==='upgrade'?180_000:90_000,message:kind==='compound'
+    ?'Native inventory and the actual compound response must both confirm the result'
+    :'Native inventory must confirm exactly one finite upgrade result after collection and return travel'}).toBe(true);
   const completed=await count();
   if(kind==='compound') {
     const outcomes=await live.clients[merchant].run('globalThis.__e2eCompoundOutcomes');

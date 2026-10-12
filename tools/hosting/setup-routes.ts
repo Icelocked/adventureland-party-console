@@ -11,6 +11,7 @@ import { transfer } from './setup-transfer.ts';
 import { toString as qrToString } from 'qrcode';
 export interface Options {
   builds?: { route(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> };
+  code?:{route(req:IncomingMessage,res:ServerResponse,pathname:string):Promise<boolean>};
   realms?: Promise<import('./realms.ts').RealmDiscovery>;
   debug?: import('../debug/service.ts').DebugInstances;
   steam?: import('../steam/service.ts').LocalSteam;

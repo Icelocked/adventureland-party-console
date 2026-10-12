@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { bankStagingReserved } from '../inventory/reserved-cargo.ts';
 import { requestObject, type HttpRequest, type HttpResponse } from "../http/contracts.ts";
 import { craftProtection, type CraftReservationState } from './craft-reservations.ts';
-import { bankStagingReserved } from '../inventory/reserved-cargo.ts';
 
 export interface BankSortRequest {
   id: string;
@@ -12,6 +12,7 @@ export interface BankSortRequest {
   message?: string;
 }
 export interface BankSortState {
+  bankbois?: Record<string, unknown> | null;
   bankSortMode?: "automatic" | "request";
   /** "gapped" starts each category on its own row and leaves free slots, so later sorts move few items. */
   bankSortLayout?: "packed" | "gapped";
@@ -75,7 +76,6 @@ function updatePending(state: BankSortState, body: Record<string, unknown>): boo
 /** A request is a durable intent; a runtime/visit lease is never portable to another runner. */
 export function createBankSortRoutes(state: BankSortState & CraftReservationState & {
   withdrawals?: Record<string, {pack?: string; slot?: number}[]>;
-  bankbois?: Record<string, unknown>;
 }, ports: Ports) {
   function reconcile() {
     const pending = state.bankSortRequest;
@@ -103,9 +103,9 @@ export function createBankSortRoutes(state: BankSortState & CraftReservationStat
     if (body.action === 'stack') {
       const protection = craftProtection(state);
       return res.json({ protection: {
+        staging: bankStagingReserved(state),
         locations: Object.values(state.withdrawals || {}).flat().map(({pack, slot}) => ({pack, slot})),
         items: protection.requirements.map(need => ({name: need.id, level: need.level})),
-        staging: bankStagingReserved(state),
         ...(protection.error ? {error: protection.error} : {}),
       } });
     }

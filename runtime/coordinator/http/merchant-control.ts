@@ -46,9 +46,17 @@ export function createMerchantControlRoutes(state: ControlState, ports: ControlP
     ports.persist(); ports.dispatch();
     return res.json({ ok: true });
   }
+  function cancelExchange(job: MerchantWork): void {
+    const deliveryId = job.exchangeDeliveryId || job.id;
+    state.merchantQueue = state.merchantQueue.filter(candidate => candidate.id !== deliveryId && candidate.exchangeDeliveryId !== deliveryId);
+    for (const [member, marks] of Object.entries(state.merchantMarked))
+      state.merchantMarked[member] = (marks || []).filter(raw => requestObject(raw).exchangeJobId !== deliveryId);
+  }
+  function pendingExchange(job: MerchantWork): boolean { return !!(job.exchangeDeliveryId || job.exchangePickupId); }
   function cancelIntent(job: MerchantWork): void {
     const name = job.target;
-    if (job.reason === "marked items") {
+    if (pendingExchange(job)) cancelExchange(job);
+    else if (job.reason === "marked items") {
       state.marked[String(name)] = [];
       state.merchantMarked[String(name)] = [];
     } else if (job.reason === "manual upgrades") {
@@ -92,6 +100,8 @@ export function createMerchantControlRoutes(state: ControlState, ports: ControlP
         type: "merchant-gather",
         mode: null,
       };
+    for (const [member, marks] of Object.entries(state.merchantMarked))
+      state.merchantMarked[member] = (marks || []).filter(raw => !requestObject(raw).exchangeJobId);
     state.merchantQueue = [];
     state.merchantCurrent = null;
     state.gatheringModes = [];

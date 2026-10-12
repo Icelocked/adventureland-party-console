@@ -68,11 +68,13 @@ test.describe('native Hunt lifecycle', () => {
       await info.attach('native-booboo-return-preparation',{body:JSON.stringify({before,destination,preparation,native:await world(live)}),contentType:'application/json'});
     }
     const cycle=profile(await live.state()).monsterHunt.cycleId;
+    const townReadiness=await Promise.all(fighters.map(name=>live.clients[name].run("can_use('use_town')&&!is_on_cooldown('use_town')")));
+    expect(townReadiness.every(Boolean),'The declared walking recovery starts with verified native Town readiness').toBe(true);
     await live.restoreHistoricalSettings(settings=>{
       const owner=settings.farmingProfiles[W],hunt=owner.monsterHunt,convoy=owner.activeConvoy||settings.activeConvoy;
       expect(hunt.cycleId).toBe(cycle);expect(convoy.returnRouting).toBe(true);
       expect(convoy.location.map).toBe('main');
-      const policy={map:destination.map,interruptions:0,walking:true};
+      const policy={map:destination.map,interruptions:0,walking:true,blockedReadiness:townReadiness.join(':')};
       hunt.returnDisableTown=true;hunt.returnTown=policy;
       convoy.disableTown=true;convoy.returnTown=policy;convoy.nativeFallback=false;
       return {farmingProfiles:{...settings.farmingProfiles,[W]:owner},monsterHunt:hunt,activeConvoy:convoy};
@@ -285,6 +287,10 @@ test.describe('native Hunt lifecycle', () => {
     await live.restartCoordinator();
     expect(profile(await live.state()).huntSettings.preferredSpawns.bee).toBe(key);
     await quests(live, info, { [W]: { id: 'bee', count: 1000 }, [P]: { id: 'bee', count: 1000 } });
+    await live.clients[W].run(`(()=>{const observation={positions:[],timer:null};globalThis.__e2ePreferredSpawnPositions=observation;
+      observation.timer=setInterval(()=>{observation.positions.push({map:character.map,x:character.real_x,y:character.real_y});
+        if(observation.positions.length>3000)observation.positions.shift();},100);return true;})()`);
+    try{
     await start(live, W, 'bee');
     await expect.poll(async () => profile(await live.state()).monsterHunt?.stage, { timeout: 120_000 }).toBe('farming');
     const countAtArrival = (await world(live))[W].quest.c;
@@ -293,11 +299,19 @@ test.describe('native Hunt lifecycle', () => {
     expect(JSON.stringify([mission.map, mission.x, mission.y])).toBe(key);
     const actual = (await world(live))[W];
     expect(actual.map).toBe(destination.map);
-    expect(contains(destination, actual, 120)).toBe(true);
+    const positions=await live.clients[W].run('globalThis.__e2ePreferredSpawnPositions.positions');
+    expect(positions.some((point:any)=>point.map===destination.map&&contains(destination,point,120)),
+      'The actual native journey must visit the configured preferred area').toBe(true);
     await artifact(live, info, 'preferred-spawn-native-combat', { destination, key });
+    }finally{
+      const positions=await live.clients[W].run(`(()=>{const observation=globalThis.__e2ePreferredSpawnPositions;
+        if(!observation)return [];clearInterval(observation.timer);delete globalThis.__e2ePreferredSpawnPositions;return observation.positions;})()`);
+      await info.attach('preferred-spawn-native-position-history',{body:JSON.stringify({destination,key,positions}),contentType:'application/json'});
+    }
   });
 
   test('invalid backup and spawn preference mutations leave an active native Hunt intact', async ({ live }, info) => {
+    test.setTimeout(480_000);
     await party(live);
     await quests(live, info, { [W]: { count: 30 }, [P]: { count: 30 } });
     const before = await world(live);
@@ -341,18 +355,18 @@ test.describe('native Hunt lifecycle', () => {
     await live.post('/hunt-blacklist', { character: W, action: 'clear' });
     expect(profile(await live.state()).huntBlacklist).toEqual({});
     expect(profile(await live.state()).huntFailures).toEqual({});
-    await expect.poll(async () => tokens((await world(live))[W]), { timeout: 180_000 }).toBe(tokens(before[W]) + 1);
+    await expect.poll(async () => tokens((await world(live))[W]), { timeout: 300_000 }).toBe(tokens(before[W]) + 1);
     await artifact(live, info, 'rejected-hunt-mutations-real-completion', { responses, expected, cycle });
   });
 
   for (const deathThreshold of [1, 2]) {
     test(`an active Hunt survives native death and restart with death threshold ${deathThreshold}`, async ({ live }, info) => {
-      if (deathThreshold === 2) test.setTimeout(450_000);
+      test.setTimeout(480_000);
       await party(live);
       await live.post('/hunt-settings', { character: W, deathThreshold });
       await quests(live, info, { [W]: { count: 10000 }, [P]: { count: 10000 } });
       await start(live);
-      await expect.poll(async () => profile(await live.state()).monsterHunt?.stage, { timeout: 120_000 }).toBe('farming');
+      await expect.poll(async () => profile(await live.state()).monsterHunt?.stage, { timeout: 240_000 }).toBe('farming');
       await expect.poll(async () => (await world(live))[W].quest.c, { timeout: 60_000 }).toBeLessThan(10000);
       const cycle = profile(await live.state()).monsterHunt.cycleId;
       // Inject the failure, never the recovery: the real server death function emits

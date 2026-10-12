@@ -98,8 +98,8 @@ export function installRoleRunner(
     if (character.ctype === "merchant" || !active || character.rip || !resolvedRole().combat || ["pending","feed"].includes(sharedRoutine.getAbtestingMode())) return null;
     // Boss attendance permits only the boss; passing attacks would pull adds or the map.
     if (sharedRoutine.bossCombatActive?.()) return null;
-    const target = (sharedRoutine as any).getPassingTarget?.() || null;
-    return target && sharedRoutine.allowsTarget(target) ? target : null;
+    const target = sharedRoutine.getPassingTarget?.() || null;
+    return target && sharedRoutine.allowsPassingTarget(target) ? target : null;
   }
   function attackTarget(): Target | null {
     const current = currentTarget(), passing = passingTarget();
@@ -231,7 +231,8 @@ export function installRoleRunner(
       if (selectedTarget && !currentTarget()) { invalidated = true; void selectTarget(); }
       const target = currentTarget();
       entityRefresh.tick({ enabled: combatAllowed(), context: JSON.stringify([character.map, character.in]),
-        target: selectedTarget, accepted: root.partyCombatState.attackTiming?.accepted || 0 });
+        target: selectedTarget, retainedTarget: sharedRoutine.sharedTargetId?.() || null,
+        accepted: root.partyCombatState.attackTiming?.accepted || 0 });
       if (target) missingSince = 0;
       else if (!missingSince) missingSince = Date.now();
       attacks.wake();
@@ -305,6 +306,8 @@ export function installRoleRunner(
     }
   }
   return (root.partyRoleRunner = {
+    hasStartedTarget(id:string){return attacks.hasStarted(id);},
+    engagedTargetId(){return attacks.engagedTargetId();},
     isKnownDead(id: string) { return killed.has(id); },
     invalidateTarget(id?: string) {
       if (id) killed.set(id, Date.now());

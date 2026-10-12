@@ -583,3 +583,51 @@ test('Cave follower retains its wait while a progressing leader searches beyond9
  assert.equal(r.service.state.moving,true);assert.equal(r.searches,0);
  r.service.install([{map:'main',x:100,y:0}],r.service.identity,'cave-convoy');await r.ticks(8);await p;r.dispose();
 });
+
+
+test('Cave combat drift joins a nearby clear forward segment without backtracking or new search',async()=>{
+ const options={stall:true},r=fixture(options);
+ const promise=r.service.move({map:'main',x:400,y:200},undefined,{native:true,shared:true,awaitSharedRoute:true,repairSharedDrift:true,retainOnDirectStop:true});promise.catch(()=>{});
+ r.service.install([{map:'main',x:100,y:0},{map:'main',x:100,y:200},{map:'main',x:400,y:200}],r.service.identity,'cave-convoy');await r.ticks(1);
+ await r.host.stop('move');Object.assign(r.c,{x:220,real_x:220,y:210,real_y:210});
+ r.host.can_move=p=>!(p.x===220&&p.y===210&&p.going_x===100);
+ options.stall=false;await r.ticks(30);await promise;
+ assert.equal(r.searches,0);assert.equal(r.c.real_x,400);assert.equal(r.c.real_y,200);
+ assert.ok(r.calls.some(c=>c[0]==='move'&&c[1]===220&&c[2]===200));r.dispose();
+});
+
+test('Cave forward rejoin cannot skip a native transition to a nearby later segment',async()=>{
+ const options={stall:true},r=fixture(options);
+ const promise=r.service.move({map:'main',x:400,y:200},undefined,{native:true,shared:true,awaitSharedRoute:true,repairSharedDrift:true,retainOnDirectStop:true});const failed=assert.rejects(promise,/collisions detected/);
+ r.service.install([{map:'main',x:100,y:0},{map:'main',x:0,y:0,town:true},{map:'main',x:100,y:200},{map:'main',x:400,y:200}],r.service.identity,'cave-convoy');await r.ticks(1);
+ await r.host.stop('move');Object.assign(r.c,{x:220,real_x:220,y:210,real_y:210});
+ r.host.can_move=p=>!(p.x===220&&p.y===210&&p.going_x===100);
+ options.stall=false;await r.ticks(10);await failed;assert.equal(r.searches,0);assert.equal(r.c.real_x,220);r.dispose();
+});
+
+
+test('Cave forward rejoin rejects an obstructed local connector',async()=>{
+ const options={stall:true},r=fixture(options);
+ const promise=r.service.move({map:'main',x:400,y:200},undefined,{native:true,shared:true,awaitSharedRoute:true,repairSharedDrift:true,retainOnDirectStop:true});const failed=assert.rejects(promise,/collisions detected/);
+ r.service.install([{map:'main',x:100,y:0},{map:'main',x:100,y:200},{map:'main',x:400,y:200}],r.service.identity,'cave-convoy');await r.ticks(1);
+ await r.host.stop('move');Object.assign(r.c,{x:220,real_x:220,y:210,real_y:210});
+ r.host.can_move=p=>!(p.x===220&&p.y===210);
+ options.stall=false;await r.ticks(10);await failed;assert.equal(r.searches,0);assert.equal(r.c.real_x,220);r.dispose();
+});
+
+
+test('captured native Cave geometry rejoins combat displacement without stale-corner collision',async()=>{
+ const observed=require('./fixtures/cave-combat-forward-rejoin.json');
+ const {directory}=require('./helpers/installed-game.cjs'),n=createNative(directory);
+ n.game.geometry[observed.map]=observed.geometry;n.game.maps[observed.map]=observed.mapData;
+ const options={stall:true},r=fixture(options);r.host.G=n.game;r.c.base=observed.base;
+ Object.assign(r.c,{map:observed.map,in:observed.map,x:observed.from.x,y:observed.from.y,real_x:observed.from.x,real_y:observed.from.y});
+ r.host.can_move=input=>n.context.can_move(input);
+ const destination=observed.path.at(-1),promise=r.service.move(destination,undefined,{native:true,shared:true,awaitSharedRoute:true,repairSharedDrift:true,retainOnDirectStop:true});promise.catch(()=>{});
+ r.service.install(observed.path,r.service.identity,'captured-cave-convoy');await r.ticks(1);await r.host.stop('move');
+ Object.assign(r.c,{x:observed.displaced.x,y:observed.displaced.y,real_x:observed.displaced.x,real_y:observed.displaced.y});
+ assert.equal(n.canWalk({...observed.displaced,map:observed.map},{...observed.from,map:observed.map}),false);
+ options.stall=false;await r.ticks(40);await promise;
+ assert.equal(r.searches,0);assert.equal(r.c.real_x,destination.x);assert.equal(r.c.real_y,destination.y);
+ assert.ok(r.logs.some(entry=>entry.phase==='Rejoined forward walking segment'));r.dispose();
+});

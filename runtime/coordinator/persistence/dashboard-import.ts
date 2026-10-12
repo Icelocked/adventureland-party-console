@@ -3,6 +3,7 @@ import { validOfferingRules } from '../../upgrade-offerings.ts';
 import {validPassivePatch, migratePassiveSettings, committedPassiveRules, type PassiveSettings} from "../navigation/passive-settings.ts";
 import { migrateRoutinePriorities } from '../merchant/routines.ts';
 import {validHuntSettings} from "../hunt/settings.ts";
+import {validMarketIgnoredItem} from "../../market-preferences.ts";
 import { stateKeys } from "./snapshots.ts";
 import { validStandLocation } from '../merchant/stand-location.ts';
 
@@ -77,6 +78,7 @@ export const validators: Record<string, (value: unknown) => boolean> = {
   standListings: listOf((value) => object(value) && item(value.item) && positive(value.price)),
   standBids: mapOf((value) => object(value) && positive(value.price) && positive(value.quantity)),
   merchantBlacklist: mapOf(object),
+  marketIgnoredItems: listOf(validMarketIgnoredItem),
   huntBlacklist: mapOf(object),
   huntSettings: validHuntSettings,
   huntFailures: mapOf(v => object(v) && [v.deaths, v.expirations].every(n => Number.isSafeInteger(n) && Number(n) >= 0)),

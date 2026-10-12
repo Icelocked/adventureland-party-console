@@ -70,8 +70,9 @@ export function reconcileFarmingMembership<T extends MembershipState>(party: T, 
       if (hunt && !hunt.participants.includes(name)) hunt.participants.push(name);
       const leader = party.statuses[owner];
       if (!leader || now() - leader.seenAt > 10000 || party.commands[name]) return;
-      const destination = { map: leader.map, x: Number(leader.x), y: Number(leader.y) };
-      party.characterLocations[name] = destination;
+      // return-leader resolves the live rendezvous in the character client.
+      // Following shares the controller's saved farm; a temporary event position
+      // must not become a personal event-return checkpoint.
       party.commands[name] = { id: party.nextCommandId++, type: "return-leader", purpose: "farming-follow" };
     }
 }

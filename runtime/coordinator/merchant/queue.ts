@@ -70,7 +70,7 @@ export function createMerchantQueue(state: QueueState, ports: QueuePorts) {
     return false;
   }
 
-  const separateRoutines = new Set(['deliveries', 'manual upgrades', 'auto upgrade', 'manual compounds', 'auto compound', 'manual buying', 'npc sale pickup', 'auto npc sale pickup', 'npc sales', 'auto npc sales']);
+  const separateRoutines = new Set(['exchange pickup', 'deliveries', 'manual upgrades', 'auto upgrade', 'manual compounds', 'auto compound', 'manual buying', 'npc sale pickup', 'auto npc sale pickup', 'npc sales', 'auto npc sales']);
   function sameWork(job: MerchantJob | null, name: string, reason: string): boolean {
     if (!job || job.target !== name) return false;
     if (name === ports.merchant() && ['withdrawals','bank collection'].includes(reason) && ['withdrawals','bank collection'].includes(job.reason)) return true;
@@ -92,11 +92,14 @@ export function createMerchantQueue(state: QueueState, ports: QueuePorts) {
     });
   }
 
+  function canEnqueue(name:string,reason:string):boolean {
+    if (isItemCollection(reason) && ports.collectionReady?.({target:name,reason}) === false) return false;
+    if (ports.enabled?.(reason) === false) return false;
+    return !blocked(name,reason) && !sameWork(state.current,name,reason);
+  }
   function enqueue(name: string, reason: string): void {
     reason = pickupReason(reason, name, ports.merchant());
-    if (isItemCollection(reason) && ports.collectionReady?.({target:name,reason}) === false) return;
-    if (ports.enabled?.(reason) === false) return;
-    if (blocked(name, reason) || sameWork(state.current, name, reason)) return;
+    if (!canEnqueue(name,reason)) return;
     const index = state.queue.findIndex((job) => sameWork(job, name, reason));
     if (index < 0) {
       state.queue.push(

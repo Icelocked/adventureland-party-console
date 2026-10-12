@@ -35,6 +35,7 @@ interface WalkState extends SharedState {
     cycleId?: string;
     participants: string[];
     pending?: string[];
+    waypoints?: Record<string, {revision: number}>;
     returnRoutes?: Record<string, { commandId?: number; revision: number }> | null;
   } | null;
   deferredEventReturns?: Record<string, {cycleId: string; navigationRevision?: number}>;
@@ -142,8 +143,10 @@ export function createSharedWalks(input: unknown, ports: WalkPorts) {
     boss: NonNullable<typeof s.eventCombatSighting>): boolean {
     return boss.map === s.map && boss.map === r.destination.map &&
       String(boss.in) === String(s.in ?? s.map) &&
-      String(boss.in) === String(r.destination.in ?? r.destination.map) &&
-      distance(boss, r.destination) <= 100;
+      // Destination coordinates can remain the advertised spawn while this
+      // actively fought boss moves. Do not recall its attending fighter merely
+      // to assemble a respawned member's walking route.
+      String(boss.in) === String(r.destination.in ?? r.destination.map);
   }
   function pending(r: WalkRequest): WalkRequest[] {
     return [...requests.values()].filter(other => !other.complete && !other.failed && !other.convoyId &&
@@ -192,7 +195,32 @@ export function createSharedWalks(input: unknown, ports: WalkPorts) {
   function retainParents(c: SharedConvoy, waiting: WalkRequest[]): void {
     c.walkingParents = Object.fromEntries(waiting.map(r => [r.name, { revision: r.revision, parentId: r.parentId, command: r.parent }]));
   }
+  function recentExitPeerStatus(status: SharedStatus | undefined, server: string | undefined, now: number): status is SharedStatus {
+    if(!status || status.rip || status.hp===0)return false;
+    return status.convoyProtocol===4 && !!characterRuntime(status) && status.server===server &&
+      status.seenAt<now-3000 && status.seenAt>now-10000;
+  }
+  function retainedExitParent(command: SharedState['commands'][string], cycleId: string): boolean {
+    return command?.type==='event-return-town' && command.cycleId===cycleId;
+  }
+  function savedExitRevision(recovery: NonNullable<WalkState['eventReturn']>, name: string): boolean {
+    const saved=recovery.waypoints?.[name];
+    return !!saved && saved.revision===(state.navigationIntents?.[name]?.revision||0);
+  }
+  function recentPendingExitPeer(r: WalkRequest): boolean {
+    const recovery=state.eventReturn,now=ports.now();
+    if(!recovery || r.activity!=='event-return' || recovery.cycleId!==r.key)return false;
+    return workflowMembers(r).some(name=>{
+      const status=state.statuses[name],command=state.commands[name];
+      // Admission still needs a fresh real request. Reserve only the existing
+      // request window for a known living peer whose same-cycle exit is current.
+      return name!==r.name && recentExitPeerStatus(status,state.statuses[r.name]?.server,now) &&
+        retainedExitParent(command,r.key) && savedExitRevision(recovery,name) &&
+        !!ports.owned(name) && !atDestination(status,r.destination);
+    });
+  }
   function tryStart(r: WalkRequest): void {
+    if(recentPendingExitPeer(r))return;
     const leaderName = leaderForRequest(r);
     if (!canReplace(r) || !leaderName) return;
     const waiting = pending(r), expected = eligible(r);

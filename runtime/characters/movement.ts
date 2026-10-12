@@ -255,6 +255,7 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
     const next = state.plot[0], from = position();
     if (!j.options.repairSharedDrift || !next || isTransition(next) || !sameJourneyInstance(j,from)) return false;
     const reason = stepIssue(validation, from, next, state.use_town);
+    if (reason === 'collisions detected' && rejoinForwardWalking(j,from)) return true;
     const join=localWalkingJoin(from,next);
     if (reason !== 'collisions detected' || !join || !beginRepair(j,state.plot.slice(),{reason,from,to:next})) return false;
     j.repair!.target=join.target;
@@ -262,6 +263,40 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
     j.repair!.instance = from.in ?? from.map;
     state.found = false;
     executor.cancel();
+    return true;
+  }
+  function rejoinForwardWalking(j: Journey, from: Point): boolean {
+    // Combat can carry a participant past an unconsumed corner. Join only a
+    // native-clear part of the remaining walking prefix; never skip a
+    // door, Town cast, map/instance boundary, or the coordinator's destination.
+    const edge=executor.walkingEdge();
+    let previous = edge?.from || state.plot[0];
+    let selected: {index:number;target:Point;distance:number} | undefined;
+    for (let index=edge ? 0 : 1;index<state.plot.length;index++) {
+      const next=state.plot[index];
+      if (isTransition(previous) || isTransition(next) || previous.map!==from.map || next.map!==from.map
+        || previous.in!==undefined && String(previous.in)!==String(from.in??from.map)
+        || next.in!==undefined && String(next.in)!==String(from.in??from.map)) break;
+      if (!validation.walk(previous,next)) break;
+      const dx=next.x-previous.x,dy=next.y-previous.y,length=dx*dx+dy*dy;
+      const along=length ? Math.max(0,Math.min(1,((from.x-previous.x)*dx+(from.y-previous.y)*dy)/length)) : 0;
+      const target={map:from.map,in:from.in,x:previous.x+dx*along,y:previous.y+dy*along};
+      const separation=distance(from,target);
+      // Nearby current-edge repairs retain their existing bounded BFS path.
+      // A proven direct connector has the same geometry contract as ordinary
+      // walking; distance alone must not force a full-floor regroup/search.
+      if ((index>0 || separation>150) && (!selected || separation<selected.distance)
+        && validation.walk(from,target) && validation.walk(target,next) && repairAllowed(j,target))
+        selected={index,target,distance:separation};
+      previous=next;
+    }
+    if (!selected) return false;
+    const plot=[selected.target,...state.plot.slice(selected.index)];
+    if (validateRoute(validation,from,state,plot,state.use_town,state.edge)) return false;
+    recordRepair(j,selected.target);
+    executor.cancel();
+    install(plot,true);
+    report(j.id,state,'Rejoined forward walking segment',j.firstIssue);
     return true;
   }
   function localWalkingJoin(from: Point, next: Step): {target:Point;retainEndpoint:boolean} | undefined {

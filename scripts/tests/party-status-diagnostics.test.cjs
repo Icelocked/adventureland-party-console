@@ -68,7 +68,7 @@ function statusFixture() {
  const f=fixture(),r=f.r;
  Object.assign(r,{
   keepTracktrixLast:async()=>{},dungeonRuntime:()=>({receive(){},owns:()=>false}),
-  busy:false,snapshot:()=>({}),runtimeCurrent:()=>true,dashboardSampler:null,reloadConvoyGeometry(){},
+  parent:{},busy:false,snapshot:()=>({}),runtimeCurrent:()=>true,dashboardSampler:null,reloadConvoyGeometry(){},
   prepareCatalog:async()=>{},applyMerchantVisibility:async()=>{},
   bindLuckySlotCharacterId(){},luckySlotTracking:()=>({sync:()=>{}}),
   wakeGatheringAfterStatus:()=>{r.gatheringWakes=(r.gatheringWakes||0)+1;},
@@ -82,6 +82,7 @@ function statusFixture() {
   banking:false,stocking:false,upgrading:false,departurePending:false,quantity:()=>1,
  });
  vm.runInContext(source.slice(source.indexOf('  async function applyEventReturnOwner('),source.indexOf('  async function merchantSendMail(')),r);
+ for(const name of ['receiveConsoleMaintenance','consoleCheckpointKey','consoleMainTick'])vm.runInContext(require('./helpers/named-function.cjs').namedFunction(source,name),r);
  vm.runInContext(tick,r);return f;
 }
 test('status request failure releases busy and the next successful update dispatches normally',async()=>{

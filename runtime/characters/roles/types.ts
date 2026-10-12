@@ -73,6 +73,7 @@ export interface SharedCombat {
   monsterPriority?(this: void, target: Target): number;
   isCurrentPartyTarget(target: Target): boolean;
   allowsTarget(target: Target): boolean;
+  allowsPassingTarget(target: Target): boolean;
   emergencyWarriorStomp(): Promise<boolean>;
   dashToward(target: Target): Promise<boolean>;
   isAttackingPartyMember(target: Target): boolean;
@@ -88,6 +89,7 @@ export interface SharedCombat {
   getCloserHuntTarget?(current: Target): Target | null;
   returnCombatActive?(): boolean;
   getWalkingPassiveTarget?(): Target | null;
+  getPassingTarget?(): Target | null;
   returnDefenseTarget?(): Target | null;
   returnAttacker?(target: Target): boolean;
   returnMovementTick?(): void;
@@ -126,6 +128,8 @@ export interface CombatState {
   skippedAttack?: string | null;
 }
 export interface RoleRunner {
+  hasStartedTarget(id:string):boolean;
+  engagedTargetId():string|null;
   advanceTarget(): void;
   resetTargeting():void;
   isKnownDead(id: string): boolean;

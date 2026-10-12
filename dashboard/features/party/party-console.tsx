@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useEffect } from "react";
+import {useSessionState} from './session-state';
 import { LogSidebar } from "./log-sidebar";
 import { PartyHeader } from "./party-header";
 import { PartyInventoryPanels } from "./party-inventory-panels";
@@ -16,7 +17,8 @@ export function Home() {
 }
 function PartyConsole() {
   const model = usePartyConsole();
-  const [logsOpen,setLogsOpen]=useState(false),[logsWidth,setLogsWidth]=useState(440);
+  const [logsOpen,setLogsOpen]=useSessionState('logs-open',false),[logsWidth,setLogsWidth]=useSessionState('logs-width',440);
+  useEffect(()=>{const saved=sessionStorage.getItem('party-console-scroll');if(saved!==null){sessionStorage.removeItem('party-console-scroll');const y=Number(saved);const timer=setTimeout(()=>window.scrollTo(0,y),500);return()=>clearTimeout(timer);}},[]);
   return (
     <>
       <main style={{marginRight:logsOpen?`min(${logsWidth}px,75vw)`:0}} data-party-console-root className="@container min-h-screen bg-[#07100f] text-[#e9f3e8]">

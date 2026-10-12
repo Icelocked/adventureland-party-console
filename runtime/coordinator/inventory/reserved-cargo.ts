@@ -10,12 +10,8 @@ export interface CargoRequest {
   bootstrap?: boolean;
   queuedAt?: number;
 }
-/** items1 slots 35–41 are the BankBoi transfer row only while a BankBoi exists; otherwise ordinary bank space. */
-export function bankStagingReserved(state: { bankbois?: Record<string, unknown> | null }): boolean {
-  return Object.keys(state.bankbois || {}).length > 0;
-}
 interface CargoState {
-  bankbois?: Record<string, unknown>;
+  bankbois?: Record<string, unknown> | null;
   merchantQueue?: { id: string; order?: { bank?: { pack: string; slot?: number }[] } }[];
   merchantCurrent?: { id: string; order?: { bank?: { pack: string; slot?: number }[] } } | null;
   bankSnapshot?: { packs?: { items1?: (InventoryEntry | null)[] } } | null;
@@ -27,6 +23,11 @@ interface CargoPorts {
   identity(item: Item): string;
   now(): number;
   persist(): void;
+}
+
+/** The final seven cells of initial pane 1 are transfers only while a BankBoi exists. */
+export function bankStagingReserved(state: { bankbois?: Record<string, unknown> | null }): boolean {
+  return Object.keys(state.bankbois || {}).length > 0;
 }
 
 /** Adopt overflow in the staging row without recapturing cargo awaiting merchant withdrawal. */
@@ -41,7 +42,6 @@ export function createReservedBankboiCargo(state: CargoState, ports: CargoPorts)
 
   function retain(request: CargoRequest, slots: (InventoryEntry | null)[]): boolean {
     if (request.pack !== "items1" || request.slot < 35) return true;
-    // Without a BankBoi the row is ordinary bank space, so nothing there is waiting cargo.
     if (!bankStagingReserved(state)) return false;
     if (reservedForRetrieval(request.slot)) return false;
     const item = slots[request.slot]?.item;
@@ -85,17 +85,26 @@ export function createReservedBankboiCargo(state: CargoState, ports: CargoPorts)
     return changed;
   }
 
-  function reconcile(): boolean {
-    const slots = state.bankSnapshot?.packs?.items1;
-    if (!Array.isArray(slots)) return false;
+  function pruneCargo(slots: (InventoryEntry | null)[]): boolean {
     const previous = JSON.stringify(state.bankboiQueue);
     state.bankboiQueue = state.bankboiQueue.filter((request) => retain(request, slots));
-    let changed = previous !== JSON.stringify(state.bankboiQueue);
-    if (bankStagingReserved(state) && adoptStagingRow(slots)) changed = true;
-    if (!state.bankboiReservedMigrated) {
-      state.bankboiReservedMigrated = true;
-      changed = true;
-    }
+    return previous !== JSON.stringify(state.bankboiQueue);
+  }
+  function markReservedMigration(reserved: boolean): boolean {
+    if (!reserved || state.bankboiReservedMigrated) return false;
+    state.bankboiReservedMigrated = true;
+    return true;
+  }
+  function adoptReservedCargo(reserved: boolean, slots: (InventoryEntry | null)[] | undefined): boolean {
+    return reserved && Array.isArray(slots) && adoptStagingRow(slots);
+  }
+  function reconcile(): boolean {
+    const slots = state.bankSnapshot?.packs?.items1;
+    const reserved = bankStagingReserved(state);
+    if (reserved && !Array.isArray(slots)) return false;
+    let changed = pruneCargo(slots || []);
+    if (adoptReservedCargo(reserved, slots)) changed = true;
+    if (markReservedMigration(reserved)) changed = true;
     if (changed) ports.persist();
     return changed;
   }

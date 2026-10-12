@@ -200,6 +200,7 @@ export const InventoryPanel = memo(function InventoryPanel({
       | "buy-copy"
       | "compound-mark"
       | "auto-compound-mark"
+      | "exchange"
       | "auto-exchange"
       | "merchant-weapon",
     item?: Item,
@@ -522,7 +523,8 @@ export const InventoryPanel = memo(function InventoryPanel({
       return Boolean(autoItemMarks[key] || (!item.level && autoItemMarks[item.name]) || autoUpgradeMarks[key] ||
         autoCompoundMarks.some(rule => rule.name === item.name) || autoDeconstruction[commerceKey] ||
         autoNpcSales[sharedRules || character.name === merchant ? commerceKey : JSON.stringify([character.name, commerceKey])] ||
-        (character.name === merchant && (autoStandMarks[commerceKey] || autoExchanges[`${item.name}@${item.level || 0}`] || (merchantWeapon?.item && same(item, merchantWeapon.item)))));
+        (!!merchant && autoExchanges[`${item.name}@${item.level || 0}`]) ||
+        (character.name === merchant && (autoStandMarks[commerceKey] || (merchantWeapon?.item && same(item, merchantWeapon.item)))));
     },
     [autoItemMarks, autoUpgradeMarks, autoCompoundMarks, autoDeconstruction, autoNpcSales, sharedRules, character.name, merchant, autoStandMarks, autoExchanges, merchantWeapon],
   );
@@ -675,8 +677,8 @@ export const InventoryPanel = memo(function InventoryPanel({
               const autoCompoundPending =
                 !!autoCompoundMark && Number(entry.item.level || 0) < autoCompoundMark.targetTier && Number(autoCompoundMark.quantity) !== 0;
               const autoExchangeKey = `${entry.item.name}@${entry.item.level || 0}`;
-              // Party collection brings exchange stock to the merchant, so every holder shows the rule.
-              const autoExchangeMarked = !!merchant && !!autoExchanges[autoExchangeKey];
+              const autoExchangeMarked =
+                !!merchant && !!autoExchanges[autoExchangeKey];
               const automaticSaleKey = automaticCommerceRuleKey(entry.item);
               const autoNpcSaleMarked =
                 !!autoNpcSales[sharedRules || character.name === merchant ? automaticSaleKey : JSON.stringify([character.name, automaticSaleKey])];
@@ -696,7 +698,7 @@ export const InventoryPanel = memo(function InventoryPanel({
               const autoStandMarked =
                 character.name === merchant && autoStandMarks[automaticSaleKey];
               const exchangeable =
-                character.name === merchant && Number(entry.meta?.definition.e || 0) > 0;
+                !!merchant && Number(entry.meta?.definition.e || 0) > 0;
               const held = heldSlots[entry.slot];
               const banner = itemActionBanner([
                 !!held && {action:'held',label:held,title:`${held}: automatic bank, merchant, compound, upgrade, sale and deconstruction rules skip this item`},
@@ -928,6 +930,7 @@ export const InventoryPanel = memo(function InventoryPanel({
                         </ContextMenuSubContent>
                       </ContextMenuSub>
                     ) : null}
+                    {exchangeable && <ContextMenuItem onClick={() => onCommand(character.name, "exchange", entry.item, {slot: entry.slot})}>Exchange</ContextMenuItem>}
                     {!!merchant && <AutomaticItemActions section="exchange"
                       entry={entry} bank={autoMarkMode === 'bank'} merchant={character.name === merchant}
                       stand={!!autoStandMarked} npc={autoNpcSaleMarked} exchange={autoExchangeMarked}

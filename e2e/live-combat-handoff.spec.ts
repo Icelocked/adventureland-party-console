@@ -13,7 +13,7 @@ test('bag-only native merchant collection finishes while the fighter keeps fight
   const before=await live.clients[W].snapshot(),initialHits=(await hits()).length;
   await live.post('/bank-party',{group:W});
   await live.post('/merchant/force-stand',{enabled:false});
-  await expect.poll(async()=>live.admin(`output=get_player(${JSON.stringify(M)}).items.some(i=>i?.name==='leather'&&i.q>=7)`),{timeout:90000}).toBe(true);
+  await expect.poll(async()=>live.admin(`output=get_player(${JSON.stringify(M)})?.items.some(i=>i?.name==='leather'&&i.q>=7)`),{timeout:90000}).toBe(true);
   const during=await live.admin(`output=(()=>{const p=get_player(${JSON.stringify(W)}),m=instances[p.in].monsters[${JSON.stringify(monster.id)}];return {monster:m&&{id:m.id,hp:m.hp},fighter:{x:p.x,y:p.y,hp:p.hp},merchant:get_player(${JSON.stringify(M)}).items}})()`);
   expect(during.monster?.hp).toBeGreaterThan(0);
   await expect.poll(async()=>(await hits()).length,{timeout:15000}).toBeGreaterThan(initialHits);

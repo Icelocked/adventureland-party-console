@@ -70,7 +70,7 @@ const configFields = [
   "marked", "merchantMarked", "autoItemMarks", "merchantDeliveries",
   "standListings", "npcSaleMarks", "deconstructionMarks", "autoDeconstruction",
   "deconstructionCatalog", "autoNpcSales", "autoStandMarks",
-  "merchantRoutinePriorities", "merchantAutomations", "merchantBlacklist",
+  "merchantRoutinePriorities", "merchantAutomations", "merchantBlacklist", "marketIgnoredItems",
   "standBids", "autoStandBuys", "autoBlacklistMerchants", "standSearch",
   "upgrades", "statScrolls", "compounds", "autoCompounds", "autoExchanges", "goldTargets",
   "leader", "designatedTank", "gearSets", "followers", "eventsByCharacter", "eventSelectionsByCharacter", "eventPrioritiesByCharacter", "eventLimitsByCharacter", "eventAttendance",

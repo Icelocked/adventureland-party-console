@@ -9,6 +9,8 @@ test('native mage closes from outside range and damages a fast Phoenix',async({l
   await live.post('/merchant/force-stand',{enabled:true});
   await live.post('/formation',{leader:P});
   await live.post('/formation',{character:W,follow:true});
+  await expect.poll(async()=> !!(await live.state(true)).monsterChoices?.some((entry:any)=>entry.id==='phoenix'),
+    {timeout:30_000,message:'The native monster catalog must authorize Phoenix before configuring its rule'}).toBe(true);
   const seed=await live.admin(`output=(()=>{
     const p=get_player(${JSON.stringify(W)}),priest=get_player(${JSON.stringify(P)});
     const distance=p.range+55;

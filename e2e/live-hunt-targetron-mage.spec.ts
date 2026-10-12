@@ -75,6 +75,17 @@ test('mage reengages a blocked Targetron from the reported UHills screenshot',as
     target_player(m,get_player('${P}'));return {id:String(m.id),map:m.map,x:m.x,y:m.y,target:m.target};
   })()`);
   const samples:any[]=[];
+  await live.clients[W].run(`(()=>{
+    const observation={samples:[],timer:null};globalThis.__e2eTargetronMageSampler=observation;
+    const sample=()=>{const t=parent.entities[${JSON.stringify(seed.id)}],p=globalThis.partyCombatPosition;
+      observation.samples.push({at:Date.now(),map:character.map,rip:!!character.rip,x:character.real_x,y:character.real_y,target:character.target,
+        moving:!!character.moving,going:{x:character.going_x,y:character.going_y},
+        segmentClear:character.moving?can_move_to(character.going_x,character.going_y):null,
+        distance:t?distance(character,t):null,positioning:p?{at:p.at,mode:p.mode,movementOwner:p.movementOwner,target:p.target,
+          reason:p.reason,constraint:p.constraint,healingDistance:p.healingDistance,healingRange:p.healingRange}:null});
+      if(observation.samples.length>600)observation.samples.shift();};
+    sample();observation.timer=setInterval(sample,100);return true;
+  })()`);
   try{
     expect(await live.admin(`output=Object.values(instances.uhills.monsters).filter(m=>m.type==='targetron').map(m=>String(m.id))`),
       'The declared combat scenario starts with exactly its seeded Targetron').toEqual([seed.id]);
@@ -84,16 +95,13 @@ test('mage reengages a blocked Targetron from the reported UHills screenshot',as
       {timeout:30000,message:'The native priest must damage Targetron before joining the mage-led formation'}).toBe(true);
     await live.post('/formation',{character:P,follow:true});
     await expect.poll(async()=>{
-      const sample=await live.clients[W].run(`(()=>{const t=parent.entities[${JSON.stringify(seed.id)}],p=globalThis.partyCombatPosition;return {
-        at:Date.now(),map:character.map,rip:!!character.rip,x:character.real_x,y:character.real_y,target:character.target,
-        moving:!!character.moving,going:{x:character.going_x,y:character.going_y},
-        segmentClear:character.moving?can_move_to(character.going_x,character.going_y):null,
-        distance:t?distance(character,t):null,positioning:p?{at:p.at,mode:p.mode,movementOwner:p.movementOwner,target:p.target,
-          reason:p.reason,constraint:p.constraint,healingDistance:p.healingDistance,healingRange:p.healingRange}:null};})()`);
-      samples.push(sample);
-      expect(sample.map,'Combat recovery must not send the mage to jail or another map').toBe('uhills');
-      if(sample.moving&&sample.positioning?.movementOwner==='combat'&&sample.positioning?.target===seed.id)
-        expect(sample.segmentClear,'Every observed combat-owned movement segment must be collision clear').toBe(true);
+      const observed=await live.clients[W].run('globalThis.__e2eTargetronMageSampler.samples.splice(0)');
+      samples.push(...observed);
+      for(const sample of observed){
+        expect(sample.map,'Combat recovery must not send the mage to jail or another map').toBe('uhills');
+        if(sample.moving&&sample.positioning?.movementOwner==='combat'&&sample.positioning?.target===seed.id)
+          expect(sample.segmentClear,'Every observed combat-owned movement segment must be collision clear').toBe(true);
+      }
       return (await live.clients[W].events()).some((event:any)=>event.event==='hit'&&String(event.data?.id)===seed.id&&event.data?.hid===W&&event.data?.damage>0);
     },{timeout:60000,intervals:[100,250],message:'The mage must recover around native UHills terrain and damage Targetron'}).toBe(true);
     expect(samples.some(sample=>sample.distance!==null&&sample.distance<=geometry.range),
@@ -104,6 +112,8 @@ test('mage reengages a blocked Targetron from the reported UHills screenshot',as
       'The mage must actually leave its initially blocked position').toBe(true);
     expect(await live.clients[W].run('character.rip')).toBeFalsy();
   }finally{
+    samples.push(...await live.clients[W].run(`(()=>{const observation=globalThis.__e2eTargetronMageSampler;
+      if(!observation)return [];clearInterval(observation.timer);delete globalThis.__e2eTargetronMageSampler;return observation.samples;})()`));
     await evidence(live,info,'targetron-mage-native-terrain-combat-recovery',{geometry,seed,samples,
       hits:(await live.clients[W].events()).filter((event:any)=>event.event==='hit'&&String(event.data?.id)===seed.id&&event.data?.hid===W)});
     await info.attach('targetron-mage-native-terrain-view',{body:await live.clients[W].page.screenshot(),contentType:'image/png'});

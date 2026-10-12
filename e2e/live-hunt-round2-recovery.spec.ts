@@ -188,7 +188,19 @@ test('native Anniversary staging survives an old-round slice without repeated To
     await expect.poll(async()=>{const native=await world(live);samples.push({at:Date.now(),players:native.players});
       expect(Math.hypot(native.players[W].x,native.players[W].y)).toBeLessThanOrEqual(110);
       return Date.now()-started>=30_000;},{timeout:40_000,intervals:[1000]}).toBe(true);
-    const casts=(await live.clients[W].events()).filter((e:any)=>e.at>=started&&e.event==='player'&&e.data?.c?.town);
+    // Player packets repeat the remaining cast condition; a late echo is not
+    // a newly issued Town. Native CIDs fence duplicates/out-of-order echoes.
+    const castStarts:any[]=[];let remaining=0,lastCid=-Infinity;
+    for(const packet of await live.clients[W].events()){
+      if(packet.event!=='player')continue;
+      const data=packet.data||{},cid=Number(data.cid);
+      if(Number.isFinite(cid)){if(cid<lastCid)continue;lastCid=cid;}
+      if(!Object.prototype.hasOwnProperty.call(data,'c'))continue;
+      const nextRemaining=Number(data.c?.town?.ms)||0;
+      if(nextRemaining>0&&(remaining===0||nextRemaining>remaining+250))castStarts.push(packet);
+      remaining=nextRemaining;
+    }
+    const casts=castStarts.filter(packet=>packet.at>=started);
     expect(casts.length).toBe(0);
     scheduled=false;
     await live.admin('clearInterval(globalThis.__e2eStagingTimer);broadcast_e=globalThis.__e2eStagingBroadcast;delete globalThis.__e2eStagingBroadcast;output=true');

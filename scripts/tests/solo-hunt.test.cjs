@@ -35,6 +35,18 @@ function follow(root,scopes,name,value) {
  root.followers[name]=value;
  reconcileFarmingMembership(root,scopes,before,()=>NOW);
 }
+test('joining an event leader follows its current position without replacing the shared return checkpoint',()=>{
+ const {root,scopes}=fixture();root.followers.P=false;
+ Object.assign(root.statuses.W,{map:'halloween',x:-298,y:676});
+ root.location={map:'halloween',x:-550,y:-290};
+ follow(root,scopes,'P',true);
+ assert.equal(root.commands.P.type,'return-leader');
+ assert.equal(root.characterLocations.P,undefined,'Transient event rendezvous must not become a personal farming checkpoint');
+ const nav=service(root).nav;
+ assert.deepEqual(nav.capture(['P']).P.location,root.location);
+ assert.equal(scopes.owner('P'),'W');
+});
+
 test('legacy leader migrates once; personal defaults and blacklists remain independent after restart',()=>{
  const {root,scopes}=fixture({farmingPolicy:'hunt',huntBlacklist:{rat:{monsterId:'rat',at:1,deaths:1}}});
  const solo=scopes.view('R');

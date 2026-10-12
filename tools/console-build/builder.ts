@@ -104,8 +104,8 @@ async function dependencyCache(root:string,app:string,store:ConsoleBuildStore,si
   const names={root:'',dashboard:'dashboard',caracal:'.caracal'};
   const locks:Record<string,string>={};
   for(const [name,relative] of Object.entries(names))locks[name]=digest(await readFile(path.join(app,relative,'package-lock.json')));
-  // The store refuses links, and npm links node_modules/.bin on Linux and macOS; the build calls tools
-  // by path, so caches install without bin links. The mode is part of the ID so older linked caches are not reused.
+  // npm creates .bin symlinks on Unix, which immutable cache verification rejects.
+  // Tools are invoked by module path; version the install mode to bypass old caches.
   const id=digest(JSON.stringify({locks,platform:process.platform,arch:process.arch,abi:process.versions.modules,binLinks:false}));
   await store.pinDependencies([id]);
   await dependencyLocked(store,id,async()=>{

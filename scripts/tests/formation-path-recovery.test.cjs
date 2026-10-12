@@ -150,3 +150,12 @@ test('recovery followers move while attacks remain paused; route segments wait f
  covered=true;c.gate.owner.tick();assert.equal(c.self.x,-12,'long native segment is split before movement');
  c.api.accept({...c.control,mover:'W'});assert.equal(c.api.movement(),true);assert.equal(follows,1);assert.equal(c.api.blocks(),true);
 });
+
+
+test('certified alternate recovery goal is reached when the preferred endpoint is unreachable',async()=>{
+ const alternative={x:80,y:0},blocked={x:240,y:0};
+ const c=client({segmentClear:(a,b)=>b.x!==blocked.x,safe:()=>true});
+ c.control.goal=blocked;c.control.goals=[blocked,alternative];c.api.accept(c.control);
+ for(let i=0;i<10&&c.gate.owner;i++){c.gate.owner.tick();await new Promise(setImmediate);}
+ assert.equal(c.api.report().outcome,'arrived');assert.deepEqual({x:c.self.x,y:c.self.y},alternative);assert.equal(c.starts,1);
+});

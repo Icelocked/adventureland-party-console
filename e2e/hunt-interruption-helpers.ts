@@ -122,7 +122,7 @@ export async function killedByParty(live:LiveGame,id:string,timeout=45000,observ
   return {monsterId:id,...matched,serverAbsent:true};
 }
 export async function seedCargo(live:LiveGame,name=W) {
-  await live.admin(`output=(()=>{const p=get_player(${JSON.stringify(name)});if(p.items[10])throw Error('Occupied seed slot');p.items[10]={name:'leather',q:7};cache_player_items(p);resend(p,'u+cid+reopen');return true})()`);
+  await expect.poll(()=>live.admin(`output=(()=>{const p=get_player(${JSON.stringify(name)});if(!p)return false;if(p.items[10])throw Error('Occupied seed slot');p.items[10]={name:'leather',q:7};cache_player_items(p);resend(p,'u+cid+reopen');return true})()`),{timeout:30_000,message:'Native cargo owner must be present before the one-time seed'}).toBe(true);
   await expect.poll(async()=>(await live.state()).characters[name]?.items?.[10]?.item?.q,{timeout:30000}).toBe(7);
   await live.post('/command',{character:name,type:'merchant-mark',slot:10,item:{name:'leather',q:7}});
 }

@@ -892,9 +892,16 @@ export function createRareHunting(input: unknown, hooks: Hooks) {
   function committedCandidate(s: Sight): boolean {
     return !(party.passiveHunting?.rules[s.mtype]?.keepMoving && !(s.mtype === 'phoenix' && patrol));
   }
+  function selectionAcknowledged(): boolean {
+    const revision = party.groupedCombat?.queueRevision;
+    return !!revision && members().every(name =>
+      party.statuses[name]?.groupedCombat?.queueAck === revision);
+  }
   function released(e: Encounter) {
     if (e.awaitingSelection) {
-      if (combat.selected(e.target) || combat.locked(e.target)) {
+      // A coordinator nomination can precede the clients switching out of
+      // scatter. Do not interpret their old reports as a released selection.
+      if (combat.locked(e.target) || combat.selected(e.target) && selectionAcknowledged()) {
         e.awaitingSelection = false;
         diagnostic('Rare target selected', {id:e.target.id,mtype:e.target.mtype});
       }

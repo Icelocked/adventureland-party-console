@@ -17,7 +17,19 @@ test('three delayed native departure signals preserve walking recovery budget an
       faults.push(fault);
       // Delaying the response itself also shifts the client's clock estimate and
       // may not miss departure. Block its actual event loop at the deadline.
-      await live.clients[W].run(`setTimeout(()=>{const end=Date.now()+2500;while(Date.now()<end){}},${Math.max(0, signal.departAt-body.serverNow-100)})`);
+      await live.clients[W].run(`(()=>{
+        const epoch=${signal.epoch},deadline=${signal.departAt};
+        const now=()=>Date.now()+sharedRoutine.queueClockOffset();
+        const receipts=globalThis.__e2eDepartureFaults ||= [];
+        setTimeout(()=>{
+          const receipt={epoch,deadline,startedAt:now(),endedAt:0};receipts.push(receipt);
+          while(now()<deadline+2000){}
+          receipt.endedAt=now();
+        // A hidden native frame may dispatch timers a second late. Begin while
+        // the scheduled deadline is still ahead, rather than relying on 100ms
+        // timer precision; the receipt still proves a real cross-deadline stall.
+        },0);
+      })()`);
       fault.forwardedAt = Date.now();
     }
     await route.fulfill({response});
@@ -28,7 +40,9 @@ test('three delayed native departure signals preserve walking recovery budget an
     await expect.poll(async () => {
       const convoy = (await live.state()).activeConvoy;
       maxRecoveryAttempts = Math.max(maxRecoveryAttempts, convoy?.recoveryAttempts || 0);
-      return faults.filter(fault => fault.forwardedAt).length;
+      const blocked=await live.clients[W].run('globalThis.__e2eDepartureFaults || []');
+      return blocked.filter((fault:{deadline:number;startedAt:number;endedAt:number})=>
+        fault.startedAt<=fault.deadline && fault.endedAt>=fault.deadline+1500).length;
     }, {timeout:120_000,message:'Three genuine scheduled departure signals must be delayed beyond their deadlines'}).toBe(3);
     await expect.poll(async () => {
       const current = await world(live), convoy = (await live.state()).activeConvoy;
@@ -39,6 +53,7 @@ test('three delayed native departure signals preserve walking recovery budget an
     await artifact(live,info,'native-delayed-departures',{faults,maxRecoveryAttempts,destination});
   } finally {
     await context.unroute('**/party-api/status');
-    await info.attach('native-departure-response-delays',{body:JSON.stringify(faults),contentType:'application/json'});
+    const blocked=await live.clients[W].run('globalThis.__e2eDepartureFaults || []');
+    await info.attach('native-departure-response-delays',{body:JSON.stringify({responses:faults,blocked}),contentType:'application/json'});
   }
 });

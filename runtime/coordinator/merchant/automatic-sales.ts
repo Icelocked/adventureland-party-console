@@ -109,12 +109,19 @@ export function createAutomaticMerchantSales(state: SalesState, ports: SalesPort
     pending.push({pack: entry.craftLocation, slot: entry.slot, item: entry.item, autoNpcRuleKey:key});
     return true;
   }
+  function bankNpcStacks():number {
+    return (state.withdrawals?.[String(state.merchantCharacter)] || []).filter(mark=>mark.autoNpcRuleKey).length;
+  }
+  function bankNpcLimit():number {return Math.max(10,state.itemCollectionThreshold ?? 10);}
+  function bankStandPending():boolean {
+    return !!state.withdrawals?.[String(state.merchantCharacter)]?.some(mark=>mark.standListingId);
+  }
   function markBankStock(): boolean {
     if (!bankStockReady()) return false;
-    let changed = false, npcStacks = (state.withdrawals?.[String(state.merchantCharacter)] || []).filter(mark => mark.autoNpcRuleKey).length;
+    let changed = false, npcStacks = bankNpcStacks();
     for (const entry of availableBankStock()) {
       if (!bankEntry(entry)) continue;
-      if (npcStacks < Math.max(10, state.itemCollectionThreshold ?? 10) && markBankNpc(entry)) {
+      if (npcStacks < bankNpcLimit() && markBankNpc(entry)) {
         npcStacks++; changed = true;
         continue;
       }
@@ -215,7 +222,7 @@ export function createAutomaticMerchantSales(state: SalesState, ports: SalesPort
     const changed = reconcileSales(items) || marks.changed || bankChanged;
     const collection = bankCollectionReason(state);
     if (collection) ports.queue([state.merchantCharacter], collection);
-    if (bankChanged && state.withdrawals?.[String(state.merchantCharacter)]?.some(mark => mark.standListingId))
+    if (bankChanged && bankStandPending())
       ports.queue([state.merchantCharacter], "manual bank exchange");
     if (marks.standChanged || bankChanged) {
       ports.publish();

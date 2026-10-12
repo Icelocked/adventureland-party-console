@@ -2,8 +2,81 @@
 
 ## Unreleased
 
+- Keep followers on the shared saved farming checkpoint when joining a leader during an event, without persisting the temporary rendezvous as a personal return destination.
+
+- Retain rare encounter admission until the exact combat queue is acknowledged, avoiding permanent rejection from pre-handoff status reports.
+
+- Verify explicit native combat fixture wire overrides and catalog projections, and acknowledge Cave entry freshness rejections without duplicating accepted entries.
+
+- Preserve authoritative event-return ownership through CODE replacement, keeping early finishers defensive and coalescing recently stale same-cycle exit peers within the existing request window.
+- Record actual native Hunt readiness and preferred-area arrival before combat drift during E2E validation.
+
+- Allow login recovery past stale merchant jobs while retaining fresh inventory fences and bounded party-realm reconnect ownership.
+
+- Reduce combat recovery collision-search overhead while preserving live terrain checks and planner budgets.
+- Stabilize native E2E choice acknowledgements, reconnect/catalog readiness and combat sampling; preserve real gameplay and conservation assertions.
+
+- Keep native Cave vote acknowledgements and reconnect-frame checks tied to the exact original choice or frame, avoiding stale duplicate actions during E2E validation.
+
+- Preserve confirmed lucky-slot upgrade results during interrupted restoration; leave manually moved results and changed cargo untouched.
+- Recover committed Cave enemies around blocked terrain while retaining scoped target and travel-handoff guards.
+- Keep local Cave waypoint placement responsive during heartbeat freshness gaps; actual waypoint submission still requires fresh participant reports.
+- Reacquire native test observers after reconnects without replaying mutations, and fetch event deltas to limit observation overhead.
+
+- Keep eligible reserved passing encounters ahead of equal-priority newcomers until admission completes, while preserving higher-priority targeting and attack guards.
+- Let stopped, freshly owned party members complete map-transition barriers under bounded network latency, retaining position, identity and walking-lease checks.
+
+- Let respawning event fighters rejoin a roaming boss without recalling allies already actively fighting it at its new position.
+
+- Preserve native Steam companion launch flags and CODE slots across realm navigation so saved merchant work can resume.
+- Record combat-recovery latency inside native clients and wait for discovered monster catalogs before configuring native hunt scenarios.
+
+- Keep authoritative entity reconciliation active for retained combat targets even when no role target is currently attackable.
+- Make native Cave scenarios wait for boss completion before starting the next encounter, and preserve test evidence during character reconnects.
+
+- Preserve newer fast-channel convoy ownership against delayed full status responses, preventing interrupted event return journeys.
+- Preserve selected upgrade offerings through production authorization and reserve merchant ownership during independent realm transitions.
+- Refactor coordinator predicates without changing behavior to satisfy strict CI lint checks.
+
+- Recover collision-blocked walking routes through safe forward segments, select reachable formation-recovery positions, and wait for escape movement to settle before resuming.
+- Preserve passing-target admission during travel while respecting combat-drain holds.
+- Refresh retained regression fixtures for current inventory, deployment and account contracts, and make native readiness and fault-injection checks match actual game boundaries.
+
+- Align native lucky-slot recovery coverage with best-effort restoration: retire ambiguous journals without inventory swaps or repeated upgrade attempts, while retaining provable restoration.
+
+- Verify map screenshot pixels and the real image proxy in separate E2E journeys, using stable game observations and real dashboard state instead of duplicated status fetches.
+
+- Keep the full Cave map dialog accessibly named across encounter updates and allow its native waypoint test the existing bounded UI readiness window.
+
+- Supply compiled character CODE in isolated console fixtures and keep opt-in Docker journeys out of the default CI selection, preserving complete regression evidence.
+
+- Run the prepared-runtime deployment benchmark in CI without requiring a local artifact, preserving complete executable-installation evidence.
+
+- Prepare console artifacts before pausing gameplay and publish prevalidated coordinator runtime files, reducing deployment interruptions while preserving readiness checks and rollback.
+
 Changes queued for the next release. The release workflow determines its version
 from the commits merged into `main`.
+
+- Add per-tab Hide stale listings filters to Live WTS, Live WTB, Classifieds and
+  Ponty, plus persistent ignored items matched by exact item and level. Manage
+  ignored items and merchant blacklist entries in collapsed, bordered sections.
+- Simplify Stand and Market WTB displays: remove Auto badges and minimum wording,
+  and rename Use stand to Keep on stand.
+
+- Make console deployment a durable transaction: hold new combat pulls after candidate preparation,
+  renew the hold through activation, wait for all browser and headless clients,
+  and restore activity together after three continuously safe seconds.
+- Add Load at Main with fighter checkpoint return and a brief merchant-operation
+  boundary; keep only Load now available inside Cave.
+- Restore deployment progress after refreshing, preserve dashboard view state,
+  and avoid refreshing the page for gameplay-only updates. Prewarm dashboard
+  builds and move slow history cleanup outside deployment completion.
+
+- Restore the shared upgrade-offering resolver required by upgrade menus in
+  clean installations; verify offering badges with pinned native sprite pixels.
+
+- Fix staged console builds on Linux and macOS by installing isolated dependency
+  caches without npm executable symlinks and bypassing older linked caches.
 
 - Show the deployed artifact hash below the header version without changing
   header sizing or page layout.

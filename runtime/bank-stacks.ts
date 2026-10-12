@@ -7,11 +7,10 @@ export interface StackItem extends Pick<ItemInfo, 'q' | 'level'> {
 }
 export interface StackLocation { pack: string; slot: number; item?: StackItem | null }
 export interface StackProtection {
+  staging?: boolean;
   locations: { pack?: string; slot?: number }[];
   items: { name: string; level?: number }[];
   error?: string;
-  /** items1 slots 35–41 are BankBoi staging only while a BankBoi exists; older coordinators omit this. */
-  staging?: boolean;
 }
 export const stackQuantity = (item?: StackItem | null): number => item ? Number(item.q) || 1 : 0;
 export function stackIdentity(item?: StackItem | null): string {

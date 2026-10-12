@@ -23,8 +23,8 @@ test('merchant gathering waits at capacity without resetting cooldowns',async({l
   await page.goto(live.url);await page.getByText(/Merchant logistics ·/).click();
   await expect(page.locator('details').filter({has:page.locator('summary').getByText(/Merchant logistics/)}).getByText('BLOCKED',{exact:true})).toHaveCount(2);
   await expect.poll(()=>live.clients[name].frame.evaluate(()=>{
-    const root=(document.getElementById('maincode') as HTMLIFrameElement).contentWindow as any;
-    return root.__merchantGatheringBlockedReason;
+    const root=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+    return root?.__merchantGatheringBlockedReason;
   })).toBe('inventory capacity');
   const after=await live.state();expect(after.gatheringCooldowns).toEqual(before);
   const native=await live.admin(`output=(()=>{const p=get_player('${name}');return {items:p.items,last:{fishing:p.last.fishing,mining:p.last.mining}};})()`);
@@ -88,19 +88,19 @@ test('manual merchant weapon remains selected through gathering and restart',asy
   await live.post('/merchant/gather',{mode:'fishing',enabled:true});
   await live.post('/merchant/gather',{mode:'mining',enabled:true});
   await expect.poll(async()=> (await live.state()).gatheringModes,{timeout:10_000}).toEqual(expect.arrayContaining(['fishing','mining']));
-  await expect.poll(()=>live.admin(`output=['rod','pickaxe'].includes(get_player('${name}').slots.mainhand?.name)`),{timeout:90_000}).toBe(true);
+  await expect.poll(()=>live.admin(`output=['rod','pickaxe'].includes(get_player('${name}')?.slots.mainhand?.name)`),{timeout:90_000}).toBe(true);
   await page.goto(live.url);
   const merchant=page.locator('article').filter({has:page.getByRole('heading',{name,exact:true})});
   const inventory=merchant.getByRole('button',{name:/^Inventory/});
   if(await inventory.getAttribute('aria-expanded')!=='true')await inventory.click();
   await merchant.getByLabel('Broom',{exact:true}).click({button:'right'});
   await page.getByRole('menuitem',{name:'Equip',exact:true}).click();
-  await expect.poll(()=>live.admin(`output=get_player('${name}').slots.mainhand`),{timeout:30_000}).toMatchObject({name:'broom',level:6});
+  await expect.poll(()=>live.admin(`output=get_player('${name}')?.slots.mainhand`),{timeout:30_000}).toMatchObject({name:'broom',level:6});
   await expect.poll(async()=> (await live.state()).merchantWeapon?.item,{timeout:10_000}).toMatchObject({name:'broom',level:6});
-  await expect.poll(()=>live.admin(`output=['rod','pickaxe'].includes(get_player('${name}').slots.mainhand?.name)`),{timeout:90_000}).toBe(true);
+  await expect.poll(()=>live.admin(`output=['rod','pickaxe'].includes(get_player('${name}')?.slots.mainhand?.name)`),{timeout:90_000}).toBe(true);
   await live.post('/merchant/gather',{mode:'fishing',enabled:false});
   await live.post('/merchant/gather',{mode:'mining',enabled:false});
-  await expect.poll(()=>live.admin(`output=get_player('${name}').slots.mainhand`),{timeout:30_000}).toMatchObject({name:'broom',level:6});
+  await expect.poll(()=>live.admin(`output=get_player('${name}')?.slots.mainhand`),{timeout:30_000}).toMatchObject({name:'broom',level:6});
   const after=await live.state();expect(after.merchantWeapon.item).toMatchObject({name:'broom',level:6});
   await live.restartCoordinator();
   await expect.poll(async()=> (await live.state()).merchantWeapon?.item,{timeout:30_000}).toMatchObject({name:'broom',level:6});

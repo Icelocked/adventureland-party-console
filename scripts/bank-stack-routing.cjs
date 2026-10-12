@@ -1,4 +1,5 @@
 const {stackDepositPlan} = require('../runtime/bank-stacks.ts');
+const {bankStagingReserved} = require('../runtime/coordinator/inventory/reserved-cargo.ts');
 // A partial stack has one preferred home across physical and virtual panes.
 function identity(item) {
   return JSON.stringify(['name', 'level', 'p', 'stat_type', 'data', 'rid', 'b', 'm', 'l']
@@ -6,6 +7,7 @@ function identity(item) {
 }
 function homes(bank, workers) {
   const result = {};
+  const staging = bankStagingReserved({bankbois:workers});
   const add = (entry, owner) => {
     const limit = Number(entry?.meta?.definition?.s) || 1;
     if (!entry?.item || limit <= 1 || Number(entry.item.q || 1) >= limit) return;
@@ -37,7 +39,7 @@ function unloadPlan(party, worker) {
   const withdrawals = Object.values(party.withdrawals || {}).flat();
   const slots = Object.entries(party.bankSnapshot?.packs || {}).filter(([, entries]) => Array.isArray(entries))
     .flatMap(([pack, entries]) => Array.from({length:42}, (_, slot) => ({pack, slot, item:entries[slot]?.item})))
-    .filter(location => !(location.pack === 'items1' && location.slot >= 35) &&
+    .filter(location => !(bankStagingReserved(party) && location.pack === 'items1' && location.slot >= 35) &&
       !withdrawals.some(request => request.pack === location.pack && request.slot === location.slot));
   const moves = [];
   (worker.items || []).forEach((entry, slot) => {

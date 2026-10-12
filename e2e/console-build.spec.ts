@@ -109,7 +109,7 @@ test('reload menu confirms immediate loading and safely deploys the exact select
     const c = await stage('C', 3);
     await expect(refresh.getByLabel('2 completed builds since deployment')).toHaveText('2');
     await page.getByRole('button', {name:'Load when safe',exact:true}).click();
-    await expect(refresh).toBeDisabled();
+    await expect(refresh).toHaveAttribute('aria-busy','true');
     await expect(page.getByText('Waiting for combat to finish; new targets paused…')).toHaveCount(0);
     await expect.poll(async()=>(await store.journal())?.phase).toBe('waiting-safe');
     expect((await store.journal())?.target).toBe(b.id);
@@ -120,9 +120,9 @@ test('reload menu confirms immediate loading and safely deploys the exact select
     expect(await refresh.locator('svg').evaluate(element=>getComputedStyle(element).transform)).not.toBe(rotation);
     await info.attach('safe-reload-waiting-menu-selection', {body:await page.screenshot(),contentType:'image/png'});
     await page.reload();
-    await expect(refresh).toBeDisabled();
+    await expect(refresh).toHaveAttribute('aria-busy','true');
     finishFight?.();
-    await expect(refresh).toBeDisabled();
+    await expect(refresh).toHaveAttribute('aria-busy','true');
     await expect.poll(() => ledger.filter(entry => entry.action === 'activate').length).toBe(1);
     expect(ledger.find(entry => entry.action === 'activate')?.buildId).toBe(b.id);
     expect((await store.references()).active).toBe(a.id);
@@ -148,9 +148,9 @@ test('reload menu confirms immediate loading and safely deploys the exact select
     await page.getByRole('button', {name:'Load now',exact:true}).click();
     await dialog.getByRole('button', {name: 'Load now', exact: true}).click();
     await expect.poll(async()=>(await store.journal())?.error).toContain('rollback failed: Declared rollback readiness failure');
-    await expect(refresh).toBeDisabled();
+    await expect(refresh).toHaveAttribute('aria-busy','true');
     await expect(page.getByText('Restoring previous build…')).toHaveCount(0);
-    await expect(refresh).toBeDisabled();
+    await expect(refresh).toHaveAttribute('aria-busy','true');
     expect((await store.references()).active).toBe(b.id);
     expect((await store.journal())?.phase).toBe('rolling-back');
     // Complete more candidates than retained history; the durable count must

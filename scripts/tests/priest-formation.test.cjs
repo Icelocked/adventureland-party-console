@@ -546,13 +546,13 @@ test('visibility recovery applies the same healing limit as ordinary movement',(
  assert.equal(r.c.formationRecoverySafePoint({x:170,y:0}),true);
 });
 
- test('terrain-blocked priest proposes safe recovery goals after local recovery stalls',()=>{
+ test('terrain-blocked priest proposes safe recovery goals when no local step is reachable',()=>{
   const r=setup(true),proposals=[];
   r.monster.target=null;r.monster.x=400;r.c.can_move_to=()=>false;
   r.c.can_move=p=>p.x===p.going_x&&p.y===p.going_y;
   r.c.terrainRecoveryContext=()=>({allowed:true,target:'goo'});
-  r.c.partyQueueClient={formation:{movement:()=>false,propose:(id,goals)=>proposals.push({id,goals})}};
-  r.c.formationMove(r.monster);assert.equal(proposals.length,0);
+  r.c.partyQueueClient={formation:{movement:()=>proposals.length>0,propose:(id,goals)=>proposals.push({id,goals})}};
+  r.c.formationMove(r.monster);assert.equal(proposals.length,1);
   r.now(12000);r.c.formationMove(r.monster);assert.equal(proposals.length,1);
   assert.equal(proposals[0].id,'goo');assert.ok(proposals[0].goals.length>0);
   assert.ok(proposals[0].goals.every(p=>r.c.terrainRecoverySafe(p,true)));

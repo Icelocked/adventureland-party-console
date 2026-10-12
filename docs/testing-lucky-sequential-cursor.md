@@ -2,14 +2,17 @@
 
 Failure inventory recorded before implementation:
 
-- Least-sampled selection can jump several inventory squares after uneven historic observations; posterior inference can silently pin discovery to an inferred square.
+- Least-sampled selection can jump several inventory squares after uneven historic observations.
+- Unlocked upgrades must use the inferred square at 99.9% confidence with at least 100 observations, while continuing to record evidence and advance the durable cursor.
+- If inference lapses, sequential discovery must resume at the durable cursor, skipping ruled-out squares in order and wrapping from 41 to 0.
+- Ruled-out status must be recomputed from evidence; selection must remain bounded even if every square is ruled out.
 - Restarting native CODE or moving between native/headless clients can lose an in-memory next square or replay older stream metadata.
 - A repeated completed native roll must neither count twice nor advance twice. A failed upgrade still supplies a completed roll and advances once.
 - Locking a square must retain its outline and observation counts; unlocking must continue at the following square, including 41 wrapping to 0.
-- Statistical elimination and confidence must remain evidence independently of sequential placement. Explicit verified/configured positions remain supported overrides.
+- Statistical elimination and confidence must guide placement without becoming sticky flags. Explicit verified/configured positions remain supported overrides.
 - Malformed cursor metadata must not select an invalid inventory position or erase valid statistics.
 
-The maintained tracker stores the next square, receipt timestamp, and cumulative stream roll count together with the native receipt and statistics. Same-stream merges reject older cursor counts; merged discovery uses the latest timestamp across durable streams. Legacy streams without cursor metadata begin discovery at square 0. Placement overrides continue to take precedence outside the tracker.
+The maintained tracker stores the next square, receipt timestamp, and cumulative stream roll count together with the native receipt and statistics. Same-stream merges reject older cursor counts; merged discovery uses the latest timestamp across durable streams. Legacy streams without cursor metadata begin discovery at square 0. Inference selects the leading square; otherwise discovery scans forward from the cursor to the first remaining candidate without rewriting the cursor. Placement overrides continue to take precedence outside the tracker.
 
 Native E2E coverage must observe actual rolls across successive squares, preserve the next square through CODE replacement, retain a locked outline through rolls, and verify unlocking resumes at the following square. Native receipts and persisted tracker/status artifacts establish progression; confidence alone is not placement evidence.
 

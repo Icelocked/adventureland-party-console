@@ -1,4 +1,4 @@
-import type { Candidate, Component, DeploymentDriver } from './contracts.ts';
+import type { Candidate, Component, DeploymentDriver, DeploymentJournal } from './contracts.ts';
 
 export interface ActivationObservation {
   coordinator?: { artifactId: string; hash: string };
@@ -9,6 +9,7 @@ export interface ActivationObservation {
 export interface ActivationPorts {
   /** Capture required connected roster once, before any component stops. */
   prepare?(signal: AbortSignal): Promise<void>;
+  stage?(candidate:Candidate,previous:Candidate|undefined,operation:DeploymentJournal,signal:AbortSignal):Promise<void>;
   stopCoordinator(signal: AbortSignal): Promise<void>;
   startCoordinator(directory: string, signal: AbortSignal): Promise<void>;
   activateDashboard(directory: string, signal: AbortSignal): Promise<void>;
@@ -59,6 +60,7 @@ export function createDeploymentDriver(ports: ActivationPorts): DeploymentDriver
     }
   }
   return {
+    async prepare(candidate,previous,operation,signal){await ports.stage?.(candidate,previous,operation,signal);},
     async activate(candidate, previous, signal) {
       await ports.prepare?.(signal);
       attempted = candidate;

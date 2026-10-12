@@ -6,7 +6,7 @@ import {
   ContextMenuSubTrigger,
 } from "@/components/ui/context-menu";
 import { useUpgradeOfferings, type OfferingSource } from './upgrade-offering-controls';
-import { upgradeOfferings, offeringRule, type UpgradeOffering } from '../../../runtime/upgrade-offerings';
+import { upgradeOfferings, resolveUpgradeOffering, type UpgradeOffering } from '../../../runtime/upgrade-offerings';
 import { SpriteCrop } from './sprite-crop';
 import { useState } from "react";
 import { UpgradePreviewPanel } from "./upgrade-preview-panel";
@@ -50,8 +50,7 @@ export function UpgradeActions({
     max = Math.max(0, itemMaximumLevel(meta) - level);
   function destinationOffering(tiers: number) {
     const step = level + tiers - 1;
-    // resolveUpgradeOffering from ce74ef1 was never committed upstream (#101); offeringRule is the same lookup.
-    const rule = offeringRule(offerings?.rules || [], item.name, step);
+    const rule = resolveUpgradeOffering(offerings?.rules || [], item.name, step);
     if (!rule) return null;
     const sprite = offerings?.catalog.find(entry => entry.id === rule.offering)?.sprite;
     const name = upgradeOfferings[rule.offering];

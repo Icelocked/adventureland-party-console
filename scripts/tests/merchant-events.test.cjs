@@ -83,7 +83,7 @@ test('merchant event attacks reach the normal controller and rejected attacks re
  let controller,attacks=0;const errors=[],state={};
  try {
   Object.assign(global,{parent:{},character:{ctype:'merchant',damage_type:'physical',slots:{mainhand:{name:'equipped-gun'}}},
-   sharedRoutine:{basicAttackReserved:()=>false,noteAttack:()=>{}},can_attack:()=>true,is_in_range:()=>true,is_on_cooldown:()=>false,
+   sharedRoutine:{allowsTarget:()=>true,allowsPassingTarget:()=>true,basicAttackReserved:()=>false,noteAttack:()=>{}},can_attack:()=>true,is_in_range:()=>true,is_on_cooldown:()=>false,
    setTimeout:()=>0,clearTimeout:()=>{},attack:async()=>{attacks++;throw {reason:'merchant'};}});
   controller=createAttackController({target:()=>target,selected:()=>target.id,epoch:()=>1,active:()=>true,allowed:()=>true,state:()=>state,report:e=>errors.push(e)});
   controller.tick();for(let i=0;i<12;i++)await Promise.resolve();

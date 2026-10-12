@@ -1,5 +1,6 @@
 import {test,expect} from './live-fixtures';
 import {W,P,M,world,quantity,prepareHunt,beginAnniversary,endAnniversary,spawnRare,cleanupEvents} from './game/hunt-events';
+import {killedByParty} from './hunt-interruption-helpers';
 
 for(const mode of ['resume','restart','hunt-off'] as const) test(`native anniversary visit ${mode} delivers real kiss rewards and event deselection returns to current Hunt policy`,async({live},info)=>{
   test.setTimeout(420_000);
@@ -27,6 +28,25 @@ for(const mode of ['resume','restart','hunt-off'] as const) test(`native anniver
     } else {
       await expect.poll(async()=>{const h=(await live.state()).monsterHunt;return h?.cycleId===hunt.cycleId&&!['paused-event','paused'].includes(h.stage);},{timeout:90_000}).toBe(true);
       const count=afterGift.players[W].quest.c;
+      // The retained mission must be physically reached before declaring its
+      // next native encounter; ambient spawn availability is not recovery proof.
+      await expect.poll(async()=>{
+        const current=await world(live),state=await live.state(),mission=state.monsterHunt?.missions?.[state.monsterHunt.currentIndex];
+        const bounds=mission?.destination?.boundary;
+        return state.monsterHunt?.cycleId===hunt.cycleId&&state.monsterHunt.stage==='farming'&&Array.isArray(bounds)&&
+          [W,P].every(name=>{const p=current.players[name];return p.map===mission.destination.map&&
+            p.x>=bounds[0]&&p.x<=bounds[2]&&p.y>=bounds[1]&&p.y<=bounds[3];});
+      },{timeout:90_000,message:'Both actual fighters must reach the retained Hunt mission before its next encounter'}).toBe(true);
+      const state=await live.state(),destination=state.monsterHunt.missions[state.monsterHunt.currentIndex].destination;
+      const encounter=await live.admin(`output=(()=>{const p=get_player(${JSON.stringify(W)}),destination=${JSON.stringify(destination)},bounds=destination.boundary;
+        for(const [dx,dy] of [[35,0],[-35,0],[0,35],[0,-35]]){const x=p.x+dx,y=p.y+dy;
+          if(x<bounds[0]||x>bounds[2]||y<bounds[1]||y>bounds[3]||!can_move({map:p.map,x:p.x,y:p.y,going_x:x,going_y:y,base:p.base}))continue;
+          const m=new_monster(p.in,{type:'goo',position:[x,y],radius:0,count:1},{temp:1});m.e2eHunt=true;
+          return {id:String(m.id),map:m.map,x:m.x,y:m.y,hp:m.hp,destination};}
+        throw Error('No reachable native encounter inside retained Goo mission');})()`);
+      await info.attach('anniversary-resumed-native-encounter',{body:JSON.stringify({mode,encounter}),contentType:'application/json'});
+      const kill=await killedByParty(live,encounter.id);
+      await info.attach('anniversary-resumed-native-kill',{body:JSON.stringify(kill),contentType:'application/json'});
       await expect.poll(async()=>(await world(live)).players[W].quest?.c,{timeout:120_000}).toBeLessThan(count);
     }
     expect(quantity((await world(live)).players[M].items,'anniversarygift')).toBe(quantity(before.players[M].items,'anniversarygift')+1);

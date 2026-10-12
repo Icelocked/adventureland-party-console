@@ -51,6 +51,11 @@ module.exports = function createEscape(party, hooks) {
       status.map === destination.map && status.in === destination.in && status.server === destination.server &&
       Math.hypot(status.x - destination.x, status.y - destination.y) <= 65);
   }
+  function settled(status) {
+    // Active owned journeys omit `done`; terminal movement receipts include it.
+    // A paused or between-node walker is not an acknowledged safety arrival.
+    return !status.moving && (!status.movement || typeof status.movement.done === 'boolean');
+  }
   function step() {
     const e = party.escape;
     if (!e || ['released', 'complete', 'failed-hold'].includes(e.stage)) return;
@@ -66,7 +71,7 @@ module.exports = function createEscape(party, hooks) {
       fail('Timed out during ' + e.stage + ': ' + (Object.values(e.progress).map(p => p.error).filter(Boolean).join('; ') || 'arrival was not confirmed'));
     if (e.stage === 'recovering') {
       const ready = e.participants.every(name => {
-        const s = party.statuses[name]; return s && !s.rip && s.hp > 0 && s.map === 'main' && Math.hypot(s.x, s.y) <= 65 && now() - s.seenAt < 10000;
+        const s = party.statuses[name]; return s && settled(s) && !s.rip && s.hp > 0 && s.map === 'main' && Math.hypot(s.x, s.y) <= 65 && now() - s.seenAt < 10000;
       });
       if (ready && hooks.convoy(e.participants)) { e.stage = 'recovery-convoy'; e.convoyId = party.activeConvoy?.id; hooks.persist(); }
       return;
@@ -78,7 +83,7 @@ module.exports = function createEscape(party, hooks) {
         e.progress.recovery = { error: party.activeConvoy.failure || 'Recovery convoy is blocked' };
       }
       if (e.participants.every(name => {
-        const s = party.statuses[name]; return s && !s.rip && s.map === 'main' && now() - s.seenAt < 10000 && Math.hypot(s.x, s.y) <= 65;
+        const s = party.statuses[name]; return s && settled(s) && !s.rip && s.map === 'main' && now() - s.seenAt < 10000 && Math.hypot(s.x, s.y) <= 65;
       })) { e.stage = 'failed-hold'; hooks.cancel(); hooks.persist(); }
       else if (!party.activeConvoy) { e.stage = 'recovering'; hooks.persist(); }
       return;

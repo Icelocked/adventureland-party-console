@@ -4,7 +4,7 @@ function fixture(){
  const names=['L','F'];
  const state={activeConvoy:{id:'c',epoch:1,routeVersion:1,routeProtocol:4,phase:'travel',participants:names,completed:[],runtimes:{L:'L',F:'F'}},
   commands:Object.fromEntries(names.map(name=>[name,{convoyId:'c',epoch:1,id:1,navigationRevision:0}])),
-  statuses:Object.fromEntries(names.map(name=>[name,{seenAt:1000,convoyNavigation:{runtimeId:name}}]))};
+  statuses:Object.fromEntries(names.map(name=>[name,{seenAt:1000,map:'main',in:'main',x:0,y:0,hp:100,moving:false,transporting:false,convoyNavigation:{runtimeId:name}}]))};
  const body=name=>({character:name,convoyId:'c',epoch:1,commandId:1,routeVersion:1,navigationRevision:0,runtimeId:name,step:0,destination:{map:'main',x:0,y:0,town:true},ready:true});
  return {state,body};
 }
@@ -33,7 +33,7 @@ test('scheduled departure accepts a barrier only when departure time has arrived
  assert.equal(movementBarrier(state,{...body('L'),epoch:2},1200).ready,false);
 });
 test('three-member leave waits for the last arrival before releasing the convoy',()=>{
- const {state,body}=fixture();state.activeConvoy.participants.push('P');state.activeConvoy.runtimes.P='P';state.commands.P={...state.commands.F};state.statuses.P={seenAt:1000,convoyNavigation:{runtimeId:'P'}};
+ const {state,body}=fixture();state.activeConvoy.participants.push('P');state.activeConvoy.runtimes.P='P';state.commands.P={...state.commands.F};state.statuses.P={seenAt:1000,map:'main',in:'main',x:0,y:0,hp:100,moving:false,transporting:false,convoyNavigation:{runtimeId:'P'}};
  const leave=name=>({...body(name),destination:{map:'main',x:0,y:0,method:'leave'}});
  for(const name of ['L','F'])assert.equal(movementBarrier(state,leave(name),1000).ready,false);
  assert.equal(movementBarrier(state,leave('P'),1000).ready,true);
