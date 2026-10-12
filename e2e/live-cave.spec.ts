@@ -948,7 +948,14 @@ test('Cave shared-route pacing keeps the party together and stops the selected r
     if(!c.choice||c.choice.resolved)return false;
     const option=c.choice.options.find((o:any)=>!o.unavailable&&!o.cost&&!o.amber);
     await act({action:'vote',run:c.run,choice:c.choice.id,option:option.id});
-    await expect.poll(async()=>(await view()).members[0].observation.cave.choice.resolved,{timeout:20_000}).toBe(true);
+    await expect.poll(async()=>{
+      const current=await view();
+      return current.state.run===c.run&&current.members.length===2&&current.members.every((m:any)=>{
+        const observed=m.observation?.cave,choice=observed?.choice;
+        return m.fresh&&m.observation?.alive&&observed?.run===c.run&&observed.floor===c.floor&&
+          choice?.id===c.choice.id&&choice.resolved&&choice.votes?.[m.name]===option.id;
+      });
+    },{timeout:20_000,message:'Both native participant votes must settle before pacing travel'}).toBe(true);
     return true;
   }
   await reply(await view());
@@ -1037,7 +1044,14 @@ test('Cave assembly regroups displaced completed participants before departure',
     const option=cave.choice.options.find((o:any)=>!o.unavailable&&!o.cost&&!o.amber);
     expect(option).toBeTruthy();
     await act({action:'vote',run:cave.run,choice:cave.choice.id,option:option.id});
-    await expect.poll(async()=>(await view()).members[0].observation.cave.choice.resolved,{timeout:30_000}).toBe(true);
+    await expect.poll(async()=>{
+      const current=await view();
+      return current.state.run===cave.run&&current.members.length===2&&current.members.every((m:any)=>{
+        const observed=m.observation?.cave,choice=observed?.choice;
+        return m.fresh&&m.observation?.alive&&observed?.run===cave.run&&observed.floor===cave.floor&&
+          choice?.id===cave.choice.id&&choice.resolved&&choice.votes?.[m.name]===option.id;
+      });
+    },{timeout:30_000,message:'Both native participant votes must settle before assembly staging'}).toBe(true);
   }
   const staging=await live.admin(`output=(()=>{
     const people=['E2EWarrior','E2EPriest'].map(name=>get_player(name)),p=people[0],run=generated_entry(p).record;
