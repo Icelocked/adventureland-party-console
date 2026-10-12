@@ -38,6 +38,8 @@ export interface SharedStatus extends RoutePoint {
   moving?: boolean; transporting?: boolean; speed?: number; convoyProtocol?: number; convoyNavigation?: SharedReport;
 }
 export interface SharedCommand {
+  /** Workflow parent retained by a shared event-return walking child. */
+  cycleId?: string;
   jobId?: unknown;
   routeRecovery?: import('../hunt/route-recovery.ts').RouteRecoveryCommand;
   returnWalking?: boolean;

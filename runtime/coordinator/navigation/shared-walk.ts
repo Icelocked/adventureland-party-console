@@ -35,6 +35,7 @@ interface WalkState extends SharedState {
     cycleId?: string;
     participants: string[];
     pending?: string[];
+    waypoints?: Record<string, {revision: number}>;
     returnRoutes?: Record<string, { commandId?: number; revision: number }> | null;
   } | null;
   deferredEventReturns?: Record<string, {cycleId: string; navigationRevision?: number}>;
@@ -193,7 +194,24 @@ export function createSharedWalks(input: unknown, ports: WalkPorts) {
   function retainParents(c: SharedConvoy, waiting: WalkRequest[]): void {
     c.walkingParents = Object.fromEntries(waiting.map(r => [r.name, { revision: r.revision, parentId: r.parentId, command: r.parent }]));
   }
+  function recentPendingExitPeer(r: WalkRequest): boolean {
+    const recovery=state.eventReturn,now=ports.now();
+    if(r.activity!=='event-return' || recovery?.cycleId!==r.key)return false;
+    return workflowMembers(r).some(name=>{
+      if(name===r.name)return false;
+      const status=state.statuses[name],command=state.commands[name];
+      // Admission still needs a fresh real request. Reserve only the existing
+      // request window for a known living peer whose same-cycle exit is current.
+      return !!status && !status.rip && status.hp!==0 && status.convoyProtocol===4 &&
+        !!characterRuntime(status) && status.server===state.statuses[r.name]?.server &&
+        status.seenAt<now-3000 && status.seenAt>now-10000 &&
+        command?.type==='event-return-town' && command.cycleId===r.key &&
+        recovery.waypoints?.[name]?.revision===(state.navigationIntents?.[name]?.revision||0) &&
+        !!ports.owned(name) && !atDestination(status,r.destination);
+    });
+  }
   function tryStart(r: WalkRequest): void {
+    if(recentPendingExitPeer(r))return;
     const leaderName = leaderForRequest(r);
     if (!canReplace(r) || !leaderName) return;
     const waiting = pending(r), expected = eligible(r);

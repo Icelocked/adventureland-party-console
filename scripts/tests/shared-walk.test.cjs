@@ -357,3 +357,33 @@ test('independent merchant owns event walking and return convoys but cannot requ
  assert.equal(returned.error,undefined);assert.deepEqual(f.state.activeConvoy.participants,['M']);
  assert.equal(f.state.activeConvoy.purpose,'shared-walk-return');
 });
+
+function recentlyStaleExitFixture(){
+ const t=fixture();t.advance(10000);
+ for(const name of ['L','F'])Object.assign(t.state.statuses[name],{map:'spookytown',x:0,y:0,hp:100,combatSelection:{runtimeId:name}});
+ t.state.statuses.F.seenAt=7800;
+ t.state.eventReturn={cycleId:'event-1',event:'mrgreen',participants:['L','F'],pending:['L','F'],waypoints:{L:{revision:1},F:{revision:1}}};
+ t.state.commands.L={id:10,type:'event-return-town',cycleId:'event-1'};
+ t.state.commands.F={id:11,type:'event-return-town',cycleId:'event-1'};
+ return {...t,exit:name=>t.body(name,{activity:'event-return',key:'event-1',parentCommandId:name==='L'?10:11,destination:{map:'main',x:0,y:0}})};
+}
+test('recently stale same-cycle native peer gets its existing request window before serial exit starts',()=>{
+ const t=recentlyStaleExitFixture();t.walks.submit(t.exit('L'));assert.equal(t.starts(),0);
+ t.advance(250);t.walks.submit(t.exit('F'));assert.equal(t.starts(),1);
+ assert.deepEqual(t.state.activeConvoy.participants,['L','F']);
+ assert.equal(t.state.activeConvoy.walkingParents.L.parentId,10);assert.equal(t.state.activeConvoy.walkingParents.F.parentId,11);
+});
+test('recent peer reservation expires without admitting stale observations into movement',()=>{
+ const t=recentlyStaleExitFixture();t.walks.submit(t.exit('L'));assert.equal(t.starts(),0);
+ t.advance(7001);t.state.statuses.F.seenAt=7800;t.walks.submit(t.exit('L'));
+ assert.equal(t.starts(),1);assert.deepEqual(t.state.activeConvoy.participants,['L']);
+});
+test('dead remote unknown-runtime and superseded exit peers cannot reserve another return',()=>{
+ for(const change of [t=>t.state.statuses.F.rip=true,t=>t.state.statuses.F.hp=0,t=>t.state.statuses.F.server='USI',
+  t=>delete t.state.statuses.F.combatSelection,t=>t.state.statuses.F.convoyProtocol=3,
+  t=>t.state.commands.F.cycleId='other',t=>t.state.commands.F.type='merchant-visit',
+  t=>t.state.navigationIntents.F.revision=2,t=>t.state.eventReturn.waypoints.F.revision=2]){
+  const t=recentlyStaleExitFixture();change(t);t.walks.submit(t.exit('L'));
+  assert.equal(t.starts(),1);assert.deepEqual(t.state.activeConvoy.participants,['L']);
+ }
+});

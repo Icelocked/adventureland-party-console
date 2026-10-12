@@ -3131,7 +3131,8 @@
   }
   function returnCombatActive() {
     if(character.rip || navigationIntent.cancelled || escapeOwns() || combatRecoveryActive())return false;
-    return !!(convoyTraveling && convoyTraveling.continuousReturn === 1 || root.__partyAnniversaryStagingOperation && !root.__partyAnniversaryStagingOperation.cancelled);
+    return !!(convoyTraveling && convoyTraveling.continuousReturn === 1 || root.__partyAnniversaryStagingOperation && !root.__partyAnniversaryStagingOperation.cancelled ||
+      typeof root.__partyEventRecoveryCycleId === "string" && root.__partyEventRecoveryCycleId);
   }
   function returnAttacker(target) {
     return !!(target && target.type==='monster' && target.visible!==false && !target.dead && target.hp>0 &&
@@ -12858,7 +12859,8 @@
   }
   function eventExitOwnsMovement() {
     return typeof eventReturnPending !== "undefined" && eventReturnPending ||
-      !!(root.__partySharedWalking && root.__partySharedWalking.activity === "event-return");
+      !!(root.__partySharedWalking && root.__partySharedWalking.activity === "event-return") ||
+      !!(typeof root.__partyEventRecoveryCycleId === "string" && root.__partyEventRecoveryCycleId);
   }
   function reunionBlocked() {
     if (dungeonOwned()) return true;
@@ -15383,6 +15385,10 @@
     if (typeof groupedDefensiveTarget === "function" && groupedDefensiveTarget()) {
       cancelFarmApproach("defending visible party attackers");
       return false;
+    }
+    if (typeof eventExitOwnsMovement === "function" && eventExitOwnsMovement()) {
+      cancelFarmApproach("event return owns movement");
+      return !target;
     }
     if (!target && typeof rareActive === "function" && rareActive()) {
       cancelFarmApproach("rare encounter owns movement; waiting for combat selection");

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Preserve authoritative event-return ownership through CODE replacement, keeping early finishers defensive and coalescing recently stale same-cycle exit peers within the existing request window.
+- Record actual native Hunt readiness and preferred-area arrival before combat drift during E2E validation.
+
 - Allow login recovery past stale merchant jobs while retaining fresh inventory fences and bounded party-realm reconnect ownership.
 
 - Reduce combat recovery collision-search overhead while preserving live terrain checks and planner budgets.
