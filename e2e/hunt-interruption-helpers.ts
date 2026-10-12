@@ -4,7 +4,12 @@ export const W='E2EWarrior', P='E2EPriest', M='E2EMerchant', fighters=[W,P], nam
 export const quantity=(items:any[],id:string)=>items.reduce((n,item)=>n+(item?.name===id?item.q||1:0),0);
 export const hunt=(s:any)=>s.monsterHunt||s.farmingProfiles?.[W]?.monsterHunt;
 export async function observed(live:LiveGame):Promise<Record<string,any>> {
-  return live.admin(`output=Object.fromEntries(${JSON.stringify(names)}.map(name=>{const p=get_player(name);return [name,{map:p.map,in:p.in,x:p.x,y:p.y,hp:p.hp,rip:!!p.rip,moving:!!p.moving,items:p.items,quest:p.s.monsterhunt||null}]}))`);
+  let snapshot:Record<string,any>={};
+  await expect.poll(async()=>{
+    snapshot=await live.admin(`output=Object.fromEntries(${JSON.stringify(names)}.map(name=>{const p=get_player(name);return [name,p?{map:p.map,in:p.in,x:p.x,y:p.y,hp:p.hp,rip:!!p.rip,moving:!!p.moving,items:p.items,quest:p.s.monsterhunt||null}:null]}))`);
+    return names.every(name=>!!snapshot[name]);
+  },{timeout:30_000,intervals:[100,250],message:'All actual native interruption participants must be present before observing their state'}).toBe(true);
+  return snapshot;
 }
 export async function killNativeCharacter(live:LiveGame,name:string) {
   // Native Rime Shatter disables stacked-hit sharing; ordinary monster attacks

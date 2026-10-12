@@ -44,6 +44,23 @@ test('stale return participant is deferred without holding up healthy party memb
 });
 
 
+test('an actual native Halloween target records the assisting follower without a joined flag',()=>{
+ const f=fixture();f.statuses.P={seenAt:1000,map:'halloween',in:'halloween',server:'USI'};
+ f.observe({name:'P',map:'halloween',in:'halloween',server:'USI',serverLiveEvents:[{name:'mrpumpkin'}],target:{id:'492',type:'monster',mtype:'mrpumpkin',hp:100000}});
+ assert.deepEqual(f.state.sessions.P.participants,['P']);
+ const globalOnly=fixture();globalOnly.statuses.P={seenAt:1000};globalOnly.observe({name:'P',serverLiveEvents:[{name:'mrpumpkin'}]});
+ assert.deepEqual(globalOnly.state.sessions.P.participants,[]);
+ for(const invalid of [{status:{seenAt:-20000}},{status:{seenAt:1000,eventFeedConnected:false}},{cancelled:true},
+  {target:{id:'492',type:'monster',mtype:'mrpumpkin',hp:0}},{target:{id:'other',type:'monster',mtype:'goo',hp:100}},
+  {target:{id:'492',type:'monster',mtype:'mrpumpkin',hp:100,map:'main'}},
+  {target:{id:'492',type:'monster',mtype:'mrpumpkin',hp:100,in:'other'}},
+  {target:{id:'492',type:'monster',mtype:'mrpumpkin',hp:100,server:'USII'}},{missingMap:true},{clockStale:true}]){
+  const rejected=fixture();rejected.statuses.P={map:'halloween',in:'halloween',server:'USI',...(invalid.status||{seenAt:1000})};if(invalid.cancelled)rejected.intent(2,true);
+  rejected.observe({name:'P',map:invalid.missingMap?undefined:'halloween',in:'halloween',server:'USI',eventClockStale:!!invalid.clockStale,serverLiveEvents:[{name:'mrpumpkin'}],target:invalid.target||{id:'492',type:'monster',mtype:'mrpumpkin',hp:100000}});
+  assert.deepEqual(rejected.state.sessions.P.participants,[]);
+ }
+});
+
 test('observed Gigacrab without departure never starts event recovery',()=>{
  const f=fixture(); f.observe({name:'P',serverLiveEvents:[{name:'crabxx'}]});
  f.time(12000);f.observe({name:'P'});

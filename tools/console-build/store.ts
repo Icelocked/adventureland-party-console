@@ -84,9 +84,49 @@ export class ConsoleBuildStore {
     }
     await atomicJson(path.join(lock, 'owner.json'), {pid: process.pid, token});
     try { return await action(); }
-    finally {
-      const owner = await readJson<{token: string}>(path.join(lock, 'owner.json'));
-      if (owner?.token === token) await rm(lock, {recursive: true});
+    finally { await this.releaseLock(lock, token); }
+  }
+  private async releaseLock(lock: string, token: string): Promise<void> {
+    // Fence the ownership check and rename with the same auditor mutex used by
+    // stale recovery. Never remove owner.json from the admission pathname.
+    const claim = path.join(lock, 'recovery');
+    for (let attempt = 0; ; attempt++) {
+      try { await mkdir(claim); break; }
+      catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === 'ENOENT') return;
+        if (code !== 'EEXIST') throw error;
+        await this.reclaimAuditor(claim, token);
+        if (attempt >= 600) throw new Error('Console candidate release auditor is busy');
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+    }
+    let detached = false;
+    try {
+      await atomicJson(path.join(claim, 'owner.json'), {pid: process.pid, token});
+      const owner = await readJson<{token: string}>(path.join(lock, 'owner.json')).catch(() => undefined);
+      if (owner?.token !== token) return;
+      const released = lock + '.released-' + token;
+      await rename(lock, released);
+      detached = true;
+      await this.removeReleased(released);
+    } finally {
+      if (!detached) await removeOwnedClaim(claim, token);
+    }
+  }
+  private async removeReleased(released: string): Promise<void> {
+    // Retry only the detached generation; a successor may already own lock.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const verified = await inspectRemoval(this.directory, path.relative(this.directory, released));
+        await rm(verified.path, {recursive: true});
+        return;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === 'ENOENT') return;
+        if (!['ENOTEMPTY', 'EBUSY', 'EPERM'].includes(code || '') || attempt >= 5) throw error;
+        await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
+      }
     }
   }
   private async reclaim(lock: string, token: string): Promise<boolean> {

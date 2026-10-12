@@ -1,3 +1,5 @@
+import type { MonsterEntity } from "typed-adventureland";
+import type { CombatReference } from "../status/scatter.ts";
 import type {
   AnniversaryReturnCycle,
   EventRecovery,
@@ -43,6 +45,12 @@ interface EventObservationState {
 }
 
 interface EventReport extends ReturnStatus {
+  /** Native target wire inherits its report context when coordinates omit it.
+   * IDs/types may describe newer game entities than the upstream catalog. */
+  target?: (CombatReference & Partial<Pick<MonsterEntity, "hp">> &
+    {type?: string; map?: string; in?: string | number; server?: string}) | null;
+  in?: string | number;
+  server?: string;
   name: string;
   x?: number;
   y?: number;
@@ -467,6 +475,41 @@ export function createEventObservations(
     ports.persist();
   }
 
+  function nativeHalloweenTarget(body: EventReport): string | undefined {
+    const target = body.target;
+    if (!target || target.type !== "monster" || !target.id || !(Number(target.hp) > 0)) return;
+    if (!localTarget(body)) return;
+    return ["mrgreen", "mrpumpkin", "slenderman"].includes(target.mtype || "") ? target.mtype : undefined;
+  }
+
+  function localTarget(body: EventReport): boolean {
+    const target = body.target!;
+    return (target.map === undefined || target.map === body.map) &&
+      (target.in === undefined || String(target.in) === String(body.in ?? body.map)) &&
+      (target.server === undefined || target.server === body.server);
+  }
+
+  function matchingNativeContext(body: EventReport, status: ReturnStatus): boolean {
+    return typeof body.map === "string" && body.map === status.map &&
+      typeof body.server === "string" && body.server === status.server &&
+      String(body.in ?? body.map) === String(status.in ?? status.map);
+  }
+
+  function assistedReportReady(body: EventReport): boolean {
+    const status = ports.statuses()[body.name];
+    return liveFeedReady(status) && !ports.intent(body.name).cancelled && !body.rip &&
+      !body.eventClockStale && body.eventFeedConnected !== false && matchingNativeContext(body, status);
+  }
+
+  function observedParticipation(body: EventReport, reports: {name: string}[]): string | undefined {
+    if (body.joinedEvent || body.mapEvent) return body.joinedEvent || body.mapEvent;
+    if (!assistedReportReady(body)) return;
+    const event = nativeHalloweenTarget(body);
+    // A following fighter can assist a real boss without the join flag. Its
+    // actual living target establishes attendance; a global sighting cannot.
+    return event && reports.some(report => report.name === event) ? event : undefined;
+  }
+
   function observe(body: EventReport): void {
     const reports = Array.isArray(body.serverLiveEvents)
       ? body.serverLiveEvents.filter((entry) => entry && typeof entry.name === "string")
@@ -474,7 +517,7 @@ export function createEventObservations(
     if (ports.enabled(body.name)) for (const report of reports)
       if (!(report.name === "slenderman" && body.slendermanSearchExhausted)) reportLive(body.name, report);
     reportStaging(body);
-    const participating = body.joinedEvent || body.mapEvent;
+    const participating = observedParticipation(body, reports);
     if (participating && ports.enabled(body.name, participating))
       participate(body.name, participating);
     reportAnniversaryHandoff(body);

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Record actual Halloween boss participation for assisting followers so event recovery returns every fighter to its saved farming checkpoint.
+- Make console-build lock cleanup tolerate transient Windows filesystem failures without deleting a successor build lock.
+- Wait for genuine native player presence when observing Hunt interruption recovery, without replaying gameplay mutations.
+
 - Keep realm switches active while distinct characters make verified arrival progress, with bounded no-progress and total deadlines; superseded operations cannot clear successor commands.
 
 - Bound verified native pathfinding search slices to keep combat and coordinator heartbeats responsive, preserving native routes, deadlines and freshness checks.
