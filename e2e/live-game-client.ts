@@ -122,10 +122,26 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
         const game = window as any, c = game.character;
         if(!c || !game.socket)throw Error('Native game not initialized');
         const runner = (document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+        const transport=runner?.__partyTravelTransport;
+        const timing=(value:any)=>value&&({at:value.at,durationMs:value.durationMs,
+          processingMs:value.processingMs,networkMs:value.networkMs,eventLoopMaxMs:value.eventLoopMaxMs});
+        const walk=runner?.__partySharedWalking;
+        const http=runner?.__partyConvoyHttp;
+        const diagnostics=(runner?.__partyStatusDiagnostics||[]).slice(-6).map((entry:any)=>({
+          at:entry.at,phase:entry.details?.phase,error:String(entry.details?.error||'').slice(0,240),
+          request:entry.details?.request,repeats:entry.details?.repeats,lastAt:entry.details?.lastAt}));
+        const commandObservation={at:Date.now(),attemptAt:runner?.__partyStatusAttemptAt,
+          successAt:runner?.__partyStatusSuccessAt,lastCommandId:runner?.__partyLastCommand,
+          navigationIntent:runner?.__partyNavigationIntent,eventReturnCycleId:runner?.__partyEventRecoveryCycleId,
+          eventReturnOwnerAt:runner?.__partyEventRecoveryOwnerAt,travelSignalAt:runner?.__partyTravelSignalAt,
+          transport:{full:timing(transport?.full),fast:timing(transport?.fast),clock:transport?.clock},
+          walk:walk&&({activity:walk.activity,key:walk.key,parentCommandId:walk.parentCommandId,
+            revision:walk.revision,token:walk.token,convoyId:walk.convoyId,cancelled:walk.cancelled}),
+          convoyHttp:http&&({responseAt:http.responseAt,failure:http.failure}),observedMono:performance.now(),diagnostics};
         return JSON.parse(JSON.stringify({ name: c.name, map: c.map, x: c.real_x, y: c.real_y, hp: c.hp, mp: c.mp,
           gold: c.gold, xp: c.xp, rip: c.rip, items: c.items, slots: c.slots, s: c.s, party: c.party,
           connected: game.socket.connected, codeActive: game.code_active, statusAt: runner?.__partyStatusSuccessAt,
-          runtimeGeneration: runner?.__partyRuntimeGeneration }));
+          runtimeGeneration: runner?.__partyRuntimeGeneration, commandObservation }));
       }));
     },
     async events() { return observe(async frame=>{await retainEvents(frame);return [...eventLedger];}); },
