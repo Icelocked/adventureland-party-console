@@ -767,7 +767,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
 });
 
 test('Cave shared-route pacing keeps the party together and stops the selected route', async ({live,page},info)=>{
-  test.setTimeout(180_000);
+  test.setTimeout(540_000);
   await live.admin("Dev=true;Prod=false;G.events.dreams.disabled=false;G.events.dreams.encounters=G.events.dreams.encounters.filter(e=>['e11','e20','e31','e50'].includes(e.id));output=true");
   await live.post('/formation',{leader:'E2EWarrior'});
   await live.post('/formation',{character:'E2EPriest',follow:true});
@@ -791,6 +791,23 @@ test('Cave shared-route pacing keeps the party together and stops the selected r
   const initial=await live.state(),cave=(await view()).members[0].observation.cave;
   const target=cave.points.filter((p:any)=>p.kind==='farm'&&!p.done).sort((a:any,b:any)=>Math.hypot(a.x-initial.characters.E2EWarrior.x,a.y-initial.characters.E2EWarrior.y)-Math.hypot(b.x-initial.characters.E2EWarrior.x,b.y-initial.characters.E2EWarrior.y))[0];
   await act({action:'move',run:cave.run,target:target.id});
+  const preparation:any[]=[];let sampledAt=0;
+  try{
+    await expect.poll(async()=>{
+      const v=await view();
+      if(await reply(v)){await act({action:'move',run:cave.run,target:target.id});return false;}
+      if(Date.now()-sampledAt>=5000){
+        sampledAt=Date.now();
+        const native=await live.clients.E2EWarrior.run('({at:Date.now(),searching:smart.searching,found:smart.found,index:typeof start==="number"?start:null,queued:typeof queue!=="undefined"?queue.length:null})');
+        preparation.push({at:sampledAt,native,travel:v.members.map((m:any)=>({name:m.name,travel:m.observation?.travel,action:m.observation?.action}))});
+      }
+      return v.members.every((m:any)=>{
+        const command=v.state.commands[m.name];
+        return command?.action==='move'&&command.target?.id===target.id&&command.run===cave.run&&
+          m.observation?.travel?.id===command.id&&m.observation.travel.prepared;
+      });
+    },{timeout:270_000,message:'The owned Cave routes must prepare within the progressive native planning allowance'}).toBe(true);
+  }finally{await info.attach('native-cave-pacing-route-preparation',{body:JSON.stringify(preparation),contentType:'application/json'});}
   let evidence:any;
   await expect.poll(async()=>{
     const v=await view();

@@ -478,6 +478,7 @@ test('eligible passing and active attacks share priority without passing movemen
     r.c.partyQueueClient.preparePassing=()=>true; // Admission is covered by passing-admission tests.
     const passing={...r.target,id:'passing',mtype:'bee'};const hit=[];
     r.routine.getPassingTarget=()=>passing;
+    r.routine.allowsPassingTarget=target=>target===passing;
     r.routine.monsterPriority=target=>target.id==='passing'?passivePriority:50;
     r.routine.beginPassingAttack=()=>{};
     r.c.attack=target=>{hit.push(target.id);return new Promise(()=>{});};
