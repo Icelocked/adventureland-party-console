@@ -512,6 +512,38 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     }
     return deferred?undefined:acceptedState;
   };
+  const answerNativeChoice=async(encounter:any,expectedFloor=cave.floor)=>{
+    const reply=encounter.options.find((o:any)=>!o.unavailable&&!o.cost&&!o.amber);
+    expect(reply,'Native interruption must offer a free UI reply').toBeTruthy();
+    const resolved=(view:any)=>view.state.run===cave.run&&['E2EWarrior','E2EPriest'].every(name=>{
+      const observed=view.members.find((m:any)=>m.name===name)?.observation?.cave;
+      return observed?.run===cave.run&&observed.floor===expectedFloor&&
+        observed.choice?.id===encounter.id&&observed.choice.resolved&&observed.choice.votes[name]===reply.id;
+    });
+    const ledger:any={choice:encounter.id,option:reply.id,run:cave.run,floor:expectedFloor,clicked:false};
+    let observed:any;
+    try{
+      observed=await dungeon();
+      if(!resolved(observed)){
+        try{
+          await choice.getByRole('button',{name:reply.label,exact:true}).click();
+          ledger.clicked=true;
+        }catch(error){
+          observed=await dungeon();
+          // Native telemetry can lag the UI: a duplicate button disappears
+          // after the same real vote has already resolved. No other error or
+          // choice/option mismatch is eligible for this acknowledgement.
+          if(!(error instanceof Error&&error.name==='TimeoutError')||!resolved(observed))throw error;
+          ledger.resolvedDuringClick=true;
+        }
+      }else ledger.alreadyResolved=true;
+      await expect.poll(async()=>{observed=await dungeon();return resolved(observed);},
+        {timeout:30_000,message:'The same native choice must acknowledge both actual votes for the chosen option'}).toBe(true);
+    }finally{
+      ledger.native=observed?.members.map((m:any)=>({name:m.name,choice:m.observation?.cave?.choice}));
+      await info.attach('native-cave-choice-resolution',{body:JSON.stringify(ledger),contentType:'application/json'});
+    }
+  };
   const continueRoomChoice=async(point:{id:string;label:string;map:string})=>{
     let view=await dungeon();
     const observation=view.members[0]?.observation,c=observation?.cave,encounter=c?.choice,tracked=roomChoices.get(point.id);
@@ -520,14 +552,8 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     const ledger:any={point,choice:encounter.id,before:view.state};
     try{
       if(!encounter.resolved){
-        const reply=encounter.options.find((o:any)=>!o.unavailable&&!o.cost&&!o.amber);
-        expect(reply,'Native interruption must offer a free UI reply').toBeTruthy();
-        await choice.getByRole('button',{name:reply.label,exact:true}).click();
-        await expect.poll(async()=>{
-          const current=(await dungeon()).members[0]?.observation?.cave?.choice;
-          return current?.id===encounter.id&&current.resolved;
-        },{timeout:30_000,message:'The same native interruption must acknowledge the actual UI reply'}).toBe(true);
-        ledger.reply=reply.id;
+        await answerNativeChoice(encounter,c.floor);
+        ledger.reply=encounter.options.find((o:any)=>!o.unavailable&&!o.cost&&!o.amber).id;
       }
       view=await dungeon();
       if(!view.members.every((m:any)=>m.fresh&&m.observation?.cave?.run===cave.run&&m.observation.cave.floor===cave.floor)||
@@ -718,8 +744,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   await expect.poll(async()=>{
     const c=(await dungeon()).members[0].observation.cave;
     if(c.choice&&!c.choice.resolved){
-      const reply=c.choice.options.find((o:any)=>!o.unavailable&&!o.cost&&!o.amber);
-      await choice.getByRole('button',{name:reply.label,exact:true}).click();
+      await answerNativeChoice(c.choice,c.floor);
       return false;
     }
     const required=c.points.find((p:any)=>p.required&&!p.done&&p.map.endsWith('_0'));

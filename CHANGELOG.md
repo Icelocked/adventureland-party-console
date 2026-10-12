@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep native Cave vote acknowledgements and reconnect-frame checks tied to the exact original choice or frame, avoiding stale duplicate actions during E2E validation.
+
 - Preserve confirmed lucky-slot upgrade results during interrupted restoration; leave manually moved results and changed cargo untouched.
 - Recover committed Cave enemies around blocked terrain while retaining scoped target and travel-handoff guards.
 - Keep local Cave waypoint placement responsive during heartbeat freshness gaps; actual waypoint submission still requires fresh participant reports.

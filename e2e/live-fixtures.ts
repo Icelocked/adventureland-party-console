@@ -189,7 +189,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
             ownership.characters[member]?.runtime === 'native');
           if (!steamNames.includes(name)) throw Error('Native browser reconnect requires current Steam ownership: ' + name);
           const companions = steamNames.filter(member=>member!==primaryName);
-          const previous = companions.map(member=>clients[member]);
+          const previous = companions.map(member=>clients[member].frame);
           if (name === primaryName) {
             await clients[name].page.close();
             await expect.poll(async () => game.admin(`output=Object.values(players).concat(Object.values(dc_players)).filter(p=>${JSON.stringify(steamNames)}.includes(p.name)).length`), { timeout: 45_000 }).toBe(0);
@@ -198,7 +198,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           } else {
             await clients[primaryName].frame.evaluate(name => (window as any).stop_character_runner(name), name);
             await live!.post('/steam/restore', {});
-            await expect.poll(() => previous.every(client => client.frame.isDetached()), { timeout: 30_000 }).toBe(true);
+            await expect.poll(() => previous.every(frame => frame.isDetached()), { timeout: 30_000 }).toBe(true);
           }
           for (const companion of companions)
             clients[companion] = await launchGameClient(context, optionsFor(companion));
