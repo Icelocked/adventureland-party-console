@@ -1,3 +1,19 @@
+Console deployment accepts and journals an operation before expensive verification.
+A renewable host lease fences new pulls immediately and captures actual engaged
+combat targets. The hold survives CODE replacement until coordinator, dashboard
+and every required client acknowledge readiness. Main mode saves fighter
+checkpoints and waits for Town arrival; the merchant continues until the final
+atomic-operation hold. Cave permits immediate loading only. Progress survives
+refreshing; gameplay-only loads preserve the document, while dashboard loads
+preserve log filters, sidebar state, expanded maps and scroll position.
+The stable host serves maintenance control and CODE during coordinator restart.
+History cleanup follows completion outside the operation lock.
+Validate the transaction, browser-recovery, Main and mixed-client E2E journeys in
+docs/testing-deployment-transaction.md. Build candidates without activating them.
+For an existing installation, activate the new candidate explicitly, then perform
+the supported explicit host restart to install the host implementation; a restart
+resumes the selected active artifact, not an undeployed newest candidate.
+
 Safe console loading uses an expiring host maintenance lease with mode `draining`.
 Normal combat heartbeats, attacks and healing continue for the captured current
 red-circle fight and genuine attackers; the character eligibility gate rejects

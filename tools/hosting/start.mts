@@ -91,6 +91,7 @@ const steam = createLocalSteam(root, data, apiPort, async () => steamServer ??=
   (process.platform === 'linux' ? `https://localhost:${tls.publicPort}` : `http://127.0.0.1:${process.env.AL_PORT || 3010}`) + '/bridge/' + await access.steam());
 const server = gateway({
   builds: managed?.routes,
+  code:managed?.code,
   debug: await new DebugInstances(root, path.join(data, 'debug')).load(),
   steam,
   tls,

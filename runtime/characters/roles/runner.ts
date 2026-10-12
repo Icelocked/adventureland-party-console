@@ -301,6 +301,8 @@ export function installRoleRunner(
     }
   }
   return (root.partyRoleRunner = {
+    hasStartedTarget(id:string){return attacks.hasStarted(id);},
+    engagedTargetId(){return attacks.engagedTargetId();},
     isKnownDead(id: string) { return killed.has(id); },
     invalidateTarget(id?: string) {
       if (id) killed.set(id, Date.now());

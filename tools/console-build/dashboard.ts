@@ -14,6 +14,7 @@ export class ImmutableDashboard {
   private active?: Running;
   private previous?: Running;
   private children = new Set<Running>();
+  private prepared = new Map<string,Running>();
   private respawnTimer?: ReturnType<typeof setTimeout>;
   private respawnAbort?: AbortController;
   private respawnAttempts = 0;
@@ -52,6 +53,11 @@ export class ImmutableDashboard {
       if (this.active && !this.currentHash) this.scheduleRespawn(this.active);
     }
   }
+  async prepare(candidate:Candidate,signal:AbortSignal):Promise<void>{
+    if(this.currentHash===candidate.manifest.components.dashboard)return;
+    await this.startPrepared(candidate,signal);
+  }
+  async discardPrepared(){for(const value of this.prepared.values())await this.retire(value);this.prepared.clear();}
   private cancelRespawn() {
     clearTimeout(this.respawnTimer);
     this.respawnTimer = undefined;
@@ -80,6 +86,13 @@ export class ImmutableDashboard {
     signal.throwIfAborted();
     if (this.stopped) throw new Error('Immutable dashboard is stopped');
     if (this.currentHash === candidate.manifest.components.dashboard) return;
+    const next=await this.startPrepared(candidate,signal);
+    signal.throwIfAborted();this.prepared.delete(candidate.manifest.components.dashboard);
+    await this.handoff(next);
+  }
+  private async startPrepared(candidate:Candidate,signal:AbortSignal):Promise<Running>{
+    const hash=candidate.manifest.components.dashboard,existing=this.prepared.get(hash);
+    if(existing&&this.alive(existing))return existing;
     const port = await this.port();
     signal.throwIfAborted();
     const child = launch(path.join(candidate.directory, 'tools/dashboard/node-server.mts'),
@@ -93,7 +106,7 @@ export class ImmutableDashboard {
     try {
       await this.ready(next, signal, () => spawnError);
       signal.throwIfAborted();
-      await this.handoff(next);
+      this.prepared.set(hash,next);return next;
     } catch (error) { await this.retire(next); throw error; }
   }
   private async ready(next: Running, signal: AbortSignal, failure: () => Error | undefined) {
@@ -144,7 +157,7 @@ export class ImmutableDashboard {
         this.proxy(req, res, fallback);
         return;
       }
-      res.writeHead(response.statusCode || 502, response.headers);
+      res.writeHead(response.statusCode || 502, {...response.headers,'server-timing':`party_dashboard;desc="${target.candidate.manifest.components.dashboard}"`});
       response.pipe(res);
     });
     upstream.on('error', () => { if (!res.headersSent) res.writeHead(502); res.end('Dashboard upstream unavailable'); });
@@ -160,6 +173,7 @@ export class ImmutableDashboard {
     this.cancelRespawn();
     this.active = undefined;
     this.previous = undefined;
+    this.prepared.clear();
     this.server.closeAllConnections();
     await Promise.all([...this.children].map(child => this.retire(child)));
     if (this.server.listening) await new Promise<void>((resolve, reject) => this.server.close(error => error ? reject(error) : resolve()));

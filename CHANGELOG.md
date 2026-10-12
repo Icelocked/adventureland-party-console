@@ -5,6 +5,15 @@
 Changes queued for the next release. The release workflow determines its version
 from the commits merged into `main`.
 
+- Make console deployment a durable transaction: immediately hold new combat pulls,
+  renew the hold through activation, wait for all browser and headless clients,
+  and restore activity together after three continuously safe seconds.
+- Add Load at Main with fighter checkpoint return and a brief merchant-operation
+  boundary; keep only Load now available inside Cave.
+- Restore deployment progress after refreshing, preserve dashboard view state,
+  and avoid refreshing the page for gameplay-only updates. Prewarm dashboard
+  builds and move slow history cleanup outside deployment completion.
+
 - Restore the shared upgrade-offering resolver required by upgrade menus in
   clean installations; verify offering badges with pinned native sprite pixels.
 

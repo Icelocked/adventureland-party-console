@@ -1,124 +1,123 @@
-import { randomUUID } from 'node:crypto';
+import {randomUUID} from 'node:crypto';
 import path from 'node:path';
-import { atomicJson, readJson } from '../build-store.ts';
-import type { Candidate, ConsoleBuildStatus, DeploymentDriver, DeploymentJournal } from './contracts.ts';
-import { ConsoleBuildStore } from './store.ts';
+import {atomicJson,readJson} from '../build-store.ts';
+import {deploymentPending,type Candidate,type ConsoleBuildStatus,type DeploymentDriver,type DeploymentJournal,type DeploymentMode} from './contracts.ts';
+import {ConsoleBuildStore} from './store.ts';
 
-export class DeploymentConflict extends Error {}
+export class DeploymentConflict extends Error {
+  readonly operation?:DeploymentJournal;
+  constructor(message:string,operation?:DeploymentJournal){super(message);this.operation=operation;}
+}
 export class ConsoleBuildController {
-  private busy = false;
-  readonly store: ConsoleBuildStore;
-  private driver: DeploymentDriver;
-  private timeoutMs: number;
-  private safeWait?: AbortController;
-  constructor(store: ConsoleBuildStore, driver: DeploymentDriver, timeoutMs = 120_000) {
-    this.store = store; this.driver = driver; this.timeoutMs = timeoutMs;
+  readonly store:ConsoleBuildStore;
+  private operation?:DeploymentJournal;
+  private admission?:Promise<DeploymentJournal>;
+  private safeWait?:AbortController;
+  private cleanup?:Promise<void>;
+  private driver:DeploymentDriver;
+  private timeoutMs:number;
+  constructor(store:ConsoleBuildStore,driver:DeploymentDriver,timeoutMs=120_000){this.store=store;this.driver=driver;this.timeoutMs=timeoutMs;}
+  async setBuildState(value:{building:boolean;error?:string}){await atomicJson(path.join(this.store.directory,'builder.json'),value);}
+  async status():Promise<ConsoleBuildStatus>{
+    const [refs,builder,builds,operation]=await Promise.all([this.store.references(),readJson<{building:boolean;error?:string}>(path.join(this.store.directory,'builder.json')),this.store.summaries(),this.store.journal()]);
+    const latest=builds.find(b=>b.id===refs.latest),active=builds.find(b=>b.id===refs.active);
+    return {...refs,builds,operation,building:builder?.building||false,buildError:builder?.error,
+      pendingBuildCount:await this.store.completedSince(refs.active,builds),available:latest&&latest.id!==refs.active&&(!active||latest.createdAt>=active.createdAt)?latest.id:undefined};
   }
-  async setBuildState(value: {building: boolean; error?: string}) {
-    await atomicJson(path.join(this.store.directory, 'builder.json'), value);
-  }
-  async status(): Promise<ConsoleBuildStatus> {
-    const refs = await this.store.references();
-    const builder = await readJson<{building: boolean; error?: string}>(path.join(this.store.directory, 'builder.json'));
-    const builds = await this.store.history();
-    const latest = builds.find(item => item.id === refs.latest), active = builds.find(item => item.id === refs.active);
-    return {...refs, builds, pendingBuildCount: await this.store.completedSince(refs.active, builds), operation: await this.store.journal(), building: builder?.building || false,
-      buildError: builder?.error, available: latest && latest.id !== refs.active && (!active || latest.createdAt >= active.createdAt) ? latest.id : undefined};
-  }
-  /** Accepted operation runs asynchronously; its exact target is durably pinned first. */
-  async deploy(id: string, mode: 'now' | 'safe' = 'now'): Promise<DeploymentJournal> {
-    if (mode === 'safe' && !this.driver.waitUntilSafe) throw new Error('Safe reload is unavailable on this host');
-    if (this.busy) throw new DeploymentConflict('A console deployment is already in progress');
-    this.busy = true;
-    try {
-      const operation = await this.store.locked(async () => {
-        const pending = await this.store.journal();
-        if (pending && ['waiting-safe', 'activating', 'rolling-back'].includes(pending.phase)) throw new DeploymentConflict('An incomplete deployment requires recovery');
-        await this.store.verify(id);
-        const refs = await this.store.references();
-        const journal: DeploymentJournal = {id: randomUUID(), target: id, previous: refs.active,
-          startedAt: new Date().toISOString(), mode, phase: mode === 'safe' ? 'waiting-safe' : 'activating'};
-        await this.store.setJournal(journal);
-        return journal;
-      });
-      void this.run(operation).catch(error => console.error('Console deployment journal failure:', error)).finally(() => { this.busy = false; });
-      return operation;
-    } catch (error) { this.busy = false; throw error; }
-  }
-  private async timed(action: (signal: AbortSignal) => Promise<void>) {
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const expired = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => { controller.abort(); reject(new Error('Console deployment readiness timed out')); }, this.timeoutMs);
+  async deploy(id:string,mode:DeploymentMode='now'):Promise<DeploymentJournal>{
+    if(mode!=='now'&&!this.driver.waitUntilSafe)throw Error('Safe reload is unavailable on this host');
+    if(this.admission)await this.admission;
+    if(this.operation&&deploymentPending(this.operation.phase))return this.duplicate(this.operation,id,mode);
+    const admission=this.store.locked(async()=>{
+      const pending=await this.store.journal();
+      if(pending&&deploymentPending(pending.phase))return this.duplicate(pending,id,mode);
+      await this.store.describe(id);
+      const refs=await this.store.references(),at=new Date().toISOString();
+      const operation:DeploymentJournal={id:randomUUID(),target:id,previous:refs.active,mode,startedAt:at,
+        phase:refs.active===id?'complete':'preparing',phaseStartedAt:at,timings:{preparing:at}};
+      await this.store.setJournal(operation);this.operation=operation;
+      return {...operation};
     });
-    try { await Promise.race([action(controller.signal), expired]); }
-    finally { clearTimeout(timer); controller.abort(); }
+    this.admission=admission;
+    let accepted:DeploymentJournal;
+    try{accepted=await admission;}finally{if(this.admission===admission)this.admission=undefined;}
+    if(accepted.phase==='preparing'&&this.operation?.id===accepted.id){
+      void this.run(this.operation).catch(error=>console.error('Console deployment journal failure:',error));
+    }
+    return accepted;
   }
-  private async prior(operation: DeploymentJournal): Promise<Candidate | undefined> {
-    return operation.previous ? this.store.verify(operation.previous) : undefined;
+  private duplicate(operation:DeploymentJournal,id:string,mode:DeploymentMode){
+    if(operation.target===id&&(operation.mode||'now')===mode)return {...operation};
+    throw new DeploymentConflict('A console deployment is already in progress',operation);
   }
-  private async rollback(operation: DeploymentJournal, error: unknown) {
-    operation.phase = 'rolling-back';
-    operation.error = error instanceof Error ? error.message : String(error);
+  private async phase(operation:DeploymentJournal,phase:DeploymentJournal['phase']){
+    const at=new Date().toISOString();operation.phase=phase;operation.phaseStartedAt=at;operation.timings={...operation.timings,[phase]:at};
     await this.store.setJournal(operation);
-    try {
-      const prior = await this.prior(operation);
-      await this.timed(signal => this.driver.restore(prior, signal));
-      await this.store.locked(async () => {
-        const refs = await this.store.references();
-        await this.store.setReferences({...refs, active: operation.previous});
-        operation.phase = 'failed';
-        await this.store.setJournal(operation);
-      });
-    } catch (cause) {
-      operation.error += '; rollback failed: ' + (cause instanceof Error ? cause.message : String(cause));
-      // Keep rolling-back durable: next startup must retry, never claim healthy activation.
+  }
+  private async timed(action:(signal:AbortSignal)=>Promise<void>,timeout=this.timeoutMs){
+    const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;
+    const expired=new Promise<never>((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(Error('Console deployment readiness timed out'));},timeout);});
+    try{await Promise.race([action(controller.signal),expired]);}finally{clearTimeout(timer);controller.abort();}
+  }
+  private async run(operation:DeploymentJournal){
+    let activated=false,previous:Candidate|undefined;
+    const waiting=new AbortController();this.safeWait=waiting;
+    try{
+      await this.driver.beginMaintenance?.(operation,this.safeWait.signal);
       await this.store.setJournal(operation);
+      const dependencies=new Set<string>();
+      const target=await this.store.verify(operation.target,dependencies);
+      previous=operation.previous?await this.store.verify(operation.previous,dependencies):undefined;
+      operation.changed=(['dashboard','coordinator','characters'] as const).filter(c=>target.manifest.components[c]!==previous?.manifest.components[c]);
+      await this.store.setJournal(operation);
+      await this.driver.prepare?.(target,previous,operation,this.safeWait.signal);
+      if(operation.mode==='safe'||operation.mode==='main'){
+        await this.phase(operation,operation.mode==='main'?'moving-main':'waiting-safe');
+        await this.driver.waitUntilSafe!(operation.id,this.safeWait.signal,operation.mode);
+      }
+      this.safeWait.signal.throwIfAborted();
+      await this.phase(operation,'activating');activated=true;
+      await this.timed(signal=>this.driver.activate(target,previous,signal));
+      await this.phase(operation,'resuming');
+      await this.store.locked(async()=>{await this.store.setReferences({...await this.store.references(),active:operation.target,previous:operation.previous});});
+      await this.driver.releaseSafeWait?.(operation.id);
+      await this.phase(operation,'complete');
+    }catch(error){
+      operation.error=error instanceof Error?error.message:String(error);
+      if(activated){
+        await this.phase(operation,'rolling-back');
+        try{
+          previous||=operation.previous?await this.store.verify(operation.previous):undefined;
+          await this.timed(signal=>this.driver.restore(previous,signal));
+          await this.store.locked(async()=>{await this.store.setReferences({...await this.store.references(),active:operation.previous});});
+          await this.driver.releaseSafeWait?.(operation.id);
+          await this.phase(operation,'failed');
+        }catch(cause){operation.error+='; rollback failed: '+(cause instanceof Error?cause.message:String(cause));await this.store.setJournal(operation);}
+      }else{await this.driver.releaseSafeWait?.(operation.id);await this.phase(operation,'failed');}
+    }finally{
+      if(this.safeWait===waiting)this.safeWait=undefined;
+      if(!deploymentPending(operation.phase)){
+        if(this.operation?.id===operation.id)this.operation=undefined;
+        this.cleanup||=this.store.cleanup().catch(error=>console.error('Console candidate cleanup deferred:',error)).finally(()=>{this.cleanup=undefined;});
+      }
     }
   }
-  private async run(operation: DeploymentJournal) {
-    try {
-      if (operation.phase === 'waiting-safe') {
-        this.safeWait = new AbortController();
-        await this.driver.waitUntilSafe!(operation.id, this.safeWait.signal);
-        this.safeWait = undefined;
-        operation.phase = 'activating';
-        await this.store.setJournal(operation);
+  async recover(){
+    const journal=await this.store.journal();if(!journal||!deploymentPending(journal.phase))return;
+    if(this.operation)throw new DeploymentConflict('A console deployment is already in progress',this.operation);
+    this.operation=journal;
+    try{
+      if(['preparing','waiting-safe','moving-main'].includes(journal.phase)){
+        journal.error='The host stopped before activation; the running build was preserved.';
+      }else{
+        await this.driver.beginMaintenance?.({...journal,mode:'now'},AbortSignal.timeout(10000));
+        await this.phase(journal,'rolling-back');
+        const previous=journal.previous?await this.store.verify(journal.previous):undefined;
+        await this.timed(signal=>this.driver.restore(previous,signal));
+        await this.store.setReferences({...await this.store.references(),active:journal.previous});
       }
-      const target = await this.store.verify(operation.target), previous = await this.prior(operation);
-      await this.timed(signal => this.driver.activate(target, previous, signal));
-      // Gameplay resumes before success is published; history cleanup may be slow.
-      await this.driver.releaseSafeWait?.(operation.id);
-      await this.store.locked(async () => {
-        const refs = await this.store.references();
-        await this.store.setReferences({...refs, active: operation.target, previous: operation.previous});
-        operation.phase = 'complete';
-        await this.store.setJournal(operation);
-      });
-      await this.store.cleanup();
-    } catch (error) {
-      if (operation.phase === 'waiting-safe') {
-        operation.phase = 'failed';
-        operation.error = error instanceof Error ? error.message : String(error);
-        await this.store.setJournal(operation);
-      } else if (operation.phase !== 'complete') await this.rollback(operation, error);
-      else console.error('Console candidate cleanup deferred:', error);
-    } finally { await this.driver.releaseSafeWait?.(operation.id); }
+      await this.driver.releaseSafeWait?.(journal.id);await this.phase(journal,'failed');
+    }finally{if(!deploymentPending(journal.phase))this.operation=undefined;}
   }
-  async recover(): Promise<void> {
-    if (this.busy) throw new DeploymentConflict('A console deployment is already in progress');
-    this.busy = true;
-    try {
-      const journal = await this.store.journal();
-      if (journal?.phase === 'waiting-safe') {
-        await this.driver.releaseSafeWait?.(journal.id);
-        journal.phase = 'failed'; journal.error = 'The safe reload wait was interrupted; the running build was preserved.';
-        await this.store.setJournal(journal);
-        return;
-      }
-      if (journal && ['activating', 'rolling-back'].includes(journal.phase))
-        await this.rollback(journal, journal.error || 'Interrupted console deployment');
-    } finally { this.busy = false; }
-  }
-  stopWaiting() { this.safeWait?.abort(new Error('The host stopped before safe reload; the running build was preserved.')); }
+  stopWaiting(){this.safeWait?.abort(Error('The host stopped before safe reload; the running build was preserved.'));}
 }

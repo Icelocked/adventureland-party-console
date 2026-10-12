@@ -1031,7 +1031,7 @@ export function startCoordinatorApplication(
         merchantScheduling: merchantScheduling.observe,
         response: (name, mode) => {
           dungeons.reconcile();
-          const maintenance = consoleUpdate.current();
+          const maintenance = consoleUpdate.current(party.statuses);
           if (maintenance && maintenance.mode !== 'draining') return { serverNow: Date.now(), consoleMaintenance: maintenance };
           const lease = mode ? undefined : dashboardStream.lease(name);
           return { ...(soloFor(name)?.heartbeatResponse || heartbeatResponse).response(name, mode),
@@ -1595,7 +1595,7 @@ export function startCoordinatorApplication(
     }
 
     function dispatchMerchant() {
-      if (consoleUpdate.current() || realmOwnsMerchant()) return;
+      if (consoleUpdate.blocksMerchant() || realmOwnsMerchant()) return;
       merchantRecovery.expire(String(party.merchantCharacter));
       if (coordinatorPolicies.pruneIneligibleCollections(party, () => Date.now())) persistSettings();
       merchantDispatcher.dispatch();
@@ -1614,7 +1614,7 @@ export function startCoordinatorApplication(
     }
 
     function dispatchMerchantIdle() {
-      if (consoleUpdate.current() || realmOwnsMerchant()) return;
+      if (consoleUpdate.blocksMerchant() || realmOwnsMerchant()) return;
       merchantIdle.idle();
     }
 
@@ -2165,7 +2165,7 @@ export function startCoordinatorApplication(
     }
 
     function dispatchBank() {
-      if (consoleUpdate.current()) return;
+      if (consoleUpdate.blocksMerchant()) return;
       bankQueueService.dispatch();
     }
 
@@ -2259,6 +2259,12 @@ export function startCoordinatorApplication(
                 upgradePreviews.install(router);
                 router.get('/party-api/console-maintenance', (_req, res) => res.json(consoleUpdate.status(party.statuses,
                   [...party.headlessSlots, ...party.steamMembers], !!party.steamSwitch && party.steamSwitch.phase !== 'complete')));
+                router.get('/party-api/console-deployment',(_req,res)=>res.json({serverNow:Date.now(),consoleMaintenance:consoleUpdate.current()}));
+                router.get('/party-api/console-runtime', (_req,res)=>res.json({characters:Object.fromEntries(Object.entries(party.statuses).map(([name,report])=>[name,{
+                  name,seenAt:report.seenAt,connected:report.connected,ctype:report.ctype,type:report.type,codeHash:report.codeHash,rip:report.rip,
+                  consoleMaintenance:report.consoleMaintenance,map:report.map,in:report.in,x:report.x,y:report.y,
+                  dungeon:{cave:{run:coordinatorPolicies.requestObject(coordinatorPolicies.requestObject(report.dungeon).cave).run}},
+                }]))}));
                 coordinatorPolicies.installMovementRoutes(router, movementPlanner, ownedCharacter);
                 installProductionRoutes(router, party, () => persistence.settings(), merchantLog);
                 router.post('/party-api/merchant/stand-location', standLocationRoute(party, (x,y) => canStand(x,y), persistSettings));

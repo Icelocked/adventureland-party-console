@@ -30,6 +30,7 @@ async function continueSetup(req: import('node:http').IncomingMessage, res: Serv
   await acceptTransfer(req, res, options); return true;
 }
 async function forward(req: import('node:http').IncomingMessage, res: ServerResponse, url: URL, match: RegExpExecArray | null, options: Options) {
+  if(options.code&&await options.code.route(req,res,new URL(req.url||'/','http://localhost').pathname))return;
   if (isSteamAction(url, req, match)) { await steamAction(req, res, options); return; }
   const route = req.url || '';
   proxy(req, res, upstreamPort(route, options), !/^\/(party-api|CODE)\//.test(route));

@@ -5,11 +5,12 @@ import { X } from 'lucide-react';
 import { domainOptions, useVisible } from './query-cache';
 import { logFilters, defaultLogFilters, showGameLog, classifyGameLog } from '../../../runtime/game-log-filters';
 import type { PartyState } from './party-state';
+import {useSessionState} from './session-state';
 export function LogSidebar({state,width,onWidth,onClose}:{state:PartyState;width:number;onWidth:(n:number)=>void;onClose:()=>void}){
   const client=useQueryClient(),visible=useVisible();
   const query=useQuery({...domainOptions(client,'logs'),enabled:visible,refetchInterval:1000});
-  const [tab,setTab]=useState<'game'|'dashboard'>('game'),[source,setSource]=useState('all');
-  const [excludedCharacters,setExcludedCharacters]=useState<Record<string,boolean>>({});
+  const [tab,setTab]=useSessionState<'game'|'dashboard'>('logs-tab','game'),[source,setSource]=useSessionState('logs-source','all');
+  const [excludedCharacters,setExcludedCharacters]=useSessionState<Record<string,boolean>>('logs-characters',{});
   const [filters,setFilters]=useState<Record<string,boolean>>({...defaultLogFilters});
   const scroller=useRef<HTMLDivElement>(null),following=useRef(true);
   useEffect(()=>{try{setFilters({...defaultLogFilters,...JSON.parse(localStorage.getItem('party-log-filters')||'{}')});}catch{}},[]);

@@ -2160,6 +2160,9 @@
   }
 
   function consoleMaintenanceBusy(includeCombat) {
+    var lease=root.__partyConsoleMaintenance;
+    if(character.ctype==='merchant'&&lease&&(lease.phase==='holding'||lease.loadMode!=='main'))return !!(root.__partyConsoleAtomic||activeUpgrade||root.__partyUpgradePreviewInFlight||
+      character.q&&Object.keys(character.q).length||includeCombat!==false&&currentTravelAttackers().length);
     return !!(root.__partyUpgradePreviewInFlight || banking || stocking || upgrading || gatheringActive || anniversaryBusy ||
       root.__merchantActiveJob || merchantIdleActive || root.__merchantInventoryTidy ||
       luckyUpgradeService && luckyUpgradeService.pending() ||
@@ -2167,10 +2170,9 @@
   }
   function consoleDraining() {
     var pause = root.__partyConsoleMaintenance;
-    if (pause && pause.mode === 'draining' && pause.expires <= Date.now() + coordinatorClockOffset) {
-      root.__partyConsoleMaintenance = null; root.__partyConsoleDrainTargets = null; return false;
-    }
-    return !!(pause && pause.mode === 'draining' && pause.expires > Date.now() + coordinatorClockOffset);
+    // A stale local clock cannot release a transaction. The coordinator observes
+    // host lease expiry and sends an ordered null; defense remains permitted.
+    return !!(pause && pause.mode === 'draining');
   }
   function consoleDrainKey(target) {
     return [reunionRealm(), character.map, character.in, target && target.id].join(':');
@@ -2186,23 +2188,63 @@
   function consoleMovementPaused() {
     // Finish already-owned inventory/merchant work before parking its route.
     // Freezing that route while also waiting for the job would deadlock readiness.
+    if(root.__partyConsoleMaintenance?.loadMode==='main'&&character.ctype!=='merchant'&&character.map!=='main')return false;
     return consoleDraining() && !consoleDrainCombatActive() && !consoleMaintenanceBusy();
+  }
+  function consoleCheckpointKey(){return 'party-console-return:'+character.name;}
+  function consoleMainTick(){
+    var lease=root.__partyConsoleMaintenance;
+    if(lease&&lease.loadMode==='main'&&character.ctype!=='merchant'){
+      if(character.map!=='main'&&!consoleDrainCombatActive()&&!root.__partyConsoleTownPromise){
+        var townPromise=smart_move('main').catch(function(error){game_log('Console Main travel retry: '+String(error.message||error),'red');}).finally(function(){if(root.__partyConsoleTownPromise===townPromise)root.__partyConsoleTownPromise=null;});
+        root.__partyConsoleTownPromise=townPromise;
+      }
+      return true;
+    }
+    var saved;
+    try{saved=JSON.parse(root.localStorage.getItem(consoleCheckpointKey())||'null');}catch(_error){return false;}
+    if(!lease&&saved&&character.ctype!=='merchant'){
+      if(!root.__partyConsoleReturnPromise){
+        forceTraveling=true;
+        var returnPromise=smart_move(saved).then(function(){if(runtimeCurrent())root.localStorage.removeItem(consoleCheckpointKey());})
+          .catch(function(error){game_log('Console checkpoint return retry: '+String(error.message||error),'red');})
+          .finally(function(){if(root.__partyConsoleReturnPromise===returnPromise){root.__partyConsoleReturnPromise=null;forceTraveling=false;}});
+        root.__partyConsoleReturnPromise=returnPromise;
+      }
+      return true;
+    }
+    return false;
+  }
+  async function consoleAtomicBoundary(){
+    while(runtimeCurrent()&&root.__partyConsoleMaintenance&&character.ctype==='merchant')await sleep(100);
+    if(!runtimeCurrent())throw Error('Merchant continuation replaced during console loading');
   }
   function receiveConsoleMaintenance(pause, serverNow) {
     if (serverNow && serverNow < (root.__partyConsoleMaintenanceAt || 0)) return;
     root.__partyConsoleMaintenanceAt = serverNow || root.__partyConsoleMaintenanceAt || 0;
+    if(pause&&pause.loadMode==='main'&&pause.phase!=='holding'&&character.ctype==='merchant')pause=null;
     if (pause && pause.mode === 'draining' && pause.id !== (root.__partyConsoleMaintenance || {}).id) {
       // Snapshot the current red-circle fight before enabling the acquisition gate.
       var targets = {};
-      var markers = queueMarkers().filter(function(marker) { return marker.role === 'current' && marker.visible; });
+      var markers = queueMarkers().filter(function(marker) { return marker.role === 'current' && marker.visible &&
+        (root.partyRoleRunner && root.partyRoleRunner.hasStartedTarget && root.partyRoleRunner.hasStartedTarget(marker.id) || isAttackingPartyMember(get_entity(marker.id))); });
       markers.forEach(function(marker) {
         targets[consoleDrainKey(marker)] = true;
       });
-      var active = activeCombatTarget();
-      if (active && !markers.length) targets[consoleDrainKey(active)] = true;
+      var active = engagedCombatTarget();
+      if (active && !markers.length && (root.partyRoleRunner && root.partyRoleRunner.hasStartedTarget && root.partyRoleRunner.hasStartedTarget(active.id) ||
+          isAttackingPartyMember(get_entity(active.id)))) targets[consoleDrainKey(active)] = true;
       root.__partyConsoleDrainTargets = targets;
+      if(pause.loadMode==='main'&&character.ctype!=='merchant'&&!root.localStorage.getItem(consoleCheckpointKey())){
+        root.localStorage.setItem(consoleCheckpointKey(),JSON.stringify({map:character.map,in:character.in,x:character.x,y:character.y}));
+      }
     }
     root.__partyConsoleMaintenance = pause;
+    if(pause&&Array.isArray(pause.fightTargets))pause.fightTargets.forEach(function(target){
+      if(target.map===character.map&&String(target.in||target.map)===String(character.in||character.map)&&(!target.server||target.server===reunionRealm()))
+        (root.__partyConsoleDrainTargets||= {})[consoleDrainKey(target)]=true;
+    });
+    parent.__partyConsoleMaintenance=pause;parent.__partyConsoleMaintenanceAt=root.__partyConsoleMaintenanceAt;
     if (!pause) root.__partyConsoleDrainTargets = null;
   }
   function previewSuppliesKey() { return "party-preview-supplies:"+character.name; }
@@ -2300,7 +2342,8 @@
   function consoleMaintenanceReport() {
     var pause = root.__partyConsoleMaintenance;
     var combat = consoleDrainCombatActive();
-    return pause ? { id: pause.id, mode: pause.mode, combat: combat, ready: !combat && !consoleMaintenanceBusy() && !character.moving &&
+    return pause ? { id: pause.id, mode: pause.mode,phase:pause.phase, combat: combat, ready: !combat && !consoleMaintenanceBusy() && !character.moving &&
+      (pause.loadMode!=='main'||character.ctype==='merchant'||character.map==='main') &&
       (consoleMovementPaused() || !(typeof smart !== 'undefined' && smart.moving)) } : null;
   }
   var dungeonClient;
@@ -2610,6 +2653,7 @@
       movement: movement.report() || movement.last(),
       convoyNavigation: convoyNavigationReport(),
       activeCombatTarget: activeCombatTarget(),
+      engagedCombatTarget:engagedCombatTarget(),
       combatTrace: root.__partyCombatTrace || [],
       recovery: root.partyCombatState && root.partyCombatState.recovery || null,
       eventWalkFailure: root.__partyEventWalkFailure || null,
@@ -4181,6 +4225,8 @@
   }
 
   async function bankRetrieveConfirmed(pack, slot) {
+    await consoleAtomicBoundary();root.__partyConsoleAtomic=(root.__partyConsoleAtomic||0)+1;
+    try{
     var item = character.bank && character.bank[pack] && character.bank[pack][slot];
     if (!item) throw new Error("Bank withdrawal source is missing");
     var identity = bankStackIdentity(item), quantity = Number(item.q || 1);
@@ -4197,9 +4243,12 @@
       await sleep(100);
     }
     throw new Error("Bank withdrawal was not confirmed: " + item.name);
+    }finally{root.__partyConsoleAtomic--;}
   }
 
   async function bankStageConfirmed(inventorySlot, pack, slot) {
+    await consoleAtomicBoundary();root.__partyConsoleAtomic=(root.__partyConsoleAtomic||0)+1;
+    try{
     var item = character.items[inventorySlot];
     if (!item || character.bank[pack][slot]) throw new Error("Bank transfer slots changed before deposit");
     var identity = bankStackIdentity(item), quantity = Number(item.q || 1);
@@ -4211,6 +4260,7 @@
       await sleep(100);
     }
     throw new Error("Bank transfer deposit was not confirmed: " + item.name);
+    }finally{root.__partyConsoleAtomic--;}
   }
 
   async function runBankboiService(command) {
@@ -4611,12 +4661,18 @@
     return result;
   }
   async function compoundConfirmed(first, second, third, scrollSlot, automatic) {
-    return trackedProduction("compound",[first,second,third],automatic,function(){return observedCompoundConfirmed(first,second,third,scrollSlot);});
+    await consoleAtomicBoundary();root.__partyConsoleAtomic=(root.__partyConsoleAtomic||0)+1;
+    try{return await trackedProduction("compound",[first,second,third],automatic,function(){return observedCompoundConfirmed(first,second,third,scrollSlot);});}
+    finally{root.__partyConsoleAtomic--;}
   }
-  async function upgradeConfirmed(itemSlot, scrollSlot, expectedName, expectedLevel, automatic, offeringAttempt) {
+  async function upgradeConfirmed(itemSlot, scrollSlot, expectedName, expectedLevel, automatic) {
+    await consoleAtomicBoundary();
+    root.__partyConsoleAtomic=(root.__partyConsoleAtomic||0)+1;
+    try{
     if (character.items[scrollSlot] && !/^scroll[0-9]+$/.test(character.items[scrollSlot].name))
-      return observedUpgradeConfirmed(itemSlot,scrollSlot,expectedName,expectedLevel);
-    return trackedProduction("upgrade",[itemSlot],automatic,function(){return observedUpgradeConfirmed(itemSlot,scrollSlot,expectedName,expectedLevel,offeringAttempt);},offeringAttempt);
+      return await observedUpgradeConfirmed(itemSlot,scrollSlot,expectedName,expectedLevel);
+    return await trackedProduction("upgrade",[itemSlot],automatic,function(){return observedUpgradeConfirmed(itemSlot,scrollSlot,expectedName,expectedLevel);});
+    }finally{root.__partyConsoleAtomic--;}
   }
   async function observedCompoundConfirmed(first, second, third, scrollSlot) {
     await verifyMerchantItemMarks();
@@ -10509,6 +10565,10 @@
       var state = await request("/status", { method: "POST", body: statusBody });
       if (!runtimeCurrent()) return;
       receiveConsoleMaintenance(state.consoleMaintenance || null, state.serverNow);
+      if(consoleMainTick()){
+        root.__partyStatusSuccessAt=Date.now();if(dashboardSampler)dashboardSampler.renew(state.dashboardLease);
+        return;
+      }
       if (root.__partyConsoleMaintenance && (!consoleDraining() || !consoleDrainCombatActive())) {
         // A held character still has a healthy heartbeat. Otherwise Steam's
         // stale-runner recovery replaces its CODE after twenty seconds of waiting.
@@ -13498,6 +13558,11 @@
     if (!groupedFarming()) return false;
     return !!groupedDefensiveTarget() || !!(groupedFresh() && groupedCombat.threats && groupedCombat.threats.length);
   }
+  function engagedCombatTarget(){
+    var id=root.partyRoleRunner&&root.partyRoleRunner.engagedTargetId&&root.partyRoleRunner.engagedTargetId(),entity=id&&get_entity(id);
+    return entity&&entity.visible&&!entity.dead&&entity.hp>0?{id:String(id),map:character.map,in:character.in,server:reunionRealm(),at:Date.now()+coordinatorClockOffset}:null;
+  }
+
   function activeCombatTarget() {
     var id=root.partyCombatState && root.partyCombatState.selectedTarget;
     var e=id && get_entity(id);
@@ -16545,6 +16610,7 @@
     // CODE replacement retires and replays travel ownership. A maintenance
     // movement hold must not prevent the very replacement it is waiting for.
     canReload: function () { return !consoleMaintenanceBusy(false); },
+    receiveConsoleMaintenance:receiveConsoleMaintenance,
     merchantEventCombatActive: function () {
       return character.ctype === "merchant" && !!joinedEvent && eventSelected(joinedEvent) &&
         !eventReturnPending && !root.__merchantActiveJob;

@@ -3,6 +3,7 @@ import type { GameManifest } from "../../tools/game/manifest.ts";
 import { initializeConnection, needsSteamBridge, steamBootstrap } from "../steam/connection.ts";
 const server = initializeConnection();
 const baseUrl = server + "/CODE/adventure_land/";
+interface LoaderMaintenance{id:string;expires:number;mode?:'draining';loadMode?:'now'|'safe'|'main';phase?:string}
 interface LoaderRoot {
   character: { ctype: string };
   parent: {
@@ -13,6 +14,8 @@ interface LoaderRoot {
     eval(source: string): unknown;
     start_runner(id: string, source: string): void;
     setTimeout(fn: () => void, delay: number): unknown;
+    __partyConsoleMaintenance?:LoaderMaintenance|null;
+    __partyConsoleMaintenanceAt?:number;
   };
   __partyCodeLoader?: { dispose(): void };
   __partyLoaderGeneration?: number;
@@ -20,7 +23,9 @@ interface LoaderRoot {
   __partyRuntimeGeneration?: number;
   __partyStatusSuccessAt?: number;
   __partyLoaderRuntimeStartedAt?: number;
-  sharedRoutine?: { stop(): void; canReload?(): boolean; isOccupied?(): boolean };
+  __partyConsoleMaintenance?:LoaderMaintenance|null;
+  __partyConsoleMaintenanceAt?:number;
+  sharedRoutine?: { stop(): void; canReload?(): boolean; isOccupied?(): boolean;receiveConsoleMaintenance?(lease:LoaderMaintenance|null,serverNow:number):void };
   partyRoleRunner?: { start(): void; stop(): void };
   game_log(message: string, color: string): void;
   addEventListener?(event: string, callback: () => void): void;
@@ -64,6 +69,8 @@ function install(signature: string, compiled: () => void): void {
   root.sharedRoutine?.stop();
   if (!current()) return;
   root.__partyCodeHash = signature;
+  root.__partyConsoleMaintenance=gameHost.__partyConsoleMaintenance;
+  root.__partyConsoleMaintenanceAt=gameHost.__partyConsoleMaintenanceAt;
   compiled();
   if (!current()) return;
   lastSource = signature;
@@ -80,16 +87,21 @@ async function refresh(force = false): Promise<void> {
   try {
     // Subsequent generations require the host's explicit activation record.
     // Standalone startup can still load a manifest; periodic polling cannot.
-    let activation: {id: string; manifest: GameManifest} | null = null;
+    let activation: {id: string; manifest: GameManifest;maintenance?:LoaderMaintenance|null;serverNow?:number} | null = null;
     try { activation = JSON.parse(await source("activation.json")); }
     catch (error) { if (lastSource !== null) return; }
     if (activation && (typeof activation.id !== 'string' || !activation.id)) throw Error('Invalid CODE activation');
+    if(activation?.maintenance&&(activation.serverNow||0)>=(gameHost.__partyConsoleMaintenanceAt||0)){
+      gameHost.__partyConsoleMaintenance=activation.maintenance;gameHost.__partyConsoleMaintenanceAt=activation.serverNow;
+    }
+    await refreshControl();
     const entry = activation ? manifestClass(activation.manifest,root.character.ctype) : await classArtifact(source, root.character.ctype);
     if (entry.sha256 === lastSource && !force) return;
     const compiled = await compileArtifact(source, entry, baseUrl);
     if (!current()) return;
+    if(lastSource!==null&&occupied())return;
     if (needsNewFrame()) {
-      if (!occupied()) replaceFrame();
+      replaceFrame();
       return;
     }
     install(entry.sha256, compiled);
@@ -109,6 +121,19 @@ function dispose(): void {
   root.partyRoleRunner?.stop();
   if (root.parent === gameHost) root.sharedRoutine?.stop();
 }
+let controlLoading=false;
+async function refreshControl(){
+  if(controlLoading||!current())return;controlLoading=true;
+  try{
+    const response=await fetch(server+'/party-api/console-deployment',{cache:'no-store',signal:AbortSignal.any([abort.signal,AbortSignal.timeout(3000)])});
+    if(!response.ok)return;
+    const value=await response.json() as {serverNow:number;consoleMaintenance:LoaderMaintenance|null};
+    if(!current()||value.serverNow<(gameHost.__partyConsoleMaintenanceAt||0))return;
+    gameHost.__partyConsoleMaintenance=value.consoleMaintenance;gameHost.__partyConsoleMaintenanceAt=value.serverNow;
+    root.sharedRoutine?.receiveConsoleMaintenance?.(value.consoleMaintenance,value.serverNow);
+    if(value.consoleMaintenance)root.__partyStatusSuccessAt=Date.now();
+  }catch{/* Keep the last hold until a fresh control reply can order its release. */}finally{controlLoading=false;}
+}
 root.__partyCodeLoader = { dispose };
 root.addEventListener?.("pagehide", dispose);
 async function refreshBridge(): Promise<void> {
@@ -124,11 +149,8 @@ async function refreshBridge(): Promise<void> {
 }
 if (!gameHost.caracAL) {
   void refreshBridge();
-  timer = setInterval(() => {
-    void refreshBridge();
-    if (!deliberatelyStopped()) void refresh();
-  }, 2000);
 }
+timer=setInterval(()=>{void refreshControl();if(!gameHost.caracAL)void refreshBridge();if(!deliberatelyStopped())void refresh();},2000);
 function deliberatelyStopped(): boolean {
   return gameHost.localStorage?.getItem("party-code-stopped:" + gameHost.character?.name) === "1";
 }
