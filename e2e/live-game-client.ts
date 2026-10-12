@@ -70,8 +70,7 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
       const observed:WeakSet<object>=game.__e2eObservedSockets ||= new WeakSet();
       if(observed.has(socket))return;
       observed.add(socket);
-      // Passive Socket.IO outgoing observation; preserve every native method and packet.
-      socket.onAnyOutgoing?.((event:string,...args:any[])=>{
+      const observeOutgoing=(event:string,...args:any[])=>{
         if(event!=='attack')return;
         const c=game.character,runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
         if(!c?.name || game.socket!==socket || args[0]?.id==null)return;
@@ -82,8 +81,21 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
             x:c.real_x??c.x,y:c.real_y??c.y,moving:!!c.moving,owner:runner?.__partyCombatOwner,
             candidate:candidate&&{id:String(candidate.id),mtype:candidate.mtype}}});
         if(game.__e2eEvents.length>2000)game.__e2eEvents.shift();
-      });
-      // Passive observations only; no native method replacement or synthetic packet.
+      };
+      if(typeof socket.onAnyOutgoing==='function'){
+        game.__e2eOutgoingObservation='onAnyOutgoing';
+        socket.onAnyOutgoing((event:string,...args:any[])=>{try{observeOutgoing(event,...args);}catch{}});
+      }else{
+        // Older native clients lack outgoing listeners. Preserve one original
+        // call, its receiver/arguments/result/errors, and never replay packets.
+        game.__e2eOutgoingObservation='native emit';
+        const emit=socket.emit;
+        socket.emit=function(...args:any[]){
+          try{observeOutgoing(args[0],...args.slice(1));}catch{}
+          return emit.apply(this,args);
+        };
+      }
+      // Incoming observations only; no synthetic packets.
       for(const event of ['hit','death','game_response','game_log','chest_opened','disappear','new_map','party_update','player'])socket.on(event,(data:unknown)=>{
         game.__e2eEvents.push({sequence:++game.__e2eEventSequence,at:Date.now(),event,data:JSON.parse(JSON.stringify(data ?? null))});
         if(game.__e2eEvents.length>2000)game.__e2eEvents.shift();
