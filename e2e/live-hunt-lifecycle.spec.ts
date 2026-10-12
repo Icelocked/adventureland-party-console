@@ -71,7 +71,7 @@ test.describe('native Hunt lifecycle', () => {
     // Declared initial client cooldown, using the same native setter as PvP
     // Town delays. This models client unavailability, not a server rejection;
     // it is never refreshed during walking, the fault, recovery or reward.
-    const townCooldown=await Promise.all(fighters.map(name=>live.clients[name].run("(()=>{parent.skill_timeout('use_town',600000);return {until:+parent.next_skill.use_town,now:Date.now()};})()")));
+    const townCooldown=await Promise.all(fighters.map(name=>live.clients[name].run("(()=>{parent.skill_timeout_singular('use_town',600000);return {until:+parent.next_skill.use_town,now:Date.now()};})()")));
     expect(townCooldown.every(value=>Number.isFinite(value.until)&&value.until-value.now>=590000)).toBe(true);
     await info.attach('declared-native-town-cooldown',{body:JSON.stringify(townCooldown),contentType:'application/json'});
     const townReadiness=await Promise.all(fighters.map(name=>live.clients[name].run("can_use('use_town')&&!is_on_cooldown('use_town')")));

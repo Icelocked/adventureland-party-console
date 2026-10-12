@@ -9,4 +9,4 @@ Failure boundaries recorded before editing:
 - Do not change native clocks, skill definitions, server cast physics, or refresh the cooldown during the scenario.
 - Retain all actual walking, communication-fault, cached-route reuse, recovery and reward assertions and their existing deadlines.
 
-The native `skill_timeout` setter populates `parent.next_skill` with a real-clock Date and is also used for PvP Town delays. The fixture declares a 600-second initial client cooldown through that setter. It models client unavailability, rather than server rejection.
+The native `skill_timeout_singular` setter populates `parent.next_skill` with a real-clock Date. The fixture declares a 600-second initial client cooldown through that setter. The `skill_timeout` wrapper skips skills without configured cooldowns, including Town. This models client unavailability, rather than server rejection.
