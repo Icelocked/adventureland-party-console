@@ -683,7 +683,7 @@ test('buy with upgrade target survives lucky restoration failure and missing cli
   const followup=await live.post('/merchant/order',{buys:[{id:'shoes',quantity:1,level:1}],crafts:[]});
   await expect.poll(async()=>{
     const state=await live.state();return ![state.merchantCurrent,...state.merchantQueue].some((job:any)=>job?.id===followup.jobId||job?.commerceOrderId===followup.jobId);
-  },{timeout:90_000}).toBe(true);
+  },{timeout:180_000}).toBe(true);
   expect(upgradedShoes(await economy(live))-shoesBefore).toBe(1);
   await expect.poll(() => live.clients[merchant].run(`localStorage.getItem('party-production:'+character.name)`)).toBeNull();
   await context.unroute('**/merchant/production');

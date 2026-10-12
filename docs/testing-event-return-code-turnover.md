@@ -11,3 +11,11 @@ Failure inventory before code:
 Regressions precede implementation. They verify real coalescer starts/participants/parents and defensive eligibility under retained/missing/retired ownership, not source text or callback order. The final native MrGreen journey retains240s total deadline, forced CODE turnover, native death/reentry/attacks and actual saved-checkpoint arrival. Do not deploy the candidate.
 
 Private verification: five behavioral regressions failed before maintained changes. After the fix,64 walking/ownership/farming tests and76 event/communication/defensive-return tests pass with zero skips; runtime TypeScript passes. Pinned installed17665 geometry was supplied explicitly to old helper-based farming checks. Before/after ledgers are retained under the private worktree's .build/return-before.log and .build/return-after.log; actual native MrGreen completion remains required after integration.
+
+## Coordinator complexity check
+
+Before the structural predicate refactor, validation on2fbe0b4
+rejects recentPendingExitPeer at complexity21 against the unchanged maximum10.
+Split native recent-status evidence, owned matching parent and saved navigation
+revision into named checks. Preserve every existing coalescing and negative
+ownership regression; do not loosen freshness, request windows or lint settings.

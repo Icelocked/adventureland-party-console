@@ -194,19 +194,27 @@ export function createSharedWalks(input: unknown, ports: WalkPorts) {
   function retainParents(c: SharedConvoy, waiting: WalkRequest[]): void {
     c.walkingParents = Object.fromEntries(waiting.map(r => [r.name, { revision: r.revision, parentId: r.parentId, command: r.parent }]));
   }
+  function recentExitPeerStatus(status: SharedStatus | undefined, server: string | undefined, now: number): status is SharedStatus {
+    if(!status || status.rip || status.hp===0)return false;
+    return status.convoyProtocol===4 && !!characterRuntime(status) && status.server===server &&
+      status.seenAt<now-3000 && status.seenAt>now-10000;
+  }
+  function retainedExitParent(command: SharedState['commands'][string], cycleId: string): boolean {
+    return command?.type==='event-return-town' && command.cycleId===cycleId;
+  }
+  function savedExitRevision(recovery: NonNullable<WalkState['eventReturn']>, name: string): boolean {
+    const saved=recovery.waypoints?.[name];
+    return !!saved && saved.revision===(state.navigationIntents?.[name]?.revision||0);
+  }
   function recentPendingExitPeer(r: WalkRequest): boolean {
     const recovery=state.eventReturn,now=ports.now();
-    if(r.activity!=='event-return' || recovery?.cycleId!==r.key)return false;
+    if(!recovery || r.activity!=='event-return' || recovery.cycleId!==r.key)return false;
     return workflowMembers(r).some(name=>{
-      if(name===r.name)return false;
       const status=state.statuses[name],command=state.commands[name];
       // Admission still needs a fresh real request. Reserve only the existing
       // request window for a known living peer whose same-cycle exit is current.
-      return !!status && !status.rip && status.hp!==0 && status.convoyProtocol===4 &&
-        !!characterRuntime(status) && status.server===state.statuses[r.name]?.server &&
-        status.seenAt<now-3000 && status.seenAt>now-10000 &&
-        command?.type==='event-return-town' && command.cycleId===r.key &&
-        recovery.waypoints?.[name]?.revision===(state.navigationIntents?.[name]?.revision||0) &&
+      return name!==r.name && recentExitPeerStatus(status,state.statuses[r.name]?.server,now) &&
+        retainedExitParent(command,r.key) && savedExitRevision(recovery,name) &&
         !!ports.owned(name) && !atDestination(status,r.destination);
     });
   }
