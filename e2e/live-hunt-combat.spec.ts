@@ -8,33 +8,36 @@ test.describe('native Hunt travel combat and death ownership',()=>{
     // proposal, cohort acknowledgement, or an admitted native attack. Preserve
     // bounded real client observations even when the existing kill check fails.
     const passingObservations:unknown[]=[];
+    let outboundConvoyId:string|undefined,returningConvoyId:string|undefined;
     try {
     const setup=await prepareHunt(live);
     await live.post('/rare-hunting',{rules:{goo:{enabled:true,keepMoving:true,priority:100}},useFieldGenerators:false});
     await beginHunt(live,setup);
     await expect.poll(async()=>{
       const s=await live.state();
-      return hunt(s)?.stage==='mission-travel'&&s.activeConvoy?.phase==='travel'&&
+      const ready=hunt(s)?.stage==='mission-travel'&&s.activeConvoy?.phase==='travel'&&
         await live.clients[W].run('!!character.moving && !(character.c && character.c.town)');
+      if(ready)outboundConvoyId=s.activeConvoy.id;return ready;
     },{timeout:90000,intervals:[100,250],message:'Introduce the outbound Goo during native walking, after any Town cast'}).toBe(true);
     // Seed ahead on the actual walking leg so native visibility and the party's
     // reservation exchange can precede reaching melee range on slower hosts.
     const outboundStartedAt=Date.now();
     const outbound=await spawnGoo(live,W,0,400);
     await info.attach('outbound-passing-goo-seed',{body:JSON.stringify(outbound),contentType:'application/json'});
-    const outboundKill=await killedByParty(live,String(outbound.id),45000,passingObservations,{passingGoo:true,startedAt:outboundStartedAt});
+    const outboundKill=await killedByParty(live,String(outbound.id),45000,passingObservations,{passingGoo:true,startedAt:outboundStartedAt,convoyId:outboundConvoyId});
     expect((await observed(live))[W].quest?.id).toBe('armadillo');
     await evidence(live,info,'outbound-passing-goo-killed',{outbound,outboundKill});
     await expect.poll(async()=>{const p=(await observed(live))[W];return p.quest?.id==='armadillo'&&p.quest.c===0;},{timeout:240000,intervals:[100,250]}).toBe(true);
     await expect.poll(async()=>{
       const s=await live.state();
-      return hunt(s)?.stage==='returning'&&s.activeConvoy?.phase==='travel'&&
+      const ready=hunt(s)?.stage==='returning'&&s.activeConvoy?.phase==='travel'&&
         await live.clients[W].run('!!character.moving && !(character.c && character.c.town)');
+      if(ready)returningConvoyId=s.activeConvoy.id;return ready;
     },{timeout:90000,intervals:[100,250],message:'Introduce the return Goo during native walking, after any Town cast'}).toBe(true);
     const returningStartedAt=Date.now();
     const returning=await spawnGoo(live,W,0,400);
     await info.attach('returning-passing-goo-seed',{body:JSON.stringify(returning),contentType:'application/json'});
-    const returningKill=await killedByParty(live,String(returning.id),45000,passingObservations,{passingGoo:true,startedAt:returningStartedAt});
+    const returningKill=await killedByParty(live,String(returning.id),45000,passingObservations,{passingGoo:true,startedAt:returningStartedAt,convoyId:returningConvoyId});
     await reward(live,setup.before);
     await evidence(live,info,'armadillo-return-goo-and-daisy-reward',{outbound,outboundKill,returning,returningKill});
     } finally {

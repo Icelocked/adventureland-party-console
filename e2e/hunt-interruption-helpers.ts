@@ -66,6 +66,16 @@ export async function reward(live:LiveGame,before:Record<string,any>,timeout=240
 export async function spawnGoo(live:LiveGame,name=W,observableCombatSeconds=0,ahead=0) {
   let seeded: any;
   const seed = async () => {
+  if(ahead&&!observableCombatSeconds){
+    const direct=await live.admin(`output=(()=>{const p=get_player(${JSON.stringify(name)});
+      if(!p?.moving)return null;const distance=Math.hypot(p.going_x-p.x,p.going_y-p.y),ahead=Math.min(${ahead},distance-35);
+      if(!Number.isFinite(ahead)||ahead<35)return null;
+      const x=p.x+ahead*(p.going_x-p.x)/distance,y=p.y+ahead*(p.going_y-p.y)/distance;
+      if(!can_move({map:p.map,x:p.x,y:p.y,going_x:x,going_y:y,base:p.base}))return null;
+      const m=new_monster(p.in,{type:'goo',position:[x,y],radius:0,count:1},{temp:1});m.e2eHunt=true;
+      return {id:m.id,map:m.map,x:m.x,y:m.y,hp:m.hp,ahead,origin:{x:p.x,y:p.y},observableCombatSeconds:${observableCombatSeconds},source:'native waypoint'};})()`);
+    if(direct)return direct;
+  }
   // Native temp suppresses this encounter's respawn without changing species rules.
   // A newly introduced encounter is setup; no existing monster health or death is changed.
   // Native paths can split one straight corridor into short waypoints. Read the
@@ -88,7 +98,7 @@ export async function spawnGoo(live:LiveGame,name=W,observableCombatSeconds=0,ah
     message:'Introduce one passing encounter on an actual native walking leg'}).toBe(true);
   return seeded;
 }
-export async function killedByParty(live:LiveGame,id:string,timeout=45000,observations?:unknown[],options:{passingGoo?:boolean;startedAt?:number}={}) {
+export async function killedByParty(live:LiveGame,id:string,timeout=45000,observations?:unknown[],options:{passingGoo?:boolean;startedAt?:number;convoyId?:string}={}) {
   let matched:{monsterId:string;attackIssued?:unknown;movingIssued?:unknown;hit:unknown;death:unknown}|undefined;
   let sampledAt=0;
   await expect.poll(async()=>{
@@ -139,6 +149,7 @@ export async function killedByParty(live:LiveGame,id:string,timeout=45000,observ
     let movingIssued:any;
     if(options.passingGoo){
       const killer=hitReceipt!.attackIssued,context=killer.motion;
+      if(options.convoyId&&context.convoyId!==options.convoyId)return false;
       movingIssued=receipts.map(receipt=>[...receipt.issued].reverse().find((entry:any)=>entry.at<=hit.at)).find((entry:any)=>
         entry&&hit.at-entry.at<=2000&&String(entry.data.id)===monsterId&&entry.motion?.moving&&
         entry.motion.owner==='convoy:travelling'&&entry.motion.convoyId===context.convoyId&&
