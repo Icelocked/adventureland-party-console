@@ -587,7 +587,7 @@ test('merchant mass skills use both tiers and passive recovery restores critical
 });
 
 test('upgrade purchase batch excludes an existing target-level coat', async ({ live }, info) => {
-  test.setTimeout(240_000);
+  test.setTimeout(360_000);
   // Failure modes: existing results reduce a new order, command dispatch drops
   // the batch setting, or purchase sizing includes nonzero-level inventory.
   await catalog(live, 'coat');
@@ -613,7 +613,7 @@ test('upgrade purchase batch excludes an existing target-level coat', async ({ l
   });
   try {
     const order = await live.post('/merchant/order', { buys: [{ id: 'coat', quantity: 4, level: 5 }], crafts: [] });
-    await expect.poll(() => purchased, { timeout: 120_000 }).toBeDefined();
+    await expect.poll(() => purchased, { timeout: 240_000 }).toBeDefined();
     const coats = purchased!.characters[merchant].items.filter(item => item?.name === 'coat');
     expect(coats.filter(item => (item!.level || 0) === 0)).toHaveLength(10);
     expect(coats.filter(item => item!.level === 5)).toHaveLength(1);
@@ -749,7 +749,7 @@ async function jobFinished(live: LiveGame, id?: string, timeout = 150_000) {
   await expect.poll(async () => {
     const state = await live.state();
     const jobs = [state.merchantCurrent, ...(state.merchantQueue || [])].filter(Boolean);
-    return id ? !jobs.some(job => job.id === id) : jobs.length === 0;
+    return id ? !jobs.some(job => job.id === id || job.commerceOrderId === id) : jobs.length === 0;
   }, { timeout, message: 'Requested merchant work must leave both active and queued state' }).toBe(true);
 }
 

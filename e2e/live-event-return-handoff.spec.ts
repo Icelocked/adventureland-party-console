@@ -33,10 +33,9 @@ for(const variant of ['leaving Green','following a Pumpkin leader','restoring a 
         await expect.poll(async()=>await hits(W,'mrpumpkin')&&await hits(P,'mrgreen'),{timeout:120_000}).toBe(true);
       }
       const transitionAt=Date.now();
-      const beforeTransition=await live.state();
-      // Following captures the leader's current location as the new destination.
-      const checkpoints=Object.fromEntries(fighters.map(name=>[name,variant==='following a Pumpkin leader'&&name===P?
-        {map:beforeTransition.characters[W].map,x:beforeTransition.characters[W].x,y:beforeTransition.characters[W].y}:checkpoint]));
+      // Follow remains enabled after attendance. Its event rendezvous is not a
+      // new independent farm: both members must return to the saved party farm.
+      const checkpoints=Object.fromEntries(fighters.map(name=>[name,checkpoint]));
       if(variant==='restoring a held Green return'||variant==='interrupting a checkpoint return'){
         // Declare the persisted failure state, never a successful exit or hit.
         // Its dispatched timestamp must not strand an empty recovery.

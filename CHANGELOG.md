@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Allow login recovery past stale merchant jobs while retaining fresh inventory fences and bounded party-realm reconnect ownership.
+
 - Reduce combat recovery collision-search overhead while preserving live terrain checks and planner budgets.
 - Stabilize native E2E choice acknowledgements, reconnect/catalog readiness and combat sampling; preserve real gameplay and conservation assertions.
 
