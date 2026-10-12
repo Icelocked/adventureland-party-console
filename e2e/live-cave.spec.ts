@@ -767,8 +767,23 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   await info.attach('native-cave-rogue-blades',{body:JSON.stringify({seed:blades,frame:bladeFrame}),contentType:'application/json'});
   await info.attach('native-cave-rogue-map',{body:await fullMap.screenshot(),contentType:'image/png'});
   await page.keyboard.press('Escape');
+  // Capture the same polled observations: a final expired visit cannot show
+  // whether native BFS, route publication, or a follower gate stalled first.
+  const requiredPlanning:any[]=[];
+  try{
   await expect.poll(async()=>{
     const v=await dungeon();
+    if(requiredPlanning.length<600)requiredPlanning.push({at:Date.now(),phase:v.state.phase,
+      travel:v.state.travel&&{stage:v.state.travel.stage,target:v.state.travel.target?.id,serial:v.state.travel.serial},
+      members:v.members.map((m:any)=>({name:m.name,fresh:m.fresh,at:m.observation?.at,
+        ready:m.observation?.ready,alive:m.observation?.alive,
+        cave:m.observation?.cave&&{run:m.observation.cave.run,floor:m.observation.cave.floor,
+          expires:m.observation.cave.expires,remainingMs:m.observation.cave.remainingMs,paused:m.observation.cave.paused,
+          choice:m.observation.cave.choice&&{id:m.observation.cave.choice.id,resolved:m.observation.cave.choice.resolved}},
+        action:m.observation?.action&&{id:m.observation.action.id,status:m.observation.action.status,error:m.observation.action.error},
+        travel:m.observation?.travel&&{id:m.observation.travel.id,prepared:m.observation.travel.prepared,
+          distance:m.observation.travel.distance,routeLength:m.observation.travel.route?.plot?.length,
+          geometry:m.observation.travel.route?.identity}}))});
     if(v.state.run!==cave.run || v.members.length!==2 ||
         !v.members.every((m:any)=>m.fresh && m.observation?.cave?.run===cave.run &&
           m.observation.cave.floor===cave.floor && Array.isArray(m.observation.cave.points)))return false;
@@ -786,6 +801,9 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   // Random floors can require several long trips with native combat along the
   // corridors. Allow the final vote's acknowledged result to reach telemetry.
   },{timeout:300_000,message:'Required rooms must finish through native combat and votes'}).toBe(true);
+  }finally{
+    await info.attach('native-cave-required-planning',{body:JSON.stringify(requiredPlanning),contentType:'application/json'});
+  }
   console.log('[Cave verified] Required native rooms completed');
   const stairs=(await dungeon()).members[0].observation.cave.points.find((p:any)=>p.down);
   expect(stairs.locked).toBe(false);
