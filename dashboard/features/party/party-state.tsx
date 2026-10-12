@@ -89,6 +89,7 @@ export type PartyState = {
   autoNpcSales?: Record<string, { item: Item; createdAt: number; character?: string }>;
   autoStandMarks?: Record<string, { item: Item; price: number; createdAt: number }>;
   merchantRoutinePriorities?: Record<string, number>;
+  marketIgnoredItems?: import("../../../runtime/market-preferences").MarketIgnoredItem[];
   merchantBlacklist?: Record<string, MerchantBlacklistEntry>;
   merchantAutomations?: Record<string, boolean>;
   giveawayRealms?: { key: string; label: string }[];

@@ -1,3 +1,4 @@
+import './market-preferences.case';
 import { test, expect } from './fixtures';
 import './tracktrix-drilldown.case';
 import { createServer } from 'node:http';

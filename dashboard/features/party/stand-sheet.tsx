@@ -1,4 +1,6 @@
 'use client';
+import {IgnoreMarketItemButton,IgnoredMarketItems,MarketSettingsSection} from './market-preferences';
+import {marketItemKey,marketListingFresh,type MarketIgnoredItem,type MarketItemIdentity} from '../../../runtime/market-preferences';
 import { ActiveWTBFields } from './active-wtb-fields';
 
 
@@ -136,6 +138,7 @@ export const StandSheet = memo(function StandSheet({
   priceHistory,
 
   blacklist,
+  marketIgnoredItems,
 
   aldata,
 
@@ -194,6 +197,7 @@ export const StandSheet = memo(function StandSheet({
   priceHistory: Record<string, StandPriceHistory>;
 
   blacklist: Record<string, MerchantBlacklistEntry>;
+  marketIgnoredItems: MarketIgnoredItem[];
 
   aldata?: ALDataState;
 
@@ -353,6 +357,9 @@ export const StandSheet = memo(function StandSheet({
 
   const [hideUnaffordable, setHideUnaffordable] = useState(false);
   const [hideUnowned, setHideUnowned] = useState(false);
+  const [hideStale,setHideStale]=useStoredBoolean(`party-market-hide-stale-${marketTab}`,false);
+  const ignoredKeys=new Set(marketIgnoredItems.map(marketItemKey));
+  const [ignoreError,setIgnoreError]=useState('');
 
   const [hideBlacklisted, setHideBlacklisted] = useState(true);
 
@@ -506,7 +513,7 @@ export const StandSheet = memo(function StandSheet({
 
     const groups = new Map<string, ALDataListing[]>();
 
-    allALData.forEach((entry) => {
+    allALData.filter(entry=>!hideStale||marketListingFresh(entry.seenAt,now)).forEach((entry) => {
 
       const identity = JSON.stringify({
 
@@ -546,7 +553,7 @@ export const StandSheet = memo(function StandSheet({
 
     }));
 
-  }, [allALData]);
+  }, [allALData,hideStale,now]);
 
   const filteredALData = useMemo(() => {
 
@@ -622,6 +629,7 @@ export const StandSheet = memo(function StandSheet({
 
     (entry) =>
 
+      !ignoredKeys.has(marketItemKey(entry.item)) && (!hideStale||marketListingFresh(entry.seenAt,now)) &&
       (!showDealsOnly || isDeal(entry)) &&
 
       (!hideBadDeals || !isBadDeal(entry)) &&
@@ -719,6 +727,7 @@ export const StandSheet = memo(function StandSheet({
   });
 
   const filteredBuyOrders = allBuyOrders
+    .filter(order=>!ignoredKeys.has(marketItemKey(order.item))&&(!hideStale||marketListingFresh(order.seenAt,now)))
     .filter((order) => !hideUnowned || (bankOwned.get(ownedKey(order.item)) || 0) > 0)
 
     .filter((order) =>
@@ -748,6 +757,7 @@ export const StandSheet = memo(function StandSheet({
   );
 
   const filteredClassifieds = publicTrades.filter(({ owner, listing }) =>
+    !ignoredKeys.has(marketItemKey(listing)) && (!hideStale||marketListingFresh(aldata?.tradesUpdatedAt,now)) &&
 
     `${catalogById.get(listing.name)?.name || ''} ${listing.name} ${owner.label || ''} ${owner.characters?.join(' ') || ''}`
 
@@ -765,6 +775,7 @@ export const StandSheet = memo(function StandSheet({
 
       return (
 
+        !ignoredKeys.has(marketItemKey(listing.item)) && (!hideStale||marketListingFresh(listing.seenAt,now)) &&
         listing.serverIdentifier !== 'PVP' &&
 
         `${item?.name || ''} ${listing.item.name}`
@@ -785,7 +796,7 @@ export const StandSheet = memo(function StandSheet({
 
     );
 
-  const pontyFreshCutoff = now - 120000;
+
 
   const pontyGroups = new Map<
 
@@ -797,7 +808,7 @@ export const StandSheet = memo(function StandSheet({
 
   filteredPonty.forEach((listing) => {
 
-    const stale = !listing.seenAt || listing.seenAt <= pontyFreshCutoff;
+    const stale = !marketListingFresh(listing.seenAt,now);
 
     const key = `${listing.groupKey || listing.key}|${stale ? 'stale' : 'fresh'}`;
 
@@ -838,6 +849,18 @@ export const StandSheet = memo(function StandSheet({
       });
 
   });
+
+  const marketItemLabel=(item:MarketItemIdentity)=>{
+    const known=catalogById.get(item.name);
+    return `${known?.name||item.name}${known?.upgradeable||known?.compoundable||known?.meta?.upgradeable||known?.meta?.compoundable||item.level?' +'+(item.level??0):''}`;
+  };
+  const updateIgnored=async(actionName:'add'|'remove'|'clear',item?:MarketItemIdentity)=>{
+    setIgnoreError('');setSettingsError('');setSettingsSaving(true);
+    try{await action.mutateAsync({path:'/market/ignored-items',body:{action:actionName,...item,level:item?.level??0}});}
+    catch(error){const message=error instanceof Error?error.message:'Could not save ignored items';setIgnoreError(message);setSettingsError(message);}
+    finally{setSettingsSaving(false);}
+  };
+  const ignoreButton=(item:MarketItemIdentity)=><IgnoreMarketItemButton label={marketItemLabel(item)} disabled={settingsSaving} onIgnore={()=>void updateIgnored('add',item)}/>;
 
   const pontyRows = [...pontyGroups.values()].map((listing) => {
 
@@ -880,6 +903,8 @@ export const StandSheet = memo(function StandSheet({
         className="flex flex-wrap items-center gap-3 rounded border border-fuchsia-900 bg-black p-2"
 
       >
+
+        {ignoreButton(listing.item)}
 
         <button
 
@@ -1287,7 +1312,7 @@ export const StandSheet = memo(function StandSheet({
 
       const age = Math.max(0, Math.floor((now - entry.seenAt) / 1000));
 
-      const fresh = age <= 120 && entry.serverIdentifier !== 'PVP';
+      const fresh = marketListingFresh(entry.seenAt,now) && entry.serverIdentifier !== 'PVP';
 
       const suggested = listingValue(entry);
 
@@ -1332,6 +1357,8 @@ export const StandSheet = memo(function StandSheet({
           className={`flex items-center gap-3 rounded border border-cyan-950 bg-cyan-950/10 p-2 ${fresh ? '' : 'opacity-65'}`}
 
         >
+
+          {ignoreButton(entry.item)}
 
           <button
 
@@ -1567,7 +1594,7 @@ export const StandSheet = memo(function StandSheet({
 
       const age = Math.max(0, Math.floor((now - order.seenAt) / 1000));
 
-      const fresh = age <= 120 && order.serverIdentifier !== 'PVP';
+      const fresh = marketListingFresh(order.seenAt,now) && order.serverIdentifier !== 'PVP';
 
       const maximum = Math.min(owned, order.quantity);
 
@@ -1580,6 +1607,8 @@ export const StandSheet = memo(function StandSheet({
           className={`flex items-center gap-3 rounded border p-2 ${owned ? 'border-emerald-900 bg-emerald-950/15' : 'border-violet-950 bg-violet-950/10'} ${fresh ? '' : 'opacity-60'}`}
 
         >
+
+          {ignoreButton(order.item)}
 
           <button
 
@@ -2092,11 +2121,11 @@ export const StandSheet = memo(function StandSheet({
                   <WTBPriorityInput className="h-8 w-24 font-mono" value={standPriorityDrafts[id] ?? (bid.priorityOverride == null ? '' : String(bid.priorityOverride))} disabled={Boolean(savingBid)} onChange={value => setStandPriorityDrafts(previous => ({...previous,[id]:value}))} onBlur={() => void saveStandPriority(id,bid)} onKeyDown={event => {if(event.key === 'Enter') event.currentTarget.blur(); if(event.key === 'Escape') setStandPriorityDrafts(previous => {const next={...previous};delete next[id];return next;});}} />
                 </label>}
 
-                {offer?.auto && <span title={autoStandExplanation} className="absolute right-3 top-3 rounded border border-cyan-600 bg-cyan-950 px-2 text-xs text-cyan-100">Auto</span>}
+
 
                 {bid && <div className="flex flex-wrap items-center justify-between gap-3">
 
-                  <WTBPreference label="Use stand" description={standBuyExplanation} checked={bid.useStandSlot === true} disabled={Boolean(savingBid)} onChange={(useStandSlot) => void replacement.save((replaceStandEntry) => onBid(id, bid.price, bid.quantity, bid.minimumQuality, false, bid.priorityOverride, { useStandSlot, replaceStandEntry, preferencesOnly: true }))} />
+                  <WTBPreference label="Keep on stand" description={standBuyExplanation} checked={bid.useStandSlot === true} disabled={Boolean(savingBid)} onChange={(useStandSlot) => void replacement.save((replaceStandEntry) => onBid(id, bid.price, bid.quantity, bid.minimumQuality, false, bid.priorityOverride, { useStandSlot, replaceStandEntry, preferencesOnly: true }))} />
 
                   {cancelControl(id)}
 
@@ -2379,7 +2408,7 @@ export const StandSheet = memo(function StandSheet({
 
                               {item && (item.upgradeable || item.compoundable)
 
-                                ? ` · +${bid.minimumQuality || 0} minimum`
+                                ? ` · +${bid.minimumQuality || 0}`
 
                                 : ''}
 
@@ -2402,7 +2431,7 @@ export const StandSheet = memo(function StandSheet({
 
                               <WTBPreference
 
-                                label="Use stand"
+                                label="Keep on stand"
 
                                 description={standBuyExplanation}
 
@@ -2444,31 +2473,7 @@ export const StandSheet = memo(function StandSheet({
 
                               />
 
-                              {Object.values(nativeStand?.offers || {}).some(
 
-                                (offer) =>
-
-                                  offer.itemId === itemId &&
-
-                                  offer.auto &&
-
-                                  offer.phase === 'live',
-
-                              ) && (
-
-                                <span
-
-                                  title={autoStandExplanation}
-
-                                  className="rounded border border-cyan-600 bg-cyan-950 px-2 text-xs text-cyan-100"
-
-                                >
-
-                                  Auto
-
-                                </span>
-
-                              )}
 
                             </div>
 
@@ -2642,7 +2647,7 @@ export const StandSheet = memo(function StandSheet({
 
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
 
               <Input
 
@@ -2652,10 +2657,15 @@ export const StandSheet = memo(function StandSheet({
 
                 placeholder="Search item, seller, server, or map…"
 
-                className="border-cyan-800 bg-black/40 text-emerald-50"
+                className="border-cyan-800 bg-black text-emerald-50"
 
               />
 
+              <label className="flex shrink-0 items-center gap-2 rounded border border-slate-600 bg-black px-3 py-2 text-sm text-slate-100" title="Hide observations older than two minutes; classifieds use the last successful feed refresh.">
+                <Checkbox checked={hideStale} onCheckedChange={checked=>setHideStale(checked===true)}/>
+                Hide stale listings
+              </label>
+              {ignoreError&&<p role="alert" className="text-sm text-rose-200">{ignoreError}</p>}
               {marketTab === 'wts' ? (
 
                 <>
@@ -2837,6 +2847,8 @@ export const StandSheet = memo(function StandSheet({
                         className="flex items-center gap-3 rounded border border-slate-800 bg-black/20 p-2"
 
                       >
+
+                        {ignoreButton(requested)}
 
                         <button
 
@@ -3052,11 +3064,7 @@ export const StandSheet = memo(function StandSheet({
 
             <DialogDescription>
 
-              Automatic strikes never expire or reset on success. Retry
-
-              cooldowns are 1, 2, 4, 8… minutes; only Clear removes a strike
-
-              record. Manual entries can use -1 for forever.
+              Manage stand preferences, ignored items and merchant blacklist entries.
 
             </DialogDescription>
 
@@ -3092,13 +3100,11 @@ export const StandSheet = memo(function StandSheet({
 
             </section>
 
-            <section className="space-y-3">
-
-              <h3 className="text-sm font-semibold text-slate-100">
-
-                Marketplace merchant blacklist
-
-              </h3>
+            <IgnoredMarketItems items={marketIgnoredItems} label={marketItemLabel} disabled={settingsSaving}
+              onRemove={item=>void updateIgnored('remove',item)} onClear={()=>void updateIgnored('clear')}/>
+            <MarketSettingsSection title="Marketplace merchant blacklist" count={blacklistRecords.length} disabled={settingsSaving}
+              clearLabel={confirmBlacklistClear?'Really clear all?':'Clear all'} clearAriaLabel={confirmBlacklistClear?'Confirm clearing all merchant blacklist entries':'Clear all merchant blacklist entries'}
+              onClear={()=>{if(confirmBlacklistClear){setConfirmBlacklistClear(false);void updateBlacklist({action:'clear'});}else setConfirmBlacklistClear(true);}}>
 
               <WTBPreference
 
@@ -3290,7 +3296,7 @@ export const StandSheet = memo(function StandSheet({
 
               </div>
 
-            </section>
+            </MarketSettingsSection>
 
           </div>
 
@@ -3306,31 +3312,7 @@ export const StandSheet = memo(function StandSheet({
 
           <DialogFooter className="shrink-0 border-t border-slate-700 bg-[#07120f] pt-3">
 
-            <Button
 
-              variant="outline"
-
-              disabled={!blacklistRecords.length || settingsSaving}
-
-              className="mr-auto border-rose-600 bg-black text-rose-200 hover:bg-rose-950 hover:text-white"
-
-              onClick={() => {
-
-                if (confirmBlacklistClear) {
-
-                  setConfirmBlacklistClear(false);
-
-                  void updateBlacklist({ action: 'clear' });
-
-                } else setConfirmBlacklistClear(true);
-
-              }}
-
-            >
-
-              {confirmBlacklistClear ? 'Really clear all?' : 'Clear all'}
-
-            </Button>
 
             <Button
 

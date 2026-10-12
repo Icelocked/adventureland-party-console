@@ -88,6 +88,7 @@ export function createInitialCoordinatorState<Merchant extends string | null = s
     autoBlacklistMerchants: persistedSettings.autoBlacklistMerchants !== false,
     standPriceHistory: persistedSettings.standPriceHistory || {},
     merchantBlacklist: persistedSettings.merchantBlacklist || {},
+    marketIgnoredItems: persistedSettings.marketIgnoredItems || [],
     ...initialItemIntents(persistedSettings),
     ...initialCommandState(persistedSettings, ports.now),
     ...initialPartySelection(persistedSettings),

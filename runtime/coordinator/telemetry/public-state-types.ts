@@ -26,6 +26,7 @@ export const publicStateFields = [
   "merchantRoutinePriorities",
   "merchantAutomations",
   "merchantBlacklist",
+  "marketIgnoredItems",
   "standBids",
   "nativeStand",
   "autoStandBuys",

@@ -295,6 +295,7 @@ function PartyInventoryPanelsConnected({ base }: { base: PartyConsoleModel }) {
           autoBlacklistMerchants={state.autoBlacklistMerchants !== false}
           onAutoStandBuys={onAutoStandBuys}
           priceHistory={standPriceHistory}
+          marketIgnoredItems={state.marketIgnoredItems || []}
           blacklist={state.merchantBlacklist || emptyRecord()}
           onEdit={onStandEdit}
           onRemove={removeStandListing}

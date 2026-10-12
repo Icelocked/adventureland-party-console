@@ -1,3 +1,13 @@
+Market display ignores are account settings keyed by item name and exact level;
+omitted native levels normalize to +0. They filter all marketplace tabs without
+changing merchant automation or trade intent. The ignored-item mutation route
+persists add/remove/clear operations and participates in dashboard export/import.
+Freshness is the existing 120-second observation window; classifieds use their
+last successful ALData feed refresh, not publication edit age. Filter Ponty and
+live WTS observations before combining quantities. Validate the market browser
+journeys in docs/testing-market-preferences.md and retain screenshots and saved
+preference ledgers. Build the candidate; activation remains an explicit user action.
+
 Console deployment accepts and journals an operation before expensive verification.
 A renewable host lease fences new pulls immediately and captures actual engaged
 combat targets. The hold survives CODE replacement until coordinator, dashboard

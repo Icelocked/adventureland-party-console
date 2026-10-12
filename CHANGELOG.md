@@ -5,6 +5,12 @@
 Changes queued for the next release. The release workflow determines its version
 from the commits merged into `main`.
 
+- Add per-tab Hide stale listings filters to Live WTS, Live WTB, Classifieds and
+  Ponty, plus persistent ignored items matched by exact item and level. Manage
+  ignored items and merchant blacklist entries in collapsed, bordered sections.
+- Simplify Stand and Market WTB displays: remove Auto badges and minimum wording,
+  and rename Use stand to Keep on stand.
+
 - Make console deployment a durable transaction: immediately hold new combat pulls,
   renew the hold through activation, wait for all browser and headless clients,
   and restore activity together after three continuously safe seconds.

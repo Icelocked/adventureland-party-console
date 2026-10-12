@@ -6,6 +6,7 @@ import { consoleMaintenance } from './lifecycle/console-maintenance.ts';
 import { createUpgradePreviews } from './merchant/upgrade-preview.ts';
 import { merchantVisibility } from './merchant/visibility.ts';
 import { loadCoordinatorDependencies } from "./infrastructure/dependencies.ts";
+import {marketIgnoredItemsRoute} from "./http/market-ignored-items.ts";
 import * as coordinatorPolicies from "./index.ts";
 import { realmOperationOwnsCharacter } from "./characters/realm-switch.ts";
 import type { CatalogDefinitions } from './status/catalog-validation.ts';
@@ -2280,6 +2281,7 @@ export function startCoordinatorApplication(
                 }]))}));
                 coordinatorPolicies.installMovementRoutes(router, movementPlanner, ownedCharacter);
                 installProductionRoutes(router, party, () => persistence.settings(), merchantLog);
+                router.post('/party-api/market/ignored-items',marketIgnoredItemsRoute(party,persistSettings));
                 router.post('/party-api/merchant/stand-location', standLocationRoute(party, (x,y) => canStand(x,y), persistSettings));
                 installSharedRuleRoutes(router, party, persistSettings);
                 router.post("/party-api/merchant/native-stand", coordinatorPolicies.createNativeStandRoute(party, { fulfill: fulfillStandBid, persist: persistSettings, dispatch: dispatchMerchant, stamp: stampMerchantJob }));

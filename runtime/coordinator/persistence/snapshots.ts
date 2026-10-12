@@ -73,6 +73,7 @@ export const settingsFields = [
   "autoBlacklistMerchants",
   "standPriceHistory",
   "merchantBlacklist",
+  "marketIgnoredItems",
   "upgrades",
   "statScrolls",
   "purchases",
