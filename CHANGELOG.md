@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Align native lucky-slot recovery coverage with best-effort restoration: retire ambiguous journals without inventory swaps or repeated upgrade attempts, while retaining provable restoration.
+
 - Verify map screenshot pixels and the real image proxy in separate E2E journeys, using stable game observations and real dashboard state instead of duplicated status fetches.
 
 - Keep the full Cave map dialog accessibly named across encounter updates and allow its native waypoint test the existing bounded UI readiness window.
