@@ -11,7 +11,7 @@ Failure inventory, before implementation:
 
 Measure an isolated native installation using the same artifact twice: legacy transformation/syntax validation versus prepared publication. Retain timings, output-file hashes and unchanged account/state sentinels. Compare the resulting executable files byte for byte. Separately retain a deployment-controller journey showing a deliberately delayed preparation while the maintenance endpoint remains inactive, followed by safety and readiness acknowledgements. These measurements exclude real game reconnect latency; headless process ownership is unchanged.
 
-Run the focused installer and pause journeys with `E2E_PREPARED_ARTIFACT` pointing to a completed release's `app` directory and Playwright selecting `console-build-prepared.spec.ts`. The test copies native executable files into private output directories; it never touches the live installation. Native benchmark activation is opt-in because CI installations need not contain a completed production artifact.
+Run the focused installer and pause journeys with `E2E_PREPARED_ARTIFACT` pointing to a completed release's `app` directory and Playwright selecting `console-build-prepared.spec.ts`. The test copies native executable files into private output directories; it never touches the live installation. Without that environment variable, the benchmark reads only executable inputs from the installed native runtime into private output directories. It excludes account configuration, sessions and mutable storage, and runs normally in CI without skipped evidence.
 
 Measured Windows results (2026-10-12), three repeated installations:
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Run the prepared-runtime deployment benchmark in CI without requiring a local artifact, preserving complete executable-installation evidence.
+
 - Prepare console artifacts before pausing gameplay and publish prevalidated coordinator runtime files, reducing deployment interruptions while preserving readiness checks and rollback.
 
 Changes queued for the next release. The release workflow determines its version

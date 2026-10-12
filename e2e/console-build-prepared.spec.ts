@@ -37,13 +37,15 @@ test('candidate preparation keeps gameplay unpaused and failure preserves the se
 
 test('prepared native publication matches validated legacy installation and measures its cost',async({},info)=>{
   test.setTimeout(180000);
-  const source=process.env.E2E_PREPARED_ARTIFACT;
-  test.skip(!source,'Set E2E_PREPARED_ARTIFACT to a completed artifact app directory for the native benchmark');
+  const source=process.env.E2E_PREPARED_ARTIFACT||process.cwd();
   const root=info.outputPath('runtime'),app=path.join(root,'artifact');await mkdir(app,{recursive:true});
   await cp(path.resolve('tools/caracal'),path.join(app,'tools/caracal'),{recursive:true});
   const native=path.join(app,'.caracal');await mkdir(native,{recursive:true});
   for(const entry of await readdir(path.join(source!,'.caracal'),{withFileTypes:true})){
-    if(entry.name==='node_modules'||entry.name==='prepared-runtime.json')continue;
+    // Read executable inputs only; never copy account config, sessions or storage.
+    const allowed=entry.isDirectory()?['src','standalones','presentation'].includes(entry.name):
+      ['package.json','package-lock.json','account_info.js','game_files.js','html_vars.js','ipcStorage.js','main.js','monitoring_util.js'].includes(entry.name);
+    if(!allowed)continue;
     await cp(path.join(source!,'.caracal',entry.name),path.join(native,entry.name),{recursive:true});
   }
   async function run(args:string[]){const start=performance.now();let output='';await new Promise<void>((resolve,reject)=>{
