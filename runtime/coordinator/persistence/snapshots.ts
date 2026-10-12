@@ -102,6 +102,7 @@ export const settingsFields = [
   "achievementHunt",
   "achievementBlacklist",
   "achievementTarget",
+  "achievementPassive",
   "characterLocations",
   "navigationIntents",
   "townCycle",
