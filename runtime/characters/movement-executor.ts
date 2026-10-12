@@ -169,6 +169,23 @@ export function createMovementExecutor(host: MovementHost, state: MoveState, val
     current.error=reason;
     current.townUnavailable=/cooldown|unavailable|not.ready|no.mp|disabled/i.test(reason);
   }
+  function terminalIssued(current: Issued): boolean {
+    return !current.finished && !current.error && !!current.acknowledged &&
+      state.plot.length===1 && state.plot[0]===current.step && !!isTransition(current.step);
+  }
+  function settledPosition(p: Point, step: Step): boolean {
+    return !host.character.moving && !host.is_transporting(host.character) && p.map===step.map &&
+      String(p.in??p.map)===String(step.in??step.map) && distance(p,step)<=1;
+  }
+  function settleTerminal(options: MovementOptions): boolean {
+    const current=issued,p=position();
+    if(!current || !terminalIssued(current) || !settledPosition(p,current.step))return false;
+    // This is an acknowledgement of an already executed terminal transition.
+    // Never align, dispatch, consult/release a barrier, or advance another step.
+    notifyTown(current,options,'complete');notifyTransition(current,options);
+    state.plot.shift();issued=undefined;barrierReady=false;walkingEdge=undefined;index++;
+    return true;
+  }
   function tick(options: MovementOptions): boolean {
     sample();
     if (issued && state.plot[0] !== issued.step) reset();
@@ -227,7 +244,7 @@ export function createMovementExecutor(host: MovementHost, state: MoveState, val
     return isTransition(issued.step)?transitionLabel(issued.step):'walking';
   }
   function canStart(): boolean { return !host.character.moving && host.can_walk(host.character) && !host.is_transporting(host.character); }
-  return { tick, reset, cancel, pause, progress: () => ({step:index,phase:phase(),destination:issued?.step,durations:{...durations},
+  return { tick, settleTerminal, reset, cancel, pause, progress: () => ({step:index,phase:phase(),destination:issued?.step,durations:{...durations},
     position:position(),noProgressMs:issued ? now()-issued.progressAt : 0,reissued:!!issued?.reissued}),
     transition: () => issued && isTransition(issued.step) ? (issued.step.town ? 'town' : 'transport') : null,
     walkingEdge:()=>walkingEdge?.to===state.plot[0] ? walkingEdge : undefined,

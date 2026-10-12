@@ -124,7 +124,7 @@ export async function killedByParty(live:LiveGame,id:string,timeout=45000,observ
             entry.sequence<event.sequence&&entry.data?.actor===observer);
           const motion=issued?.motion;
           if(!issued||issued.at<startedAt||String(issued.data.id)!==String(event.data.id)||
-            event.at-issued.at<0||event.at-issued.at>2000||!motion?.convoyId||motion.owner!=='convoy:travelling'||motion.candidate?.mtype!=='goo'||
+            event.at-issued.at<0||event.at-issued.at>2000||!motion?.convoyId||motion.convoyPhase!=='travelling'||motion.candidate?.mtype!=='goo'||
             String(motion.candidate.id)!==String(event.data.id))return false;
           attackIssued=issued;return true;
         });
@@ -152,7 +152,7 @@ export async function killedByParty(live:LiveGame,id:string,timeout=45000,observ
       if(options.convoyId&&context.convoyId!==options.convoyId)return false;
       movingIssued=receipts.map(receipt=>[...receipt.issued].reverse().find((entry:any)=>entry.at<=hit.at)).find((entry:any)=>
         entry&&hit.at-entry.at<=2000&&String(entry.data.id)===monsterId&&entry.motion?.moving&&
-        entry.motion.owner==='convoy:travelling'&&entry.motion.convoyId===context.convoyId&&
+        entry.motion.convoyPhase==='travelling'&&entry.motion.convoyId===context.convoyId&&entry.motion.convoyEpoch===context.convoyEpoch&&
         entry.motion.map===context.map&&entry.motion.in===context.in&&entry.motion.server===context.server&&
         entry.motion.candidate?.mtype==='goo'&&String(entry.motion.candidate.id)===monsterId);
       if(!movingIssued)return false;

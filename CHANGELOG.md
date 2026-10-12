@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Avoid unnecessary merchant realm restarts during brief heartbeat gaps when its live connection is already on the configured home realm; keep work held until fresh status returns.
+- Acknowledge an already completed final native travel transition without restarting a zero-distance route after its shared signal expires, while retaining ownership and pause safeguards.
+
 - After a confirmed failed Town shortcut during Franky evacuation, retry walking within that return cycle instead of repeatedly attempting Town.
 
 - Repair short terrain-blocked walking segments on future maps with native-certified local connectors, avoiding full cross-map replanning during event returns.

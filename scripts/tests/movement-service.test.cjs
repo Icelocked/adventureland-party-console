@@ -631,3 +631,51 @@ test('captured native Cave geometry rejoins combat displacement without stale-co
  assert.equal(r.searches,0);assert.equal(r.c.real_x,destination.x);assert.equal(r.c.real_y,destination.y);
  assert.ok(r.logs.some(entry=>entry.phase==='Rejoined forward walking segment'));r.dispose();
 });
+
+
+test('owned acknowledged terminal leave can retire without a fresh barrier or any further movement',async()=>{
+ const owner={convoyId:'return',epoch:3,commandId:7,navigationRevision:1};
+ const r=fixture();r.c.hp=100;r.host.G.maps.cyberland={spawns:[[0,0]]};r.c.map=r.c.in='cyberland';
+ const original=r.ports.context;r.ports.context=()=>({...original(),server:'USI'});
+ let completedBarrier=false;
+ r.host.parent.push_deferred=()=>{Object.assign(r.c,{map:'main',in:'main',real_x:0,real_y:0});return Promise.resolve();};
+ const p=r.service.move({map:'main',in:'main',x:0,y:0},undefined,{shared:true,awaitSharedRoute:true,owner,
+   barrier:async(_step,_index,completed)=>{completedBarrier ||= completed;return !completed;}});
+ r.service.install([{map:'main',in:'main',x:0,y:0,method:'leave'}],r.service.identity);
+ await r.ticks(5);r.setNow(1500);await r.ticks(5);assert.equal(completedBarrier,true);
+ const id=r.service.report().id,calls=r.calls.length;
+ assert.equal(r.service.settleTerminal(id,{...owner,commandId:8}),false);
+ r.c.in='foreign';assert.equal(r.service.settleTerminal(id,owner),false);r.c.in='main';
+ r.c.rip=true;assert.equal(r.service.settleTerminal(id,owner),false);r.c.rip=false;
+ r.c.moving=true;assert.equal(r.service.settleTerminal(id,owner),false);r.c.moving=false;
+ r.ports.context=()=>({...original(),server:'EU'});assert.equal(r.service.settleTerminal(id,owner),false);
+ r.ports.context=()=>({...original(),server:'USI'});
+ assert.equal(r.service.settleTerminal(id,owner),true);await p;
+ assert.equal(r.calls.length,calls,'settling must send no move, transport, or warp');
+ assert.equal(r.service.last().done,true);r.dispose();
+});
+
+
+
+
+test('terminal acknowledgement refuses unacknowledged, intermediate, displaced, and superseded owned journeys',async()=>{
+ for(const mode of ['unacknowledged','intermediate','displaced','superseded','runtime','paused']){
+  const owner={convoyId:'return',epoch:3,commandId:7,navigationRevision:1},r=fixture();
+  r.c.hp=100;r.host.G.maps.cyberland={spawns:[[0,0]]};r.c.map=r.c.in='cyberland';
+  const original=r.ports.context;r.ports.context=()=>({...original(),server:'USI'});
+  r.host.parent.push_deferred=()=>{Object.assign(r.c,{map:'main',in:'main',real_x:0,real_y:0});
+    return mode==='unacknowledged'?new Promise(()=>{}):Promise.resolve();};
+  const p=r.service.move({map:'main',in:'main',x:mode==='intermediate'?100:0,y:0},undefined,
+    {shared:true,awaitSharedRoute:true,owner,barrier:async(_s,_i,completed)=>!completed});
+  p.catch(()=>{});
+  const plot=[{map:'main',in:'main',x:0,y:0,method:'leave'}];
+  if(mode==='intermediate')plot.push({map:'main',in:'main',x:100,y:0});
+  r.service.install(plot,r.service.identity);await r.ticks(5);r.setNow(1500);await r.ticks(3);
+  const id=r.service.report().id,calls=r.calls.length;
+  if(mode==='displaced')r.c.real_x=5;
+  if(mode==='superseded')r.supersede();if(mode==='runtime')r.reload();
+  if(mode==='paused')r.ports.context=()=>({...original(),server:'USI',paused:true});
+  assert.equal(r.service.settleTerminal(id,owner),false,mode);assert.equal(r.calls.length,calls,mode);
+  assert.equal(r.service.state.moving,true,mode);r.dispose();
+ }
+});

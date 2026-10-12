@@ -313,6 +313,25 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
   function sameJourneyInstance(j: Journey, from: Point): boolean {
     return from.map === j.context.map && String(from.in ?? from.map) === String(j.context.instance ?? j.context.map);
   }
+  function terminalOwner(j: Journey, owner: NonNullable<MovementOptions['owner']>): boolean {
+    const stored=j.options.owner;
+    return !!stored && Object.keys(owner).length===Object.keys(stored).length &&
+      Object.entries(owner).every(([key,value])=>stored[key as keyof typeof owner]===value);
+  }
+  function terminalContext(j: Journey): boolean {
+    const c=host.character,context=ports.context();
+    return current(j) && !context.paused && !c.rip && Number(c.hp)>0 && !!context.server && context.server===j.context.server;
+  }
+  function terminalGoal(): boolean {
+    const c=host.character;
+    return c.map===state.map && String(c.in??c.map)===String(state.in??state.map) && distance(position(),state)<=1;
+  }
+  function settleTerminal(id: string, owner: NonNullable<MovementOptions['owner']>): boolean {
+    const j=journey;
+    if(!j || j.id!==id || !state.moving || !state.found || !terminalContext(j) ||
+      !terminalOwner(j,owner) || !terminalGoal() || !executor.settleTerminal(j.options))return false;
+    finish(true);return true;
+  }
   function tick() {
     const j = journey;
     if (!j || !state.moving) return;
@@ -370,7 +389,7 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
     return install(plot, true);
   }
   const service = { state, move, stop,
-    cancel(reason: string, cause?: Record<string, unknown>) { finish(false, reason, cause); return native.stop('smart'); }, tick, planTick, gate, transition: executor.transition, get identity() { return {version, fingerprint}; }, install: importRoute, last: () => last,
+    settleTerminal, cancel(reason: string, cause?: Record<string, unknown>) { finish(false, reason, cause); return native.stop('smart'); }, tick, planTick, gate, transition: executor.transition, get identity() { return {version, fingerprint}; }, install: importRoute, last: () => last,
     combatHandoff() { finish(false, 'Combat handoff'); },
     nativePlanning: planner.report,
     report: () => journey ? { id: journey.id, owner:journey.options.owner, engine: engine(journey), retries: journey.retries, fingerprint, version, remaining: state.plot.length, nativePlanning: planner.report(),

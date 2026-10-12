@@ -17,7 +17,7 @@
   function runtimeCurrent() { return Number(root.__partyRuntimeGeneration) === runtimeGeneration && !!parent; }
   var movement = root.installPartyMovement(root, {
     now: Date.now,
-    context: function() { return { runtime: convoyRuntimeId || String(runtimeGeneration), revision: Number(navigationIntent && navigationIntent.revision) || 0,
+    context: function() { return { server: parent.server_region && parent.server_identifier ? String(parent.server_region)+String(parent.server_identifier) : undefined, runtime: convoyRuntimeId || String(runtimeGeneration), revision: Number(navigationIntent && navigationIntent.revision) || 0,
       current: runtimeCurrent() && (!parent.socket || parent.socket.connected !== false), paused: consoleMovementPaused() || !!root.__partyMovementPaused || !!(dungeonClient && !dungeonClient.canMove()) }; },
     request: request,
     townReady: function() { return !departureCombatPending() && eligibleDepartureChests().length === 0; },
@@ -14851,6 +14851,10 @@
         var matches=signal && signal.id===convoy.id && Number(signal.epoch)===convoy.epoch &&
           Number(signal.commandId)===convoy.commandId && signal.runtimeId===convoyRuntimeId && signal.routeVersion===command.routeVersion;
         if(!matches || convoySignalExpired(signal)) {
+          // A stale lease cannot authorize movement, but a completed owned final
+          // transition can retire its receipt without issuing another action.
+          if(matches && released && smart.on_done===onDone && smart.plot===plot &&
+            movement.settleTerminal && movement.settleTerminal(movement.report()?.id, sharedMovementOptions(command).owner))return;
           if(Date.now()-started<3000 && !released)return;
           if(command.routeProtocol===4 && (!signal || matches))
             convoyCommunication(convoy, '/status', !signal ? 'missing-signal' : 'expired-signal');
@@ -16811,7 +16815,8 @@
       departure:!!(root.partyLootClient&&root.partyLootClient.huntPending()),cancelled:navigationIntent.cancelled,
       approach:groupedApproachReport(),pursuit:groupedCombat && groupedCombat.pursuit,
       nominations:root.__partyNomination||null,
-      convoy:convoyTraveling&&convoyTraveling.id,rare:rareControlState&&rareControlState.id};},
+      convoy:convoyTraveling&&convoyTraveling.id,convoyPhase:convoyTraveling&&convoyTraveling.phase,
+      convoyEpoch:convoyTraveling&&convoyTraveling.epoch,rare:rareControlState&&rareControlState.id};},
     acceptCombatControl: acceptCombatControl,
     queueClockOffset: function(){return coordinatorClockOffset;},
     queueMembers: function(){return currentPartyList();},
