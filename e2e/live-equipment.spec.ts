@@ -5,8 +5,17 @@ import { test, expect } from './live-fixtures';
 test('merchant gathering waits at capacity without resetting cooldowns',async({live,page},info)=>{
   const name='E2EMerchant';
   for(const mode of ['fishing','mining'])await live.post('/merchant/gather',{mode,enabled:false});
+  const standDeadline=Date.now()+90_000;
+  async function standReady(){await expect.poll(async()=>{
+    const state=await live.state();
+    return state.characters[name]?.standOpen && state.pendingCommands?.[name]?.type!=='merchant-idle';
+  },{timeout:Math.max(1,standDeadline-Date.now()),message:'Native stand return and reconciliation must finish before the capacity-only fixture'}).toBe(true);}
+  await live.post('/merchant/force-stand',{enabled:true});
+  await standReady();
   const seed=await live.admin(`output=(()=>{const p=get_player('${name}');
+    const stand=p.items.find(item=>item?.name==='stand0');if(!stand)throw new Error('Native merchant stand tool missing before capacity seed');
     for(let i=0;i<42;i++)p.items[i]=i<39?{name:'helmet',level:0}:null;
+    p.items[12]=stand;
     p.items[10]={name:'rod',level:0};p.items[11]={name:'pickaxe',level:0};
     cache_player_items(p);resend(p,'reopen+cid');return {items:p.items,last:{fishing:p.last.fishing,mining:p.last.mining}};})()`);
   await expect.poll(async()=> (await live.state()).characters[name]?.items?.filter(Boolean).length).toBe(39);
@@ -18,7 +27,11 @@ test('merchant gathering waits at capacity without resetting cooldowns',async({l
     });
     return {gatheringCooldowns:{fishing:0,mining:0}};
   });
+  // Historical cooldown seeding restarts the master; reconcile its new idle
+  // lifecycle under the same original preparation deadline.
+  await standReady();
   const before=(await live.state()).gatheringCooldowns;
+  await live.post('/merchant/force-stand',{enabled:false});
   for(const mode of ['fishing','mining'])await live.post('/merchant/gather',{mode,enabled:true});
   await page.goto(live.url);await page.getByText(/Merchant logistics ·/).click();
   await expect(page.locator('details').filter({has:page.locator('summary').getByText(/Merchant logistics/)}).getByText('BLOCKED',{exact:true})).toHaveCount(2);

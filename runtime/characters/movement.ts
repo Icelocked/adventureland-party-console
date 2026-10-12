@@ -9,6 +9,7 @@ import { resolveDestination } from './movement-destination.ts';
 import { movementDiagnostics } from './movement-diagnostics.ts';
 import { repairDoorApproaches } from '../navigation/door-approach.ts';
 import { planReturnCandidates } from './return-planner.ts';
+import {repairWalkingEndpoint} from '../navigation/walking-endpoint.ts';
 interface SegmentRepair { plot: Step[]; index: number; target: Point; started: boolean; instance?: string | number; retainEndpoint?: boolean }
 interface Journey { settlingAt?: number; repair?: SegmentRepair; repaired?: boolean; repairEndpoints?: string[]; firstIssue?: Issue; failureContext?: Record<string, unknown>; id: string; context: MovementContext; options: MovementOptions; native: boolean; pending: boolean; searches: number; retries: number; started: number; planningAt: number; fallback: boolean; plannerMs?: number; requestMs?: number; distance?: number; transitions?: number; importedEngine?: string }
 const failurePhases = new Map([
@@ -101,6 +102,7 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
   function install(plot: Step[], nativeRoute: boolean) {
     if (!nativeRoute) plot = repairDoorApproaches(validation, position(), plot);
     plot = trimUncheckedFinal(finalApproach(plot, position(), state, journey?.options));
+    if(journey&&sameJourneyInstance(journey,position()))plot=repairWalkingEndpoint(validation,position(),state,plot);
     const issue = validateRoute(validation, position(), state, plot, state.use_town, state.edge);
     if (issue) {
       if (nativeRoute) throw Error(`Native route rejected: ${issue.reason} between ${JSON.stringify(issue.from)} and ${JSON.stringify(issue.to)}`);
