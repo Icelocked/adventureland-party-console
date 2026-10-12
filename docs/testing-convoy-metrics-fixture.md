@@ -1,0 +1,3 @@
+# Convoy diagnostic timing regression inventory
+
+116e Validate38287893615: one of3414 unit cases fails existing diagnostics invariance comparison because independently run nativePlanning measurements differ. Exact delta is totalMs,maxMs,intervals.minMs/meanMs/maxMs; original reason,requests,route and diagnostic identity match. Failure modes: deleting whole movement context would hide behavioral regressions; equal wall timings are not a meaningful contract; nonfinite/negative metrics must remain rejected. Existing case should validate each elapsed metric then normalize only these five measured durations before its unchanged full behavioral deep equality. Frozen snapshot coverage remains in its existing dedicated case.

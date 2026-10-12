@@ -56,6 +56,12 @@ test('confirmed completion escapes then resumes only after everyone safely retur
  f.party.statuses.M.hp=50;f.ctl.tick();assert.equal(f.returns(),1);assert.equal(f.party.combatRecovery.phase,'returning-to-farm');f.ctl.tick();assert.equal(f.returns(),1);
  for(const s of Object.values(f.party.statuses)){s.map='cave';s.x=s.y=10;}f.ctl.tick();assert.equal(f.party.combatRecovery.phase,'complete');
 });
+test('escape recovery does not release moving or between-node arrivals',()=>{
+ const f=fixture();f.target.hp=90;f.advance();f.kill('M');f.ctl.tick();f.home();
+ f.party.statuses.W.moving=true;f.ctl.tick();assert.equal(f.returns(),0);
+ f.party.statuses.W.moving=false;f.party.statuses.W.movement={id:'escape-approach'};f.ctl.tick();assert.equal(f.returns(),0);
+ f.party.statuses.W.movement.done=true;f.ctl.tick();assert.equal(f.returns(),1);
+});
 test('Hunt resumes through its controller and manual navigation cancels automatic return',()=>{
  const f=fixture();f.party.farmingPolicy='hunt';f.target.hp=90;f.advance();f.kill('M');f.ctl.tick();f.home();f.ctl.tick();assert.equal(f.resumes(),1);assert.equal(f.returns(),0);
  const g=fixture();g.target.hp=90;g.advance();g.kill('P');g.ctl.tick();g.revisions.W++;g.home();g.ctl.tick();assert.equal(g.party.combatRecovery.phase,'cancelled');assert.equal(g.returns(),0);

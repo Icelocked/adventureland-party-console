@@ -478,6 +478,14 @@ test('failure context changes only diagnostics, retaining the original failure a
   if(enabled){assert.equal(failure[2].body.details.failureContext.phase,phase);assert.equal(failure[2].body.details.failureContext.signal.state,'identity mismatch');assert.equal(logs.filter(m=>/^Convoy (context|signal):/.test(m)).length,2);}
   await r.cancel();await started.promise;
   const body=copy(failure[2].body);delete body.details.failureContext;
+  // Each run has independent monotonic-clock samples; retain all identities,
+  // counts and failure details while comparing elapsed measurements separately.
+  const metrics=body.details.movement.nativePlanning;
+  for(const record of [metrics,metrics.intervals])for(const key of ['totalMs','maxMs','minMs','meanMs']){
+   if(!(key in record))continue;
+   assert.ok(Number.isFinite(record[key])&&record[key]>=0,key+' must be a valid elapsed measurement');
+   record[key]=0;
+  }
   runs.push({body,requests:r.calls.filter(c=>c[0]==='request').map(c=>c[1]),moves:r.moves(),searches:r.searches});
  }
  assert.deepEqual(runs[1],runs[0]);

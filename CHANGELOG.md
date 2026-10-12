@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep Escape recovery held until every fighter has a settled movement arrival in Main town, preventing early farming resumes while teammates are still returning.
+
 - Retain bounded native route-search timing diagnostics to distinguish search CPU cost from scheduler delays in movement reports.
 
 - Record actual Halloween boss participation for assisting followers so event recovery returns every fighter to its saved farming checkpoint.
