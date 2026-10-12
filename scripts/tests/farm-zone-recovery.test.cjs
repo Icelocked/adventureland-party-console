@@ -183,6 +183,7 @@ test('convoy announced before local command blocks independent zone searching',(
 });
 test('Escape release installs convoy ownership before its first asynchronous stop',async()=>{
  const r=movement();r.c.state={partyConvoyActive:true,escape:null};r.c.partyConvoyActive=false;
+ vm.runInContext(require('./helpers/named-function.cjs').namedFunction(shared,'convoyActivityFromStatus'),r.c);
  r.c.applyEscape=async()=>{assert.equal(r.c.recoverFarmApproach(null),true);assert.equal(r.calls(),0);};
  vm.runInContext(shared.slice(shared.indexOf('  async function applyEventReturnOwner('),shared.indexOf('  async function merchantSendMail(')),r.c);
  const start=shared.indexOf('      // Install the new convoy barrier');
