@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Give native Cave completion tests a bounded allowance for distinct room/choice progress, while retaining quiet-time failure, an absolute cap and all native completion assertions.
+
 - Preserve cross-map event travel when the same boss moves within its destination map, then pursue its latest verified position after arrival instead of repeatedly restarting transit.
 
 - Add an opt-in native Cave rendering diagnostic and retain failed room-assembly geometry for repeatable movement investigations; normal gameplay CI remains unchanged.

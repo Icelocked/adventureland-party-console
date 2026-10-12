@@ -1,5 +1,6 @@
 import { test, expect } from './live-fixtures';
 import { createRequire } from 'node:module';
+import {createNativeProgressBudget} from './native-progress-budget.js';
 const sharp: typeof import('../dashboard/node_modules/sharp') = createRequire(import.meta.url)('../dashboard/node_modules/sharp');
 test.use({ initialPosition: { map: 'main', x: 816, y: 1180 } });
 
@@ -686,6 +687,10 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
             nativePlanning:w.__partyMovement?.nativePlanning?.(),schedulerGate:!!w.__partyMovement?.gate?.owner,
             nativeMoving:!!c.moving,transporting:!!p.transporting,cavePaused:!!c.cave?.paused,
             nativeGraphics:{noGraphics:!!p.no_graphics,noHtml:p.no_html},
+            nativeBodies:{self:{id:c.id||c.name,awidth:c.awidth,aheight:c.aheight,base:c.base,dimensions:p.G.dimensions[c.type]},
+              monsters:Object.keys(p.entities||{}).map(id=>p.entities[id]).filter(e=>e.type==='monster'&&!e.dead)
+                .sort((a,b)=>Math.hypot(a.real_x-c.real_x,a.real_y-c.real_y)-Math.hypot(b.real_x-c.real_x,b.real_y-c.real_y)).slice(0,5)
+                .map(e=>({id:e.id,mtype:e.mtype,awidth:e.awidth,aheight:e.aheight,base:e.base,dimensions:p.G.dimensions[e.mtype]}))},
             ready:w.__partyDungeonRuntime?.report().ready,
             smart:{searching:s.searching,found:s.found,moving:s.moving,x:s.x,y:s.y,map:s.map,start_x:s.start_x,start_y:s.start_y},
             bfs:{length:q.length,index,best:w.best,current:q[index],last:q[q.length-1]},
@@ -773,9 +778,11 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   // Capture the same polled observations: a final expired visit cannot show
   // whether native BFS, route publication, or a follower gate stalled first.
   const requiredPlanning:any[]=[];
+  const requiredBudget=createNativeProgressBudget(Date.now,300_000,600_000);
   let requiredCompleted=false;
   try{
   await expect.poll(async()=>{
+    requiredBudget.check();
     const v=await dungeon();
     if(requiredPlanning.length<600)requiredPlanning.push({at:Date.now(),phase:v.state.phase,
       travel:v.state.travel&&{stage:v.state.travel.stage,target:v.state.travel.target?.id,serial:v.state.travel.serial},
@@ -789,9 +796,15 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
           distance:m.observation.travel.distance,routeLength:m.observation.travel.route?.plot?.length,
           geometry:m.observation.travel.route?.identity}}))});
     if(v.state.run!==cave.run || v.members.length!==2 ||
-        !v.members.every((m:any)=>m.fresh && m.observation?.cave?.run===cave.run &&
+        !v.members.every((m:any)=>m.fresh && m.observation?.alive && m.observation?.cave?.run===cave.run &&
           m.observation.cave.floor===cave.floor && Array.isArray(m.observation.cave.points)))return false;
     const c=v.members[0].observation.cave;
+    const markers=c.points.filter((p:any)=>p.required&&p.done&&v.members.every((m:any)=>
+      m.observation.cave.points.some((other:any)=>other.id===p.id&&other.required&&other.done))).map((p:any)=>'room:'+p.id);
+    if(c.choice?.resolved&&v.members.every((m:any)=>{
+      const choice=m.observation.cave.choice;return choice?.id===c.choice.id&&choice.resolved&&choice.votes?.[m.name]!=null;
+    }))markers.push('choice:'+c.choice.id);
+    requiredBudget.observe(markers);
     if(c.choice&&!c.choice.resolved){
       await answerNativeChoice(c.choice,c.floor);
       return false;
@@ -802,18 +815,23 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     const current=v.state.travel?.target?.id || (Object.values(v.state.commands).find((c:any)=>c.action==='move') as any)?.target?.id;
     if(current!==required.id)await acceptRoom(required,true);
     return false;
-  // Random floors can require several long trips with native combat along the
-  // corridors. Allow the final vote's acknowledged result to reach telemetry.
-  },{timeout:300_000,message:'Required rooms must finish through native combat and votes'}).toBe(true);
+  // Long native routes may progress across the old total five-minute boundary.
+  // Only new authoritative completions renew quiet time; the total is bounded.
+  },{timeout:600_000,message:'Required rooms must finish through native combat and votes'}).toBe(true);
   requiredCompleted=true;
   }finally{
     await info.attach('native-cave-required-planning',{body:JSON.stringify(requiredPlanning),contentType:'application/json'});
+    await info.attach('native-cave-required-progress-budget',{body:JSON.stringify(requiredBudget.snapshot()),contentType:'application/json'});
     if(!requiredCompleted){
       const geometry=await Promise.allSettled(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].run(`(()=>{
         const m=globalThis.__partyMovement,p=parent,c=character;
         return {name:c.name,map:c.map,in:c.in,base:c.base,position:{x:c.real_x,y:c.real_y},
           identity:m?.identity,planning:m?.nativePlanning?.(),movement:m?.last?.(),
           nativeGraphics:{noGraphics:!!p.no_graphics,noHtml:p.no_html},
+          nativeBodies:{self:{id:c.id||c.name,awidth:c.awidth,aheight:c.aheight,base:c.base,dimensions:p.G.dimensions[c.type]},
+            monsters:Object.keys(p.entities||{}).map(id=>p.entities[id]).filter(e=>e.type==='monster'&&!e.dead)
+              .sort((a,b)=>Math.hypot(a.real_x-c.real_x,a.real_y-c.real_y)-Math.hypot(b.real_x-c.real_x,b.real_y-c.real_y)).slice(0,5)
+              .map(e=>({id:e.id,mtype:e.mtype,awidth:e.awidth,aheight:e.aheight,base:e.base,dimensions:p.G.dimensions[e.mtype]}))},
           cave:c.cave?{run:c.cave.run,floor:c.cave.floor}:null,
           geometry:p.G.geometry[c.map],mapData:p.G.maps[c.map]};
       })()`)));
