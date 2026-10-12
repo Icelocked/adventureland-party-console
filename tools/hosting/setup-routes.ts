@@ -8,7 +8,6 @@ import type { LocalTLS } from './tls.ts';
 import { trustHelper } from './trust.ts';
 import { requestOrigin } from './request-origin.ts';
 import { transfer } from './setup-transfer.ts';
-import { toString as qrToString } from 'qrcode';
 export interface Options {
   builds?: { route(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> };
   code?:{route(req:IncomingMessage,res:ServerResponse,pathname:string):Promise<boolean>};
@@ -112,15 +111,7 @@ export async function setupRoute(req: IncomingMessage, res: ServerResponse, path
       await options.configure(text(input.session), text(input.realm));
       return { ok: true };
     },
-    "/setup/invite": async () => {
-      const token = await options.access.invitation();
-      // POSTs are origin-checked (sameBrowserOrigin), so Origin is the address this browser really uses;
-      // the Host header can be an internal address behind a reverse proxy or public URL.
-      const origin = req.headers.origin || options.publicUrl || requestOrigin(req, options);
-      const url = `${origin}/setup#${token}`;
-      const qrSvg = await qrToString(url, { type: "svg", margin: 1 });
-      return { token, url, qrSvg };
-    },
+    "/setup/invite": async () => ({ token: await options.access.invitation() }),
     "/setup/revoke": async () => {
       await options.access.revokeSteam();
       return { ok: true };
