@@ -1,5 +1,5 @@
 import type {BrowserContext} from '@playwright/test';
-import type {LiveClientOptions} from './live-game-client';
+import type {LiveClientOptions} from './live-game-client.js';
 
 const installed=new WeakSet<BrowserContext>();
 

@@ -5,6 +5,21 @@ const {publishSharedRoute,sharedRoute}=require('../../runtime/coordinator/naviga
 const legacy=require('../convoy-navigation.cjs');
 const engine=()=>createSharedConvoyNavigation(legacy);
 const copy=x=>JSON.parse(JSON.stringify(x));
+test('same-boss coordinate changes preserve cross-map progress until destination arrival',()=>{
+ const {movingEventDestination}=require('../../runtime/coordinator/navigation/event-pursuit.ts');
+ const {p}=travellingParty(),c=p.activeConvoy,now=22000;
+ Object.assign(c,{purpose:'shared-walk',walkingActivity:'event',walkingEvent:'mrpumpkin',routeServer:'USII',sharedStartedAt:1000,
+  location:{map:'halloween',in:'halloween',x:0,y:0},walkingParents:{},runtimes:{}});
+ p.navigationIntents={};
+ for(const name of c.participants){c.walkingParents[name]={revision:0};c.runtimes[name]=name;p.navigationIntents[name]={revision:0};
+  Object.assign(p.statuses[name],{seenAt:now,joinedEvent:'mrpumpkin',in:'main'});}
+ Object.assign(p.statuses.P,{map:'halloween',in:'halloween',eventCombatSighting:{id:'boss-1',mtype:'mrpumpkin',map:'halloween',in:'halloween',x:500,y:500,observedAt:now}});
+ const owned=c;assert.equal(movingEventDestination(p,c,now),null);assert.equal(p.activeConvoy,owned);assert.equal(c.phase,'travel');
+ for(const s of Object.values(p.statuses))Object.assign(s,{map:'halloween',in:'halloween'});
+ assert.deepEqual(movingEventDestination(p,c,now),{map:'halloween',in:'halloween',x:500,y:500});
+ p.statuses.P.eventCombatSighting.observedAt=now-3001;assert.equal(movingEventDestination(p,c,now),null);
+ p.statuses.P.eventCombatSighting.observedAt=now;p.navigationIntents.L.cancelled=true;assert.equal(movingEventDestination(p,c,now),null);
+});
 
 function mismatchedParty(){
  const p=party(),e=engine();e.step(p,1000);

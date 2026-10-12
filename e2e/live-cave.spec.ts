@@ -17,7 +17,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     await route.fulfill({ response, headers: { ...response.headers(), 'access-control-allow-origin': '*' } });
   });
   await page.goto(live.url);
-  const dungeon = async () => (await page.request.get(live.url + '/party-api/daily-dungeons')).json();
+  const dungeon = async () => (await page.request.get(live.url + '/party-api/daily-dungeons',{maxRetries:1})).json();
   await expect.poll(async () => {
     const view = await dungeon();
     return view.members.length === 2 && view.members.every((m: any) => m.fresh && m.observation?.ready && m.observation?.visit?.available &&
@@ -886,7 +886,7 @@ test('Cave shared-route pacing keeps the party together and stops the selected r
   await live.admin("Dev=true;Prod=false;G.events.dreams.disabled=false;G.events.dreams.encounters=G.events.dreams.encounters.filter(e=>['e11','e20','e31','e50'].includes(e.id));output=true");
   await live.post('/formation',{leader:'E2EWarrior'});
   await live.post('/formation',{character:'E2EPriest',follow:true});
-  const view=async()=>await (await page.request.get(live.url+'/party-api/daily-dungeons')).json();
+  const view=async()=>await (await page.request.get(live.url+'/party-api/daily-dungeons',{maxRetries:1})).json();
   const act=(body:Record<string,unknown>)=>live.post('/daily-dungeons',{operationId:crypto.randomUUID(),...body});
   await expect.poll(async()=>{
     const v=await view();
@@ -960,7 +960,7 @@ test('Cave assembly regroups displaced completed participants before departure',
   await live.admin("Dev=true;Prod=false;G.events.dreams.disabled=false;G.events.dreams.encounters=G.events.dreams.encounters.filter(e=>['e11','e20','e31','e50'].includes(e.id));output=true");
   await live.post('/formation',{leader:'E2EWarrior'});
   await live.post('/formation',{character:'E2EPriest',follow:true});
-  const view=async()=>await (await page.request.get(live.url+'/party-api/daily-dungeons')).json();
+  const view=async()=>await (await page.request.get(live.url+'/party-api/daily-dungeons',{maxRetries:1})).json();
   const act=(body:Record<string,unknown>)=>live.post('/daily-dungeons',{operationId:crypto.randomUUID(),...body});
   const positions=()=>live.admin("output=Object.fromEntries(['E2EWarrior','E2EPriest'].map(name=>{const p=get_player(name);return [name,{map:p.map,x:p.x,y:p.y,moving:!!p.moving,cruise:p.cruise}]}))");
   const point=(name:string,distance:number)=>live.admin(`output=(()=>{

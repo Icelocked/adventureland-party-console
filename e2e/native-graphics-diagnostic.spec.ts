@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 import {createServer} from 'node:http';
-import {installCompanionGraphicsDiagnostic} from './native-graphics-diagnostic';
+import {installCompanionGraphicsDiagnostic} from './native-graphics-diagnostic.js';
 
 test('companion rendering experiment rewrites only opted-in native bot requests',async({browser},info)=>{
  const received:string[]=[];

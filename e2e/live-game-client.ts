@@ -1,6 +1,6 @@
 import type { BrowserContext, Page, Frame } from '@playwright/test';
 import {randomUUID} from 'node:crypto';
-import {installCompanionGraphicsDiagnostic} from './native-graphics-diagnostic';
+import {installCompanionGraphicsDiagnostic} from './native-graphics-diagnostic.js';
 
 export interface LiveClientOptions {
   webUrl: string;

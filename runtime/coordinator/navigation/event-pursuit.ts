@@ -9,6 +9,10 @@ export function movingEventDestination(state: SharedState, c: SharedConvoy, now:
   if (!boss || distance(boss, c.location) < 250) return null;
   if (c.eventPursuitBossId && c.eventPursuitBossId !== boss.id) return null;
   c.eventPursuitBossId = boss.id;
+  // Coordinate changes within the destination do not change cross-map transit.
+  // Preserve its owned route until everyone reaches that map/instance, then
+  // consume the current fresh sighting before pursuing the old final waypoint.
+  if (c.participants.some(name => !samePlace(state.statuses[name]!, boss))) return null;
   return { map: boss.map, in: boss.in, x: boss.x, y: boss.y };
 }
 function retargetDue(c: SharedConvoy, now: number): boolean {

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserve cross-map event travel when the same boss moves within its destination map, then pursue its latest verified position after arrival instead of repeatedly restarting transit.
+
 - Add an opt-in native Cave rendering diagnostic and retain failed room-assembly geometry for repeatable movement investigations; normal gameplay CI remains unchanged.
 
 - Let combat formation routes proceed immediately when local obstacle recovery has no safe candidate, and release real local attempts after their existing bounded window.
