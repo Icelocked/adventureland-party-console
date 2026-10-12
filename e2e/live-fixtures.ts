@@ -214,6 +214,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
       await live.post('/merchant/routine-priorities', { priorities: {},
         enabled: Object.fromEntries(Object.keys(initial.merchantAutomations || {}).map(key => [key, false])) });
       // Keep this serial: failures retain the already connected clients for teardown and evidence.
+      let nativeReadyDeadline=0;
       for (const name of ['E2EWarrior', 'E2EPriest', 'E2EMerchant']) {
         if (name !== primaryName) {
           await expect.poll(async () => {
@@ -225,8 +226,11 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
             await live.post('/steam/realm-choice', { operationId: login.operation.id, choice: 'stay' });
         }
         clients[name] = await launchGameClient(context, optionsFor(name));
-        if (name !== primaryName)
-          await expect.poll(async () => (await live!.state()).steamSwitch?.phase, { timeout: 90_000 }).toBe('complete');
+        if (name !== primaryName) {
+          if(name==='E2EMerchant')nativeReadyDeadline=Date.now()+90_000;
+          await expect.poll(async () => (await live!.state()).steamSwitch?.phase,
+            {timeout:name==='E2EMerchant'?Math.max(1,nativeReadyDeadline-Date.now()):90_000}).toBe('complete');
+        }
       }
       await testInfo.attach('live-server-initial', { body: JSON.stringify(await live.admin("output=Object.fromEntries(Object.values(players).filter(p=>['E2EWarrior','E2EPriest','E2EMerchant'].includes(p.name)).map(p=>[p.name,{name:p.name,map:p.map,x:p.x,y:p.y,hp:p.hp,max_hp:p.max_hp,mp:p.mp,max_mp:p.max_mp,attack:p.attack,frequency:p.frequency,speed:p.speed,armor:p.armor,resistance:p.resistance,gold:p.gold,xp:p.xp,items:p.items,slots:p.slots,s:p.s}]))"), null, 2), contentType: 'application/json' });
       // Guard the fixture contract: native recalculation must clamp initial pools.
@@ -244,6 +248,17 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           expect(stats.slots[slot], `${loadout} ${stats.name} native ${slot}`).toMatchObject(equipped);
       }
       await testInfo.attach('live-build-manifest', { path: path.join(root, '.build/game/manifest.json'), contentType: 'application/json' });
+      const nativeVersion=await clients[primaryName].run('parent.G.version');
+      expect(Number.isSafeInteger(Number(nativeVersion))&&Number(nativeVersion)>0,'The primary native client must supply its actual game version').toBe(true);
+      const catalogReadiness:Array<{at:number;version:unknown;choices:number}>=[];
+      try{await expect.poll(async()=>{
+        const state=await live!.state(true);
+        if(catalogReadiness.length>=64)catalogReadiness.shift();
+        catalogReadiness.push({at:Date.now(),version:state.gameVersion,choices:state.monsterChoices?.length||0});
+        return String(state.gameVersion)===String(nativeVersion)&&Array.isArray(state.monsterChoices)&&state.monsterChoices.length>0;
+      },{timeout:Math.max(1,nativeReadyDeadline-Date.now()),intervals:[1000],
+        message:'Native bootstrap must publish the current game version and real monster catalog before starting the scenario'}).toBe(true);}
+      finally{await testInfo.attach('native-bootstrap-catalog-readiness',{body:JSON.stringify({nativeVersion,deadline:nativeReadyDeadline,observations:catalogReadiness}),contentType:'application/json'});}
       await use(live);
     } finally {
       rmSync(path.join(directory,'hold-merchant-status'),{force:true});
