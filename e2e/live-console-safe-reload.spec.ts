@@ -26,7 +26,7 @@ test('safe console reload finishes the native fight without acquiring the next t
     const body=route.request().postDataJSON();
     if(!holdFull || body?.combatOnly || body?.combatWait)return route.continue();
     const response=await route.fetch();delayedFull++;
-    await new Promise<void>(resolve=>releases.push(resolve));
+    if(holdFull)await new Promise<void>(resolve=>releases.push(resolve));
     // Native AJAX can abort a deliberately delayed full report at its deadline.
     // Preserve that transport failure without masking the behavior assertion.
     try{await route.fulfill({response});}catch(error){
@@ -67,7 +67,7 @@ test('safe console reload finishes the native fight without acquiring the next t
     live.consoleDrainLease('native-safe-reload',Date.now()-1);
     await expect.poll(async()=>hit(await live.clients[W].events(),seeded.next).length,{timeout:30000,
       message:'An expired host hold must restore normal acquisition'}).toBeGreaterThan(0);
-  }finally{holdFull=false;releases.splice(0).forEach(release=>release());await live.clients[W].page.unroute('**/status',delayedStatus);await evidence(live,info,'safe-reload-final-state',{seeded,samples});live.consoleDrainLease(null);await live.admin(`output=(()=>{for(const id of ${JSON.stringify([seeded.first,seeded.next])}){const m=instances.main.monsters[id];if(m)remove_monster(m,{method:'disappear',nospawn:true});}return true;})()`);}
+  }finally{holdFull=false;releases.splice(0).forEach(release=>release());await live.clients[W].page.unrouteAll({behavior:'wait'});await evidence(live,info,'safe-reload-final-state',{seeded,samples});live.consoleDrainLease(null);await live.admin(`output=(()=>{for(const id of ${JSON.stringify([seeded.first,seeded.next])}){const m=instances.main.monsters[id];if(m)remove_monster(m,{method:'disappear',nospawn:true});}return true;})()`);}
 });
 
 for(const mode of ['safe','now'] as const)test(`console reload resumes native farming and roaming defense in ${mode} mode`,async({live},info)=>{

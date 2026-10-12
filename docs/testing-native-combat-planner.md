@@ -35,3 +35,30 @@ party identity, idle state and absence of an existing native run. A200 response
 must acknowledge both participants exactly and is never submitted again. Other
 errors fail immediately. The original90s active-entry bound is unchanged; retain
 an entry-response ledger for each real UI click.
+
+## Negative native seed coordinates
+
+Failure inventory before the fixture correction: focused run 38270026932
+rejected the stationary-Prat observer expression before evaluating either actor.
+The native seed x=-11 produced `x--11` when interpolated directly after a minus
+operator, which JavaScript parses as an invalid postfix operation. This prevented
+all subsequent native movement assertions from running. Parenthesize both numeric
+seed expressions so negative and positive coordinates remain valid subtraction.
+Parse and evaluate the resulting expression with x=-11/y=115 and x=11/y=-115;
+retain the original native target identity, stationary wire checks, and strict
+3.5/6-second motion and real-hit assertions.
+
+## Incremental follower preparation
+
+Failure inventory before fixture correction: validation on 7554b05 failed the
+retained blocked-segment follower assertion because `followPoint` returned no
+point. The route API intentionally yields while its four-millisecond search
+slice remains pending; a missing point alone does not establish route failure.
+The fixture had incorrectly required a movement endpoint on every call.
+
+Model one exhausted slice inside the existing scenario and verify that it
+yields without changing the actor position. Then allow at most 150 existing
+ticks, retaining the collision check on every actual segment and the final
+assertions that the follower uses the opening and reaches x=240. No route,
+planner, native E2E latency, or timing budget changes are permitted. The finite
+tick cap still detects searches that never finish or paths that do not arrive.

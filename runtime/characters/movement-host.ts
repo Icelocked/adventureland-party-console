@@ -33,7 +33,9 @@ export interface MovementHost {
   find_npc(name: string): Point | null;
   game_log(message: string, color: string): void;
   // caracAL supplies its selected game-file version through process arguments.
-  parent: { __partyClientVersion?: number | string; socket: { emit(event: string, data: unknown): void }; push_deferred(key: string): Promise<unknown> };
+  // Upstream types omit the runner's synchronous BFS visibility-budget hook.
+  // Verified in pinned 15555 and installed 17665; unknown versions keep native behavior.
+  parent: { __partyClientVersion?: number | string; is_hidden?: (this: void) => boolean; socket: { emit(event: string, data: unknown): void }; push_deferred(key: string): Promise<unknown> };
   __partyMovement?: { dispose(): void };
   __partyNativeMovement?: NativeFunctions;
 }

@@ -45,6 +45,8 @@ export interface EventReturnState {
   deferred: Record<string, { cycleId: string }>;
 }
 export interface ReturnStatus {
+  in?: string | number;
+  server?: string;
   lastCommandId?: number;
   x?: number;
   y?: number;

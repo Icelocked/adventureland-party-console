@@ -51,6 +51,7 @@ interface RealmPorts {
   characterType?(name:string):string|null;
   connectionCount(): number;
   refresh(): Promise<unknown>;
+  ownsOperation?(operation: RealmOperation): boolean;
 }
 
 /** Coordinates one requested realm transition without changing worker restart ownership. */
@@ -58,7 +59,8 @@ export function createRealmSwitch(ports: RealmPorts) {
   function arrived(name: string, operation: RealmOperation): boolean {
     const status = ports.status(name);
     return (
-      !!status && status.seenAt >= operation.startedAt && "SR_" + status.server === operation.realm
+      !!status && status.seenAt >= Math.max(operation.startedAt, ports.now() - 10_000) &&
+      status.seenAt <= ports.now() + 500 && "SR_" + status.server === operation.realm
     );
   }
 
@@ -91,20 +93,29 @@ export function createRealmSwitch(ports: RealmPorts) {
     ports.persist();
   }
 
+  function operationOwned(operation: RealmOperation): boolean {
+    return ports.ownsOperation?.(operation) !== false;
+  }
+
   async function awaitArrival(operation: RealmOperation): Promise<void> {
-    const deadline = ports.now() + 60_000;
-    while (ports.now() < deadline) {
-      const allArrived = operation.participants.every((name) => arrived(name, operation));
+    const participants = new Set(operation.participants), verified = new Set<string>();
+    const hardDeadline = ports.now() + Math.max(1, participants.size) * 60_000;
+    let progressDeadline = ports.now() + 60_000;
+    while (ports.now() < Math.min(progressDeadline, hardDeadline)) {
+      if (!operationOwned(operation) || operation.phase !== "switching")
+        throw new Error("Realm operation was cancelled or superseded");
       operation.characters = observations(operation);
-      if (allArrived) break;
+      if (operation.characters.every(entry => entry.arrived)) return;
+      // Renew once per new, freshly confirmed destination participant. Repeated
+      // reports or oscillating realms cannot indefinitely extend this operation.
+      for (const entry of operation.characters) {
+        if (!entry.arrived || verified.has(entry.name)) continue;
+        verified.add(entry.name);
+        progressDeadline = ports.now() + 60_000;
+      }
       await ports.sleep(500);
     }
-    if (
-      !operation.participants.every((name) =>
-        operation.characters.some((entry) => entry.name === name && entry.arrived),
-      )
-    )
-      throw new Error("Not every active character confirmed the destination within 60 seconds");
+    throw new Error("Not every active character confirmed the destination within 60 seconds without new arrival progress");
   }
 
   function assignHomeExecutor(operation: RealmOperation): void {
@@ -275,10 +286,14 @@ export function createRealmSwitch(ports: RealmPorts) {
 
   async function run(operation: RealmOperation): Promise<void> {
     try {
+      if (!operationOwned(operation)) return;
       await depart(operation);
       await awaitArrival(operation);
+      if (!operationOwned(operation)) return;
       await finish(operation);
     } catch (error) {
+      // A replaced operation must not clear commands owned by its successor.
+      if (!operationOwned(operation)) return;
       operation.phase = "failed";
       operation.error = error instanceof Error ? error.message : String(error);
       operation.completedAt = ports.now();

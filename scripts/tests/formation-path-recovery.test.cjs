@@ -103,9 +103,15 @@ test('recovery planner and follower route around the same blocked segment withou
  }
  assert.equal(c.api.report().outcome,'arrived');assert.equal(c.starts,1);
  c.self.x=0;c.self.y=0;
- let highest=0;
- for(let i=0;i<30&&c.self.x<240;i++){
-  const point=c.api.followPoint({x:240,y:0});assert.ok(point);assert.ok(clear(c.self,point));
+ let highest=0,clock=0;
+ const previous={...c.self};
+ const exhausted=test.mock.method(performance,'now',()=>clock+=5);
+ try{assert.equal(c.api.followPoint({x:240,y:0}),undefined);assert.deepEqual(c.self,previous);}
+ finally{exhausted.mock.restore();}
+ for(let i=0;i<150&&c.self.x<240;i++){
+  const point=c.api.followPoint({x:240,y:0});
+  if(!point){await new Promise(setImmediate);continue;}
+  assert.ok(clear(c.self,point));
   c.self.x=point.x;c.self.y=point.y;highest=Math.max(highest,point.y);
  }
  assert.ok(highest>=60,'follower takes the opening instead of waiting at the wall');assert.equal(c.self.x,240);

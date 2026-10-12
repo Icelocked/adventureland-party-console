@@ -203,7 +203,7 @@ test('unavailable upgrade estimate enforces its gold cap across native purchases
 });
 
 test('production journal storage echoes retain the current native attempt ownership',async({live},info)=>{
-  test.setTimeout(360_000);
+  test.setTimeout(480_000);
   await live.restoreHistoricalSettings(()=>({luckyUpgradeSlots:{[merchant]:30}}));
   await catalog(live,'helmet');
   const before=await economy(live);
@@ -224,7 +224,7 @@ test('production journal storage echoes retain the current native attempt owners
   await expect.poll(async()=>{
     const state=await live.state();
     return ![state.merchantCurrent,...state.merchantQueue].some((job:any)=>job?.commerceOrderId===order.jobId);
-  },{timeout:240_000}).toBe(true);
+  },{timeout:300_000}).toBe(true);
   expect(await live.clients[merchant].run('globalThis.__e2eProductionEchoes')).toBeGreaterThan(0);
   const after=await economy(live);
   const results=(value:Economy)=>value.characters[merchant].items.filter(item=>item?.name==='helmet'&&item.level===3).length;

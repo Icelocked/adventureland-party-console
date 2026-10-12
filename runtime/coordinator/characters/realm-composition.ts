@@ -1,7 +1,8 @@
-import { createRealmSwitch } from "./realm-switch.ts";
+import { createRealmSwitch, type RealmOperation } from "./realm-switch.ts";
 
 type RealmPorts = Parameters<typeof createRealmSwitch>[0];
 interface RealmState {
+  realmSwitch?: RealmOperation | null;
   commands: Record<string, Parameters<RealmPorts["command"]>[1] | { type: string } | undefined>;
   steamMembers: string[];
   nextCommandId: number;
@@ -32,6 +33,7 @@ type CompositionPorts = Pick<
 export function createCoordinatorRealmSwitch(state: RealmState, ports: CompositionPorts) {
   return createRealmSwitch({
     now: () => ports.now(),
+    ownsOperation: (operation) => state.realmSwitch === operation,
     sleep: (ms) => ports.sleep(ms),
     pauseMerchant: () => ports.pauseMerchant(),
     retireConvoys: (participants) => ports.retireConvoys?.(participants),

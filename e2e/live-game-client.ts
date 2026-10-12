@@ -68,6 +68,19 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
       const observed:WeakSet<object>=game.__e2eObservedSockets ||= new WeakSet();
       if(observed.has(socket))return;
       observed.add(socket);
+      // Passive Socket.IO outgoing observation; preserve every native method and packet.
+      socket.onAnyOutgoing?.((event:string,...args:any[])=>{
+        if(event!=='attack')return;
+        const c=game.character,runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+        if(!c?.name || game.socket!==socket || args[0]?.id==null)return;
+        let candidate:any;
+        try { candidate=runner?.sharedRoutine?.getWalkingPassiveTarget?.(true); } catch { return; }
+        game.__e2eEvents.push({sequence:++game.__e2eEventSequence,at:Date.now(),event:'attack-issued',
+          data:{id:String(args[0]?.id),actor:c.name},motion:{map:c.map,in:c.in??c.map,server:String(game.server_region||'')+String(game.server_identifier||''),
+            x:c.real_x??c.x,y:c.real_y??c.y,moving:!!c.moving,owner:runner?.__partyCombatOwner,
+            candidate:candidate&&{id:String(candidate.id),mtype:candidate.mtype}}});
+        if(game.__e2eEvents.length>2000)game.__e2eEvents.shift();
+      });
       // Passive observations only; no native method replacement or synthetic packet.
       for(const event of ['hit','death','game_response','game_log','chest_opened','disappear','new_map','party_update','player'])socket.on(event,(data:unknown)=>{
         game.__e2eEvents.push({sequence:++game.__e2eEventSequence,at:Date.now(),event,data:JSON.parse(JSON.stringify(data ?? null))});
@@ -122,10 +135,26 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
         const game = window as any, c = game.character;
         if(!c || !game.socket)throw Error('Native game not initialized');
         const runner = (document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+        const transport=runner?.__partyTravelTransport;
+        const timing=(value:any)=>value&&({at:value.at,durationMs:value.durationMs,
+          processingMs:value.processingMs,networkMs:value.networkMs,eventLoopMaxMs:value.eventLoopMaxMs});
+        const walk=runner?.__partySharedWalking;
+        const http=runner?.__partyConvoyHttp;
+        const diagnostics=(runner?.__partyStatusDiagnostics||[]).slice(-6).map((entry:any)=>({
+          at:entry.at,phase:entry.details?.phase,error:String(entry.details?.error||'').slice(0,240),
+          request:entry.details?.request,repeats:entry.details?.repeats,lastAt:entry.details?.lastAt}));
+        const commandObservation={at:Date.now(),attemptAt:runner?.__partyStatusAttemptAt,
+          successAt:runner?.__partyStatusSuccessAt,lastCommandId:runner?.__partyLastCommand,
+          navigationIntent:runner?.__partyNavigationIntent,eventReturnCycleId:runner?.__partyEventRecoveryCycleId,
+          eventReturnOwnerAt:runner?.__partyEventRecoveryOwnerAt,travelSignalAt:runner?.__partyTravelSignalAt,
+          transport:{full:timing(transport?.full),fast:timing(transport?.fast),clock:transport?.clock},
+          walk:walk&&({activity:walk.activity,key:walk.key,parentCommandId:walk.parentCommandId,
+            revision:walk.revision,token:walk.token,convoyId:walk.convoyId,cancelled:walk.cancelled}),
+          convoyHttp:http&&({responseAt:http.responseAt,failure:http.failure}),observedMono:performance.now(),diagnostics};
         return JSON.parse(JSON.stringify({ name: c.name, map: c.map, x: c.real_x, y: c.real_y, hp: c.hp, mp: c.mp,
           gold: c.gold, xp: c.xp, rip: c.rip, items: c.items, slots: c.slots, s: c.s, party: c.party,
           connected: game.socket.connected, codeActive: game.code_active, statusAt: runner?.__partyStatusSuccessAt,
-          runtimeGeneration: runner?.__partyRuntimeGeneration }));
+          runtimeGeneration: runner?.__partyRuntimeGeneration, commandObservation }));
       }));
     },
     async events() { return observe(async frame=>{await retainEvents(frame);return [...eventLedger];}); },

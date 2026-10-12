@@ -20,11 +20,27 @@ test.beforeEach(async ({live},info) => {
       if(monster.e2eHalloween||owned.has(id)&&(!definition||definition.type===monster.type)){
         removed.push({id,type:monster.type,master:monster.master});remove_monster(monster,{silent:true});}}
     globalThis.__e2eHalloweenDeclared={};
+    if(globalThis.__e2eHalloweenSpawnOriginal)new_monster=globalThis.__e2eHalloweenSpawnOriginal;
+    const nativeSpawn=new_monster;globalThis.__e2eHalloweenSpawnOriginal=nativeSpawn;
+    new_monster=function(instance,mapDef,args){
+      const declared=globalThis.__e2eHalloweenDeclared[String(args?.last_state?.id)];
+      if(!declared?.definition||declared.type!==mapDef.type)return nativeSpawn(instance,mapDef,args);
+      // Native irregular warp preserves hp/id, but reconstructs other stats
+      // from G. Keep only this declared encounter's initial difficulty scoped.
+      const original=G.monsters[mapDef.type];G.monsters[mapDef.type]=declared.definition;
+      try{const monster=nativeSpawn(instance,mapDef,args);if(monster){
+        monster.zone_stats={...declared.definition};monster.e2eHalloween=true;
+      }return monster;}finally{G.monsters[mapDef.type]=original;}
+    };
     for(const entry of Object.values(globalThis.__e2eHalloweenAnnouncements||{}))clearInterval(entry.timer);
     globalThis.__e2eHalloweenAnnouncements={};
     for(const type of ['mrgreen','mrpumpkin','slenderman'])delete E[type];
     broadcast_e();return {removed,scope:'between-case exact declared native IDs and actual descendants'};})()`);
   await info.attach('native-halloween-between-case-cleanup',{body:JSON.stringify(cleanup),contentType:'application/json'});
+});
+
+test.afterEach(async({live})=>{
+  await live.admin(`if(globalThis.__e2eHalloweenSpawnOriginal){new_monster=globalThis.__e2eHalloweenSpawnOriginal;delete globalThis.__e2eHalloweenSpawnOriginal;}output=true`);
 });
 
 // Failure inventory, written before runtime implementation: unsupported native
@@ -101,7 +117,8 @@ async function spawn(live: LiveGame, event: string, map: string, x: number, y: n
       G.monsters[type]={...original,hp:Math.ceil(dps*nominalSeconds),attack:1,speed:0,charge:0,range:1,aggro:0,phresistance:0,spawns:${nativeAdds ? 'original.spawns' : '[]'}};
       const m=new_monster(${JSON.stringify(map)},{type,count:1,boundary:[${x},${y},${x},${y}]},{temp:1});
       m.e2eHalloween=true;
-      (globalThis.__e2eHalloweenDeclared||={})[String(m.id)]={type,map:m.map};
+      m.zone_stats={...G.monsters[type]};
+      (globalThis.__e2eHalloweenDeclared||={})[String(m.id)]={type,map:m.map,definition:{...G.monsters[type]}};
       E[type]={live:true,map:m.map,hp:m.hp,max_hp:m.max_hp,target:m.target};
       // Native Slender status deliberately omits coordinates.
       if(type!=='slenderman'){E[type].x=m.x;E[type].y=m.y;}
@@ -123,6 +140,7 @@ for (const encounter of [{id:'mrgreen',add:'greenjr',drop:'ashleaf',map:'spookyt
       const ledgers:any[]=[];
       const observedHits=new Map<string,any>();
       const attacks:any[]=[];
+      let scenarioError:unknown;
       for(const name of fighters)await live.clients[name].frame.evaluate(()=>{
         const game=window as any,socket=game.socket,emit=socket.emit;
         game.__e2eHalloweenAttacks=[];
@@ -179,15 +197,23 @@ for (const encounter of [{id:'mrgreen',add:'greenjr',drop:'ashleaf',map:'spookyt
         },{timeout:30_000,message:'Real native add loot must reach party inventory'}).toBe(true);
         await info.attach('native-threshold-add-combat-and-loot',{body:JSON.stringify({seed,before,ledgers,attacks,
           events:await live.clients[W].events(),after:await live.admin(`output=${JSON.stringify(fighters)}.map(name=>({name,items:get_player(name).items}))`),state:await live.state()}),contentType:'application/json'});
-      } finally {
-        await info.attach('native-threshold-observer-final',{body:JSON.stringify({ledgers,attacks,hits:[...observedHits.values()],
+      } catch(error){scenarioError=error;throw error;}
+      finally {
+        const cleanupErrors:{step:string;error:string}[]=[];
+        const cleanup=async(step:string,action:()=>Promise<unknown>)=>{
+          try{await action();}catch(error){cleanupErrors.push({step,error:String(error)});}
+        };
+        await cleanup('capture final native threshold evidence',async()=>info.attach('native-threshold-observer-final',{body:JSON.stringify({ledgers,attacks,hits:[...observedHits.values()],
           native:await live.admin(`output={adds:globalThis.__e2eThresholdAdds,players:${JSON.stringify(fighters)}.map(name=>{const p=get_player(name);return p?{name,present:true,map:p.map,x:p.x,y:p.y,rip:p.rip}:{name,present:false}})}`),
-          state:await live.state()}),contentType:'application/json'});
-        for(const name of fighters)await live.clients[name].frame.evaluate(()=>{
-          const game=window as any;game.__e2eHalloweenRestoreAttack?.();delete game.__e2eHalloweenRestoreAttack;
-        });
-        await live.admin(`if(globalThis.__e2eAddSpawner){new_monster=globalThis.__e2eAddSpawner;delete globalThis.__e2eAddSpawner;}output=true`);
-        await live.post('/formation',{character:W,eventSelections:[]});
+          state:await live.state()}),contentType:'application/json'}));
+        for(const name of fighters)await cleanup('restore native attack observer '+name,()=>live.clients[name].run(
+          '(()=>{parent.__e2eHalloweenRestoreAttack?.();delete parent.__e2eHalloweenRestoreAttack;})()'));
+        await cleanup('restore native add spawner',()=>live.admin(`if(globalThis.__e2eAddSpawner){new_monster=globalThis.__e2eAddSpawner;delete globalThis.__e2eAddSpawner;}output=true`));
+        await cleanup('deselect native event',()=>live.post('/formation',{character:W,eventSelections:[]}));
+        if(cleanupErrors.length){
+          await info.attach('native-threshold-cleanup-errors',{body:JSON.stringify({scenarioError:String(scenarioError||''),cleanupErrors}),contentType:'application/json'});
+          if(!scenarioError)throw Error('Native threshold cleanup failed: '+JSON.stringify(cleanupErrors));
+        }
       }
     });
   });

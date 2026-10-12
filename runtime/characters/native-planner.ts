@@ -33,11 +33,26 @@ export function createNativePlanner(host: MovementHost, native: NativeFunctions)
     if (!failure && !expired(now)) return;
     const reason = failure || `Native planning timed out (${(now >= hardDeadline ? hardLimit : limit) / 1000} seconds)`; cancel(); throw Error(reason);
   }
+  function search() {
+    if (!host.smart.searching) native.start(); else if (!host.smart.found) native.next();
+  }
+  function searchSlice() {
+    const parent = host.parent, version = Number(parent?.__partyClientVersion || host.G?.version);
+    const visibility = parent?.is_hidden;
+    // Verified native BFS versions select their synchronous 40-ms branch through
+    // this hook. Unknown runners keep their original search behavior.
+    if (![15555,17665].includes(version) || typeof visibility !== 'function') { search(); return; }
+    const descriptor = Object.getOwnPropertyDescriptor(parent, 'is_hidden');
+    if (!descriptor || !('value' in descriptor) || !descriptor.writable) { search(); return; }
+    parent.is_hidden = () => false;
+    try { search(); }
+    finally { parent.is_hidden = visibility; }
+  }
   function tick(now: number): Step[] | undefined {
     if (!running) throw Error('Native search not initialized');
     if (lastIndex !== undefined) observeProgress(now);
     checkDeadline(now);
-    if (!host.smart.searching) native.start(); else if (!host.smart.found) native.next();
+    searchSlice();
     observeProgress(now);
     if (!host.smart.moving && !host.smart.found) throw Error('Native planner found no route');
     if (!host.smart.found) return;

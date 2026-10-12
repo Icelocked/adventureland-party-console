@@ -6900,11 +6900,15 @@
       }
       var bankedByCharacter = {};
       if (!canContinueCollection) {
+        var merchantTarget = Number.isInteger(command.merchantGoldTarget) ? command.merchantGoldTarget : 0;
+        var goldDeposit = Math.min(merchantPendingGold, Math.max(0, character.gold - merchantTarget));
         // This is the final return leg after servicing the player cluster.
         // Teleport out first, then walk from whichever town Town selected to
         // the bank. Never do this between players in the same itinerary.
-        await merchantTownReturn(activity);
-        await merchantVisitBank(command, activity);
+        if (merchantPendingBank.length || goldDeposit > 0) {
+          await merchantTownReturn(activity);
+          await merchantVisitBank(command, activity);
+        }
         for (var b = 0; b < merchantPendingBank.length; b += 1) {
           var pending = merchantPendingBank[b];
           var wanted = pending.mark && pending.mark.item ? pending.mark.item : pending.mark;
@@ -6916,9 +6920,8 @@
           (bankedByCharacter[pending.owner] || (bankedByCharacter[pending.owner] = [])).push(pending.mark);
         }
         merchantPendingBank = [];
-        if (merchantPendingGold) {
-          var merchantTarget = Number.isInteger(command.merchantGoldTarget) ? command.merchantGoldTarget : 0;
-          var goldDeposit = Math.min(merchantPendingGold, Math.max(0, character.gold - merchantTarget));
+        goldDeposit = Math.min(merchantPendingGold, Math.max(0, character.gold - merchantTarget));
+        if (goldDeposit > 0) {
           await bank_deposit(goldDeposit);
           activity.push({ level: "success", message: "Deposited " + goldDeposit.toLocaleString() + " collected gold" });
         }

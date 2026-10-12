@@ -1,0 +1,15 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+const {createNativePlanner}=require('../../runtime/characters/native-planner.ts');
+function setup(version=17665,descriptor={value:function visibility(){return true;},writable:true,configurable:true}){
+ const parent={__partyClientVersion:version};if(descriptor)Object.defineProperty(parent,'is_hidden',descriptor);
+ const original=parent.is_hidden,observed=[];
+ const host={parent,G:{version},smart:{moving:true,searching:false,found:false,plot:[]}};
+ const native={move:()=>Promise.resolve(),stop(){host.smart.moving=false;},start(){observed.push(parent.is_hidden?.());host.smart.searching=true;host.smart.moving=true;},next(){observed.push(parent.is_hidden?.());}};
+ const planner=createNativePlanner(host,native);return {parent,original,host,native,planner,observed,begin(){planner.begin({map:'main',x:100,y:0},false,0);host.smart.moving=true;}};
+}
+for(const version of [15555,17665])test('verified native '+version+' BFS uses short slices and restores visibility',()=>{const r=setup(version);r.begin();r.planner.tick(0);r.planner.tick(80);assert.deepEqual(r.observed,[false,false]);assert.equal(r.parent.is_hidden,r.original);assert.equal(r.parent.is_hidden(),true);});
+test('BFS exceptions restore exact visibility function',()=>{const r=setup();r.native.start=()=>{assert.equal(r.parent.is_hidden(),false);throw Error('Native search failed');};r.begin();assert.throws(()=>r.planner.tick(0),/Native search failed/);assert.equal(r.parent.is_hidden,r.original);});
+test('BFS cancellation restores exact visibility function',()=>{const r=setup();r.native.start=()=>{assert.equal(r.parent.is_hidden(),false);r.planner.cancel();};r.begin();assert.throws(()=>r.planner.tick(0),/found no route/);assert.equal(r.parent.is_hidden,r.original);});
+test('unknown runner retains native visibility behavior',()=>{const r=setup(17666);r.begin();r.planner.tick(0);assert.deepEqual(r.observed,[true]);assert.equal(r.parent.is_hidden,r.original);});
+test('missing visibility hook retains normal native planning',()=>{const r=setup(17665,null);r.begin();r.planner.tick(0);assert.deepEqual(r.observed,[undefined]);assert.equal(r.parent.is_hidden,undefined);});
+test('read-only or accessor visibility hooks are never replaced',()=>{for(const descriptor of [{value:()=>true,writable:false},{get:()=>()=>true}]){const r=setup(17665,descriptor);const before=Object.getOwnPropertyDescriptor(r.parent,'is_hidden');r.begin();r.planner.tick(0);assert.deepEqual(r.observed,[true]);assert.deepEqual(Object.getOwnPropertyDescriptor(r.parent,'is_hidden'),before);}});
