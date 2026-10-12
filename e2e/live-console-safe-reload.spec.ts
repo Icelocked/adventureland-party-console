@@ -89,18 +89,26 @@ for(const mode of ['safe','now'] as const)test(`console reload resumes native fa
   await live.post('/travel',destination);
   const seeded:string[]=[];
   try{
-    await expect.poll(()=>live.admin(`output=!!get_player('${W}').moving`),{timeout:30000}).toBe(true);
     if(mode==='safe'){
-      const journey=await live.clients[W].run('globalThis.__partyMovement.report().id');
+      let admission:any;
+      await expect.poll(async()=>{
+        admission=await live.clients[W].run(`(()=>{
+          const service=globalThis.__partyMovement,report=service.report(),goal=${JSON.stringify(destination)},state=service.state;
+          return {id:report?.id,owner:report?.owner,name:character.name,map:character.map,moving:!!character.moving,
+            goalMatch:state.map===goal.map&&state.x===goal.x&&state.y===goal.y};
+        })()`);
+        return !!admission.id&&admission.name===W&&admission.map===destination.map&&admission.moving&&admission.goalMatch;
+      },{timeout:30000,message:'The native character and active owned journey must be walking toward the requested probe together'}).toBe(true);
+      const journey=admission.id;
       live.consoleDrainLease('reload-walk');
       await expect.poll(()=>live.clients[W].run('globalThis.__partyConsoleMaintenance?.id'),{timeout:10000}).toBe('reload-walk');
       await expect.poll(()=>live.admin(`output=!!get_player('${W}').moving`),{timeout:10000}).toBe(false);
       await live.clients[W].page.waitForTimeout(3500);
-      expect(await live.clients[W].run('globalThis.__partyMovement.report().id')).toBe(journey);
+      expect(await live.clients[W].run('globalThis.__partyMovement.report()?.id')).toBe(journey);
       expect(await live.clients[W].run('sharedRoutine.canReload()')).toBe(true);
-      samples.push({phase:'parked',journey,position:await live.clients[W].snapshot()});
+      samples.push({phase:'parked',journey,admission,position:await live.clients[W].snapshot()});
       live.consoleDrainLease(null);
-    }
+    }else await expect.poll(()=>live.admin(`output=!!get_player('${W}').moving`),{timeout:30000}).toBe(true);
     await expect.poll(async()=>{const p=await live.clients[W].snapshot();return Math.hypot(p.x-destination.x,p.y-destination.y)<10;},{timeout:30000}).toBe(true);
     const arrived=await live.clients[W].snapshot();
     expect(Math.hypot(arrived.x-destination.x,arrived.y-destination.y)).toBeLessThan(10);
