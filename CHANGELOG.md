@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Bound verified native pathfinding search slices to keep combat and coordinator heartbeats responsive, preserving native routes, deadlines and freshness checks.
+- Skip unnecessary Town and bank trips after item-only merchant service when no bank cargo or positive gold deposit remains.
+
 - Keep followers on the shared saved farming checkpoint when joining a leader during an event, without persisting the temporary rendezvous as a personal return destination.
 
 - Retain rare encounter admission until the exact combat queue is acknowledged, avoiding permanent rejection from pre-handoff status reports.

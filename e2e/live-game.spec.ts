@@ -393,12 +393,16 @@ test.describe('real server, native clients, maintained character runtime', () =>
     await live.admin(`output=(()=>{const p=get_player(${JSON.stringify(M)});p.items[10]={name:'helmet',level:0};cache_player_items(p);resend(p,'u+cid+reopen');return p.items[10]})()`);
     await expect.poll(async () => (await live.state()).characters[M]?.items?.some((entry: any) => entry?.slot===10 && entry.item?.name==='helmet'), { timeout: 20_000 }).toBe(true);
     const before=await observed(live), total=names.reduce((sum,name)=>sum+quantity(before[name].items,'helmet'),0);
+    const serviceStartedAt=Date.now(),gold=names.reduce((sum,name)=>sum+before[name].gold,0);
     await live.post('/command', { character:M,type:'give',target:W,slot:10,item:{name:'helmet',level:0} });
     await expect.poll(async()=>quantity((await observed(live))[W].items,'helmet'),{timeout:120_000}).toBe(quantity(before[W].items,'helmet')+1);
     const after=await observed(live);
     expect(names.reduce((sum,name)=>sum+quantity(after[name].items,'helmet'),0)).toBe(total);
     const completed = async () => { const state = await live.state(); return !state.merchantCurrent && !state.merchantQueue?.length && !state.merchantDeliveries?.[W]?.length; };
     await expect.poll(completed, { timeout: 30_000, message: 'The actual delivery must complete its durable job' }).toBe(true);
+    expect((await live.state()).merchantActivity.some((entry:any)=>entry.at>=serviceStartedAt&&entry.message==='Entered bank'),
+      'An item-only delivery with no bank cargo or surplus gold must not add a bank return leg').toBe(false);
+    expect(names.reduce((sum,name)=>sum+after[name].gold,0)).toBe(gold);
     await live.restartCoordinator();
     await expect.poll(completed, { timeout: 30_000 }).toBe(true);
     const restored=await observed(live);
