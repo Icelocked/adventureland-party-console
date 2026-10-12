@@ -12,6 +12,7 @@ import { Access } from '../tools/hosting/access';
 import { selectionFields, stateKeys } from '../runtime/coordinator/persistence/snapshots';
 import { loadouts, seedLoadout, type NativeLoadout } from './game/loadouts';
 import { nativeEventSpawn, nativeMonsterInitialPosition } from './game/event-spawn';
+import {nativeNetworkIsolation} from './native-network-isolation';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -60,17 +61,12 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
     const port = await unusedPort(), log = path.join(directory, 'coordinator.log');
     let coordinator: ChildProcess | undefined;
     let identityEnvironment:NodeJS.ProcessEnv={};
-    const context = await browser.newContext({ viewport: { width: 1280, height: 900 },
-      recordVideo: { dir: testInfo.outputPath('native-video'), size: { width: 960, height: 675 } } });
+    const blocked: string[] = [];
+    const network=await nativeNetworkIsolation(blocked);
+    const context = await browser.newContext({proxy:network.proxy, viewport: { width: 1280, height: 900 },
+      recordVideo: { dir: testInfo.outputPath('native-video'), size: { width: 960, height: 675 } } }).catch(async error=>{await network.close();throw error;});
     const nativePages = new Set<Page>();
     context.on('page', page => nativePages.add(page));
-    const blocked: string[] = [];
-    await context.route('**/*', route => {
-      const url = new URL(route.request().url());
-      if (['127.0.0.1', 'localhost', '::1', '[::1]'].includes(url.hostname) || ['data:', 'blob:'].includes(url.protocol)) return route.continue();
-      blocked.push(url.origin + url.pathname);
-      return route.abort('blockedbyclient');
-    });
     await context.addCookies([{ name: 'auth', value: manifest.auth, url: manifest.webUrl }]);
     const access = new Access(path.join(directory, 'access.json'));
     await access.load();
@@ -311,6 +307,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
             if (result) await attach(`native-game-video-${index}-diagnostic`, result);
           }
         } finally {
+          await diagnostic(network.close());
           server.closeAllConnections();
           await diagnostic(new Promise<void>(resolve => {
             if (server.listening) server.close(() => resolve());

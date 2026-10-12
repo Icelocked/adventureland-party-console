@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reduce native E2E browser request overhead by keeping loopback traffic outside request interception, with an owned denial proxy preserving external network isolation.
+
 - Avoid unnecessary merchant realm restarts during brief heartbeat gaps when its live connection is already on the configured home realm; keep work held until fresh status returns.
 - Acknowledge an already completed final native travel transition without restarting a zero-distance route after its shared signal expires, while retaining ownership and pause safeguards.
 
