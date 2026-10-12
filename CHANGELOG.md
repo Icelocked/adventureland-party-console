@@ -363,6 +363,10 @@ from the commits merged into `main`.
 
 ### Added
 
+- Pair another browser shows a short access code, such as `K7QM-4XRT`, next to
+  the pairing link. Type it into setup on the new browser. A code works once,
+  expires after 10 minutes, and five wrong guesses cancel it. Pairing with either
+  the code or the link retires the other.
 - Advance admitted merchant realm transitions on party status reports, so native
   arrivals resume their original work and missing arrival reports retain the
   original sixty-second timeout instead of leaving the switching job held.
