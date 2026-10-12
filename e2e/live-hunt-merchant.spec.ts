@@ -35,7 +35,27 @@ test.describe('native merchant interruption of Hunt',()=>{
           'A queued merchant may outlive this Hunt only after both original owners actually received their rewards').toBe(true);
         await live.post('/farming-mode',{character:W,mode:'default'});
       } else expect(continued?.cycleId).toBe(cycle);
-      await expect.poll(async()=>quantity((await observed(live))[W].items,'leather'),{timeout:180000,message:'The native merchant must actually collect the marked stack'}).toBe(0);
+      const rendezvousSamples:any[]=[];let lastRendezvousSample=0;
+      try{await expect.poll(async()=>{
+        const native=await observed(live);
+        if(fault==='active merchant death'&&Date.now()-lastRendezvousSample>=1000){
+          lastRendezvousSample=Date.now();let client:any;
+          try{client=await live.clients[M].frame.evaluate(()=>{
+            const game=window as any,root=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+            const merchant=game.character,target=game.get_player?.('E2EWarrior'),smart=root?.smart;
+            return {character:merchant&&{name:merchant.name,map:merchant.map,in:merchant.in,x:merchant.real_x??merchant.x,y:merchant.real_y??merchant.y,rip:merchant.rip,moving:merchant.moving},
+              target:target&&{name:target.name,map:target.map,in:target.in,x:target.real_x??target.x,y:target.real_y??target.y,rip:target.rip,visible:target.visible},
+              distance:merchant&&target?Math.hypot((target.real_x??target.x)-(merchant.real_x??merchant.x),(target.real_y??target.y)-(merchant.real_y??merchant.y)):null,
+              directClear:target&&root?.can_move_to?.(target.real_x??target.x,target.real_y??target.y),realm:String(game.server_region)+String(game.server_identifier),
+              commandId:root?.__partyLastCommand,activeJob:root?.__merchantActiveJob,
+              navigationIntent:root?.__partyNavigationIntent,route:smart&&{moving:smart.moving,found:smart.found,map:smart.map,x:smart.x,y:smart.y,remaining:smart.plot?.length}};
+          });}catch(error){client={observationError:String(error)};}
+          if(rendezvousSamples.length===96)rendezvousSamples.splice(64,1);
+          rendezvousSamples.push({at:lastRendezvousSample,server:Object.fromEntries([W,M].map(name=>[name,{...native[name],items:undefined}])),client});
+        }
+        return quantity(native[W].items,'leather');
+      },{timeout:180000,message:'The native merchant must actually collect the marked stack'}).toBe(0);}
+      finally{if(fault==='active merchant death')await info.attach('native-merchant-recovery-rendezvous-samples',{body:JSON.stringify({fault,cycle,total,rendezvousSamples}),contentType:'application/json'});}
       await expect.poll(async()=>{const s=await live.state();return !s.merchantCurrent&&!s.merchantQueue.length&&!s.merchantMarked?.[W]?.length;},{timeout:180000}).toBe(true);
       expect(await totalLeather(live)).toBe(total);
       await reward(live,setup.before);
