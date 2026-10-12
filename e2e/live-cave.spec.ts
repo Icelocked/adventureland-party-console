@@ -230,6 +230,13 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     const parts=expectedMap.split("_");
     const expectedRun=parts[1],expectedFloor=Number(parts[2]);
     const attempts:unknown[]=[];
+    const activationDeadline=Date.now()+60_000;
+    let inputDispatched=false;
+    const remaining=(cap:number)=>{
+      const timeout=Math.min(cap,activationDeadline-Date.now());
+      if(timeout<=0)throw Error('Waypoint activation exhausted its original 60-second window');
+      return timeout;
+    };
     const snapshot=()=>fullMap.evaluate(element=>({
       adding:element.textContent?.includes('Click the map to place your waypoint.'),
       disabled:Array.from(element.querySelectorAll('button')).find(button=>button.textContent?.trim()==='Add waypoint')?.disabled,
@@ -240,20 +247,22 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
       await expect.poll(async()=>{
         const resolvedEncounter=page.getByRole('dialog').filter({has:page.getByText('Encounter result',{exact:true})});
         if(await resolvedEncounter.isVisible()){
-          await resolvedEncounter.getByRole('button',{name:'Close',exact:true}).click();
-          await expect(resolvedEncounter).not.toBeVisible();
+          await resolvedEncounter.getByRole('button',{name:'Close',exact:true}).click({timeout:remaining(20_000)});
+          await expect(resolvedEncounter).not.toBeVisible({timeout:remaining(15_000)});
+          inputDispatched=false;
         }
         const before=await snapshot();
         if(before.adding)return true;
-        if(!before.disabled){
+        if(!before.disabled&&!inputDispatched){
           expect(before.error,'Add activation may not retry an unrelated rendered error').toBe(false);
           try {
             const addWaypoint=fullMap.getByRole('button',{name:'Add waypoint',exact:true});
             // The native freshness gate can close between the snapshot and
             // input. Give readiness its own bounded wait, then dispatch input.
-            await expect(addWaypoint).toBeEnabled({timeout:10_000});
+            await expect(addWaypoint).toBeEnabled({timeout:remaining(10_000)});
             expect((await snapshot()).error,'Freshness readiness must not hide a rendered error').toBe(false);
-            await addWaypoint.click({timeout:10_000});
+            await addWaypoint.click({timeout:remaining(30_000)});
+            inputDispatched=true;
           } catch (error) {
             // A fresh native shop update may reopen its completed result
             // after Close. Only that observed modal obstruction is retryable.
@@ -264,8 +273,8 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
         let observed=before;
         await expect.poll(async()=>{
           observed=await snapshot();
-          return observed.adding || observed.disabled&&observed.waiting || !observed.disabled&&!observed.error;
-        },{timeout:10_000,message:'Add waypoint must activate placement or show its freshness hold'}).toBe(true);
+          return observed.adding || observed.disabled&&observed.waiting || !inputDispatched&&!observed.disabled&&!observed.error;
+        },{timeout:remaining(10_000),message:'Add waypoint must activate placement or show its freshness hold'}).toBe(true);
         attempts.push(observed);
         if(observed.adding)return true;
         if(observed.disabled)expect(observed.waiting).toBe(true);
