@@ -18,9 +18,16 @@ function createGameFixture(directory) {
     upgradeable: !!definition.upgrade, compoundable: !!definition.compound,
     scaling: definition.upgrade || definition.compound || {}, maxLevel: 12 };
   };
+  // Pinned native item sheet supplies real offering pixels at the read boundary.
+  const offeringSheet='data:image/png;base64,'+fs.readFileSync(path.join(__dirname,'fixtures/game-assets/pack_20vt8.png')).toString('base64');
+  const offeringSprite=id=>{
+    if(!['offeringp','offering','offeringx'].includes(id)) return null;
+    const position=game.positions[game.items[id].skin],pack=game.imagesets[position[0] || 'pack_20'];
+    return {url:offeringSheet,tileSize:pack.size,columns:pack.columns,rows:pack.rows,x:position[1],y:position[2]};
+  };
   const merchantCatalog = { version: 'e2e-game-17175', buyable: [], craftable: [], exchangeable: [],
     allItems: Object.keys(game.items).map(id => ({ id, name: game.items[id].name || id,
-      upgradeable: !!game.items[id].upgrade, compoundable: !!game.items[id].compound, meta: itemMeta(id) })) };
+      sprite:offeringSprite(id), upgradeable: !!game.items[id].upgrade, compoundable: !!game.items[id].compound, meta: itemMeta(id) })) };
   // Read-boundary catalog fixture; native exchange execution is covered separately.
   merchantCatalog.exchangeable = ['gem0', 'armorbox'].map(id => ({ key: id, id, level: 0,
     name: game.items[id].name, required: 1, cost: 0, npc: 'exchange', sprite: null,

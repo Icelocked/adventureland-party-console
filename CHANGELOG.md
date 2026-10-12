@@ -5,6 +5,9 @@
 Changes queued for the next release. The release workflow determines its version
 from the commits merged into `main`.
 
+- Restore the shared upgrade-offering resolver required by upgrade menus in
+  clean installations; verify offering badges with pinned native sprite pixels.
+
 - Fix staged console builds on Linux and macOS by installing isolated dependency
   caches without npm executable symlinks and bypassing older linked caches.
 

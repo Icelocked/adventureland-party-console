@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 import {spawn} from 'node:child_process';
-import {mkdir,readFile,copyFile,writeFile} from 'node:fs/promises';
+import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 
@@ -21,17 +21,10 @@ test('Docker Linux install recovers a linked dependency cache and explicitly loa
   let created=false;
   try{
     const archive=path.join(root,'baseline.tar');
-    await run('git',['archive','--format=tar','--output='+archive,'c372335']);
+    await run('git',['archive','--format=tar','--output='+archive,'HEAD']);
     await run('tar',['-xf',archive,'-C',context]);
-    // Include the compiling maintained snapshot; keep the reported builder exact.
-    // Concurrent sessions have source work not yet committed at this revision.
-    const changes=await run('git',['diff','--name-only','HEAD']);
-    for(const file of changes.trim().split(/\r?\n/).filter(Boolean)){
-      if(!/^(runtime|dashboard|tools|scripts|characters|patches|e2e)\//.test(file))continue;
-      const destination=path.resolve(context,file);
-      if(!destination.startsWith(context+path.sep))throw Error('Snapshot escaped context');
-      await mkdir(path.dirname(destination),{recursive:true});await copyFile(file,destination);
-    }
+    // Exercise committed source only; substitute the reported legacy builder to
+    // reproduce linked-cache failure before applying the current builder.
     await writeFile(path.join(context,'tools/console-build/builder.ts'),await run('git',['show','c372335:tools/console-build/builder.ts']));
     await run('docker',['build','--target','development','--tag',image,context]);
     await run('docker',['run','-d','--name',container,'--entrypoint','node',image,'-e','setInterval(()=>{},100000)']);created=true;
