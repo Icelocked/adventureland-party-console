@@ -38,7 +38,16 @@ test.beforeEach(async ({live},info) => {
   await info.attach('native-halloween-between-case-cleanup',{body:JSON.stringify(cleanup),contentType:'application/json'});
 });
 
-test.afterEach(async({live})=>{
+test.afterEach(async({live},info)=>{
+  if(info.status!==info.expectedStatus){
+    const geometry=await Promise.allSettled(fighters.map(name=>live.clients[name].run(`(()=>{
+      const movement=globalThis.__partyMovement;return {name:character.name,version:G.version,
+        identity:movement?.identity,base:character.base,map:character.map,in:character.in,
+        position:{x:character.real_x,y:character.real_y},movement:movement?.last?.(),
+        maps:['halloween','spookytown'].map(map=>({map,geometry:G.geometry[map],definition:G.maps[map]}))};
+    })()`)));
+    await info.attach('native-halloween-return-geometry',{body:JSON.stringify(geometry),contentType:'application/json'});
+  }
   await live.admin(`if(globalThis.__e2eHalloweenSpawnOriginal){new_monster=globalThis.__e2eHalloweenSpawnOriginal;delete globalThis.__e2eHalloweenSpawnOriginal;}output=true`);
 });
 
