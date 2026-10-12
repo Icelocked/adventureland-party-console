@@ -752,7 +752,12 @@ export function createRareHunting(input: unknown, hooks: Hooks) {
   }
   function released(e: Encounter) {
     if (e.awaitingSelection) {
-      if (combat.selected(e.target) || combat.locked(e.target)) {
+      const revision = party.groupedCombat?.queueRevision;
+      const acknowledged = !!revision && members().every(name =>
+        party.statuses[name]?.groupedCombat?.queueAck === revision);
+      // A coordinator nomination can precede the clients switching out of
+      // scatter. Do not interpret their old reports as a released selection.
+      if (combat.locked(e.target) || combat.selected(e.target) && acknowledged) {
         e.awaitingSelection = false;
         diagnostic('Rare target selected', {id:e.target.id,mtype:e.target.mtype});
       }

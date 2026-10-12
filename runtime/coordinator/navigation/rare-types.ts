@@ -89,7 +89,7 @@ export interface Status extends Point {
   items?: ObservedCharacterStatus['items'];
   target?: { mtype: string } | null;
   rareSightings?: Sight[];
-  groupedCombat?: {approach?: import('../../combat/pursuit.ts').ApproachReport;currentAttackersAt?:number;currentAttackers?:import('./travel-defense.ts').CurrentAttacker[]};
+  groupedCombat?: {queueAck?: string | null;approach?: import('../../combat/pursuit.ts').ApproachReport;currentAttackersAt?:number;currentAttackers?:import('./travel-defense.ts').CurrentAttacker[]};
   range?: number;
   combatSelection?: {runtimeId?: string};
   rareObservation?: {at: number; runtimeId: string; map: string; in: string; server: string; x: number; y: number; sightings: Sight[]};
@@ -136,7 +136,7 @@ export interface Party {
   rareHuntState?: unknown;
   partyFarmingMode?: string;
   scatterBreakTarget?: unknown;
-  groupedCombat?: { fights?: unknown[] };
+  groupedCombat?: { fights?: unknown[]; queueRevision?: string };
 }
 export interface Hooks {
   now?: () => number;

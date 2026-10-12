@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Retain rare encounter admission until the exact combat queue is acknowledged, avoiding permanent rejection from pre-handoff status reports.
+
 - Verify explicit native combat fixture wire overrides and catalog projections, and acknowledge Cave entry freshness rejections without duplicating accepted entries.
 
 - Preserve authoritative event-return ownership through CODE replacement, keeping early finishers defensive and coalescing recently stale same-cycle exit peers within the existing request window.
