@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserve newly admitted Hunt and shared walking journeys when delayed respawn recovery falls back to farming.
+
 - Repair native walking routes whose final goal connection crosses terrain, retaining the exact owned destination and validating every repaired segment against native collision geometry.
 
 - Give native Cave completion tests a bounded allowance for distinct room/choice progress, while retaining quiet-time failure, an absolute cap and all native completion assertions.

@@ -12910,6 +12910,9 @@
     if (character.ctype === "merchant") return;
     if (typeof lastDeathInfo !== "undefined" && lastDeathInfo) root.__partyRecoveredDeathAt = parent.__partyRecoveredDeathAt = lastDeathInfo.at;
     if (combatRecoveryActive()) return;
+    // A delayed respawn fallback must not retire a journey admitted meanwhile.
+    // Explicit reunion commands retain their existing ownership handoff.
+    if (!command && (partyConvoyActive || convoyTraveling || root.__partySharedWalking)) return;
     if (farmingTravelToken) farmingTravelToken.cancelled = true;
     reunion = root.__partyReunion = { id: character.name + "-" + Date.now(),
       revision: navigationIntent.revision, phase: "waiting", retryAt: 0,

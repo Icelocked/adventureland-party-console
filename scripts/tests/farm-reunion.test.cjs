@@ -96,6 +96,10 @@ test('convoy or anniversary ownership prevents reunion travel', async () => {
   assert.equal(calls.some(call => call.destination || call.data), false);
   assert.equal(r.reunion.phase, 'waiting-for-movement-owner');
 });
+for(const owner of ['partyConvoyActive','convoyTraveling','shared-walk'])test('delayed respawn fallback preserves '+owner,()=>{
+ const {r,calls}=runtime();if(owner==='shared-walk')r.root.__partySharedWalking={activity:'hunt'};else r[owner]=owner==='partyConvoyActive'?true:{id:'new-owned-hunt',phase:'preparing-route'};
+ r.beginFarmReunion();assert.equal(calls.includes('stop'),false);assert.equal(r.reunion,null);
+});
 test('mage never Blinks across maps and walks when mana is insufficient', async () => {
   const { r, calls } = runtime();
   r.character.ctype = 'mage'; r.character.mp = 0; r.partyPositions[0].ctype = 'warrior';
