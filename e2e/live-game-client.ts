@@ -1,5 +1,6 @@
 import type { BrowserContext, Page, Frame } from '@playwright/test';
 import {randomUUID} from 'node:crypto';
+import {installCompanionGraphicsDiagnostic} from './native-graphics-diagnostic';
 
 export interface LiveClientOptions {
   webUrl: string;
@@ -25,6 +26,7 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
     if (!['127.0.0.1', 'localhost'].includes(new URL(address).hostname)) throw new Error('Live E2E requires loopback services');
   }
   const page = options.primary?.page || await context.newPage();
+  if(!options.primary)await installCompanionGraphicsDiagnostic(context,options,process.env.E2E_COMPANION_NO_GRAPHICS==='1');
   const errors: string[] = options.primary?.errors || [];
   let native: Frame;
   if (options.primary) {

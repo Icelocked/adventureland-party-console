@@ -772,6 +772,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   // Capture the same polled observations: a final expired visit cannot show
   // whether native BFS, route publication, or a follower gate stalled first.
   const requiredPlanning:any[]=[];
+  let requiredCompleted=false;
   try{
   await expect.poll(async()=>{
     const v=await dungeon();
@@ -803,8 +804,19 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   // Random floors can require several long trips with native combat along the
   // corridors. Allow the final vote's acknowledged result to reach telemetry.
   },{timeout:300_000,message:'Required rooms must finish through native combat and votes'}).toBe(true);
+  requiredCompleted=true;
   }finally{
     await info.attach('native-cave-required-planning',{body:JSON.stringify(requiredPlanning),contentType:'application/json'});
+    if(!requiredCompleted){
+      const geometry=await Promise.allSettled(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].run(`(()=>{
+        const m=globalThis.__partyMovement,p=parent,c=character;
+        return {name:c.name,map:c.map,in:c.in,base:c.base,position:{x:c.real_x,y:c.real_y},
+          identity:m?.identity,planning:m?.nativePlanning?.(),movement:m?.last?.(),
+          cave:c.cave?{run:c.cave.run,floor:c.cave.floor}:null,
+          geometry:p.G.geometry[c.map],mapData:p.G.maps[c.map]};
+      })()`)));
+      await info.attach('native-cave-required-geometry',{body:JSON.stringify(geometry),contentType:'application/json'});
+    }
   }
   console.log('[Cave verified] Required native rooms completed');
   const stairs=(await dungeon()).members[0].observation.cave.points.find((p:any)=>p.down);
