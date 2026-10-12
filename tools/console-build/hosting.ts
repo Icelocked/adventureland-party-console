@@ -21,8 +21,9 @@ interface PublicState{characters?:Record<string,CharacterReport>}
 const fresh=(report:CharacterReport)=>report.connected!==false&&Number.isFinite(report.seenAt)&&Date.now()-Number(report.seenAt)<=5000&&Number(report.seenAt)<=Date.now()+1000;
 async function installHooks(app:string,root:string,signal:AbortSignal):Promise<void>{
   signal.throwIfAborted();
+  const prepared=await readJson<{schema:number}>(path.join(app,'.caracal/prepared-runtime.json'));
   await new Promise<void>((resolve,reject)=>{
-    const child=spawn(process.execPath,[path.join(app,'tools/caracal/install.mts'),path.join(root,'.caracal'),'--stage-dir',path.join(root,'.build/console/install-staging'),'--artifact-native',path.join(app,'.caracal')],{cwd:app,env:process.env,stdio:'inherit',windowsHide:true,signal});
+    const child=spawn(process.execPath,[path.join(app,'tools/caracal/install.mts'),path.join(root,'.caracal'),'--stage-dir',path.join(root,'.build/console/install-staging'),'--artifact-native',path.join(app,'.caracal'),...(prepared?.schema===1?['--prepared-native']:[])],{cwd:app,env:process.env,stdio:'inherit',windowsHide:true,signal});
     child.once('error',reject);child.once('exit',code=>code===0?resolve():reject(new Error('Managed native hook installation failed')));
   });
 }

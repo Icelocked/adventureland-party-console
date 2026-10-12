@@ -13,6 +13,9 @@ const stage = path.join(stageOption>=0?path.resolve(process.argv[stageOption+1])
 const artifactOption=process.argv.indexOf('--artifact-native');
 if(artifactOption>=0&&!process.argv[artifactOption+1])throw new Error('Provide --artifact-native directory');
 const artifactNative=artifactOption>=0?path.resolve(process.argv[artifactOption+1]):undefined;
+const preparedNative=process.argv.includes('--prepared-native');
+if(preparedNative&&!artifactNative)throw new Error('Prepared installation requires a verified native artifact');
+if(preparedNative&&JSON.parse(await readFile(path.join(artifactNative!, 'prepared-runtime.json'),'utf8')).schema!==1)throw new Error('Unsupported prepared native runtime');
 const files = ["src/CharacterThread.js", "src/ConfigUtil.js", "standalones/CharacterCoordinator.js", "game_files.js"];
 const nativeRootFiles=['account_info.js','game_files.js','html_vars.js','ipcStorage.js','main.js','monitoring_util.js'];
 function nativeIncluded(relative:string,name:string,directory:boolean):boolean{
@@ -33,7 +36,8 @@ async function nativeFiles(directory:string,relative=''):Promise<string[]>{
   }
   return result;
 }
-if(artifactNative)for(const file of await nativeFiles(artifactNative))if(!files.includes(file))files.push(file);
+// A prepared marker covers the entire native executable tree, not only hooks.
+for(const file of await nativeFiles(artifactNative||target))if(!files.includes(file))files.push(file);
 const originals = new Map<string, string|null>();
 async function cleanupStage():Promise<void>{
   const parent=stageOption>=0?path.resolve(process.argv[stageOption+1]):path.resolve(root,'.build/caracal-upgrades');
@@ -67,7 +71,7 @@ async function run(args: string[]): Promise<void> {
 }
 // The coordinator is replaced wholesale by the maintained launcher. Only the
 // separate character runner still needs an upstream compatibility transform.
-await run([path.join(root, "tools/caracal/upgrade-runner.mts"), stage]);
+if(!preparedNative)await run([path.join(root, "tools/caracal/upgrade-runner.mts"), stage]);
 // Setup builds the runtime after installation; start-console builds it before
 // starting the supervisor. Installation itself never executes the application.
 const launcher = await readFile(path.join(root, "tools/caracal/CharacterCoordinator.cjs"), "utf8");
@@ -75,7 +79,7 @@ if (!isCoordinatorApplicationLauncher(launcher)) throw new Error("Invalid coordi
 await writeFile(path.join(stage, "standalones/CharacterCoordinator.js"), launcher);
 await writeFile(path.join(stage, "game_files.js"),
   'module.exports = require(process.env.AL_CONSOLE_ARTIFACT ? require("node:path").join(process.env.AL_CONSOLE_ARTIFACT, "scripts/client-files.cjs") : "../scripts/client-files.cjs");\n');
-for (const file of files) if(/\.[cm]?js$/.test(file))await run(["--check", path.join(stage, file)]);
+if(!preparedNative)for (const file of files) if(/\.[cm]?js$/.test(file))await run(["--check", path.join(stage, file)]);
 for (const file of files)
   if ((await readFile(path.join(target, file), "utf8").catch((error:NodeJS.ErrnoException)=>{if(error.code==='ENOENT')return null;throw error;})) !== originals.get(file))
     throw new Error("caracAL changed while preparing the upgrade; no hooks installed");
@@ -92,6 +96,7 @@ for (const file of files) {
   await rename(temporary, destination);
 }
 console.log("Validated character runner and TypeScript coordinator launcher installed.");
+if(!artifactNative)await writeFile(path.join(target,'prepared-runtime.json'),JSON.stringify({schema:1}));
 }finally{
   await cleanupStage();
 }

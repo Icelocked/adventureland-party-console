@@ -63,14 +63,15 @@ export class ConsoleBuildController {
     let activated=false,previous:Candidate|undefined;
     const waiting=new AbortController();this.safeWait=waiting;
     try{
-      await this.driver.beginMaintenance?.(operation,this.safeWait.signal);
-      await this.store.setJournal(operation);
       const dependencies=new Set<string>();
       const target=await this.store.verify(operation.target,dependencies);
       previous=operation.previous?await this.store.verify(operation.previous,dependencies):undefined;
       operation.changed=(['dashboard','coordinator','characters'] as const).filter(c=>target.manifest.components[c]!==previous?.manifest.components[c]);
       await this.store.setJournal(operation);
       await this.driver.prepare?.(target,previous,operation,this.safeWait.signal);
+      // Prepare the candidate without interrupting the selected running build.
+      await this.driver.beginMaintenance?.(operation,this.safeWait.signal);
+      await this.store.setJournal(operation);
       if(operation.mode==='safe'||operation.mode==='main'){
         await this.phase(operation,operation.mode==='main'?'moving-main':'waiting-safe');
         await this.driver.waitUntilSafe!(operation.id,this.safeWait.signal,operation.mode);

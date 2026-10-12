@@ -9,8 +9,11 @@ journeys in docs/testing-market-preferences.md and retain screenshots and saved
 preference ledgers. Build the candidate; activation remains an explicit user action.
 
 Console deployment accepts and journals an operation before expensive verification.
-A renewable host lease fences new pulls immediately and captures actual engaged
-combat targets. The hold survives CODE replacement until coordinator, dashboard
+Verification, dashboard prewarming and CODE staging finish before gameplay is held.
+The builder publishes a transformed, syntax-validated native runtime marker;
+activation installs those verified executables without repeating syntax subprocesses.
+Older artifacts retain the full installer fallback. A renewable host lease then
+fences new pulls and captures actual engaged combat targets. The hold survives CODE replacement until coordinator, dashboard
 and every required client acknowledge readiness. Main mode saves fighter
 checkpoints and waits for Town arrival; the merchant continues until the final
 atomic-operation hold. Cave permits immediate loading only. Progress survives

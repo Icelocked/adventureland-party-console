@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Prepare console artifacts before pausing gameplay and publish prevalidated coordinator runtime files, reducing deployment interruptions while preserving readiness checks and rollback.
+
 Changes queued for the next release. The release workflow determines its version
 from the commits merged into `main`.
 
