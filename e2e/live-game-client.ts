@@ -175,11 +175,12 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
     async run(expression) {
       // Reacquire before evaluation; never replay a potentially mutating expression.
       const frame=await observe(async game=>{
-        const code=game.childFrames().find(candidate=>{
-          if(candidate.name()==='maincode')return true;
-          try{return new URL(candidate.url()).pathname==='/runner';}catch{return false;}
-        });
-        if(!code || !await code.evaluate(()=>!!(globalThis as any).sharedRoutine && !!(globalThis as any).partyRoleRunner))
+        // The current native DOM owns CODE. A retired named /runner frame may
+        // remain discoverable during replacement, so resolve this exact iframe.
+        const element=await game.$('#maincode');
+        let code:Frame|null=null;
+        try{code=await element?.contentFrame()??null;}finally{await element?.dispose();}
+        if(!code || code.isDetached() || !await code.evaluate(()=>!!(globalThis as any).sharedRoutine && !!(globalThis as any).partyRoleRunner))
           throw Error(`Native CODE runner missing for ${options.name}`);
         return code;
       });

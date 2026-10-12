@@ -93,17 +93,37 @@ export function createEventReturns(state: EventReturnState, ports: EventReturnPo
   }
 
   function startFrankyExitConvoy(recovery: EventRecovery): boolean {
-    if (recovery.event !== "franky" || recovery.exitSuspended) return false;
+    if (!frankyExitOwned(recovery)) return false;
     const existing = ports.convoy();
     if (existing) {
       if (existing.id !== recovery.exitConvoyId || existing.phase !== "failed") return false;
+      if (existing.failureCode === 'owner-lost') return false;
+      captureFailedExitTown(recovery, existing);
       ports.cancelConvoy();
     }
     const participants = exitParticipants(recovery);
     if (!participants.length || !ports.startExit(participants)) return false;
-    recovery.exitConvoyId = ports.convoy()?.id;
+    const next = ports.convoy();
+    applyExitTownFallback(recovery, next, participants);
+    recovery.exitConvoyId = next?.id;
     ports.persist();
     return true;
+  }
+  function frankyExitOwned(recovery: EventRecovery): boolean {
+    return state.current === recovery && recovery.event === 'franky' && !recovery.exitSuspended;
+  }
+  function captureFailedExitTown(recovery: EventRecovery, existing: ReturnConvoy): void {
+    if (existing.purpose === 'franky-exit' &&
+        ['town-unavailable','town-interrupted'].includes(existing.failureCode || '') &&
+        existing.participants.every(name => recovery.pending.includes(name)))
+      recovery.exitTownFallback = { cycleId: recovery.cycleId, participants: [...existing.participants] };
+  }
+  function applyExitTownFallback(recovery: EventRecovery, next: ReturnConvoy | null, participants: string[]): void {
+    const fallback = recovery.exitTownFallback;
+    if (next?.purpose === 'franky-exit' && fallback?.cycleId === recovery.cycleId &&
+        participants.every(name => fallback.participants.includes(name))) {
+      next.townFirst = false; next.disableTown = true;
+    }
   }
 
   function issueInitialTown(name: string, recovery: EventRecovery): void {

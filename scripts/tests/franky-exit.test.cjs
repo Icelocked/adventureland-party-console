@@ -37,6 +37,15 @@ test('failed exit rebuilds using remaining remote participants',()=>{
   assert.notEqual(party.activeConvoy.id,first);
   assert.deepEqual(Array.from(party.activeConvoy.participants),['C']);
 });
+for(const code of ['town-unavailable','town-interrupted','communication-timeout','owner-lost'])test('Franky retry distinguishes '+code+' within its owned cycle',()=>{
+ const {context,party,recovery}=fixture();context.startFrankyExitConvoy(recovery);
+ Object.assign(party.activeConvoy,{phase:'failed',failureCode:code});
+ context.startFrankyExitConvoy(recovery);
+ const walking=['town-unavailable','town-interrupted'].includes(code);
+ assert.equal(!!party.activeConvoy.disableTown,walking);assert.equal(party.activeConvoy.townFirst,!walking);
+ recovery.exitTownFallback={cycleId:'old-cycle',participants:['B','C']};party.activeConvoy.phase='failed';party.activeConvoy.failureCode='communication-timeout';
+ context.startFrankyExitConvoy(recovery);assert.equal(!!party.activeConvoy.disableTown,false);
+});
 test('legacy exit completion queues Town for that member before the rest arrive',()=>{
   const {context,party,recovery}=fixture(); context.startFrankyExitConvoy(recovery);
   party.activeConvoy.routeProtocol=2;

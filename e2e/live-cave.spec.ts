@@ -898,8 +898,51 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   await acceptRoom(stairs);
   let answeredFarewell=false;
   const stairReplies:{id:string;title:string;option:string}[]=[];
+  const stairSamples:any[]=[];
+  let lastStairKey='';
+  let blockedStairAt=0,blockedStairId='';
+  const stairNativeReads:Promise<unknown>[]=[];
+  const captureBlockedStairs=(v:any)=>{
+    const t=v.state.travel,id=t?`${v.state.run}:${t.serial}:${t.target.id}`:'';
+    if(!id){blockedStairAt=0;blockedStairId='';return;}
+    if(id!==blockedStairId){blockedStairId=id;blockedStairAt=Date.now();}
+    if(stairNativeReads.length>=3||Date.now()-blockedStairAt<(stairNativeReads.length+1)*20000)return;
+    stairNativeReads.push(Promise.allSettled(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].run(`(()=>{
+      const c=character,p=parent.character,now=Date.now();
+      const body=o=>o?{name:o.name,map:o.map,in:o.in,x:o.x,y:o.y,real_x:o.real_x,real_y:o.real_y,
+        hp:o.hp,rip:o.rip,moving:o.moving,base:o.base,width:o.width,height:o.height,
+        cave:o.cave?{run:o.cave.run,floor:o.cave.floor,paused:o.cave.paused}:null}:null;
+      const near=o=>Math.hypot((o.real_x??o.x)-c.x,(o.real_y??o.y)-c.y)<=500;
+      return {at:now,code:body(c),parent:body(p),connected:parent.socket?.connected,
+        codeActive:parent.code_active,runtimeGeneration:globalThis.__partyRuntimeGeneration,
+        statusAt:globalThis.__partyStatusSuccessAt,
+        entities:Object.values(parent.entities||{}).filter(near).slice(0,30).map(o=>({...body(o),
+          id:o.id,mtype:o.mtype,type:o.type,target:o.target,dead:o.dead,visible:o.visible,side:o.cave?.side})),
+        chests:Object.entries(parent.chests||{}).filter(([id,o])=>near(o)).slice(0,20).map(([id,o])=>({
+          id,map:o.map,in:o.in,x:o.x,y:o.y,deleted:o.to_delete,owner:o.owner,opened:o.opened,skin:o.skin}))};
+    })()`))));
+  };
+  const recordStairs=(v:any)=>{
+    const at=Date.now(),state=v.state;
+    const sample={at,phase:state.phase,run:state.run,error:state.error,travel:state.travel,
+      members:v.members.map((m:any)=>({name:m.name,fresh:m.fresh,expected:state.commands[m.name],
+        observationAt:m.observation?.at,alive:m.observation?.alive,ready:m.observation?.ready,
+        travel:m.observation?.travel,receipt:m.observation?.action,
+        cave:m.observation?.cave?{run:m.observation.cave.run,floor:m.observation.cave.floor,
+          paused:m.observation.cave.paused,remainingMs:m.observation.cave.remainingMs,
+          choice:m.observation.cave.choice?{id:m.observation.cave.choice.id,
+            resolved:m.observation.cave.choice.resolved,votes:m.observation.cave.choice.votes}:null}:null}))};
+    const key=JSON.stringify({...sample,at:undefined,members:sample.members.map((m:any)=>({...m,
+      observationAt:undefined,cave:m.cave?{...m.cave,remainingMs:undefined}:null}))});
+    const transition=key!==lastStairKey;lastStairKey=key;
+    if(transition||stairSamples.length<5)stairSamples.push({...sample,transition});
+    else if(stairSamples.at(-1)?.transition)stairSamples.push({...sample,transition:false});
+    else stairSamples[stairSamples.length-1]={...sample,transition:false};
+    if(stairSamples.length>100)stairSamples.splice(5,1);
+  };
   const advanceStairs=async()=>{
     const v=await dungeon(),c=v.members[0].observation.cave;
+    recordStairs(v);
     if(v.members.every((m:any)=>m.observation?.cave?.floor===1))return true;
     if(c?.choice&&!c.choice.resolved&&!stairReplies.some(r=>r.id===c.choice.id)){
       const reply=c.choice.options.find((o:any)=>!o.unavailable&&!o.cost&&!o.amber);
@@ -924,8 +967,14 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
       m.observation.cave.choice.id!==farewell.id||m.observation.cave.choice.resolved)),
     {timeout:30_000,message:'Both native farewell votes must acknowledge before continuation'}).toBe(true);
   await info.attach('native-cave-farewell-acknowledgement',{body:JSON.stringify({farewell,dungeon:await dungeon()}),contentType:'application/json'});
-  await expect.poll(advanceStairs,
-    {timeout:300_000,message:'Manual stairs must continue after the farewell vote and transport both members'}).toBe(true);
+  try{
+    await expect.poll(async()=>{const completed=await advanceStairs();const latest=stairSamples.at(-1);
+      if(latest)captureBlockedStairs({state:{phase:latest.phase,run:latest.run,travel:latest.travel}});return completed;},
+      {timeout:300_000,message:'Manual stairs must continue after the farewell vote and transport both members'}).toBe(true);
+  }finally{
+    await info.attach('native-cave-stairs-readiness',{body:JSON.stringify({samples:stairSamples,native:await Promise.allSettled(stairNativeReads),
+      unavailable:['Coordinator status position/seenAt and CODE loading/socket ownership are not exposed by this dungeon response.']}),contentType:'application/json'});
+  }
   expect(answeredFarewell).toBe(true);
   console.log('[Cave verified] Both characters reached the next native floor');
   await info.attach('native-cave-floor-transition',{body:JSON.stringify({stairReplies,dungeon:await dungeon(),state:await live.state()}),contentType:'application/json'});

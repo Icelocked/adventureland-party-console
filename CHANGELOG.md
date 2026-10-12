@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- After a confirmed failed Town shortcut during Franky evacuation, retry walking within that return cycle instead of repeatedly attempting Town.
+
 - Repair short terrain-blocked walking segments on future maps with native-certified local connectors, avoiding full cross-map replanning during event returns.
 
 - Reconsider Town during owned event and Hunt returns when it becomes safe again, instead of reusing a long walking route selected while Town was unavailable.
