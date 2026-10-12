@@ -260,6 +260,12 @@ while capacity blocks work; logistics shows enabled modes as red BLOCKED rows.
 Validate the capacity console and native gathering E2Es. Activate character and
 coordinator assets together through the supported full restart.
 
+The game starts the fishing/mining reuse cooldown only on a successful channel
+(10% fishing, 20% mining); a miss costs MP only. The merchant recasts after a
+miss and records the game's own cooldown (`next_skill`) after a success (#105).
+Validate `live-gathering-cooldown.spec.ts` (failure inventory
+`e2e/gathering-cooldown-failures.md`); activate through the full restart.
+
 Native splash packets from a visible monster fighting an identified outsider
 do not repeatedly stop owned party travel. Direct hits and unknown or party
 targets retain defense safety. Validate native Targetron collateral and direct

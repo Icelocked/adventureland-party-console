@@ -9286,6 +9286,24 @@
     return totals;
   }
 
+  /** Whether a finished channel succeeded. Current clients resolve the cast with `found`; older
+   *  ones resolve when the channel starts, so wait for it to end and read the game's cooldown,
+   *  which the server starts (skill_timeout) only on a success. */
+  async function gatheringOutcome(mode, result, castAt, current) {
+    if (result && typeof result.found === "boolean") return result.found;
+    var wait = function (ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); };
+    var channelling = function () { return !!(character.c && character.c[mode]); };
+    var appear = Date.now() + 1500;
+    while (!channelling() && Date.now() < appear && serverCooldownUntil(mode) <= castAt) {
+      await wait(100); if (current && !current()) return false;
+    }
+    var end = castAt + (Number(G.skills[mode] && G.skills[mode].duration_max) || 15000) + 5000;
+    while (channelling() && Date.now() < end) { await wait(200); if (current && !current()) return false; }
+    var settle = Date.now() + 1500;
+    while (serverCooldownUntil(mode) <= Date.now() && Date.now() < settle) { await wait(100); if (current && !current()) return false; }
+    return serverCooldownUntil(mode) > Date.now();
+  }
+
   async function reportGatheringResult(mode, before, result, current) {
     var fishing = mode === "fishing";
     if (result && result.found === false) {
@@ -9702,13 +9720,20 @@
         var beforeGathering = gatheringInventoryTotals();
         gatheringStatus(mode === "fishing" ? "Fishing…" : "Mining…", "info");
         attempt.phase = "casting";
+        var castAt = Date.now();
         var gatheringResult = await use_skill(mode);
         if (!current()) return;
-        await reportGatheringResult(mode, beforeGathering, gatheringResult, current);
+        var caught = await gatheringOutcome(mode, gatheringResult, castAt, current);
         if (!current()) return;
-        session.cooldownUntil = Date.now() + (Number(G.skills[mode] && G.skills[mode].reuse_cooldown) || 0);
+        await reportGatheringResult(mode, beforeGathering, { found: caught }, current);
+        if (!current()) return;
+        // The server starts the reuse cooldown (skill_timeout) only on a success; a miss
+        // costs MP only and can be cast again at once.
+        var serverCooldown = serverCooldownUntil(mode);
+        session.cooldownUntil = !caught ? 0 : serverCooldown > Date.now() ? serverCooldown :
+          Date.now() + (Number(G.skills[mode] && G.skills[mode].reuse_cooldown) || 0);
         gatheringCooldowns[mode] = session.cooldownUntil;
-        attempt.phase = "cooldown";
+        attempt.phase = caught ? "cooldown" : "recast";
         if (freeInventorySlots() < 3 && generation === root.__merchantGatheringGeneration) {
           await depositGatheringGains(session, current);
           if (current()) await smart_move(destination);
