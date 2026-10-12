@@ -142,8 +142,10 @@ export function createSharedWalks(input: unknown, ports: WalkPorts) {
     boss: NonNullable<typeof s.eventCombatSighting>): boolean {
     return boss.map === s.map && boss.map === r.destination.map &&
       String(boss.in) === String(s.in ?? s.map) &&
-      String(boss.in) === String(r.destination.in ?? r.destination.map) &&
-      distance(boss, r.destination) <= 100;
+      // Destination coordinates can remain the advertised spawn while this
+      // actively fought boss moves. Do not recall its attending fighter merely
+      // to assemble a respawned member's walking route.
+      String(boss.in) === String(r.destination.in ?? r.destination.map);
   }
   function pending(r: WalkRequest): WalkRequest[] {
     return [...requests.values()].filter(other => !other.complete && !other.failed && !other.convoyId &&

@@ -221,7 +221,12 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
         if(!before.disabled){
           expect(before.error,'Add activation may not retry an unrelated rendered error').toBe(false);
           try {
-            await fullMap.getByRole('button',{name:'Add waypoint',exact:true}).click({timeout:10_000});
+            const addWaypoint=fullMap.getByRole('button',{name:'Add waypoint',exact:true});
+            // The native freshness gate can close between the snapshot and
+            // input. Give readiness its own bounded wait, then dispatch input.
+            await expect(addWaypoint).toBeEnabled({timeout:10_000});
+            expect((await snapshot()).error,'Freshness readiness must not hide a rendered error').toBe(false);
+            await addWaypoint.click({timeout:10_000});
           } catch (error) {
             // A fresh native shop update may reopen its completed result
             // after Close. Only that observed modal obstruction is retryable.
@@ -843,7 +848,9 @@ test('Cave shared-route pacing keeps the party together and stops the selected r
     const w=(document.getElementById('maincode') as HTMLIFrameElement).contentWindow as any;
     return !!w.__partyMovement.state.moving;
   }),{timeout:10_000}).toBe(false);
-  await page.goto(live.url);
+  const dashboardReady=page.waitForResponse(response=>response.request().method()==='GET'&&
+    new URL(response.url()).pathname==='/party-api/daily-dungeons'&&response.ok(),{timeout:60_000});
+  await Promise.all([dashboardReady,page.goto(live.url)]);
   // Walking can reveal a fresh encounter even after travel is stopped. Its
   // native modal correctly hides background controls until the party answers.
   await reply(await view());

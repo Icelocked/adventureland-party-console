@@ -22,11 +22,13 @@ function combatAttendanceFixture(extra={}) {
  return t;
 }
 test('a recovering event walker leaves fresh current boss combat attendees in place',()=>{
- const t=combatAttendanceFixture();t.walks.submit(t.body('L'));assert.equal(t.starts(),1);
- assert.deepEqual(t.state.activeConvoy.participants,['L']);
+ for(const extra of [{},{x:1000,y:-800}]){
+  const t=combatAttendanceFixture(extra);t.walks.submit(t.body('L'));assert.equal(t.starts(),1);
+  assert.deepEqual(t.state.activeConvoy.participants,['L']);
+ }
 });
 test('staging and invalid boss evidence cannot remove an expected event walker',()=>{
- for(const extra of [{observedAt:-3001},{observedAt:2001},{in:'other-instance'},{map:'main'},{mtype:'snowman'},{id:''},{x:1000}]) {
+ for(const extra of [{observedAt:-3001},{observedAt:2001},{in:'other-instance'},{map:'main'},{mtype:'snowman'},{id:''},{attackReachable:false}]) {
   const t=combatAttendanceFixture(extra);t.walks.submit(t.body('L'));assert.equal(t.starts(),0,JSON.stringify(extra));
  }
  const t=combatAttendanceFixture();delete t.state.statuses.F.eventCombatSighting;

@@ -25,7 +25,10 @@ test('three delayed native departure signals preserve walking recovery budget an
           const receipt={epoch,deadline,startedAt:now(),endedAt:0};receipts.push(receipt);
           while(now()<deadline+2000){}
           receipt.endedAt=now();
-        },Math.max(0,deadline-now()-100));
+        // A hidden native frame may dispatch timers a second late. Begin while
+        // the scheduled deadline is still ahead, rather than relying on 100ms
+        // timer precision; the receipt still proves a real cross-deadline stall.
+        },0);
       })()`);
       fault.forwardedAt = Date.now();
     }

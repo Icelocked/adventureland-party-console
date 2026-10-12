@@ -1,0 +1,5 @@
+# Event reentry while an attending boss moves
+
+Failure inventory recorded before changing shared-walk membership. Native Pumpkin boss 558 moved to (200,-176); the Priest remained actively fighting it with fresh attack-reachable sighting. The respawned Warrior waited on Main for a shared walking rendezvous. Existing attendee exclusion required the boss to remain within100 of the request destination, which is the advertised initial spawn. A moving boss made the Priest an expected walker, but its fight correctly produced no walking request.
+
+Exclude a peer already fighting the exact event boss on the requested map/instance using fresh attendee and attack-reachable boss evidence, regardless of distance from initial spawn. Preserve realm, runtime intent, freshness, instance and event checks. Risks: stale sightings exclude needed walkers; another map/instance excludes them; a passive spectator suppresses rendezvous; respawned requester excludes itself; event deselection or replaced spawn must still cancel. Existing native Pumpkin death/reentry and event handoff cases provide actual post-death attack/arrival evidence.

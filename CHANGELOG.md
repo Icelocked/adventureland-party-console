@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Let respawning event fighters rejoin a roaming boss without recalling allies already actively fighting it at its new position.
+
 - Preserve native Steam companion launch flags and CODE slots across realm navigation so saved merchant work can resume.
 - Record combat-recovery latency inside native clients and wait for discovered monster catalogs before configuring native hunt scenarios.
 
