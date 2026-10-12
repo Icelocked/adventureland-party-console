@@ -140,7 +140,8 @@ for (const encounter of [{id:'mrgreen',add:'greenjr',drop:'ashleaf',map:'spookyt
       const observedHits=new Map<string,any>();
       const attacks:any[]=[];
       let scenarioError:unknown;
-      for(const name of fighters)await live.clients[name].frame.evaluate(()=>{
+      const attackOwners=fighters.map(name=>({name,frame:live.clients[name].frame,token:`${name}:${Date.now()}:${Math.random()}`}));
+      for(const owner of attackOwners)await owner.frame.evaluate(token=>{
         const game=window as any,socket=game.socket,emit=socket.emit;
         game.__e2eHalloweenAttacks=[];
         socket.emit=function(event:string,...args:any[]){
@@ -151,7 +152,8 @@ for (const encounter of [{id:'mrgreen',add:'greenjr',drop:'ashleaf',map:'spookyt
           return emit.apply(socket,[event,...args]);
         };
         game.__e2eHalloweenRestoreAttack=()=>{socket.emit=emit;};
-      });
+        game.__e2eHalloweenAttackOwner=token;
+      },owner.token);
       const before=await live.admin(`output=${JSON.stringify(fighters)}.map(name=>({name,items:get_player(name).items}))`);
       await live.admin(`output=(()=>{
         globalThis.__e2eThresholdAdds=[];
@@ -205,8 +207,20 @@ for (const encounter of [{id:'mrgreen',add:'greenjr',drop:'ashleaf',map:'spookyt
         await cleanup('capture final native threshold evidence',async()=>info.attach('native-threshold-observer-final',{body:JSON.stringify({ledgers,attacks,hits:[...observedHits.values()],
           native:await live.admin(`output={adds:globalThis.__e2eThresholdAdds,players:${JSON.stringify(fighters)}.map(name=>{const p=get_player(name);return p?{name,present:true,map:p.map,x:p.x,y:p.y,rip:p.rip}:{name,present:false}})}`),
           state:await live.state()}),contentType:'application/json'}));
-        for(const name of fighters)await cleanup('restore native attack observer '+name,()=>live.clients[name].run(
-          '(()=>{parent.__e2eHalloweenRestoreAttack?.();delete parent.__e2eHalloweenRestoreAttack;})()'));
+        for(const owner of attackOwners)await cleanup('restore native attack observer '+owner.name,async()=>{
+          const before={name:owner.name,originalUrl:owner.frame.url(),detached:owner.frame.isDetached(),currentUrls:live.clients[owner.name].page.frames().map(frame=>frame.url())};
+          let outcome:unknown={retired:'detached'};
+          if(!before.detached)try{
+            outcome=await owner.frame.evaluate(token=>{
+              const game=window as any;
+              if(game.__e2eHalloweenAttackOwner!==token)return {retired:'document replaced'};
+              if(typeof game.__e2eHalloweenRestoreAttack!=='function')throw Error('Owned native attack restore hook missing');
+              game.__e2eHalloweenRestoreAttack();delete game.__e2eHalloweenRestoreAttack;delete game.__e2eHalloweenAttackOwner;
+              return {restored:true};
+            },owner.token);
+          }catch(error){if(!owner.frame.isDetached())throw error;outcome={retired:'detached during cleanup'};}
+          await info.attach('native-attack-observer-owner-'+owner.name,{body:JSON.stringify({...before,outcome}),contentType:'application/json'});
+        });
         await cleanup('restore native add spawner',()=>live.admin(`if(globalThis.__e2eAddSpawner){new_monster=globalThis.__e2eAddSpawner;delete globalThis.__e2eAddSpawner;}output=true`));
         await cleanup('deselect native event',()=>live.post('/formation',{character:W,eventSelections:[]}));
         if(cleanupErrors.length){

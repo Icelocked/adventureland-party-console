@@ -685,6 +685,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
             movementPaused:!!w.__partyMovementPaused,dungeonCanMove:w.__partyDungeonRuntime?.canMove(),
             nativePlanning:w.__partyMovement?.nativePlanning?.(),schedulerGate:!!w.__partyMovement?.gate?.owner,
             nativeMoving:!!c.moving,transporting:!!p.transporting,cavePaused:!!c.cave?.paused,
+            nativeGraphics:{noGraphics:!!p.no_graphics,noHtml:p.no_html},
             ready:w.__partyDungeonRuntime?.report().ready,
             smart:{searching:s.searching,found:s.found,moving:s.moving,x:s.x,y:s.y,map:s.map,start_x:s.start_x,start_y:s.start_y},
             bfs:{length:q.length,index,best:w.best,current:q[index],last:q[q.length-1]},
@@ -812,6 +813,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
         const m=globalThis.__partyMovement,p=parent,c=character;
         return {name:c.name,map:c.map,in:c.in,base:c.base,position:{x:c.real_x,y:c.real_y},
           identity:m?.identity,planning:m?.nativePlanning?.(),movement:m?.last?.(),
+          nativeGraphics:{noGraphics:!!p.no_graphics,noHtml:p.no_html},
           cave:c.cave?{run:c.cave.run,floor:c.cave.floor}:null,
           geometry:p.G.geometry[c.map],mapData:p.G.maps[c.map]};
       })()`)));
