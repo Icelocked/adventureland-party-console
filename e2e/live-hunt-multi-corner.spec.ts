@@ -29,7 +29,12 @@ for(const primaryClass of ['warrior','mage'] as const){
               target.movedAt=Date.now();};
           state.timer=setInterval(observe,25);globalThis.__e2eCombatRecoveryTiming=state;observe();return true;
         })()`)));
-        seed=await live.admin(`output=(()=>{const original=G.monsters.prat;globalThis.__multiCornerOriginal=original;G.monsters.prat={...original,speed:0,charge:0,hp:10000000};const m=new_monster('level1',{type:'prat',count:1,position:[-11,115],radius:0},{temp:1});m.speed=0;m.charge=0;m.hp=m.max_hp=10000000;return {id:String(m.id),x:m.x,y:m.y,at:Date.now()};})()`);
+        seed=await live.admin(`output=(()=>{const original=G.monsters.prat;globalThis.__multiCornerOriginal=original;G.monsters.prat={...original,stationary:true};const m=new_monster('level1',{type:'prat',count:1,position:[-11,115],radius:0},{temp:1});m.speed=0;m.moving=false;m.hp=m.max_hp=10000000;m.abs=true;m.u=true;m.cid++;return {id:String(m.id),x:m.x,y:m.y,at:Date.now(),wire:monster_to_client(m)};})()`);
+        expect(seed.wire.speed).toBe(0);expect(seed.wire.hp).toBe(10000000);expect(seed.wire.max_hp).toBe(10000000);
+        await expect.poll(async()=>Promise.all([W,P].map(name=>live.clients[name].run(`(()=>{
+          const t=parent.entities[${JSON.stringify(seed.id)}];return !!t&&t.max_hp===10000000&&!t.moving&&
+            Math.hypot((t.real_x??t.x)-${seed.x},(t.real_y??t.y)-${seed.y})<1;
+        })()`))),{timeout:30000,message:'Both real clients must observe the declared stationary Prat wire overrides'}).toEqual([true,true]);
         await expect.poll(async()=>{
           for(const name of [W,P])samples.push(await live.clients[name].run(`(()=>{const p=globalThis.partyCombatPosition,d=p?.destination;return {name:character.name,at:Date.now(),x:character.real_x,y:character.real_y,routeState:globalThis.partyQueueClient?.formation?.approachStatus?.(),positioning:p,clear:d?can_move({map:character.map,x:character.real_x,y:character.real_y,going_x:d.x,going_y:d.y,base:character.base}):null};})()`));
           return Promise.all([W,P].map(async name=>(await live.clients[name].events()).some((e:any)=>e.event==='hit'&&String(e.data?.id)===seed.id&&e.data?.hid===name&&e.data?.damage>1)));

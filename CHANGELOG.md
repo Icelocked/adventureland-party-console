@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Verify explicit native combat fixture wire overrides and catalog projections, and acknowledge Cave entry freshness rejections without duplicating accepted entries.
+
 - Preserve authoritative event-return ownership through CODE replacement, keeping early finishers defensive and coalescing recently stale same-cycle exit peers within the existing request window.
 - Record actual native Hunt readiness and preferred-area arrival before combat drift during E2E validation.
 

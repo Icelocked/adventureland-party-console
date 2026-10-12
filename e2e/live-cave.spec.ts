@@ -27,8 +27,34 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   await page.getByRole('button', { name: 'Cave of Many Dreams settings' }).click();
   const settings = page.getByRole('dialog', { name: 'Cave of Many Dreams', exact: true });
   await expect(settings).toBeVisible();
-  await settings.getByRole('button', { name: 'Enter now' }).click();
-  await expect.poll(async () => (await dungeon()).state.phase, { timeout: 90_000 }).toBe('active');
+  const entryResponses:any[]=[];
+  let entryAccepted=false;
+  try{
+    await expect.poll(async()=>{
+      const view=await dungeon();
+      if(entryAccepted)return view.state.phase==='active';
+      expect(view.state.phase,'No unrelated dungeon operation may replace this native entry').toBe('idle');
+      expect(view.state.run).toBeUndefined();
+      const names=['E2EWarrior','E2EPriest'];
+      if(view.members.length!==2||!names.every(name=>{
+        const member=view.members.find((m:any)=>m.name===name),o=member?.observation;
+        return member?.fresh&&o?.ready&&o.alive&&o.supported&&o.protocol===1&&o.visit?.available&&!o.cave&&
+          o.leader==='E2EWarrior'&&o.members.length===2&&names.every(n=>o.members.includes(n));
+      }))return false;
+      const [response]=await Promise.all([page.waitForResponse(response=>response.request().method()==='POST'&&
+        new URL(response.url()).pathname==='/party-api/daily-dungeons'&&response.request().postDataJSON()?.action==='enter',
+        {timeout:20000}),settings.getByRole('button',{name:'Enter now',exact:true}).click()]);
+      const body=await response.json();
+      entryResponses.push({status:response.status(),body,operationId:response.request().postDataJSON()?.operationId});
+      if(response.status()===409&&/^E2E(?:Warrior|Priest): fresh dungeon-compatible runtime required$/.test(body.error))return false;
+      expect(response.status(),'Native entry may retry only its exact pre-mutation freshness rejection').toBe(200);
+      expect(body.state.participants.slice().sort()).toEqual(names.slice().sort());
+      entryAccepted=true;
+      return body.state.phase==='active';
+    },{timeout:90000,message:'A real UI entry must be accepted once and activate the native Cave'}).toBe(true);
+  }finally{
+    await info.attach('native-cave-entry-responses',{body:JSON.stringify(entryResponses),contentType:'application/json'});
+  }
   await info.attach('native-cave-entry', { body: JSON.stringify(await dungeon()), contentType: 'application/json' });
   await expect(settings).not.toBeVisible();
   const controls = page.getByRole('region', { name: 'Cave of Many Dreams controls' });
