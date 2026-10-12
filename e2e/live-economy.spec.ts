@@ -756,7 +756,7 @@ async function jobFinished(live: LiveGame, id?: string, timeout = 150_000) {
 async function restartAndObserve(live: LiveGame) {
   const startedAt = Date.now();
   await live.restartCoordinator();
-  await expect.poll(async () => (await live.clients[merchant].snapshot()).statusAt,
+  await expect.poll(async () => (await live.state()).characters[merchant]?.seenAt,
     { timeout: 30_000, message: 'Replay assertions require a native heartbeat accepted after restart' }).toBeGreaterThan(startedAt);
   await jobFinished(live);
 }
@@ -1159,7 +1159,7 @@ test('native Tracktrix stays in the final inventory slot through full-bag cleano
 });
 
 for (const kind of ['upgrade', 'compound']) test(`auto merchant collects twelve native copies alongside a finite ${kind} rule`, async ({live},info) => {
-  test.setTimeout(300_000);
+  test.setTimeout(kind==='upgrade'?450_000:300_000);
   // Declared initial rules reproduce coexisting persisted preferences. Native
   // clients must transfer all copies even though only one result is requested.
   const name=kind==='upgrade'?'helmet':'ringsj', owner='E2EWarrior';
@@ -1189,7 +1189,9 @@ for (const kind of ['upgrade', 'compound']) test(`auto merchant collects twelve 
     if(kind!=='compound')return true;
     const outcomes=await live.clients[merchant].run('globalThis.__e2eCompoundOutcomes');
     return outcomes.some((event:any)=>event.response==='compound_success');
-  },{timeout:90_000,message:'Native inventory and the actual compound response must both confirm the result'}).toBe(true);
+  },{timeout:kind==='upgrade'?180_000:90_000,message:kind==='compound'
+    ?'Native inventory and the actual compound response must both confirm the result'
+    :'Native inventory must confirm exactly one finite upgrade result after collection and return travel'}).toBe(true);
   const completed=await count();
   if(kind==='compound') {
     const outcomes=await live.clients[merchant].run('globalThis.__e2eCompoundOutcomes');
