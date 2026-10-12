@@ -338,6 +338,8 @@ for(const mode of ['default','scatter'])for(const stage of ['mission-travel','re
  for(const s of Object.values(r.party.statuses))s.farmingMonsterType='minimush';
  observeScatter(r.party,['W','M','P'],r.party.statuses,r.party.statuses.W,[],r.time(),r.controller().owns());
  const selected=coordinatorGroupedSnapshot(r.party,ports);assert.equal(selected.target.id,'rare');
+ assert.ok(r.party.groupedCombat.queueRevision,'selected production queue provides the native acknowledgement identity');
+ for(const s of Object.values(r.party.statuses))s.groupedCombat.queueAck=r.party.groupedCombat.queueRevision;
  r.controller().tick();r.advance(10001);r.controller().report('W',r.party.statuses.W);r.controller().tick();
  assert.equal(r.controller().encounter(),true,'selected rare must not hit the ten-second handoff timeout');
 });
