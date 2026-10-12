@@ -1,0 +1,3 @@
+# Gathering capacity native observation failure inventory
+
+0dab full shard7 job114924259275: the actual capacity block is rendered twice in dashboard, then read-only CODE blocked-reason inspection fails when merchant native page navigates, frame.evaluate Execution context was destroyed. Risks: permanently cached frame cannot recover; retrying mutation seeding can invalidate cooldown evidence; swallowing arbitrary script exceptions hides actual regressions. Existing reason observation should reacquire frame each poll and treat only known native navigation/context retirement as not-ready. Existing native cooldown, actual item capacity, rendered state and space-release assertions remain unchanged; no production change or deadline widening.

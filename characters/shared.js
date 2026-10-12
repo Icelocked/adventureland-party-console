@@ -15487,6 +15487,10 @@
     var gap=destination.map===character.map ? Math.hypot(character.x-destination.x,character.y-destination.y) : Infinity;
     if (!local || local.key!==localKey) local=farmApproach.local={key:localKey,at:now,gap:gap,point:null};
     if (gap<local.gap-8) {local.gap=gap;local.at=now;}
+    var formationApproach=root.partyQueueClient && root.partyQueueClient.formation;
+    var certifiedApproach=target && formationApproach && formationApproach.approachStatus &&
+      /^(planning|routing)$/.test(formationApproach.approachStatus());
+    if (certifiedApproach && now-local.at>=3000) return false;
     if (destination.map===character.map && now-local.at<3000) {
       if (!target) farmApproach.searchIndex=Math.max(0,farmApproach.searchIndex-1);
       if (local.point && Math.hypot(character.x-local.point.x,character.y-local.point.y)<8) local.point=null;
@@ -15498,6 +15502,7 @@
           if (can_move_to(point.x,point.y) && safeCombatPoint(point,target)) {local.point=point;break;}
         }
       }
+      if (!local.point && certifiedApproach) return false;
       if (local.point && can_move_to(local.point.x,local.point.y) && safeCombatPoint(local.point,target))
         Promise.resolve(move(local.point.x,local.point.y)).catch(function(){});
       root.partyCombatPosition={at:now,mode:"farm-local-detour",movementOwner:"farm-recovery",reason:"trying local obstacle recovery"};

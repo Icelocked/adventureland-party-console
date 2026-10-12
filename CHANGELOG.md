@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Let combat formation routes proceed immediately when local obstacle recovery has no safe candidate, and release real local attempts after their existing bounded window.
+
 - Keep Escape recovery held until every fighter has a settled movement arrival in Main town, preventing early farming resumes while teammates are still returning.
 
 - Retain bounded native route-search timing diagnostics to distinguish search CPU cost from scheduler delays in movement reports.

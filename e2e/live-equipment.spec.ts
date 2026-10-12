@@ -22,10 +22,15 @@ test('merchant gathering waits at capacity without resetting cooldowns',async({l
   for(const mode of ['fishing','mining'])await live.post('/merchant/gather',{mode,enabled:true});
   await page.goto(live.url);await page.getByText(/Merchant logistics ·/).click();
   await expect(page.locator('details').filter({has:page.locator('summary').getByText(/Merchant logistics/)}).getByText('BLOCKED',{exact:true})).toHaveCount(2);
-  await expect.poll(()=>live.clients[name].frame.evaluate(()=>{
-    const root=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
-    return root?.__merchantGatheringBlockedReason;
-  })).toBe('inventory capacity');
+  await expect.poll(async()=>{
+    try{return await live.clients[name].frame.evaluate(()=>{
+      const root=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+      return root?.__merchantGatheringBlockedReason;
+    });}catch(error){
+      if(/Execution context was destroyed|Cannot find context|Frame was detached|Native game frame is not present/.test(String(error)))return null;
+      throw error;
+    }
+  }).toBe('inventory capacity');
   const after=await live.state();expect(after.gatheringCooldowns).toEqual(before);
   const native=await live.admin(`output=(()=>{const p=get_player('${name}');return {items:p.items,last:{fishing:p.last.fishing,mining:p.last.mining}};})()`);
   expect(Object.values(native.last).map(value=>new Date(value as string).getTime())).toEqual([0,0]);
