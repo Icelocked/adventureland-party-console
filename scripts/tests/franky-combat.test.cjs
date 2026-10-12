@@ -11,7 +11,7 @@ function load(c, name) {
 }
 function fixture(range = 100) {
   const moves = [], stops = [];
-  const c = vm.createContext({
+  const c = require('./helpers/shared-context.cjs').createSharedContext({
     character: {name:'Hero',map:'level2w',in:'room',x:0,y:0,range,speed:40},
     G:{maps:{level2w:{event:'franky'}}}, parent:{entities:{}},
     passiveHunting:{rules:{}}, passiveLevelAllowed:()=>true, eventSelected:()=>true, joinedEvent:'franky', navigationIntent:{cancelled:false},

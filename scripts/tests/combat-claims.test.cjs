@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const source = fs.readFileSync(require('node:path').join(__dirname, '../../characters/shared.js'), 'utf8');
 function setup() {
   const entities = {};
-  const context = vm.createContext({
+  const context = require('./helpers/shared-context.cjs').createSharedContext({
     isPassingEncounter:()=>false,passiveHunting:{rules:{}},root: {}, farmingTravelToken: null, selectFarmCandidates: targets=>targets, inFarmRadius:()=>false,
     activeCombatEvent:()=>false, joinedEvent:null, lastAttackTarget:null, lastAttackAt:0, inFarmArea:()=>true, partyLocation:null, farmApproach:{failed:{}},
     character: { name: 'Us', x: 0, y: 0 }, parent: { entities },

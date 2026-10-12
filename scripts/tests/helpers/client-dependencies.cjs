@@ -9,7 +9,7 @@ function functions(context, names) {
 // Ordinary combat scenarios start without passing encounters. Use the real
 // predicates so a fixture can also introduce passing ownership explicitly.
 exports.passingContext = values => {
-  const context = vm.createContext({
+  const context = require('./shared-context.cjs').createSharedContext({
     passingEncounters: {}, peerPassingEncounters: [], coordinatorClockOffset: 0,
     groupedCombat: null, passiveHunting: {rules: {}, useFieldGenerators: true},
     navigationIntent: {}, partyTownActive: false, banking: false, stocking: false,

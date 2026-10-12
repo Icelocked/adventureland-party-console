@@ -69,6 +69,7 @@ const code=ts.transpileModule(fs.readFileSync('dashboard/features/party/stand-sh
 const context={exports:{},require(name){
  if(name==='react')return React;
  if(name==='react/jsx-runtime')return require('../../dashboard/node_modules/react/jsx-runtime');
+ if(name==='../../../runtime/market-preferences')return require('../../runtime/market-preferences.ts');
  if(name==='./stand-inspection')return {standSaleRows,standBuyRows,occupiedStandSlots,standOccupancy};
  if(name==='./level-price-history')return {levelPriceHistory:()=>({})};
  if(name==='@/hooks/use-clock')return {useClock:()=>1000};
@@ -78,7 +79,7 @@ const context={exports:{},require(name){
  return new Proxy({}, {get:(_,key)=>String(key)});
 }};
 vm.runInNewContext(code,context);
-const props=()=>({open:true,marketOpen:true,merchant:{standOpen:true,slots:{trade1:entry('cap',true)}},onOpenChange(){},onMarketOpenChange(){},catalog:[{id:'cap',name:'Cap'}],buyable:[],bids:{cap:bid},listings:[],priceHistory:{},blacklist:{},onBid:async()=>{},onInspect(){}});
+const props=()=>({open:true,marketOpen:true,merchant:{standOpen:true,slots:{trade1:entry('cap',true)}},onOpenChange(){},onMarketOpenChange(){},catalog:[{id:'cap',name:'Cap'}],buyable:[],bids:{cap:bid},listings:[],priceHistory:{},blacklist:{},marketIgnoredItems:[],onBid:async()=>{},onInspect(){}});
 
 test('WTB catalog is a narrow name-and-add picker opening the regular order editor',async()=>{
  const p=props(),opened=[];let saves=0,root;

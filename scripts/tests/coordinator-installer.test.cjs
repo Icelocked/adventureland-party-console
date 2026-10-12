@@ -9,7 +9,7 @@ for (const legacy of [false, true]) test(`installer replaces ${legacy ? 'legacy 
   const root = path.resolve(__dirname, '../..');
   const fixtureRoot = path.join(root, '.build');
   const target = await fs.mkdtemp(path.join(fixtureRoot, 'coordinator-installer-test-'));
-  const files = ['src/CharacterThread.js', 'standalones/CharacterCoordinator.js', 'game_files.js'];
+  const files = ['src/CharacterThread.js', 'standalones/CharacterCoordinator.js', 'game_files.js','src/ConfigUtil.js'];
   const originals = new Map();
   for (const file of files) {
     const source = await fs.readFile(path.join(root, '.caracal', file), 'utf8');
@@ -30,7 +30,7 @@ for (const legacy of [false, true]) test(`installer replaces ${legacy ? 'legacy 
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.equal(await fs.readFile(path.join(target, files[1]), 'utf8'), expected);
     assert.equal(await fs.readFile(path.join(target, 'game_files.js'), 'utf8'),
-      'module.exports = require("../scripts/client-files.cjs");\n');
+      'module.exports = require(process.env.AL_CONSOLE_ARTIFACT ? require("node:path").join(process.env.AL_CONSOLE_ARTIFACT, "scripts/client-files.cjs") : "../scripts/client-files.cjs");\n');
     const thread = await fs.readFile(path.join(target, files[0]), 'utf8');
     const storage = new Map(), session = new Map();
     const context = {JSDOM:require('../../.caracal/node_modules/jsdom').JSDOM,
@@ -50,7 +50,7 @@ for (const legacy of [false, true]) test(`installer replaces ${legacy ? 'legacy 
     assert.equal(thread.split('const originalInitSocket').length,2);
     const events=[],socket=new EventEmitter(),game_context={socket,init_socket(){return 'socket-ready'}};
     const hook=thread.slice(thread.indexOf('  game_context.__partyClientVersion'),thread.indexOf('  vm.runInContext("the_game()", game_context);'));
-    vm.runInNewContext(hook,{require,game_context,proc_args:{version:99,clientInstance:'instance'},process:{connected:true,send:message=>events.push(message)}});
+    vm.runInNewContext(hook,{require,game_context,proc_args:{version:99,clientInstance:'instance'},process:{env:{},connected:true,send:message=>events.push(message)}});
     assert.equal(game_context.init_socket(),'socket-ready');game_context.init_socket();
     socket.emit('welcome',{});socket.emit('reloaded',{});
     assert.deepEqual(events.map(message=>message.event),['welcome','reloaded']);

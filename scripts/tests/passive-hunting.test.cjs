@@ -136,7 +136,7 @@ test('actual attack controller sends passing attacks without queue evidence or n
  let passing=true,admitted=false,hits=0;const target={id:'bee1',mtype:'bee'},state={};
  try {
   global.parent={};global.character={range:100,frequency:1};global.setTimeout=()=>0;global.clearTimeout=()=>{};
-  global.sharedRoutine={groupedAttackAllowed:()=>false,rareAttackAllowed:()=>true,
+  global.sharedRoutine={allowsTarget:()=>true,allowsPassingTarget:()=>true,groupedAttackAllowed:()=>false,rareAttackAllowed:()=>true,
    queueEvidence:()=>assert.fail('passing hit acquired queue ownership'),noteAttack:()=>assert.fail('passing hit acquired normal combat ownership')};
   global.attack=async()=>{hits++;};global.can_attack=()=>true;global.is_in_range=()=>true;
   const controller=createAttackController({target:()=>target,selected:()=>target.id,epoch:()=>1,active:()=>true,allowed:()=>true,state:()=>state,
@@ -195,7 +195,7 @@ test('a pending passing attack burst cannot send again after the return starts p
  const saved=Object.fromEntries(keys.map(k=>[k,global[k]]));let passing=true,hits=0;const timers=[],target={id:'armadillo',mtype:'armadillo'},state={};
  try {
   global.parent={};global.character={range:100,frequency:1};global.setTimeout=fn=>{timers.push(fn);return timers.length;};global.clearTimeout=()=>{};
-  global.sharedRoutine={groupedAttackAllowed:()=>true,rareAttackAllowed:()=>true};
+  global.sharedRoutine={allowsTarget:()=>true,allowsPassingTarget:()=>true,groupedAttackAllowed:()=>true,rareAttackAllowed:()=>true};
   global.attack=()=>{hits++;return new Promise(()=>{});};global.can_attack=()=>true;global.is_in_range=()=>true;
   const controller=createAttackController({target:()=>target,selected:()=>target.id,epoch:()=>1,active:()=>true,allowed:()=>true,state:()=>state,passing:()=>passing,report:assert.fail});
   controller.tick();assert.equal(hits,1);passing=false;
@@ -299,7 +299,7 @@ test('real attack controller hits a passing goo during continuous return without
  const saved=Object.fromEntries(keys.map(k=>[k,global[k]]));let hits=0,controller;
  try {
   Object.assign(global,{parent:{},character:{range:100,frequency:1},setTimeout:()=>0,clearTimeout(){},
-   sharedRoutine:{groupedAttackAllowed:()=>false,rareAttackAllowed:()=>true,queueEvidence:()=>assert.fail('normal combat evidence'),noteAttack:()=>assert.fail('normal combat hit')},
+   sharedRoutine:{allowsTarget:()=>true,allowsPassingTarget:()=>true,groupedAttackAllowed:()=>false,rareAttackAllowed:()=>true,queueEvidence:()=>assert.fail('normal combat evidence'),noteAttack:()=>assert.fail('normal combat hit')},
    attack:async()=>{hits++;},can_attack:()=>true,is_in_range:t=>Math.hypot(t.x-c.character.x,t.y)<=100});
   controller=createAttackController({target:()=>c.passingTarget(),selected:()=>c.passingTarget()?.id,epoch:()=>1,active:()=>true,
    allowed:()=>!!c.passingTarget(),passing:t=>t===c.passingTarget(),preparePassing:t=>{c.beginPassingAttack(t);return true;},state:()=>({}),report:assert.fail});

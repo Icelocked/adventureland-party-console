@@ -41,6 +41,14 @@ test('Steam-style CODE replacement retires old socket callbacks and pending hear
   // innocuous comment and a matching checksum represent a new published build.
   let deployedFile='',deployedBody='',deployedHash='';
   let replayed=false;
+  // Explicit deployment publication is required; a rebuilt manifest alone must
+  // never retire the running native frame.
+  await client.page.route('**/CODE/adventure_land/activation.json*',async route=>{
+    if(!deploy)return route.continue();
+    const manifest=await (await client.page.request.get(live.url+'/CODE/adventure_land/manifest.json')).json();
+    manifest.classes.warrior.sha256=deployedHash;
+    await route.fulfill({json:{id:'native-code-replacement',manifest}});
+  });
   await client.page.route('**/CODE/adventure_land/manifest.json*',async route=>{
     const response=await route.fetch(),manifest=await response.json();
     if(deploy)manifest.classes.warrior.sha256=deployedHash;

@@ -94,9 +94,10 @@ export function installRoleRunner(
   function passingTarget(): Target | null {
     if (sharedRoutine.dungeonOwned?.()) return null;
     if (character.ctype === "merchant" || !active || character.rip || !resolvedRole().combat || ["pending","feed"].includes(sharedRoutine.getAbtestingMode())) return null;
-    if (sharedRoutine.frankyCombatActive?.()) return sharedRoutine.getWalkingPassiveTarget?.() || null;
-    const target = (sharedRoutine as any).getPassingTarget?.() || null;
-    return target && sharedRoutine.allowsTarget(target) ? target : null;
+    const target = sharedRoutine.frankyCombatActive?.()
+      ? sharedRoutine.getWalkingPassiveTarget?.() || null
+      : sharedRoutine.getPassingTarget?.() || null;
+    return target && sharedRoutine.allowsPassingTarget(target) ? target : null;
   }
   function attackTarget(): Target | null {
     const current = currentTarget(), passing = passingTarget();

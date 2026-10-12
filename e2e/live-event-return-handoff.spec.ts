@@ -20,8 +20,9 @@ for(const variant of ['leaving Green','following a Pumpkin leader','restoring a 
         E[type]={live:true,id:String(m.id),map:m.map,x:m.x,y:m.y,hp:m.hp,max_hp:m.max_hp};}catch(error){G.monsters[type]=original;throw error;}}
       broadcast_e();return result;})()`);
     const samples:any[]=[];
-    const hits=async(name:string,event:string,after=0)=>(await live.clients[name].events()).some(packet=>
-      packet.event==='hit'&&String(packet.data?.id)===seeds[event].id&&packet.data?.hid===name&&packet.data?.damage>0&&packet.at>=after);
+    const hits=async(name:string,event:string,after=0)=>live.clients[name].frame.evaluate(({name,id,after})=>
+      ((window as any).__e2eEvents || []).some((packet:any)=>packet.event==='hit'&&String(packet.data?.id)===id&&
+        packet.data?.hid===name&&packet.data?.damage>0&&packet.at>=after),{name,id:seeds[event].id,after});
     try{
       if(variant!=='following a Pumpkin leader'){
         await live.post('/formation',{character:W,eventSelections:['mrgreen']});

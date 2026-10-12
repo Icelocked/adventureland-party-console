@@ -71,7 +71,7 @@ test('jQuery loads the real bundle, retaining its address through bridge setup a
   Object.assign(w,{TextEncoder,AbortSignal,AbortController,character:{name:'P',ctype:'warrior'},__partyServer:'http://stale:924',
    __partySteamBridge:{realmProtocol:2},game_log:(message,color)=>{if(color==='red')errors.push(message);},
    setInterval:fn=>{interval=fn;return 1;},clearInterval(){},start_runner:(id,source)=>starts.push(source),
-   fetch:async url=>{requests.push(url);return {ok:true,text:async()=>url.includes('steam-bridge.js')
+   fetch:async url=>{requests.push(url);return {ok:true,json:async()=>({serverNow:Date.now(),consoleMaintenance:null}),text:async()=>url.includes('steam-bridge.js')
     ? `globalThis.bridgeInstalls=(globalThis.bridgeInstalls||0)+1;globalThis.__partySteamBridge={version:${steamBridgeVersion},server:globalThis.__partyServer};`
     :url.includes('activation.json')?JSON.stringify({id:'explicit-'+revision,manifest:{schema:1,classes:{warrior:{file:`generated/${hash()}/warrior.js`,sha256:hash()}}}})
     :url.includes('manifest.json')?JSON.stringify({schema:1,classes:{warrior:{file:`generated/${hash()}/warrior.js`,sha256:hash()}}}):code()};}});
@@ -82,13 +82,13 @@ test('jQuery loads the real bundle, retaining its address through bridge setup a
    await until(()=>w.installed===1);
    assert.equal(w.__partyServer,base);assert.equal(w.bridgeInstalls,1);
    assert.ok(scriptRequests[0].startsWith(base+'/CODE/adventure_land/universal-loader.js?'));
-   assert.ok(requests.every(url=>url.startsWith(base+'/CODE/adventure_land/')));
+   assert.ok(requests.every(url=>url.startsWith(base+'/CODE/adventure_land/')||url===base+'/party-api/console-deployment'));
    revision=2;interval();await until(()=>starts.length===1);
    assert.equal(starts[0],steamBootstrap(base));
    w.eval(starts[0]);await until(()=>w.installed===2);
    assert.equal(w.bridgeInstalls,1);
    w.localStorage.setItem('party-code-stopped:P','1');
-   const before=requests.length;interval();await new Promise(r=>setImmediate(r));assert.equal(requests.length,before);
+   const before=requests.filter(url=>url.startsWith(base+'/CODE/')).length,controlBefore=requests.filter(url=>url===base+'/party-api/console-deployment').length;interval();await new Promise(r=>setImmediate(r));assert.equal(requests.filter(url=>url.startsWith(base+'/CODE/')).length,before);assert.equal(requests.filter(url=>url===base+'/party-api/console-deployment').length,controlBefore+1);
    assert.deepEqual(errors,[]);
   } finally {w.__partyCodeLoader?.dispose();w.close();}
  }

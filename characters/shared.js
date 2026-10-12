@@ -17082,6 +17082,9 @@
     getNearestPartyTarget: getNearestPartyTarget,
     isAttackingPartyMember: isAttackingPartyMember,
     allowsTarget: isAllowedTarget,
+    // Passing selection and cohort admission own travel eligibility; retain the
+    // independent deployment drain gate without applying farm acquisition locks.
+    allowsPassingTarget: consoleDrainAllows,
     getEventTarget: nearestEventTarget,
     escapeOwnsRevival: function () { return escapeOwns() && escapeState.stage === "recovering"; },
     frankyCombatActive: frankyCombatActive,

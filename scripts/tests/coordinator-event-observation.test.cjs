@@ -38,7 +38,7 @@ test('a cleared navigation intent prevents reconnect recovery from restoring an 
  assert.equal(f.state.deferred.P,undefined);assert.equal(f.commands.P,undefined);
 });
 test('stale return participant is deferred without holding up healthy party members',()=>{
- const f=fixture();f.time(40000);f.state.current={event:'franky',cycleId:'r',startedAt:1000,pending:['P','W'],checkpoint:null};
+ const f=fixture();f.time(40000);f.state.current={event:'franky',cycleId:'r',startedAt:1000,pending:['P','W'],participants:['P','W'],checkpoint:null};
  f.statuses.W={seenAt:40000};f.observe({name:'W'});
  assert.deepEqual(f.state.current.pending,['W']);assert.equal(f.state.deferred.P.phase,'awaiting-reconnect');assert.ok(f.effects.includes('finish'));
 });

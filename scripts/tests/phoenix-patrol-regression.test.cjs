@@ -236,7 +236,7 @@ test('fast report interrupts convoy and actual client nomination produces a sele
  const res={status(){return this;},json(v){this.body=v;return this;}};
  ingest.handle('M',{combatSelection:{runtimeId:'M'},rareObservation:{at:r.time(),runtimeId:'M',map:'main',in:'main',server:'USII',x:0,y:0,sightings:[target]}},res);
  assert.equal(r.party.activeConvoy,null);assert.equal(res.body.rareControl.target.id,target.id);assert.equal(res.body.convoySignal,null);
- const c=vm.createContext({parent:{entities:{p:target}},character:{name:'M',map:'main',in:'main'},leader:'W',root:{},partyConvoyActive:false,
+ const c=require('./helpers/shared-context.cjs').createSharedContext({parent:{entities:{p:target}},character:{name:'M',map:'main',in:'main'},leader:'W',root:{},partyConvoyActive:false,
   navigationIntent:{},groupedFarming:()=>true,selectFarmCandidates:t=>t,isPassingEncounter:()=>false,passiveHunting:{rules:{}},passiveRareHunts:{},monsterFocus:['phoenix'],
   groupedEntityReport:e=>({...e,priority:100}),monsterPriority:()=>100,isExternallyClaimedMonster:()=>false,farmApproach:{failed:{}},reunionRealm:()=> 'USII',get_entity:()=>target});
  vm.runInContext(require('./helpers/named-function.cjs').namedFunction(source, 'passiveLevelAllowed'), c);

@@ -28,11 +28,11 @@ test('account guards prevent paid creation and occupied deletion before loading 
  const t=fixture();for(let i=0;i<8;i++)t.names.add('Char'+i);
  assert.equal((await t.invoke(t.service.creation.roster,{name:'NewMage',class:'mage'})).code,409);
  assert.equal((await t.invoke(t.service.creation.bankboi)).code,409);
- t.state.bankbois.B={items:[{name:'leather'}],slots:{},gold:0};
- assert.equal((await t.invoke(t.service.deletion,{}, {name:'B'})).code,409);assert.deepEqual(t.calls,[]);
- t.state.bankbois.B={items:[],slots:{},gold:0};t.names.add('B');t.onRefresh(async()=>t.names.delete('B'));
+ t.names.add('B');t.state.bankbois.B={items:[{name:'leather'}],slots:{},gold:0};
+ assert.equal((await t.invoke(t.service.deletion,{}, {name:'B'})).code,409);assert.deepEqual(t.calls,['refresh']);t.calls.length=0;
+ t.state.bankbois.B={items:[],slots:{},gold:0};t.names.add('B');let rosterRefreshes=0;t.onRefresh(async()=>{if(++rosterRefreshes===2)t.names.delete('B');});
  assert.equal((await t.invoke(t.service.deletion,{}, {name:'B'})).code,200);
- assert.deepEqual(t.calls,['load',{url:'https://adventure.land/api/delete_character',options:{method:'POST',
+ assert.deepEqual(t.calls,['refresh','load',{url:'https://adventure.land/api/delete_character',options:{method:'POST',
   headers:{Cookie:'auth=fixture-session','Content-Type':'application/json; charset=utf-8'},body:'{"name":"B"}'}},'refresh','bank']);
  assert.equal(t.state.bankbois.B,undefined);
 });

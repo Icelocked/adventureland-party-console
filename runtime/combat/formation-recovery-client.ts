@@ -101,7 +101,7 @@ export function createFormationRecoveryClient(p:Ports) {
       p.log('routing',{...control,destination:goal});
       Promise.resolve(promise).then(()=>{
         if(route!==owned)return;
-        finish(Math.hypot(p.self().x-goal.x,p.self().y-goal.y)<=12?undefined:'route ended before the recovery position');
+        finish(Math.hypot(p.self().x-owned.goal.x,p.self().y-owned.goal.y)<=12?undefined:'route ended before the recovery position');
       }).catch((error)=>{if(route===owned)finish(errorReason(error));});
     } catch(error){finish(errorReason(error));}
   }
@@ -125,17 +125,21 @@ export function createFormationRecoveryClient(p:Ports) {
   }
   function plan(current:Route,s:NativeSmart):void {
     if(!p.segmentClear){p.plan();return;}
-    current.search??=recoveryRoute(p.self(),current.goal,p.segmentClear);
+    // Every alternative is part of this coordinator-owned goal set. Searching
+    // them together avoids exhausting an attempt on a disconnected first goal.
+    const goals=[current.goal,...(control?.goals || [])].filter((goal,index,all)=>
+      all.findIndex(other=>other.x===goal.x && other.y===goal.y)===index);
+    current.search??=recoveryRoute(p.self(),goals,p.segmentClear);
     const points=current.search.tick();
     if(points===null){finish('no safe same-map route to recovery position');return;}
-    if(points){s.plot=points.map(point=>({...point,map:p.self().map}));s.searching=false;s.found=true;}
+    if(points){current.goal=points.at(-1)!;s.plot=points.map(point=>({...point,map:p.self().map}));s.searching=false;s.found=true;}
   }
   function report():FormationRecoveryReport|undefined {
     if(valid())return activeReport();
     if(proposal && p.context().allowed && proposal.target===p.context().target)return {...proposal,at:p.now()};
   }
   function position():void {
-    p.position({...control!,reason:movementBlock || control!.reason},route?.remaining);
+    p.position({...control!,goal:route?.goal || control!.goal,reason:movementBlock || control!.reason},route?.remaining);
   }
   function movement():boolean {
     if(!valid())return false;

@@ -48,7 +48,7 @@ test('unload planning allocates slots once and respects withdrawal reservations 
 });
 function runtime(items, bank) {
   const calls = [];
-  const c = vm.createContext({ bankStaging:true, bankStagingSlot:(pack,slot)=>pack==="items1"&&slot>=35, character: { items, bank, slots: {}, gold: 0, name: 'bankboi0' }, G: { items: { leather: { s: 9999 } } },
+  const c = require('./helpers/shared-context.cjs').createSharedContext({ bankStaging:true, bankStagingSlot:(pack,slot)=>pack==="items1"&&slot>=35, character: { items, bank, slots: {}, gold: 0, name: 'bankboi0' }, G: { items: { leather: { s: 9999 } } },
     findItem: wanted => items.findIndex(item => item?.name === wanted.name),
     parent: { bank_packs: {} }, bankStackHomes: {}, smart_move: async () => {}, freeInventorySlots: () => items.filter(x => !x).length,
     sleep: async () => {}, swap: async (a, b) => { [items[a], items[b]] = [items[b], items[a]]; },

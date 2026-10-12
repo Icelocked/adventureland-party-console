@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Recover collision-blocked walking routes through safe forward segments, select reachable formation-recovery positions, and wait for escape movement to settle before resuming.
+- Preserve passing-target admission during travel while respecting combat-drain holds.
+- Refresh retained regression fixtures for current inventory, deployment and account contracts, and make native readiness and fault-injection checks match actual game boundaries.
+
 - Align native lucky-slot recovery coverage with best-effort restoration: retire ambiguous journals without inventory swaps or repeated upgrade attempts, while retaining provable restoration.
 
 - Verify map screenshot pixels and the real image proxy in separate E2E journeys, using stable game observations and real dashboard state instead of duplicated status fetches.

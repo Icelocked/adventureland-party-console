@@ -32,7 +32,7 @@ test('first BankBoi creation waits for confirmation, reports failures, and block
  const props={open:true,bankboiPrefix:'Bank',onOpenChange(){},bank:null,bankbois:[],bankboiQueue:[],vaults:[],withdrawals:{},standListings:[],npcSaleMarks:[],catalog:[],buyable:[],priceHistory:{},onCreateBankboi:()=>{calls++;return new Promise(resolve=>finish=resolve)}};
  await act(async()=>view=create(React.createElement(BankSheet,props)));
  await act(async()=>findButton(view,'Create bankboi').props.onClick());assert.equal(calls,0);
- assert.ok(view.root.findAllByType('DialogDescription').some(n=>text(n).includes('reserve 7 slots')));
+ assert.ok(view.root.findAllByType('DialogDescription').some(n=>text(n).includes('reserve the final 7 slots')));
  const confirm=findButton(view,'Create BankBoi');await act(async()=>{confirm.props.onClick();confirm.props.onClick()});assert.equal(calls,1);
  await act(async()=>finish('Bank0'));
  assert.equal(view.root.findAllByType('Dialog').find(n=>n.props.open===true)?.props.open,true);

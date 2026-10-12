@@ -5,7 +5,8 @@ import type { Item } from '../runtime/coordinator/contracts/item';
 const merchant = 'E2EMerchant';
 
 test('unlinked upgrade adopts compatible native intermediate without claiming existing results',async({live},info)=>{
-  test.setTimeout(300_000);
+  // The retained paid batch needs ten native upgrades; CI timers are ~20s each.
+  test.setTimeout(450_000);
   await catalog(live,'helmet');
   await seed(live,{5:{name:'scroll0',q:20},10:{name:'helmet',level:2},11:{name:'helmet',level:3},12:{name:'helmet',level:3},23:{name:'helmet',level:0},24:{name:'helmet',level:0},25:{name:'helmet',level:0}});
   const id='unlinked-intermediate-commerce',before=await economy(live),checkpoints:any[]=[];
@@ -28,7 +29,7 @@ test('unlinked upgrade adopts compatible native intermediate without claiming ex
     await live.clients[merchant].frame.evaluate(()=>{const game=window as any,runner=(document.getElementById('maincode') as HTMLIFrameElement).contentWindow as any;game.start_runner('maincode',`$.getScript(${JSON.stringify(runner.__partyServer+'/CODE/adventure_land/universal-loader.js')});`);});
     release();
     await expect.poll(async()=>(await live.state()).characters[merchant]?.dashboardRuntime,{timeout:60_000}).not.toBe(oldRuntime);
-    await jobFinished(live,id,180_000);
+    await jobFinished(live,id,300_000);
     const after=await economy(live);
     const finished=(v:Economy)=>v.characters[merchant].items.filter(i=>i?.name==='helmet'&&i.level===3).length;
     const newResults=Math.max(...checkpoints.map(s=>Number(s.completedResults)||0))-1;
@@ -137,7 +138,8 @@ test('unavailable upgrade estimate enforces its gold cap across native purchases
   // the coordinator has persisted the first paid purchase, to place restart.
   // Protection-only checkpoint probes have no progress state; forward them
   // normally and retain only actual durable commerce progress for assertions.
-  test.setTimeout(300_000);
+  // The native level2 seller route alone took 110s in retained CI evidence.
+  test.setTimeout(600_000);
   const item='softstepgloves';
   await catalog(live,item);
   const nativeCosts=await live.clients[merchant].run(`({base:G.items.softstepgloves.g,scroll:G.items.scroll1.g,
@@ -180,7 +182,7 @@ test('unavailable upgrade estimate enforces its gold cap across native purchases
   await expect.poll(async()=>{
     const state=await live.state();
     return [state.merchantCurrent,...state.merchantQueue].some((entry:any)=>(entry?.id===order.jobId||entry?.commerceOrderId===order.jobId)&&/budget exhausted|gold cap/i.test(entry.lastError||entry.error||entry.blockedReason||''))||state.merchantActivity.some((entry:any)=>/budget exhausted|gold cap/i.test(JSON.stringify(entry)));
-  },{timeout:120_000}).toBe(true);
+  },{timeout:300_000}).toBe(true);
   expect(Math.max(...checkpoints.map(state=>Number(state.spent)||0))).toBeLessThanOrEqual(cap);
   expect(checkpoints.some(state=>state.pendingPurchase?.name==='scroll1'&&state.pendingPurchase.quantity===1&&state.pendingPurchase.cost===nativeCosts.scroll)).toBe(true);
   expect(checkpoints.some(state=>state.pendingPurchase?.name===item&&state.pendingPurchase.quantity===1&&state.pendingPurchase.cost===nativeCosts.base)).toBe(true);
@@ -702,8 +704,11 @@ const totalGold = (state: Economy) => state.bankGold + Object.values(state.chara
 async function economy(live: LiveGame): Promise<Economy> {
   // A mounted bank is authoritative in server memory until native unmount saves it.
   // Reading only MongoDB during a bank visit would mistake normal persistence lag for loss.
-  return live.admin(`output=(async()=>{
+  let observed:Economy|null=null;
+  await expect.poll(async()=>{
+    observed=await live.admin(`output=(async()=>{
     const m=get_player(${JSON.stringify(merchant)});
+    if(!m || ${JSON.stringify(names)}.some(name=>!get_player(name)))return null;
     const user=await db.collection('user').findOne({_id:m.owner});
     const mounted=Object.values(players).find(p=>p.owner===m.owner&&p.user);
     const bank=mounted?mounted.user:user.info;
@@ -712,6 +717,9 @@ async function economy(live: LiveGame): Promise<Economy> {
       const p=get_player(name);return [name,{map:p.map,gold:p.gold,isize:p.isize,items:p.items,upgrading:!!p.q.upgrade}];
     })),bank:packs(bank),savedBank:packs(user.info),bankGold:Number(bank.gold)||0};
   })()`);
+    return !!observed;
+  },{timeout:30_000,message:'All native account characters must be present for an authoritative economy sample'}).toBe(true);
+  return observed!;
 }
 
 async function record(live: LiveGame, info: TestInfo, name: string, before: Economy, details: unknown = {}) {

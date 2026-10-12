@@ -94,7 +94,9 @@ export function createAttackController(ports: AttackPorts) {
     return !!target && !!ports.passing?.(target);
   }
   function permitted(target: Target): boolean {
-    if (!sharedRoutine.allowsTarget(target)) {
+    const eligible = ports.passing?.(target)
+      ? sharedRoutine.allowsPassingTarget(target) : sharedRoutine.allowsTarget(target);
+    if (!eligible) {
       ports.state().skippedAttack = "target no longer eligible";
       return false;
     }
