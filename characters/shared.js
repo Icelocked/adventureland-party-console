@@ -2374,7 +2374,11 @@
   function getDungeonTarget() {
     if (!character.cave || character.cave.paused || !groupedFresh() || !groupedCombat.target) return null;
     var target = get_entity(groupedCombat.target.id);
-    return dungeonCombatThreat(target) ? target : null;
+    // A committed fight owns combat recovery even when terrain blocks its
+    // direct bearing. Keep the stricter threat test for new travel handoffs.
+    var committed = groupedCombat.caveScope === character.cave.run + ':' + character.cave.floor &&
+      groupedCombat.committed === true && groupedCombat.target.state === 'engaged';
+    return dungeonTargetAllowed(target) && (committed || dungeonCombatThreat(target)) ? target : null;
   }
   function dungeonCombatThreat(target) {
     if (!dungeonTargetAllowed(target)) return false;

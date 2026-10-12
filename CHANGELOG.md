@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Preserve confirmed lucky-slot upgrade results during interrupted restoration; leave manually moved results and changed cargo untouched.
+- Recover committed Cave enemies around blocked terrain while retaining scoped target and travel-handoff guards.
+- Keep local Cave waypoint placement responsive during heartbeat freshness gaps; actual waypoint submission still requires fresh participant reports.
+- Reacquire native test observers after reconnects without replaying mutations, and fetch event deltas to limit observation overhead.
+
 - Keep eligible reserved passing encounters ahead of equal-priority newcomers until admission completes, while preserving higher-priority targeting and attack guards.
 - Let stopped, freshly owned party members complete map-transition barriers under bounded network latency, retaining position, identity and walking-lease checks.
 

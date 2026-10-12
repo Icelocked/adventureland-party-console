@@ -591,7 +591,19 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
           command?.action==='move' && command.run===cave.run && command.target?.id===second.id && command.target.map===second.map;
       });
     const continueBoss=async()=>{const next=await continueRoomChoice(second);if(next){expect(Number.isSafeInteger(next.travel?.serial)).toBe(true);serial=next.travel.serial;}};
-    await expect.poll(async()=>{await continueBoss();return ownedBoss(await dungeon());},{timeout:300_000,message:'Accepted boss generation must dispatch owned moves after native assembly'}).toBe(true);
+    try {
+      await expect.poll(async()=>{await continueBoss();return ownedBoss(await dungeon());},{timeout:300_000,message:'Accepted boss generation must dispatch owned moves after native assembly'}).toBe(true);
+    } finally {
+      const native=await Promise.allSettled(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].run(`(()=>{
+        const id=sharedRoutine.sharedTargetId(),target=id?get_entity(id):null,selected=sharedRoutine.getDungeonTarget();
+        return {name:character.name,at:Date.now(),x:character.real_x,y:character.real_y,
+          retained:id,selected:selected?.id||null,position:globalThis.partyCombatPosition,
+          target:target?{id:target.id,mtype:target.mtype,hp:target.hp,dead:target.dead,visible:target.visible,
+            map:target.map,in:target.in,x:target.real_x??target.x,y:target.real_y??target.y,
+            targeting:target.target,side:target.cave?.side,direct:can_move_to(target.x,target.y)}:null};
+      })()`)));
+      await info.attach('native-cave-boss-assembly-targets',{body:JSON.stringify({view:await dungeon(),native}),contentType:'application/json'});
+    }
     await expect.poll(async()=>{
       await continueBoss();
       const view=await dungeon();

@@ -147,7 +147,7 @@ export function CaveMap({
             <button className={dungeonButton} disabled={!frame} onClick={()=>setNativeSize(value=>!value)}>{nativeSize?'Fit full floor':'Native-size view'}</button>
             <button
               className={dungeonButton}
-              disabled={!frame || !actionsReady}
+              disabled={!frame || !(actionsReady || waitingForReports)}
               onClick={() => setAdding(true)}
             >
               Add waypoint

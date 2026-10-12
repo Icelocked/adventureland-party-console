@@ -169,3 +169,11 @@ test('offering consumption restores after restart with a surviving failed item',
  f.ports.write({from:2,to:7,item:{name:'sword',level:3},displaced:{name:'offering',q:2},offeringDisplaced:true,phase:'running'});
  await createLuckyUpgrade(f.ports).recover();assert.equal(f.items[2].name,'sword');assert.deepEqual(f.items[7],{name:'offering',q:1});
 });
+
+test('recovering a moved confirmed result cannot reinterpret an empty lucky slot as destruction',async()=>{
+ const f=fixture({occupant:{name:'seashell',q:3}});
+ f.items[2]={name:'seashell',q:4};f.items[7]=null;f.items[27]={name:'sword',level:4,rid:'exact'};
+ f.ports.write({from:2,to:7,item:{name:'sword',level:3,rid:'exact'},displaced:{name:'seashell',q:3},phase:'restoring',result:{name:'sword',level:4,rid:'exact'}});
+ const before=structuredClone(f.items);await f.service.recover();
+ assert.deepEqual(f.items,before);assert.deepEqual(f.swaps,[]);assert.equal(f.journal,null);
+});

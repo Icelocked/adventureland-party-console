@@ -1271,10 +1271,13 @@ test('fixed-origin map image proxy returns native Dreams tiles and rejects exter
 
 test('Cave map survives stale reports without allowing stale waypoint actions',async({page},info)=>{
   // Declared read-boundary fixture: no native receipts, combat, or ownership is forged.
-  let run='read-fixture-a',floor=0,fresh=true;
+  let run='read-fixture-a',floor=0,fresh=true,operations=0;
   const name='M';
   const view=()=>({state:{phase:'active',run,participants:[name],protectFromEvents:true,commands:{},operations:[],progress:{enabled:false,serial:0}},members:[{name,fresh,observation:{protocol:1,at:Date.now(),supported:true,alive:true,ready:true,members:[name],cave:{run,floor,expires:Date.now()+600000,remainingMs:600000,paused:false,gold:0,amber:0,points:[]}}}]});
-  await page.route('**/party-api/daily-dungeons',route=>route.fulfill({json:view()}));
+  await page.route('**/party-api/daily-dungeons',route=>{
+    if(route.request().method()==='POST')operations++;
+    return route.fulfill({json:view()});
+  });
   await page.route('**/party-api/map-stream/*',route=>{
     const map='zone_'+run+'_'+floor;
     return route.fulfill({contentType:'text/event-stream',body:'data: '+JSON.stringify({name,map,at:Date.now(),x:100,y:100,entities:[],definition:{name:map,min_x:0,min_y:0,max_x:200,max_y:200,tiles:[],placements:[],groups:[],tilesets:{}}})+'\n\n'});
@@ -1290,6 +1293,12 @@ test('Cave map survives stale reports without allowing stale waypoint actions',a
   fresh=false;
   await expect(set).toBeDisabled();
   await expect(map.getByRole('status')).toHaveText('Waiting for fresh participant reports.');
+  await expect(map.getByRole('button',{name:'Add waypoint',exact:true})).toBeEnabled();
+  await map.getByRole('button',{name:'Add waypoint',exact:true}).click();
+  await expect(map.getByText('Click the map to place your waypoint.',{exact:true})).toBeVisible();
+  await map.locator('canvas').click({position:{x:120,y:100}});
+  await expect(set).toBeDisabled();
+  expect(operations,'Local placement must not dispatch a stale native operation').toBe(0);
   await expect.poll(async()=>{
     const box=await map.locator('canvas').boundingBox();
     return box && freshCanvas && Math.abs(box.y-freshCanvas.y)+Math.abs(box.height-freshCanvas.height);
@@ -1309,7 +1318,7 @@ test('Cave map survives stale reports without allowing stale waypoint actions',a
   await expect(next.getByRole('button',{name:'Set waypoint',exact:true})).toBeDisabled();
   run='read-fixture-b';
   await expect(next).not.toBeVisible();
-  await info.attach('cave-map-read-fixture-ledger',{body:JSON.stringify({transitions:['fresh','stale','fresh','floor 2','new run'],run,floor,fresh}),contentType:'application/json'});
+  await info.attach('cave-map-read-fixture-ledger',{body:JSON.stringify({transitions:['fresh','stale local placement without dispatch','fresh','floor 2','new run'],run,floor,fresh,operations}),contentType:'application/json'});
 });
 
 

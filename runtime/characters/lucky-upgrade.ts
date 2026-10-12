@@ -105,7 +105,7 @@ export function createLuckyUpgrade(ports: Ports) {
     }
     if (!same(ports.item(j.from), j.displaced)) throw inventoryFailure(j);
     const result = ports.item(j.to);
-    if (!validResult(j, result))
+    if (!validResult(j, result) || j.phase === 'restoring' && !same(result,j.result ?? null))
       throw failure('upgrade slot changed; inventory recovery required');
     j.result = copy(result); j.phase = 'restoring'; await save(j);
     // Checkpoint transport yields to native deliveries and manual moves. Never
