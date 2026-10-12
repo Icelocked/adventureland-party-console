@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Reduce combat recovery collision-search overhead while preserving live terrain checks and planner budgets.
+- Stabilize native E2E choice acknowledgements, reconnect/catalog readiness and combat sampling; preserve real gameplay and conservation assertions.
+
 - Keep native Cave vote acknowledgements and reconnect-frame checks tied to the exact original choice or frame, avoiding stale duplicate actions during E2E validation.
 
 - Preserve confirmed lucky-slot upgrade results during interrupted restoration; leave manually moved results and changed cargo untouched.

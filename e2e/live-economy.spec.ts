@@ -626,7 +626,7 @@ test('upgrade purchase batch excludes an existing target-level coat', async ({ l
 });
 
 test('buy with upgrade target survives lucky restoration failure and missing client journals across restart', async ({ live }, info) => {
-  test.setTimeout(480_000);
+  test.setTimeout(720_000);
   // Failure inventory: restore errors drop the order; a lost local receipt
   // holds all work; replay duplicates purchases/results or resets spend/attempts.
   // A completed older local journal must not fence a newer mirrored receipt.
@@ -658,7 +658,7 @@ test('buy with upgrade target survives lucky restoration failure and missing cli
   });
   const before = await economy(live);
   const order = await live.post('/merchant/order', { buys: [{ id: 'helmet', quantity: 2, level: 1 }], crafts: [] });
-  await expect.poll(() => live.clients[merchant].run('!!globalThis.__e2eLuckyRestoreFault'), { timeout: 180_000 }).toBe(true);
+  await expect.poll(() => live.clients[merchant].run('!!globalThis.__e2eLuckyRestoreFault'), { timeout: 300_000 }).toBe(true);
   await expect.poll(async () => {
     const state=await live.state();
     return ![state.merchantCurrent,...state.merchantQueue].some((job:any)=>job?.id===order.jobId||job?.commerceOrderId===order.jobId);

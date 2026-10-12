@@ -742,14 +742,17 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   await info.attach('native-cave-rogue-map',{body:await fullMap.screenshot(),contentType:'image/png'});
   await page.keyboard.press('Escape');
   await expect.poll(async()=>{
-    const c=(await dungeon()).members[0].observation.cave;
+    const v=await dungeon();
+    if(v.state.run!==cave.run || v.members.length!==2 ||
+        !v.members.every((m:any)=>m.fresh && m.observation?.cave?.run===cave.run &&
+          m.observation.cave.floor===cave.floor && Array.isArray(m.observation.cave.points)))return false;
+    const c=v.members[0].observation.cave;
     if(c.choice&&!c.choice.resolved){
       await answerNativeChoice(c.choice,c.floor);
       return false;
     }
     const required=c.points.find((p:any)=>p.required&&!p.done&&p.map.endsWith('_0'));
     if(!required)return true;
-    const v=await dungeon();
     if(v.members.some((m:any)=>m.observation.cave.choice&&!m.observation.cave.choice.resolved))return false;
     const current=v.state.travel?.target?.id || (Object.values(v.state.commands).find((c:any)=>c.action==='move') as any)?.target?.id;
     if(current!==required.id)await acceptRoom(required,true);
@@ -803,11 +806,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   if(newFloorChoice&&!newFloorChoice.resolved){
     const reply=newFloorChoice.options.find((o:any)=>!o.unavailable&&!o.cost&&!o.amber);
     expect(reply,'New-floor native encounter must have an available free reply').toBeTruthy();
-    await choice.getByRole('button',{name:reply.label,exact:true}).click();
-    await expect.poll(async()=>{
-      const current=(await dungeon()).members[0].observation.cave.choice;
-      return !current||current.id!==newFloorChoice.id||current.resolved;
-    },{timeout:30_000,message:'New-floor encounter must acknowledge the actual reply'}).toBe(true);
+    await answerNativeChoice(newFloorChoice,1);
     await expect(choice).not.toBeVisible({timeout:30_000});
     if(await shopResult.isVisible())await page.keyboard.press('Escape');
     await expect(shopResult).not.toBeVisible();

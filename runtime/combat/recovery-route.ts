@@ -7,7 +7,7 @@ export function recoveryRoute(origin:RecoveryPoint, destination:RecoveryPoint|Re
   let expanded=0,finished=false,spacing=16;
   const distance=(a:RecoveryPoint,b:RecoveryPoint)=>Math.hypot(a.x-b.x,a.y-b.y);
   const key=(p:RecoveryPoint)=>`${Math.round((p.x-start.x)/spacing)},${Math.round((p.y-start.y)/spacing)}`;
-  const heuristic=(p:RecoveryPoint)=>Math.min(...goals.map(g=>distance(p,g)));
+  const heuristic=(p:RecoveryPoint)=>{let best=Infinity;for(const goal of goals)best=Math.min(best,distance(p,goal));return best;};
   const limit=Math.max(...goals.map(g=>distance(start,g)),0)+768;
   function push(n:Node){let i=open.length;open.push(n);while(i){const parent=(i-1)>>1;if(open[parent]!.rank<=n.rank)break;open[i]=open[parent]!;i=parent;}open[i]=n;}
   function pop(){const first=open[0]!,last=open.pop()!;if(open.length){let i=0;while(i*2+1<open.length){let child=i*2+1;if(child+1<open.length&&open[child+1]!.rank<open[child]!.rank)child++;if(open[child]!.rank>=last.rank)break;open[i]=open[child]!;i=child;}open[i]=last;}return first;}
@@ -19,7 +19,11 @@ export function recoveryRoute(origin:RecoveryPoint, destination:RecoveryPoint|Re
     const deadline=performance.now()+4;
     for(let i=0;i<512&&open.length&&expanded<16384&&performance.now()<deadline;i++){
       const current=pop();if(current.cost>(costs.get(key(current))??Infinity))continue;expanded++;
-      for(const goal of [...goals].sort((a,b)=>distance(current,a)-distance(current,b)))if(clear(current,goal)){finished=true;return path(current,goal);}
+      // Keep the origin-to-goal shortcut. Later nodes connect to nearby goal
+      // vertices, just like lattice neighbors, rather than repeating long
+      // native collision probes to every distant attack-circle endpoint.
+      const nearby=goals.filter(goal=>!current.parent || distance(current,goal)<=spacing*Math.SQRT2);
+      for(const goal of nearby.sort((a,b)=>distance(current,a)-distance(current,b)))if(clear(current,goal)){finished=true;return path(current,goal);}
       for(let x=-1;x<=1;x++)for(let y=-1;y<=1;y++){
         if(!x&&!y)continue;
         const next={x:current.x+x*spacing,y:current.y+y*spacing},cost=current.cost+distance(current,next);

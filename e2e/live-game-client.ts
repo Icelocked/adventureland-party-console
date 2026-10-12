@@ -132,7 +132,10 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
     async run(expression) {
       // Reacquire before evaluation; never replay a potentially mutating expression.
       const frame=await observe(async game=>{
-        const code=game.childFrames().find(candidate=>candidate.name()==='maincode'||new URL(candidate.url()).pathname==='/runner');
+        const code=game.childFrames().find(candidate=>{
+          if(candidate.name()==='maincode')return true;
+          try{return new URL(candidate.url()).pathname==='/runner';}catch{return false;}
+        });
         if(!code || !await code.evaluate(()=>!!(globalThis as any).sharedRoutine && !!(globalThis as any).partyRoleRunner))
           throw Error(`Native CODE runner missing for ${options.name}`);
         return code;

@@ -44,3 +44,29 @@ test('captured Arena followers reach the priest through the narrow passage',t=>{
   assert.ok(path.some((p,i)=>Math.hypot(p.x-goal.x,p.y-goal.y)>Math.hypot((i?path[i-1]:start).x-goal.x,(i?path[i-1]:start).y-goal.y)), 'wall requires a temporary detour away from priest');
  }
 });
+
+test('captured level1 multi-corner approach limits redundant distant goal collision probes',t=>{
+ for(const reach of [21,161.5]){
+  const start={x:0,y:395.76},target={x:-11,y:115};
+  const c=vm.createContext({G:{},character:{map:'level1',...start,base:{h:8,v:7,vn:2}}});
+  if(!require('./helpers/game-geometry.cjs').installGameGeometry(c,require('./helpers/installed-game.cjs').version))return t.skip('native geometry unavailable');
+  let probes=0;
+  const clear=(a,b)=>{probes++;return c.can_move({map:'level1',x:a.x,y:a.y,going_x:b.x,going_y:b.y,base:c.character.base});};
+  const goals=[],reaches=[reach,(reach+Math.min(reach,42))/2,Math.min(reach,42)];
+  for(const radius of reaches.filter((r,i)=>i===0||Math.abs(r-reaches[i-1])>1))for(let side=0;side<16;side++){
+   const angle=side*Math.PI/8,point={x:target.x+Math.cos(angle)*radius,y:target.y+Math.sin(angle)*radius};
+   if(clear(point,point))goals.push(point);
+  }
+  probes=0;const path=complete(recoveryRoute(start,goals,clear));
+  assert.ok(path?.length,'a real terrain-safe path must be found');
+  assert.ok(probes<600,`${reach}-range approach made ${probes} redundant native probes`);
+  let previous=start;for(const point of path){assert.ok(clear(previous,point));previous=point;}
+  assert.ok(goals.some(goal=>goal.x===previous.x&&goal.y===previous.y),'endpoint remains an authorized goal');
+ }
+});
+
+test('clear distant authorized endpoint remains a direct single-edge route',()=>{
+ const start={x:0,y:0},goal={x:1800,y:100};let probes=0;
+ assert.deepEqual(complete(recoveryRoute(start,goal,()=>{probes++;return true;})),[goal]);
+ assert.equal(probes,1);
+});

@@ -15,10 +15,12 @@ test('blocked melee Phoenix recovery computes native hitbox-clear goals and reac
   const seed=await live.admin(`output=(()=>{const original=G.monsters.phoenix;try{
     globalThis.__e2ePlannedPhoenixOriginal=original;
     // Declared stationary encounter fixture; collision, targeting and damage remain native.
-    G.monsters.phoenix={...original,speed:0,charge:0,hp:10000000};
+    // Preserve speed/HP catalog defaults: native transport omits values equal
+    // to this catalog, but already-running clients still have the old defaults.
+    G.monsters.phoenix={...original,stationary:true};
     const m=new_monster('main',{type:'phoenix',count:1,position:[738,1702],radius:0},{temp:1});
-    m.speed=0;m.charge=0;m.hp=m.max_hp=10000000;
-    return {id:String(m.id),map:m.map,x:m.x,y:m.y};
+    m.speed=0;m.moving=false;m.hp=m.max_hp=10000000;m.abs=true;m.u=true;m.cid++;
+    return {id:String(m.id),map:m.map,x:m.x,y:m.y,wire:monster_to_client(m)};
   }catch(error){G.monsters.phoenix=original;delete globalThis.__e2ePlannedPhoenixOriginal;throw error;}})()`);
   let geometry:any;
   const proposals:any[]=[],positions:any[]=[];
@@ -30,9 +32,15 @@ test('blocked melee Phoenix recovery computes native hitbox-clear goals and reac
   };
   try{
     await context.route('**/party-api/status',intercept);
-    geometry=await live.clients[W].run(`(()=>{const t=parent.entities[${JSON.stringify(seed.id)}];
-      return {blocked:!can_move_to(${seed.x},${seed.y}),range:character.range,targetVisible:!!t,
-        origin:{x:character.real_x,y:character.real_y}};})()`);
+    expect(seed.wire.hp).toBe(10000000);expect(seed.wire.max_hp).toBe(10000000);expect(seed.wire.speed).toBe(0);
+    await expect.poll(async()=>{
+      geometry=await live.clients[W].run(`(()=>{const t=parent.entities[${JSON.stringify(seed.id)}];
+        return {blocked:!can_move_to(${seed.x},${seed.y}),range:character.range,targetVisible:!!t,
+          nativeTarget:t&&{id:t.id,hp:t.hp,max_hp:t.max_hp,moving:t.moving,x:t.x,y:t.y},
+          origin:{x:character.real_x,y:character.real_y}};})()`);
+      return geometry.nativeTarget?.max_hp===10000000&&!geometry.nativeTarget.moving&&
+        Math.hypot(geometry.nativeTarget.x-seed.x,geometry.nativeTarget.y-seed.y)<1;
+    },{timeout:30000,message:'The real client must observe the declared stationary native Phoenix fixture'}).toBe(true);
     expect(geometry.blocked,'The original reported Phoenix approach crosses native Main terrain').toBe(true);
     await expect.poll(async()=>{
       const sample=await live.clients[W].run(`(()=>{const t=parent.entities[${JSON.stringify(seed.id)}],ports=globalThis.sharedRoutine?.terrainRecoveryPorts?.();
