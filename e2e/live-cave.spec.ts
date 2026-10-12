@@ -988,22 +988,52 @@ test('Cave assembly regroups displaced completed participants before departure',
     const displacement=(origin,distance)=>{
       for(let i=0;i<16;i++){
         const a=i*Math.PI/8,target={x:origin.x+distance*Math.cos(a),y:origin.y+distance*Math.sin(a)};
-        if(can_move({map:p.map,x:origin.x,y:origin.y,going_x:target.x,going_y:target.y,base:p.base})&&pathClear(origin,target,rooms,420))return target;
+        if(target.x<geometry.min_x||target.x>geometry.max_x||target.y<geometry.min_y||target.y>geometry.max_y)continue;
+        if(people.every(actor=>can_move({map:p.map,x:origin.x,y:origin.y,going_x:target.x,going_y:target.y,base:actor.base}))&&
+          pathClear(origin,target,rooms,420)&&pathClear(origin,target,enemies,300))return target;
       }
     };
-    // Generated entry neighborhoods can have a combat room inside the required
-    // clearance. Search a larger bounded native corridor without changing walls,
-    // actors, room activation, or either displacement's safety requirements.
-    for(let radius=0;radius<=1200;radius+=20)for(let i=0;i<32;i++){
-      const a=i*Math.PI/16,target={map:p.map,x:p.x+radius*Math.cos(a),y:p.y+radius*Math.sin(a)};
-      if(!people.every(actor=>actor.map===p.map&&can_move({map:p.map,x:actor.x,y:actor.y,going_x:target.x,going_y:target.y,base:actor.base})&&pathClear(actor,target,enemies,300)))continue;
-      const offset=displacement(target,160),displaced=displacement(target,85);
-      if(offset&&displaced)return {...target,offset,displaced,rooms,enemies,before:people.map(actor=>({name:actor.name,x:actor.x,y:actor.y}))};
+    // This is the declared initial staging seed, before testing assembly.
+    // Safe corridors can be around entry walls on a randomized native floor.
+    const geometry=G.geometry[p.map];
+    if(!geometry||![geometry.min_x,geometry.min_y,geometry.max_x,geometry.max_y].every(Number.isFinite))throw Error('Native floor bounds unavailable');
+    const floor=require('./logic/dream_layout').generateDungeon(run.seed).floors[G.maps[p.map].generated.floor];
+    const nativeFloor={geometry:{min_x:geometry.min_x,min_y:geometry.min_y,max_x:geometry.max_x,max_y:geometry.max_y,
+      x_lines:geometry.x_lines,y_lines:geometry.y_lines},grid:floor.grid,bases:people.map(actor=>({name:actor.name,base:actor.base}))};
+    const tile=floor.tileSize,grid=floor.grid,seen=new Set(),connected=[{x:p.x,y:p.y,cx:Math.floor(p.x/tile),cy:Math.floor(p.y/tile),parent:-1}];
+    seen.add(connected[0].cx+':'+connected[0].cy);
+    for(let index=0;index<connected.length;index++){
+      const node=connected[index];
+      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const cx=node.cx+dx,cy=node.cy+dy,key=cx+':'+cy;
+        if(grid[cy]?.[cx]!==1||seen.has(key))continue;
+        const next={x:(cx+.5)*tile,y:(cy+.5)*tile,cx,cy,parent:index};
+        if(!people.every(actor=>can_move({map:p.map,x:node.x,y:node.y,going_x:next.x,going_y:next.y,base:actor.base})))continue;
+        seen.add(key);connected.push(next);
+      }
     }
-    throw Error('No nearby collision-safe native staging position');
+    for(let index=0;index<connected.length;index++){
+      const {x,y}=connected[index],target={map:p.map,x,y};
+      if(!people.every(actor=>actor.map===p.map&&can_move({map:p.map,x,y,going_x:x,going_y:y,base:actor.base})))continue;
+      const offset=displacement(target,160),displaced=displacement(target,85);
+      if(offset&&displaced){
+        const path=[];for(let cursor=index;cursor>=0;cursor=connected[cursor].parent)path.push({x:connected[cursor].x,y:connected[cursor].y});
+        return {found:true,...target,offset,displaced,rooms,enemies,nativeFloor,connectivity:{seed:run.seed,floor:floor.level,tile,reachableCells:connected.length,path:path.reverse()},
+          before:people.map(actor=>({name:actor.name,x:actor.x,y:actor.y}))};
+      }
+    }
+    return {found:false,map:p.map,rooms,enemies,nativeFloor,connectivity:{seed:run.seed,floor:floor.level,tile,reachableCells:connected.length},
+      before:people.map(actor=>({name:actor.name,x:actor.x,y:actor.y}))};
   })()`);
   await info.attach('declared-native-cave-safe-staging',{body:JSON.stringify(staging),contentType:'application/json'});
-  await Promise.all(['E2EWarrior','E2EPriest'].map(name=>move(name,staging)));
+  expect(staging.found,'The actual connected native floor must provide both required safe displacements').toBe(true);
+  await live.admin(`output=['E2EWarrior','E2EPriest'].map(name=>{const p=get_player(name);
+    if(p.map!==${JSON.stringify(staging.map)})throw Error('Native staging floor changed');
+    p.x=${staging.x};p.y=${staging.y};p.going_x=p.x;p.going_y=p.y;p.moving=false;resend(p,'u+cid+reopen');
+    return {name,map:p.map,x:p.x,y:p.y};})`);
+  await expect.poll(async()=>Promise.all(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].run(
+    `character.map===${JSON.stringify(staging.map)}&&Math.hypot(character.real_x-(${staging.x}),character.real_y-(${staging.y}))<5`))),
+    {timeout:20_000,message:'Both actual native clients must observe the declared initial staging seed'}).toEqual([true,true]);
   await expect.poll(async()=>(await view()).members.every((m:any)=>m.fresh&&m.observation.ready),{timeout:30_000}).toBe(true);
   const before=await positions(),offset=await point('E2EPriest',160);
   // Real native walking and a temporary native cruise keep assembly open.
