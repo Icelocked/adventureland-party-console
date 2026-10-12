@@ -21,7 +21,7 @@ for (const automatic of [false,true]) {
     await expect(page.getByRole('menuitem',{name:'Exchange',exact:true})).toBeVisible();
     await expect(page.getByRole('menuitem',{name:'Auto exchange',exact:true})).toBeVisible();
     await page.getByRole('menuitem',{name:automatic?'Auto exchange':'Exchange',exact:true}).click();
-    const pending=await live.state();
+    let pending=await live.state();
     if(automatic){
       await expect(tile).toContainText('Auto exchange');
       await live.post('/merchant/force-stand',{enabled:false});
@@ -29,8 +29,15 @@ for (const automatic of [false,true]) {
       expect((await live.clients[fighter].snapshot()).items[20]?.q).toBe(1);
       await live.post('/merchant/routine-priorities',{priorities:{},enabled:{'automatic exchange':true}});
     }else{
-      expect(pending.merchantQueue.some((job:any)=>job.reason==='exchange'&&job.exchangePickupId)).toBe(true);
+      const matchingPickup=(state:any,exchangeId?:string,pickupId?:string)=>{
+        const jobs=[...state.merchantQueue,...(state.merchantCurrent?[state.merchantCurrent]:[])];
+        const exchange=jobs.find((job:any)=>job.reason==='exchange'&&job.exchangePickupId&&(!exchangeId||job.id===exchangeId));
+        return exchange&&(!pickupId||exchange.exchangePickupId===pickupId)&&jobs.some((job:any)=>job.id===exchange.exchangePickupId&&job.exchangeDeliveryId===exchange.id);
+      };
+      await expect.poll(async()=>{pending=await live.state();return !!matchingPickup(pending);},{timeout:30_000}).toBe(true);
+      const exchange=pending.merchantQueue.find((job:any)=>job.reason==='exchange'&&job.exchangePickupId)??pending.merchantCurrent;
       await live.restartCoordinator();
+      await expect.poll(async()=>!!matchingPickup(await live.state(),exchange.id,exchange.exchangePickupId),{timeout:30_000}).toBe(true);
       await live.post('/merchant/force-stand',{enabled:false});
     }
     await expect.poll(async()=>(await live.clients[fighter].snapshot()).items.filter((item:any)=>item?.name==='armorbox'&&!item.l).length,{timeout:180_000}).toBe(0);

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Retain bounded native route-search timing diagnostics to distinguish search CPU cost from scheduler delays in movement reports.
+
 - Record actual Halloween boss participation for assisting followers so event recovery returns every fighter to its saved farming checkpoint.
 - Make console-build lock cleanup tolerate transient Windows filesystem failures without deleting a successor build lock.
 - Wait for genuine native player presence when observing Hunt interruption recovery, without replaying gameplay mutations.

@@ -33,3 +33,19 @@ frontier/tick counts, and verifies exact visibility restoration after every tick
 The replay performs no movement, timers, or network requests. Real native Cave
 CI remains the integration check; do not treat offline route parity as a passing
 native gameplay scenario.
+
+## Distinguishing CPU time from scheduler cadence
+
+Failure inventory before instrumentation: native run 38282332581 Cave shard 1
+still expired after a repaired boss route. The leader expanded 22,751 vertices
+at 196 seconds, 70,118 at 254, 108,079 at 312, and 159,098 at 376; its follower
+waited for the route. The retained reports do not establish whether the verified
+40-ms hook applied, how much CPU was spent, or how often the 80-ms scheduler
+actually called BFS. Source inclusion alone is insufficient evidence.
+
+Retain bounded per-search counters only: verified runner version, actual slice
+mode/fallback reason, original hidden state, call count, total/max synchronous
+CPU time, and min/max/mean intervals between call starts. Reset at a new search,
+restore the visibility hook on all exits, and expose immutable snapshots in
+existing movement reports and native Cave samples. No extra request, timer,
+movement, clock mutation, deadline, or freshness change is allowed.

@@ -683,6 +683,8 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
           return {at:Date.now(),name:c.name,map:c.map,in:c.in,x:c.real_x,y:c.real_y,
             paused:!!w.__partyMovementPaused || !w.__partyDungeonRuntime?.canMove(),
             movementPaused:!!w.__partyMovementPaused,dungeonCanMove:w.__partyDungeonRuntime?.canMove(),
+            nativePlanning:w.__partyMovement?.nativePlanning?.(),schedulerGate:!!w.__partyMovement?.gate?.owner,
+            nativeMoving:!!c.moving,transporting:!!p.transporting,cavePaused:!!c.cave?.paused,
             ready:w.__partyDungeonRuntime?.report().ready,
             smart:{searching:s.searching,found:s.found,moving:s.moving,x:s.x,y:s.y,map:s.map,start_x:s.start_x,start_y:s.start_y},
             bfs:{length:q.length,index,best:w.best,current:q[index],last:q[q.length-1]},
