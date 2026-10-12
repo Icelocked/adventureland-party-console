@@ -13,7 +13,7 @@ from the commits merged into `main`.
 - Simplify Stand and Market WTB displays: remove Auto badges and minimum wording,
   and rename Use stand to Keep on stand.
 
-- Make console deployment a durable transaction: immediately hold new combat pulls,
+- Make console deployment a durable transaction: hold new combat pulls after candidate preparation,
   renew the hold through activation, wait for all browser and headless clients,
   and restore activity together after three continuously safe seconds.
 - Add Load at Main with fighter checkpoint return and a brief merchant-operation
