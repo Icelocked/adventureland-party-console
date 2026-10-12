@@ -114,6 +114,7 @@ export interface HeartbeatState extends Record<(typeof heartbeatStateFields)[num
 
 export interface HeartbeatResponsePorts {
   now(): number;
+  persist?(): void;
   activeNames(): string[];
   enabled(name: string, event?: string): boolean;
   navigationRevision(name: string): number;

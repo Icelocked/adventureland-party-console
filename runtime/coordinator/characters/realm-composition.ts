@@ -14,6 +14,7 @@ type CompositionPorts = Pick<
   | "now"
   | "sleep"
   | "pauseMerchant"
+  | "retireConvoys"
   | "native"
   | "block"
   | "stop"
@@ -33,6 +34,7 @@ export function createCoordinatorRealmSwitch(state: RealmState, ports: Compositi
     now: () => ports.now(),
     sleep: (ms) => ports.sleep(ms),
     pauseMerchant: () => ports.pauseMerchant(),
+    retireConvoys: (participants) => ports.retireConvoys?.(participants),
     clearCommand: (name) => {
       delete state.commands[name];
     },

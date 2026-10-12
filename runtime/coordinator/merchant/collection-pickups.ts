@@ -6,6 +6,7 @@ import { availableCraftStock, craftProtection, type CraftReservationState } from
 
 export interface PickupState extends ConflictState, CraftReservationState {
   statuses?: Record<string, {items?: (InventoryEntry | null)[]} | undefined>;
+  autoExchanges?: Record<string, unknown>;
   merchantAutomations?: Record<string, boolean | undefined>;
   marked?: Record<string, unknown[] | undefined>;
   merchantMarked?: Record<string, unknown[] | undefined>;
@@ -24,12 +25,16 @@ function automaticSale(state: PickupState, value: ItemMark): boolean {
   if (!value.npcSaleId) return true;
   return enabled(state, 'auto npc sales') && !itemRuleConflicts(state, markedItem(value) || {}).length && !!state.npcSaleMarks?.some(sale => sale.id === value.npcSaleId && sale.auto && sale.source === 'character' && sale.state !== 'blocked');
 }
+function exchangeReserved(state: PickupState, name: string, entry: InventoryEntry): boolean {
+  return (state.merchantMarked?.[name] || []).some(value => { const saved = mark(value); return !!saved.exchangeJobId && saved.slot === entry.slot; });
+}
+function compoundReservations(state: PickupState, name: string): unknown[] {
+  return (state.compounds?.[name] || []).flatMap(group => { const items = requestObject(group).items; return Array.isArray(items) ? items : []; });
+}
 function manuallyReserved(state: PickupState, name: string, entry: InventoryEntry): boolean {
+  if (exchangeReserved(state, name, entry)) return true;
   const marks = [...(state.upgrades?.[name] || []).filter(value => !requestObject(value).auto), ...(state.statScrolls?.[name] || [])];
-  for (const group of state.compounds?.[name] || []) {
-    const items = requestObject(group).items;
-    if (Array.isArray(items)) marks.push(...items);
-  }
+  marks.push(...compoundReservations(state, name));
   return marks.some(value => { const wanted = mark(value); return wanted.slot === entry.slot || sameMarkedItem(wanted.item, entry.item); });
 }
 function upgradeMarks(state: PickupState, name: string): ItemMark[] {
@@ -53,7 +58,8 @@ function processing(state: PickupState, name: string): ItemMark[] {
     const item = entry!.item!, slot = entry!.slot;
     const upgrade = upgrades.some(m => m.slot === slot && sameMarkedItem(m.item, item));
     const compound = rules.some(rule => rule.name === item.name && Number(rule.quantity) !== 0 && Number(item.level || 0) < Number(rule.targetTier || 1));
-    return upgrade || compound ? [{slot, item, quantity: Number(item.q) || 1, automaticPickup: true}] : [];
+    const exchange = enabled(state, 'automatic exchange') && !!state.autoExchanges?.[`${item.name}@${Number(item.level) || 0}`];
+    return upgrade || compound || exchange ? [{slot, item, quantity: Number(item.q) || 1, automaticPickup: true}] : [];
   });
 }
 function manualSalePickups(state: PickupState, name: string) {
@@ -64,10 +70,20 @@ function manualSalePickups(state: PickupState, name: string) {
 export function collectionPickups(state: PickupState, name: string, reason = 'marked items') {
   if (reason === 'npc sale pickup') return manualSalePickups(state, name);
   const bank = (state.marked?.[name] || []).map(mark).filter(collectable);
-  const keep = (state.merchantMarked?.[name] || []).map(mark).filter(value => collectable(value) && automaticSale(state, value));
+  const keep = (state.merchantMarked?.[name] || []).map(mark).filter(value => collectable(value) && automaticSale(state, value) && (!value.exchangeJobId || reason === 'exchange pickup'));
   const occupied = bank.concat(keep);
   for (const pickup of processing(state, name)) {
     if (!occupied.some(value => value.slot === pickup.slot && sameMarkedItem(markedItem(value), pickup.item))) keep.push(pickup);
   }
   return {bank, keep};
+}
+
+/** A one-time exchange must own the whole selected stack, including craft stock. */
+function itemQuantity(item: Item | null | undefined): number { return Number(item?.q) || 1; }
+export function exchangePickup(state: PickupState, name: string, entry: InventoryEntry): ItemMark | null {
+  if (protectedEntry(state, name, entry)) return null;
+  const stock = availableCraftStock([{...entry, craftLocation: 'inventory:' + name}], craftProtection(state));
+  const available = stock[0];
+  if (!available?.item || itemQuantity(available.item) !== itemQuantity(entry.item)) return null;
+  return {slot: entry.slot, item: entry.item || undefined, quantity: itemQuantity(entry.item), automaticPickup: true};
 }

@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures';
+import './tracktrix-drilldown.case';
 import { createServer } from 'node:http';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { transform, build } from 'esbuild';

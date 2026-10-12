@@ -347,6 +347,9 @@
   var coordinatorClockOffset = 0;
   var banking = false;
   var bankboiStorage = false;
+  // Older coordinators omit the flag: retain their conservative reservation.
+  var bankStaging = true;
+  function bankStagingSlot(pack, slot) { return bankStaging && pack === "items1" && slot >= 35; }
   var bankQueued = false;
   var stocking = false;
   var upgrading = false;
@@ -3721,10 +3724,10 @@
     return bankStacks;
   }
   async function finishBankStacks(activity) {
-    var signature = JSON.stringify([bankSortVisit && bankSortVisit.id, character.bank]);
+    var signature = JSON.stringify([bankStaging, bankSortVisit && bankSortVisit.id, character.bank]);
     if (bankStackVisitSignature === signature) return;
     var result = await bankStackService().compact();
-    if (!result.deferred) bankStackVisitSignature = JSON.stringify([bankSortVisit && bankSortVisit.id, character.bank]);
+    if (!result.deferred) bankStackVisitSignature = JSON.stringify([bankStaging, bankSortVisit && bankSortVisit.id, character.bank]);
     if (result.moved) {
       activity.push({ level: "info", message: "Combined " + result.moved + " bank stacks" });
       await request("/status", { method: "POST", body: snapshot() });
@@ -3769,7 +3772,7 @@
         }
       }
       // Staging is a transfer pane, so compatible deposits must merge here too.
-      if (!compatibleStack && stackLimit > 1 && Array.isArray(character.bank.items1)) {
+      if (bankStaging && !compatibleStack && stackLimit > 1 && Array.isArray(character.bank.items1)) {
         for (var stagedSlot = 35; stagedSlot < 42; stagedSlot += 1) {
           var stagedItem = character.bank.items1[stagedSlot];
           if (stagedItem && bankStackIdentity(stagedItem) === bankStackIdentity(source) &&
@@ -3786,7 +3789,7 @@
           if (!character.bank[packs[ep]][emptyBankSlot]) { destination = { pack: packs[ep], slot: emptyBankSlot }; break; }
         }
       }
-      if (!destination && !compatibleStack && Array.isArray(character.bank.items1)) {
+      if (bankStaging && !destination && !compatibleStack && Array.isArray(character.bank.items1)) {
         for (var reserveSlot = 35; reserveSlot < 42; reserveSlot += 1) {
           if (!character.bank.items1[reserveSlot]) { destination = { pack: "items1", slot: reserveSlot }; break; }
         }
@@ -3852,7 +3855,7 @@
     if (!await bankSortAuthorization()) throw new Error("Bank sorting cancelled");
   }
   function bankSortSignature() {
-    return JSON.stringify(bankPacksOnCurrentFloor().map(function(pack) { return [pack, character.bank[pack]]; }));
+    return JSON.stringify([bankStaging, bankPacksOnCurrentFloor().map(function(pack) { return [pack, character.bank[pack]]; })]);
   }
   function accessibleBankSortFloors() {
     var floors = [character.map], keys = {};
@@ -4041,7 +4044,7 @@
     var bankItems = [], usableLocations = [];
     packs.forEach(function (pack) {
       for (var slot = 0; slot < 42; slot += 1) {
-        if (pack === "items1" && slot >= 35) continue;
+        if (bankStagingSlot(pack, slot)) continue;
         usableLocations.push({ pack: pack, slot: slot });
         bankItems.push(character.bank[pack][slot] || null);
       }
@@ -4060,7 +4063,7 @@
         for (var p = 0; p < packs.length && !swap; p += 1) {
           var currentPack = packs[p];
           for (var bankSlot = 0; bankSlot < 42; bankSlot += 1) {
-            if (currentPack === "items1" && bankSlot >= 35) continue;
+            if (bankStagingSlot(currentPack, bankSlot)) continue;
             var current = character.bank[currentPack][bankSlot], wanted = desired[currentPack][bankSlot];
             if (!carried) {
               if (current && compareBankItems(current, wanted)) { swap = { pack: currentPack, slot: bankSlot }; break; }
@@ -4088,7 +4091,7 @@
     if (failure) throw failure;
     var stillMisplaced = packs.some(function (pack) {
       for (var slot = 0; slot < 42; slot += 1) {
-        if (pack === "items1" && slot >= 35) continue;
+        if (bankStagingSlot(pack, slot)) continue;
         if (compareBankItems(character.bank[pack][slot] || null, desired[pack][slot] || null)) return true;
       }
       return false;
@@ -4212,7 +4215,7 @@
     var limit = Number(G.items[item.name] && G.items[item.name].s) || 1;
     return limit > 1 && Object.keys(character.bank || {}).find(function (pack) {
       return Array.isArray(character.bank[pack]) && character.bank[pack].some(function (entry, slot) {
-        return !(pack === "items1" && slot >= 35) && entry && bankStackIdentity(entry) === bankStackIdentity(item) &&
+        return !bankStagingSlot(pack, slot) && entry && bankStackIdentity(entry) === bankStackIdentity(item) &&
           Number(entry.q || 1) < limit;
       });
     });
@@ -4310,7 +4313,7 @@
       for (var pack of packs) {
         if (!Array.isArray(character.bank[pack])) continue;
         for (var slot = 0; slot < 42; slot += 1) {
-          if (pack === "items1" && slot >= 35) continue;
+          if (bankStagingSlot(pack, slot)) continue;
           if (!character.bank[pack][slot]) return { pack: pack, slot: slot };
         }
       }
@@ -10168,7 +10171,10 @@
           if (character.map !== "main") {
             await prepareReturnExit(command,"town",function(){return runtimeCurrent() && !escapeOwns() && root.__partyTownGeneration===townGeneration;});
             try { await sharedPartyWalk(townPoint,"town-return",command.cycleId,command,function(){return root.__partyTownGeneration===townGeneration;}); }
-            catch (townRouteError) { root.__partyNavigationDetail=String(townRouteError.message||townRouteError);await sleep(3000); }
+            catch (townRouteError) {
+              if (returnWorkflowSuperseded(townRouteError)) throw townRouteError;
+              root.__partyNavigationDetail=String(townRouteError.message||townRouteError);await sleep(3000);
+            }
           } else if (Date.now() - (Number(root.__partyTownLastAttempt) || 0) >= 4000) {
             await saveReturnPhase(command,"town","main-town");
             root.__partyTownLastAttempt = Date.now();
@@ -10182,6 +10188,9 @@
         await request("/town-complete", { method: "POST", body: {
           character: character.name, commandId: command.id, cycleId: command.cycleId,
         }});
+      } catch (townError) {
+        if (returnWorkflowSuperseded(townError)) return;
+        throw townError;
       } finally {
         townTraveling = false;
         departurePending = false;
@@ -10427,6 +10436,11 @@
     }
   }
 
+  function returnWorkflowSuperseded(error) {
+    var context = error && error.partyRequest;
+    return !!context && context.path === "/return-progress" && context.status === 409 &&
+      context.reason === "return workflow superseded";
+  }
   function returnPhaseRecord(command, kind) {
     var revision=Number(navigationIntent.revision)||0;
     var saved=[root.__partyReturnProgress,parent.__partyReturnProgress].find(function(p){
@@ -10744,6 +10758,7 @@
       }
       statusPhase = "apply merchant settings";
       bankboiStorage = state.bankboiStorage === true;
+      bankStaging = state.bankStaging !== false;
       var nextStandListings = state.standListings || gatheringStandListings;
       if (JSON.stringify(nextStandListings) !== JSON.stringify(gatheringStandListings) && gatheringSession)
         gatheringSession.atStandForCooldown = false;

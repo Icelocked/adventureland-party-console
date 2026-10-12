@@ -291,6 +291,7 @@ export function startCoordinatorApplication(
       now: () => Date.now(),
       sleep,
       pauseMerchant: pauseMerchantForRealmSwitch,
+      retireConvoys: retireConvoysForRealmSwitch,
       native: nativeName,
       block: ensureCharacterBlock,
       stop: softkill_block,
@@ -498,6 +499,7 @@ export function startCoordinatorApplication(
     const upgradePreviews = createUpgradePreviews(party, {persist:persistSettings, dispatch:dispatchMerchant, stamp:stampMerchantJob});
     const heartbeatResponse = coordinatorPolicies.createCoordinatorHeartbeatResponse(party, {
       now: () => Date.now(),
+      persist: persistSettings,
       activeNames: () => activeNames().filter(n => n === party.merchantCharacter || farmingScopes.owner(n) === party.leader),
       enabled: eventsEnabledFor,
       intent: (name) => farmingNavigation.intent(name),
@@ -1644,6 +1646,16 @@ export function startCoordinatorApplication(
       coordinatorPolicies.pauseMerchantForRealm(party, () => Date.now(), stampMerchantJob);
     }
 
+    function retireConvoysForRealmSwitch(participants: string[]) {
+      // Keep saved farming destinations intact; only departed travel loses its owner.
+      if (party.activeConvoy?.participants.some(name => participants.includes(name)))
+        partyConvoys.cancel("party departed for another realm");
+      for (const service of independentServices()) {
+        if (service.state.activeConvoy?.participants.some(name => participants.includes(name)))
+          service.partyConvoys.cancel("party departed for another realm");
+      }
+    }
+
     function resolveAbtestingStrategy() {
       return coordinatorPolicies.updateCoordinatorABStrategy(party, {
         activeNames,
@@ -1825,6 +1837,7 @@ export function startCoordinatorApplication(
 
     const heartbeatResponse = coordinatorPolicies.createCoordinatorHeartbeatResponse(party, {
       now: () => Date.now(),
+      persist: persistSettings,
       activeNames,
       enabled: eventsEnabledFor,
       intent: (name) => farmingNavigation.intent(name),

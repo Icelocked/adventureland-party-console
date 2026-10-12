@@ -1,4 +1,5 @@
 import {collectPassing} from '../../combat/passing.ts';
+import { bankStagingReserved } from '../inventory/reserved-cargo.ts';
 import {passingControl} from '../../combat/passing-admission.ts';
 import {requestObject} from '../http/contracts.ts';
 import {outboundHunt} from '../../combat/hunt-travel.ts';
@@ -57,12 +58,37 @@ const navigationCommands = new Set([
 
 /** Long-running commands remain deliverable until their completion endpoint acknowledges them. */
 export function createHeartbeatResponse(state: HeartbeatState, ports: HeartbeatResponsePorts) {
+  function retireTownMembership(name: string): boolean {
+    const town = state.townCycle;
+    if (!town?.pending.includes(name) || town.revisions?.[name] === ports.navigationRevision(name)) return false;
+    town.pending = town.pending.filter(member => member !== name);
+    const command = state.commands[name];
+    if (command?.type === "town-party" && command.cycleId === town.id) delete state.commands[name];
+    if (!town.pending.length) state.townCycle = null;
+    return true;
+  }
+  function orphanedTownCommand(name: string): boolean {
+    if (state.commands[name]?.type !== "town-party") return false;
+    const town = state.townCycle;
+    // Town admission updates its cycle and commands synchronously. A command
+    // outside the canonical pending cycle is orphaned, never a newer admission.
+    return !town || state.commands[name]?.cycleId !== town.id || !town.pending.includes(name);
+  }
+  function retireTownCommand(name: string): void {
+    let changed = retireTownMembership(name);
+    if (orphanedTownCommand(name)) {
+      delete state.commands[name];
+      changed = true;
+    }
+    if (changed) ports.persist?.();
+  }
   function restoreTownCommand(name: string): void {
     const town = state.townCycle;
     if (town?.pending.includes(name) && !state.commands[name] && town.revisions?.[name] === ports.navigationRevision(name))
       state.commands[name] = {id: ports.now(), type:"town-party", cycleId:town.id};
   }
   function commandFor(name: string) {
+    retireTownCommand(name);
     if (ports.escapeOwns(name) && state.escape?.stage !== "recovery-convoy") return null;
     restoreTownCommand(name);
     const command = state.commands[name] || null;
@@ -147,6 +173,7 @@ export function createHeartbeatResponse(state: HeartbeatState, ports: HeartbeatR
       ),
       gatheringModes: state.bankbois[name] ? [] : state.gatheringModes,
       bankboiStorage: !!state.bankbois[name],
+      bankStaging: bankStagingReserved(state),
     };
   }
 

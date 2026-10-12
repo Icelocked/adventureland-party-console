@@ -20,6 +20,7 @@ export type LiveGame = {
   url: string;
   clients: Record<string, LiveClient>;
   state(catalogs?: boolean): Promise<any>;
+  savedTownCycle(): {id:string;pending:string[];revisions?:Record<string,number>} | null;
   post(route: string, body: unknown): Promise<any>;
   admin(code: string): Promise<any>;
   adminRealm(realm:'USI'|'USII', code:string):Promise<any>;
@@ -108,6 +109,14 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           const response = await fetch(url + '/party-api/state' + (catalogs ? '' : '?catalog=0'), { signal: AbortSignal.timeout(15_000) });
           if (!response.ok) throw Error('Live state failed: ' + response.status);
           return response.json();
+        },
+        savedTownCycle() {
+          const journal=readFileSync(path.join(directory,'state.jsonl'),'utf8');
+          const complete=journal.slice(0,journal.lastIndexOf('\n'));
+          const stored=Object.assign({},...complete.split('\n').filter(Boolean).map(line=>JSON.parse(line)));
+          const settings=stored[stateKeys.settings];
+          const decoded=typeof settings==='string'?JSON.parse(settings):settings;
+          return decoded?.townCycle || null;
         },
         async post(route, body) {
           const endpoint = route.startsWith('/party-api/') ? route : '/party-api' + route;

@@ -70,7 +70,7 @@ export function createMerchantQueue(state: QueueState, ports: QueuePorts) {
     return false;
   }
 
-  const separateRoutines = new Set(['deliveries', 'manual upgrades', 'auto upgrade', 'manual compounds', 'auto compound', 'manual buying', 'npc sale pickup', 'auto npc sale pickup', 'npc sales', 'auto npc sales']);
+  const separateRoutines = new Set(['exchange pickup', 'deliveries', 'manual upgrades', 'auto upgrade', 'manual compounds', 'auto compound', 'manual buying', 'npc sale pickup', 'auto npc sale pickup', 'npc sales', 'auto npc sales']);
   function sameWork(job: MerchantJob | null, name: string, reason: string): boolean {
     if (!job || job.target !== name) return false;
     if (name === ports.merchant() && ['withdrawals','bank collection'].includes(reason) && ['withdrawals','bank collection'].includes(job.reason)) return true;

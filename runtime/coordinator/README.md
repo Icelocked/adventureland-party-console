@@ -196,6 +196,15 @@ Activate with the supported coordinator/dashboard-only restart.
 
 # Character coordinator
 
+Pane 1's final seven bank cells are reserved for transfers only while a saved
+BankBoi exists, including an offline worker. Without BankBois, native sorting,
+deposits, stack homes and the dashboard use the full pane. Adding the first
+worker adopts existing transfer-row contents; removing the last worker clears
+only transfer-row cargo intent. Older heartbeat/protection payloads retain the
+conservative reservation. Validate `live-bank-staging.spec.ts` and retained
+bank/storage regressions; see `docs/testing-bank-staging.md`. Activation needs
+the supported full restart for character, coordinator and dashboard changes.
+
 Bank automatic-sale rules materialize deduplicated native-bank withdrawals even
 when unrelated requests already exist. Always-on withdrawals admit small visits;
 otherwise `bank collection` uses the automatic item collection routine at its
@@ -1999,3 +2008,13 @@ stale/disconnected observations cannot reset exhaustion. CODE turnover and backe
 restart preserve counters. Cave is excluded. Expired selections use the existing
 /event-disabled exit and checkpoint recovery. Publish character and coordinator
 assets together through the supported full restart when activating this change.
+
+Party inventory exposes Exchange and Auto exchange as merchant-owned end states.
+Automatic exchange stock participates in protected party collection while the
+routine is enabled, independently of automatic compound. Auto merchant remains
+exclusive: it only hands stock to the merchant. One-time Exchange persists a
+separate manual exchange pickup and a blocked exchange job; only its matching
+full kept-item handoff receipt releases the merchant exchange, including after
+restart. Validate `live-exchange-collection.spec.ts`; see
+`docs/testing-party-exchange.md`. Coordinator/dashboard-only activation requires
+the explicitly requested supported CoordinatorOnly restart.

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { bankStagingReserved } from '../inventory/reserved-cargo.ts';
 import { requestObject, type HttpRequest, type HttpResponse } from "../http/contracts.ts";
 import { craftProtection, type CraftReservationState } from './craft-reservations.ts';
 
@@ -11,6 +12,7 @@ export interface BankSortRequest {
   message?: string;
 }
 export interface BankSortState {
+  bankbois?: Record<string, unknown> | null;
   bankSortMode?: "automatic" | "request";
   bankSortRequest?: BankSortRequest | null;
   merchantCharacter: string | null;
@@ -96,6 +98,7 @@ export function createBankSortRoutes(state: BankSortState & CraftReservationStat
     if (body.action === 'stack') {
       const protection = craftProtection(state);
       return res.json({ protection: {
+        staging: bankStagingReserved(state),
         locations: Object.values(state.withdrawals || {}).flat().map(({pack, slot}) => ({pack, slot})),
         items: protection.requirements.map(need => ({name: need.id, level: need.level})),
         ...(protection.error ? {error: protection.error} : {}),

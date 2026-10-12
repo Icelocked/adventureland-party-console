@@ -113,7 +113,17 @@ export function luckySlotSearch(tracking: LuckySlotTracking) {
   const confidence = best.probability;
   const total = ranked.reduce((sum, entry) => sum + entry.samples, 0);
   const inferred = confidence >= 0.999 && best.samples >= 100;
-  const nextSlot = tracking.cursor?.slot ?? 0;
+  let nextSlot = tracking.cursor?.slot ?? 0;
+  if (inferred) nextSlot = best.slot;
+  else {
+    const ruledOut = new Set(ranked.filter(entry => entry.ruledOut).map(entry => entry.slot));
+    // Keep the persisted cursor intact so new evidence can restore candidates.
+    // Bound the scan even if a future model rules out every square.
+    for (let offset = 0; offset < 42; offset++) {
+      const candidate = ((tracking.cursor?.slot ?? 0) + offset) % 42;
+      if (!ruledOut.has(candidate)) { nextSlot = candidate; break; }
+    }
+  }
   return {slot: total ? best.slot : null, confidence, samples: best.samples, total,
     inferred, nextSlot, slots: Object.fromEntries(ranked.map(entry => [entry.slot, entry])),
     ruledOutCount: ranked.filter(entry => entry.ruledOut).length};

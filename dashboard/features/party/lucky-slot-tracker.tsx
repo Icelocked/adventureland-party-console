@@ -21,7 +21,7 @@ export function LuckySlotStatistics({ tracking, verified, lockedSlot, resumingSl
     <p>{search.ruledOutCount}/42 slots ruled out.</p>
     <p>{search.total} recorded upgrade rolls · {rows.filter(row => row.totalRolls > 0).length}/42 slots sampled.</p>
     <p>{search.slot === null ? "No evidence yet. Testing starts at slot 0." : `${search.inferred ? 'Statistically inferred' : 'Leading candidate'}: slot ${search.slot} · ${(search.confidence * 100).toFixed(2)}% model confidence · ${search.samples} rolls in that slot.`}</p>
-    <p className="text-zinc-300">Normal upgrade jobs rotate through the least-sampled remaining candidates and restore inventory afterward. Once a slot is statistically inferred, upgrades use it while evidence continues to accumulate. No extra upgrades are queued. Slot numbers start at 0.</p>
+    <p className="text-zinc-300">Normal upgrade jobs test remaining candidates in sequential order, skipping ruled-out slots, and restore inventory afterward. Once a slot is statistically inferred, upgrades use it while evidence continues to accumulate. If confidence drops, sequential discovery resumes. No extra upgrades are queued. Slot numbers start at 0.</p>
     <p className="text-zinc-400">Inference requires at least 100 rolls in the leading slot and 99.9% confidence under the published server model. New evidence can change the selected slot. A slot with at least 100 rolls is ruled out when its ordinary probability reaches 99.9% in the same joint model; new evidence can restore it as a candidate.</p>
     <div className="max-h-[55vh] overflow-auto rounded border border-zinc-500 bg-zinc-950">
       <table className="w-full text-right text-xs">
