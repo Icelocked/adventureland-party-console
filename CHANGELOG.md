@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep followers on the shared saved farming checkpoint when joining a leader during an event, without persisting the temporary rendezvous as a personal return destination.
+
 - Retain rare encounter admission until the exact combat queue is acknowledged, avoiding permanent rejection from pre-handoff status reports.
 
 - Verify explicit native combat fixture wire overrides and catalog projections, and acknowledge Cave entry freshness rejections without duplicating accepted entries.
