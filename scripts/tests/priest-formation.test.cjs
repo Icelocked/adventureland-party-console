@@ -708,3 +708,45 @@ test('native healable terminal outside existing formation readiness is rejected'
  assert.ok(r.c.distance(r.priest,r.warrior)<187,'The actual hitboxes are within native healing reach');
  assert.equal(r.c.terrainRecoveryFollowerTerminal({x:0,y:0},{x:200,y:0}),false,'Center readiness cannot be waived by native healing alone');
 });
+
+test('designated tank: the priest formation leaves its movement to tankMovementTick',()=>{
+ const r=setup();r.c.tank=null;
+ assert.equal(r.c.formationMove(r.monster),true);assert.ok(r.moves.length>0,'a non-tank warrior orbits in formation');
+ const q=setup();q.c.tank='W';
+ assert.equal(q.c.formationMove(q.monster),false);assert.equal(q.moves.length,0);
+ q.c.tank='P';assert.equal(q.c.formationMove(q.monster),true,'another tank leaves this warrior in formation');
+});
+
+test('designated tank: does not kite its own target but still kites another attacker',async()=>{
+ const r=setup();r.c.tank='W';r.c.bossCombatActive=()=>false;r.c.returnCombatActive=()=>false;
+ assert.equal(await r.c.kiteIfNeeded(r.monster),false);assert.equal(r.moves.length,0);
+ r.monster.target=null;r.entities.B={id:'B',type:'monster',mtype:'goo',map:'main',x:150,y:20,range:20,target:'W',visible:true};
+ assert.equal(await r.c.kiteIfNeeded(r.monster),true);assert.equal(r.moves.length,1);
+ const n=setup();n.c.tank=null;n.c.bossCombatActive=()=>false;n.c.returnCombatActive=()=>false;
+ assert.equal(await n.c.kiteIfNeeded(n.monster),true,'a non-tank still kites its own attacker');
+});
+
+test('designated tank: approaches to melee range and skips the no-target defensive evade',()=>{
+ const r=setup();r.c.tank='W';r.warrior.x=100;r.c.bossCombatActive=()=>false;
+ r.c.approachCombatTarget(r.monster);assert.equal(r.c.partyCombatPosition.mode,'tank-approaching');
+ assert.ok(r.moves.at(-1).x>100);
+ r.c.formationMove=()=>{throw Error('full formation solver without target');};
+ let evades=0;r.c.kiteIfNeeded=async()=>{evades++;};
+ const start=source.indexOf('    defensiveFormationMove: function () {');
+ const end=source.indexOf('    pollFarmingCombatHandoff:',start);
+ vm.runInContext('var defense = {'+source.slice(start,end)+'};',r.c);
+ assert.equal(r.c.defense.defensiveFormationMove(),false);assert.equal(evades,0);
+ r.warrior.x=170;assert.equal(r.c.defense.defensiveFormationMove(),false,'tank stays put when the attacker is close');
+ r.c.tank=null;assert.equal(r.c.defense.defensiveFormationMove(),true);assert.equal(evades,1);
+});
+
+test('designated tank: stops holding below half HP or outside the priest heal range',()=>{
+ const r=setup();r.c.tank='W';
+ assert.equal(r.c.designatedTankHolds(),true);
+ r.warrior.hp=40;assert.equal(r.c.designatedTankHolds(),false,'low HP');
+ assert.equal(r.c.formationMove(r.monster),true,'formation moves a low-HP tank');
+ const q=setup();q.c.tank='W';Object.assign(q.warrior,{x:260});Object.assign(q.monster,{x:288});
+ assert.equal(q.c.designatedTankHolds(),false,'priest out of heal range');
+ const n=setup();n.c.tank='W';n.c.currentPartyList=()=>['W'];n.c.partyPositions=[n.warrior];
+ assert.equal(n.c.designatedTankHolds(),true,'no priest in the party');
+});
