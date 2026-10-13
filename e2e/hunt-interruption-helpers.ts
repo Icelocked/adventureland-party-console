@@ -113,8 +113,8 @@ export async function killedByParty(live:LiveGame,id:string,timeout=45000,observ
         const game=window as any, runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
         const target=game.entities?.[id], c=game.character, shared=runner?.sharedRoutine;
         const candidate=sample&&shared?.getWalkingPassiveTarget?.(true);
-        let attackIssued:any;
-        const hit=events.find((event:any)=>{
+        const eligibleHits:any[]=[];
+        const hits=events.filter((event:any)=>{
           if(event.event!=='hit'||!fighters.includes(String(event.data?.hid)))return false;
           if(!passingGoo)return String(event.data?.id)===id;
           if(event.at<startedAt||String(event.data?.hid)!==observer||!(event.data?.damage>0))return false;
@@ -126,11 +126,12 @@ export async function killedByParty(live:LiveGame,id:string,timeout=45000,observ
           if(!issued||issued.at<startedAt||String(issued.data.id)!==String(event.data.id)||
             event.at-issued.at<0||event.at-issued.at>2000||!motion?.convoyId||motion.convoyPhase!=='travelling'||motion.candidate?.mtype!=='goo'||
             String(motion.candidate.id)!==String(event.data.id))return false;
-          attackIssued=issued;return true;
+          eligibleHits.push({hit:event,attackIssued:issued});return true;
         });
+        const hit=hits[0],attackIssued=eligibleHits[0]?.attackIssued;
         const killedId=hit?String(hit.data.id):id;
         return {
-          hit,attackIssued,issued:passingGoo?events.filter((e:any)=>e.event==='attack-issued'&&e.data?.actor===observer&&e.at>=startedAt):[],
+          hit,attackIssued,eligibleHits,deaths:passingGoo?events.filter((e:any)=>e.event==='death'):[],issued:passingGoo?events.filter((e:any)=>e.event==='attack-issued'&&e.data?.actor===observer&&e.at>=startedAt):[],
           partyHits:passingGoo?events.filter((e:any)=>e.event==='hit'&&e.at>=startedAt&&fighters.includes(String(e.data?.hid))&&e.data?.damage>0):[],death:events.find((e:any)=>e.event==='death'&&String(e.data?.id)===killedId),
           ...(sample?{diagnostic:{at:Date.now(),id,position:{map:c.map,x:c.real_x,y:c.real_y,going_x:c.going_x,going_y:c.going_y,moving:c.moving,range:c.range},
             target:target&&{id:target.id,x:target.real_x??target.x,y:target.real_y??target.y,hp:target.hp,visible:target.visible,dead:target.dead,inRange:runner?.is_in_range?.(target)},
@@ -142,15 +143,20 @@ export async function killedByParty(live:LiveGame,id:string,timeout=45000,observ
         };
       },{id,fighters,sample,observer,passingGoo:!!options.passingGoo,startedAt:options.startedAt??0})})));
     if(sample&&observations){observations.push({id,clients:receipts.map(({observer,diagnostic})=>({observer,...diagnostic}))});if(observations.length>180)observations.shift();}
-    const hitReceipt=receipts.find(receipt=>receipt.hit),monsterId=hitReceipt?String(hitReceipt.hit.data.id):id;
-    const deathReceipt=receipts.find(receipt=>receipt.death&&String(receipt.death.data.id)===monsterId);
+    // A stationary earlier native kill must not permanently hide a later
+    // passing kill that satisfies every cohort-motion and ownership predicate.
+    const candidates=options.passingGoo?receipts.flatMap(receipt=>receipt.eligibleHits.map((candidate:any)=>({...receipt,...candidate}))):receipts;
+    for(const hitReceipt of candidates.filter(receipt=>receipt.hit)){
+    const monsterId=String(hitReceipt.hit.data.id);
+    const deathReceipt=receipts.map(receipt=>({...receipt,death:options.passingGoo?
+      receipt.deaths.find((event:any)=>String(event.data.id)===monsterId):receipt.death})).find(receipt=>receipt.death&&String(receipt.death.data.id)===monsterId);
     const hit=hitReceipt&&{observer:hitReceipt.observer,...hitReceipt.hit};
     const death=deathReceipt&&{observer:deathReceipt.observer,...deathReceipt.death};
-    if(!hit||!death)return false;
+    if(!hit||!death)continue;
     let movingIssued:any;
     if(options.passingGoo){
       const killer=hitReceipt!.attackIssued,context=killer.motion;
-      if(options.convoyId&&context.convoyId!==options.convoyId)return false;
+      if(options.convoyId&&context.convoyId!==options.convoyId)continue;
       // Match the same actual hit in each peer's own receive stream. Another
       // client's earlier delivery timestamp cannot order this peer's attack.
       const movingReceipt=receipts.map(receipt=>{
@@ -166,10 +172,12 @@ export async function killedByParty(live:LiveGame,id:string,timeout=45000,observ
           issued.motion.candidate?.mtype!=='goo'||String(issued.motion.candidate.id)!==monsterId)return;
         return {observer:receipt.observer,issued,received};
       }).find(Boolean);
-      if(!movingReceipt)return false;
+      if(!movingReceipt)continue;
       movingIssued={...movingReceipt.issued,nativeHitObservation:{observer:movingReceipt.observer,...movingReceipt.received}};
     }
     matched={monsterId,attackIssued:hitReceipt?.attackIssued,movingIssued,hit,death};return true;
+    }
+    return false;
   },{timeout,intervals:[200,500],message:`Native party attacks must kill encounter ${id}`}).toBe(true);
   if(!matched)throw new Error(`Missing native kill evidence for ${id}`);
   expect(await live.admin(`output=Object.values(instances).some(i=>!!i.monsters?.[${JSON.stringify(matched.monsterId)}])`)).toBe(false);

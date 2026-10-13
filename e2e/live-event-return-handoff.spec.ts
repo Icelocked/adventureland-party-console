@@ -1,3 +1,4 @@
+import {observeNativeTransport} from './native-transport-observer';
 import {observeNativeStatus} from './native-status-observer';
 import {test,expect} from './live-fixtures';
 
@@ -5,14 +6,21 @@ const W='E2EWarrior',P='E2EPriest',fighters=[W,P];
 const checkpoint={map:'halloween',x:-550,y:-290};
 test.use({initialPosition:checkpoint});
 
+const transportObservers=new Map<string,Awaited<ReturnType<typeof observeNativeTransport>>>();
 const statusObservers=new Map<string,Awaited<ReturnType<typeof observeNativeStatus>>>();
 test.beforeEach(async({live},info)=>{
+  if(['active event return hands off when leaving Green','active event return hands off when following a Pumpkin leader'].includes(info.title)){
+    transportObservers.set(info.testId,await observeNativeTransport(live.clients[W].page));
+  }
   if(info.title.startsWith('active event return hands off when ')){
     try{statusObservers.set(info.testId,await observeNativeStatus(live.clients,fighters));}
     catch(error){await info.attach('native-status-observer-install-error',{body:String(error),contentType:'text/plain'});throw error;}
   }
 });
 test.afterEach(async({},info)=>{
+  const transport=transportObservers.get(info.testId);
+  if(transport){try{await info.attach('native-event-http-transport',{body:JSON.stringify(await transport.finish()),contentType:'application/json'});}
+    finally{transportObservers.delete(info.testId);}}
   const observer=statusObservers.get(info.testId);if(!observer)return;
   try{await info.attach('native-event-status-metadata',{body:JSON.stringify(await observer.finish()),contentType:'application/json'});}
   finally{statusObservers.delete(info.testId);}

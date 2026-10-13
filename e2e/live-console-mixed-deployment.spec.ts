@@ -9,7 +9,7 @@ import {createDeploymentDriver} from '../tools/console-build/driver';
 import {safeReload} from '../tools/console-build/safe-reload';
 import {atomicJson} from '../tools/build-store';
 import type {GameManifest,CharacterClass} from '../tools/game/manifest';
-test.use({liveHeadless:true,loadout:'god',initialPosition:{map:'main',x:349,y:1532}});
+test.use({liveHeadless:true,movementMode:'shadow',loadout:'god',initialPosition:{map:'main',x:349,y:1532}});
 test('one deployment barrier covers the native browser and real headless workers through coordinator restart',async({live},info)=>{
   test.setTimeout(360000);
   const names=[W,P,M],samples:any[]=[],hash=(text:string)=>createHash('sha256').update(text).digest('hex');

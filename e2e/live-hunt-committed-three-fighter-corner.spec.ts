@@ -50,7 +50,7 @@ test('committed three-fighter corner preserves red combat while Mage and Priest 
       '({grouped:!!sharedRoutine.usesGroupedCombat(),members:sharedRoutine.queueMembers()})')));
       return views.every(v=>v.grouped&&fighters.every(name=>v.members.includes(name)));},
       {timeout:30000,message:'All three actual fighter runtimes must adopt the committed formation'}).toBe(true);
-    const hit=(list:any[],name:string)=>list.find(e=>e.event==='hit'&&String(e.data?.id)===seed.id&&
+    const hit=(list:any[],name:string,since=0)=>list.find(e=>e.event==='hit'&&e.at>=since&&e.at<=Date.now()&&String(e.data?.id)===seed.id&&
       e.data?.hid===name&&e.data?.source!=='taunt'&&e.data?.damage>1);
     await expect.poll(async()=>{
       events[W]=await live.clients[W].events();return !!hit(events[W],W);
@@ -74,7 +74,7 @@ test('committed three-fighter corner preserves red combat while Mage and Priest 
         'The same native encounter must remain alive while all three recover').toBe(true);
       const advanced=(name:string)=>events[name].some(e=>e.event==='player'&&e.data?.id===name&&e.data.map==='uhills'&&
         Number.isFinite(e.data.x)&&Number.isFinite(e.data.y)&&Math.hypot(e.data.x-starts[name as keyof typeof starts].x,e.data.y-starts[name as keyof typeof starts].y)>12);
-      return [P,M].every(name=>advanced(name)&&hit(events[name],name)?.at>=committedAt);
+      return [P,M].every(name=>advanced(name)&&!!hit(events[name],name,committedAt));
     },{timeout:60000,message:'Mage and Priest must make native physical progress and damage the same committed target'}).toBe(true);
     for(const name of fighters){
       const moves=events[name].filter(e=>e.event==='move-issued'&&e.motion?.position?.target===seed.id);
@@ -87,7 +87,7 @@ test('committed three-fighter corner preserves red combat while Mage and Priest 
     const epochs=new Set(samples.flat().filter(v=>v.target===seed.id).map(v=>v.epoch));
     expect(epochs.size,'The owned red fight must retain one combat epoch').toBe(1);
     await info.attach('native-three-fighter-corner-result',{body:JSON.stringify({seed,committedAt,samples,
-      hits:Object.fromEntries(fighters.map(name=>[name,hit(events[name],name)])),
+      hits:Object.fromEntries(fighters.map(name=>[name,hit(events[name],name,committedAt)])),
       moves:Object.fromEntries(fighters.map(name=>[name,events[name].filter(e=>e.event==='move-issued')]))}),contentType:'application/json'});
   }finally{
     await info.attach('native-three-fighter-corner-observations',{body:JSON.stringify({seed,samples,events}),contentType:'application/json'});
