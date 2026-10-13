@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Verify brief manual merchant weapon swaps using ordered native item receipts, retaining gathering restoration and restart checks.
+
 - Verify headless movement after a console reload from the character's actual settled position, avoiding contradictory endpoint assumptions in native deployment tests.
 
 - Keep native Cave regroup tests clear of encounter pauses by resolving the actual entry-shop choice during setup and checking unfinished encounter clearance before walking.

@@ -141,10 +141,16 @@ test('manual merchant weapon remains selected through gathering and restart',asy
   const inventory=merchant.getByRole('button',{name:/^Inventory/});
   if(await inventory.getAttribute('aria-expanded')!=='true')await inventory.click();
   await merchant.getByLabel('Broom',{exact:true}).click({button:'right'});
+  const priorWeaponSequence=Math.max(0,...(await live.clients[name].events()).map(event=>event.sequence||0));
+  const requestedAt=await live.clients[name].run('Date.now()');
   await page.getByRole('menuitem',{name:'Equip',exact:true}).click();
-  await expect.poll(()=>live.admin(`output=get_player('${name}')?.slots.mainhand`),{timeout:30_000}).toMatchObject({name:'broom',level:6});
+  let weaponReceipts:any[]=[];
+  try{
+    await expect.poll(async()=>{weaponReceipts=(await live.clients[name].events()).filter((event:any)=>event.event==='player'&&event.at>=requestedAt&&event.sequence>priorWeaponSequence&&event.data?.slots?.mainhand).map((event:any)=>({sequence:event.sequence,at:event.at,mainhand:event.data.slots.mainhand}));return weaponReceipts.some(receipt=>receipt.mainhand.name==='broom'&&receipt.mainhand.level===6);},{timeout:30_000,message:'Native item packet must confirm the requested Broom equip'}).toBe(true);
+  }finally{await info.attach('native-manual-weapon-equip-receipts',{body:JSON.stringify({requestedAt,priorWeaponSequence,receipts:weaponReceipts.slice(-32)}),contentType:'application/json'});}
   await expect.poll(async()=> (await live.state()).merchantWeapon?.item,{timeout:10_000}).toMatchObject({name:'broom',level:6});
-  await expect.poll(()=>live.admin(`output=['rod','pickaxe'].includes(get_player('${name}')?.slots.mainhand?.name)`),{timeout:90_000}).toBe(true);
+  const broomSequence=weaponReceipts.find(receipt=>receipt.mainhand.name==='broom'&&receipt.mainhand.level===6).sequence;
+  await expect.poll(async()=>(await live.clients[name].events()).some((event:any)=>event.event==='player'&&event.sequence>broomSequence&&['rod','pickaxe'].includes(event.data?.slots?.mainhand?.name)),{timeout:90_000,message:'Native gathering tool equip must follow the actual Broom receipt'}).toBe(true);
   await live.post('/merchant/gather',{mode:'fishing',enabled:false});
   await live.post('/merchant/gather',{mode:'mining',enabled:false});
   await expect.poll(()=>live.admin(`output=get_player('${name}')?.slots.mainhand`),{timeout:30_000}).toMatchObject({name:'broom',level:6});
