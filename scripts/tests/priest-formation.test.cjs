@@ -738,3 +738,14 @@ test('designated tank: approaches to melee range and skips the no-target defensi
  r.warrior.x=170;assert.equal(r.c.defense.defensiveFormationMove(),false,'tank stays put when the attacker is close');
  r.c.tank=null;assert.equal(r.c.defense.defensiveFormationMove(),true);assert.equal(evades,1);
 });
+
+test('designated tank: stops holding below half HP or outside the priest heal range',()=>{
+ const r=setup();r.c.tank='W';
+ assert.equal(r.c.designatedTankHolds(),true);
+ r.warrior.hp=40;assert.equal(r.c.designatedTankHolds(),false,'low HP');
+ assert.equal(r.c.formationMove(r.monster),true,'formation moves a low-HP tank');
+ const q=setup();q.c.tank='W';Object.assign(q.warrior,{x:260});Object.assign(q.monster,{x:288});
+ assert.equal(q.c.designatedTankHolds(),false,'priest out of heal range');
+ const n=setup();n.c.tank='W';n.c.currentPartyList=()=>['W'];n.c.partyPositions=[n.warrior];
+ assert.equal(n.c.designatedTankHolds(),true,'no priest in the party');
+});
