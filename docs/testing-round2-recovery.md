@@ -240,3 +240,19 @@ omits stale characters, so reading Priest's projected seenAt after admission
 threw before the owner check. Capture its verified finite timestamp before the
 hold, retain any newer projected timestamp, and independently verify its native
 client remains connected at admission. This setup failure is not product RED.
+
+## Stale-peer observation diagnostic (full650 shard8)
+
+The 15-second owner/admission predicate failed while final evidence showed both
+old owners retired, unchanged runtimes, and correct per-character admission.
+The old poll retained neither deferred/session values nor individual checks;
+its state snapshot preceded two preflight CODE reads taking roughly three seconds.
+That does not establish a runtime defect. Failure possibilities are stale state
+relative to observed CODE, genuine delayed admission, changed runtime, or missing
+selection publication. Retain each conjunct and capture timestamps to distinguish them.
+
+Read only the current native frame's DOM maincode, requiring its actual character
+name to match, then fetch fresh coordinator state. Keep the 15-second deadline,
+all owner/admission/checkpoint assertions, and actual subsequent native damage
+checks unchanged. No reload occurs in this fixture. This adds no timer, retries,
+permission, mutation, or production behavior.
