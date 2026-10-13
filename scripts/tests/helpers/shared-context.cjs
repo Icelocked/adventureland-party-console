@@ -9,10 +9,12 @@ let functions;
 exports.createSharedContext = (options) => {
   options.root ||= {};
   options.runtimeCurrent ||= () => true;
+  // Legacy extracted scenarios declare no managed independent-approach journey.
+  options.movement ||= {report:()=>null};
   const context = vm.createContext(options);
   if (!functions) {
     const source = fs.readFileSync(path.join(__dirname, '../../../characters/shared.js'), 'utf8');
-    functions = ['consoleDraining', 'consoleDrainKey', 'consoleDrainAllows', 'consoleAtomicBoundary', 'queueMarkersUnfiltered', 'fingerprint', 'sameItemState'].map(name => [name, namedFunction(source, name)]);
+    functions = ['consoleDraining', 'consoleDrainKey', 'consoleDrainAllows', 'consoleAtomicBoundary', 'queueMarkersUnfiltered', 'fingerprint', 'sameItemState','independentApproachOwnsJourney'].map(name => [name, namedFunction(source, name)]);
   }
   for (const [name, declaration] of functions)
     if (typeof context[name] !== 'function') vm.runInContext(declaration, context);

@@ -1,3 +1,4 @@
+import {observeNativeCaveCombat} from './native-cave-combat-observer';
 import {nativePlannerCpuProfile} from './native-planner-cpu-profile';
 import { test, expect } from './live-fixtures';
 import { createRequire } from 'node:module';
@@ -834,6 +835,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     // Arrival is not native encounter completion. A new artificial vote must
     // not replace encounter ownership while its real boss is still fighting.
     let completedBoss:any;
+    const bossCombatObservation=await observeNativeCaveCombat(live.clients,['E2EWarrior','E2EPriest'],second);
     try{
       await expect.poll(async()=>{
         completedBoss=await live.admin(`output=(()=>{
@@ -845,7 +847,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
         })()`);
         return completedBoss.done&&completedBoss.enemies.every((actor:any)=>actor.dead||actor.hp<=0);
       },{timeout:120_000,message:'The native Lockbreaker must actually finish before creating the next encounter'}).toBe(true);
-    }finally{await info.attach('native-cave-lockbreaker-completion',{body:JSON.stringify(completedBoss??null),contentType:'application/json'});}
+    }finally{await info.attach('native-cave-lockbreaker-completion',{body:JSON.stringify(completedBoss??null),contentType:'application/json'});await info.attach('native-cave-lockbreaker-combat-observations',{body:JSON.stringify(await bossCombatObservation.finish()),contentType:'application/json'});}
 
   }
   // Native encounter factory, bounded initial difficulty. Neither attacks,

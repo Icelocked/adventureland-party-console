@@ -60,6 +60,23 @@ test('disabled anniversary selection leaves native Hunt fighting and creates no 
     const hunt=await prepareHunt(live),before=await world(live);
     const seed=await beginAnniversary(live,M);
     await expect.poll(async()=>(await world(live)).anniversary?.live,{timeout:30_000}).toBe(true);
+    await expect.poll(async()=>{
+      const current=await world(live),state=await live.state(),mission=state.monsterHunt?.missions?.[state.monsterHunt.currentIndex];
+      const bounds=mission?.destination?.boundary;
+      return state.monsterHunt?.cycleId===hunt.cycleId&&state.monsterHunt.stage==='farming'&&Array.isArray(bounds)&&
+        [W,P].every(name=>{const p=current.players[name];return p.map===mission.destination.map&&
+          p.x>=bounds[0]&&p.x<=bounds[2]&&p.y>=bounds[1]&&p.y<=bounds[3];});
+    },{timeout:90_000,message:'Disabled Anniversary must leave both native fighters at the current Hunt mission'}).toBe(true);
+    const mission=(await live.state()).monsterHunt.missions[(await live.state()).monsterHunt.currentIndex];
+    const encounter=await live.admin(`output=(()=>{const p=get_player(${JSON.stringify(W)}),destination=${JSON.stringify(mission.destination)},bounds=destination.boundary;
+      for(const [dx,dy] of [[35,0],[-35,0],[0,35],[0,-35]]){const x=p.x+dx,y=p.y+dy;
+        if(x<bounds[0]||x>bounds[2]||y<bounds[1]||y>bounds[3]||!can_move({map:p.map,x:p.x,y:p.y,going_x:x,going_y:y,base:p.base}))continue;
+        const m=new_monster(p.in,{type:'goo',position:[x,y],radius:0,count:1},{temp:1});m.e2eHunt=true;
+        return {id:String(m.id),map:m.map,x:m.x,y:m.y,hp:m.hp,destination};}
+      throw Error('No reachable native encounter inside disabled-Anniversary Goo mission');})()`);
+    await info.attach('anniversary-disabled-native-encounter',{body:JSON.stringify(encounter),contentType:'application/json'});
+    const kill=await killedByParty(live,encounter.id);
+    await info.attach('anniversary-disabled-native-kill',{body:JSON.stringify(kill),contentType:'application/json'});
     await expect.poll(async()=>(await world(live)).players[W].quest?.c,{timeout:120_000}).toBeLessThan(before.players[W].quest.c);
     const state=await live.state(),after=await world(live);
     expect(state.monsterHunt.cycleId).toBe(hunt.cycleId);

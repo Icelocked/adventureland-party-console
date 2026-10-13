@@ -107,22 +107,30 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
             moving:o.moving,going_x:o.going_x,going_y:o.going_y,base:o.base&&{h:o.base.h,v:o.base.v,vn:o.base.vn}}:null;
           let clear:any;
           try{clear=runner?.can_move?.({map:c.map,x:p.x,y:p.y,going_x:p.going_x,going_y:p.going_y,base:c.base});}catch(error){clear={error:String(error)};}
+          let approachGoal:any;
+          const approachPosition=runner?.partyCombatPosition,destination=approachPosition?.destination,enemy=game.entities?.[approachPosition?.target];
+          if(approachPosition?.mode==='independent-approach'&&destination&&enemy){
+            try{approachGoal={sight:runner.can_move({map:c.map,x:destination.x,y:destination.y,going_x:enemy.real_x??enemy.x,going_y:enemy.real_y??enemy.y,base:c.base})};}catch(error){approachGoal={error:String(error)};}
+          }
           game.__e2eEvents.push({sequence:++game.__e2eEventSequence,at:Date.now(),event:'move-issued',
             data:{x:p.x,y:p.y,going_x:p.going_x,going_y:p.going_y,m:p.m},
-            motion:{parent:body(c),code:body(code),clear,owner:runner?.__partyCombatOwner,
+            motion:{parent:body(c),code:body(code),clear,approachGoal,owner:runner?.__partyCombatOwner,
               recovery:runner?.__partyGroupedCombat?.formationRecovery&&{id:runner.__partyGroupedCombat.formationRecovery.id,
                 target:runner.__partyGroupedCombat.formationRecovery.target,mover:runner.__partyGroupedCombat.formationRecovery.mover,
                 phase:runner.__partyGroupedCombat.formationRecovery.phase,attempt:runner.__partyGroupedCombat.formationRecovery.attempt},
               position:runner?.partyCombatPosition&&{mode:runner.partyCombatPosition.mode,reason:runner.partyCombatPosition.reason,
                 target:runner.partyCombatPosition.target,issuedAt:runner.partyCombatPosition.issuedAt,movementOwner:runner.partyCombatPosition.movementOwner,
+                destination:runner.partyCombatPosition.destination&&{x:runner.partyCombatPosition.destination.x,y:runner.partyCombatPosition.destination.y},
                 approachId:runner.partyCombatPosition.approachId,radius:runner.partyCombatPosition.radius,phase:runner.partyCombatPosition.phase},runtimeGeneration:runner?.__partyRuntimeGeneration,
               codeHash:runner?.__partyCodeHash,observerGeneration:game.__e2eObserverGeneration}});
           if(game.__e2eEvents.length>2000)game.__e2eEvents.shift();
           return;
         }
-        if(event!=='attack')return;
+        const hostileSkill=event==='skill'&&game.__e2eObserveMoves&&game.G?.skills?.[args[0]?.name]?.hostile===true;
+        if(event!=='attack'&&!hostileSkill)return;
         const c=game.character,runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
-        if(!c?.name || game.socket!==socket || args[0]?.id==null)return;
+        if(!c?.name || game.socket!==socket || !hostileSkill&&args[0]?.id==null)return;
+        const payload=args[0]||{},ids=hostileSkill?[...(payload.id==null?[]:[payload.id]),...(Array.isArray(payload.ids)?payload.ids:[]),...(Array.isArray(payload.targets)?payload.targets.map((value:any)=>Array.isArray(value)?value[0]:value):[])].map(String):undefined;
         let candidate:any,convoy:any;
         try { candidate=runner?.sharedRoutine?.getWalkingPassiveTarget?.(true);convoy=runner?.sharedRoutine?.combatTraceSnapshot?.(); } catch { return; }
         let independent:any;
@@ -136,8 +144,8 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
                 value&&{selection:value.selection,target:value.target,at:value.at,ready:value.ready}]))};
           }
         }
-        game.__e2eEvents.push({sequence:++game.__e2eEventSequence,at:Date.now(),event:'attack-issued',
-          data:{id:String(args[0]?.id),actor:c.name},motion:{map:c.map,in:c.in??c.map,server:String(game.server_region||'')+String(game.server_identifier||''),
+        game.__e2eEvents.push({sequence:++game.__e2eEventSequence,at:Date.now(),event:hostileSkill?'offensive-skill-issued':'attack-issued',
+          data:{id:payload.id==null?undefined:String(payload.id),actor:c.name,ids,skill:hostileSkill?String(payload.name):undefined},motion:{map:c.map,in:c.in??c.map,server:String(game.server_region||'')+String(game.server_identifier||''),
             x:c.real_x??c.x,y:c.real_y??c.y,moving:!!c.moving,owner:runner?.__partyCombatOwner,
             independent,convoyId:convoy?.convoy,convoyPhase:convoy?.convoyPhase,convoyEpoch:convoy?.convoyEpoch,
             candidate:candidate&&{id:String(candidate.id),mtype:candidate.mtype}}});

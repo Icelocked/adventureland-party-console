@@ -275,12 +275,13 @@ function geometry(range = 120) {
   let now = 1000;
   const c = vm.createContext({ character: { name: 'Us', map: 'main', x: range - 5, y: 0,
     range, speed: 60, hp: 100, max_hp: 100 }, parent: { entities: { m: target } },
-    kiteState: { targetId: null }, formationFrame: null, formationPerformance: { collisionChecks: 0 },
+    movement:{report:()=>null},kiteState: { targetId: null }, formationFrame: null, formationPerformance: { collisionChecks: 0 },
     runtimeCurrent: () => true, joinedEvent: null,
     can_move_to: () => true, is_in_range: () => true,
     move: (x, y) => { moves.push({ x, y }); return new Promise(() => {}); },
     Date: class extends Date { static now() { return now; } },
   }); c.root = c;
+  vm.runInContext(require('./helpers/named-function.cjs').namedFunction(shared,'independentApproachOwnsJourney'),c);
   vm.runInContext(shared.slice(shared.indexOf('  function desiredCombatRange('), shared.indexOf('  root.sharedRoutine = {')), c);
   return { c, target, moves, now: value => now = value };
 }
