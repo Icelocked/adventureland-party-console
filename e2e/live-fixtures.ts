@@ -224,7 +224,6 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           await expect.poll(async () => (await live!.state()).steamSwitch?.phase, { timeout: 90_000 }).toBe('complete');
         },
       };
-      if(initialConsoleHold)live.consoleDrainLease('native-initial-setup',Date.now()+600000,{loadMode:'now',phase:'holding'});
       await live.post('/formation', { leader: null });
       for (const name of names)
         await live.post('/formation', { character: name, follow: false, eventSelections: [] });
@@ -288,6 +287,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
       },{timeout:Math.max(1,nativeReadyDeadline-Date.now()),intervals:[1000],
         message:'Native bootstrap must publish the current game version and real monster catalog before starting the scenario'}).toBe(true);}
       finally{await testInfo.attach('native-bootstrap-catalog-readiness',{body:JSON.stringify({nativeVersion,deadline:nativeReadyDeadline,observations:catalogReadiness}),contentType:'application/json'});}
+      if(initialConsoleHold)live.consoleDrainLease('native-initial-setup',Date.now()+600000,{loadMode:'now',phase:'holding'});
       await use(live);
     } finally {
       rmSync(path.join(directory,'hold-merchant-status'),{force:true});
