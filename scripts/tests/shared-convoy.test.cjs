@@ -501,6 +501,20 @@ test('failure context changes only diagnostics, retaining the original failure a
    assert.ok(Number.isFinite(record[key])&&record[key]>=0,key+' must be a valid elapsed measurement');
    record[key]=0;
   }
+  const schedule=body.details.movement.planningSchedule;
+  assert.ok(schedule,'movement must retain planning schedule diagnostics');
+  for(const phase of ['scheduler','plan']){
+   const record=schedule[phase];
+   assert.deepEqual(Object.keys(record).sort(),['calls','elapsedMs','intervals']);
+   assert.ok(Number.isSafeInteger(record.calls)&&record.calls>=0,phase+' calls must remain valid');
+   assert.deepEqual(Object.keys(record.intervals).sort(),['maxMs','meanMs','minMs']);
+   const {minMs,maxMs,meanMs}=record.intervals;
+   assert.ok(minMs<=meanMs+1e-8&&meanMs<=maxMs+1e-8,phase+' intervals must be ordered');
+   for(const [sample,keys] of [[record,['elapsedMs']],[record.intervals,['minMs','maxMs','meanMs']]])for(const key of keys){
+    assert.ok(Number.isFinite(sample[key])&&sample[key]>=0,phase+'.'+key+' must be a valid elapsed measurement');
+    sample[key]=0;
+   }
+  }
   runs.push({body,requests:r.calls.filter(c=>c[0]==='request').map(c=>c[1]),moves:r.moves(),searches:r.searches});
  }
  assert.deepEqual(runs[1],runs[0]);
