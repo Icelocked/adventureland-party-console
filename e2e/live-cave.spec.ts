@@ -549,11 +549,13 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     return deferred?undefined:acceptedState;
   };
   const answerNativeChoice=async(encounter:any,expectedFloor=cave.floor)=>{
+    const deadline=Date.now()+30_000;
+    const remaining=()=>{const ms=deadline-Date.now();if(ms<=0)throw Error('Native choice acknowledgement exceeded its 30-second deadline');return ms;};
     const reply=encounter.options.find((o:any)=>!o.unavailable&&!o.cost&&!o.amber);
     expect(reply,'Native interruption must offer a free UI reply').toBeTruthy();
     const resolved=(view:any)=>view.state.run===cave.run&&['E2EWarrior','E2EPriest'].every(name=>{
-      const observed=view.members.find((m:any)=>m.name===name)?.observation?.cave;
-      return observed?.run===cave.run&&observed.floor===expectedFloor&&
+      const member=view.members.find((m:any)=>m.name===name),observed=member?.observation?.cave;
+      return member?.fresh&&member.observation.alive&&observed?.run===cave.run&&observed.floor===expectedFloor&&
         observed.choice?.id===encounter.id&&observed.choice.resolved&&observed.choice.votes[name]===reply.id;
     });
     const ledger:any={choice:encounter.id,option:reply.id,run:cave.run,floor:expectedFloor,clicked:false};
@@ -561,8 +563,21 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     try{
       observed=await dungeon();
       if(!resolved(observed)){
-        try{
-          await choice.getByRole('button',{name:reply.label,exact:true}).click();
+        await expect.poll(async()=>{
+          observed=await dungeon();
+          if(resolved(observed))return true;
+          return observed.state.run===cave.run&&['E2EWarrior','E2EPriest'].every(name=>{
+            const member=observed.members.find((m:any)=>m.name===name),native=member?.observation,
+              c=native?.cave,command=observed.state.commands[name],receipt=native?.action;
+            if(!member?.fresh||!native?.alive||c?.run!==cave.run||c.floor!==expectedFloor||c.choice?.id!==encounter.id)return false;
+            if(!command||['move','gather'].includes(command.action))return true;
+            if(command.action==='vote'&&c.choice.id===command.choice&&c.choice.resolved)return true;
+            return receipt?.id===command.id&&receipt.status==='complete';
+          });
+        },{timeout:remaining(),message:'The current native choice must wait for both preceding action receipts before its first vote'}).toBe(true);
+        ledger.beforeClick={state:observed.state,members:observed.members.map((m:any)=>({name:m.name,fresh:m.fresh,receipt:m.observation?.action}))};
+        if(!resolved(observed))try{
+          await choice.getByRole('button',{name:reply.label,exact:true}).click({timeout:Math.min(20_000,remaining())});
           ledger.clicked=true;
         }catch(error){
           observed=await dungeon();
@@ -574,7 +589,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
         }
       }else ledger.alreadyResolved=true;
       await expect.poll(async()=>{observed=await dungeon();return resolved(observed);},
-        {timeout:30_000,message:'The same native choice must acknowledge both actual votes for the chosen option'}).toBe(true);
+        {timeout:remaining(),message:'The same native choice must acknowledge both actual votes for the chosen option'}).toBe(true);
     }finally{
       ledger.native=observed?.members.map((m:any)=>({name:m.name,choice:m.observation?.cave?.choice}));
       await info.attach('native-cave-choice-resolution',{body:JSON.stringify(ledger),contentType:'application/json'});
