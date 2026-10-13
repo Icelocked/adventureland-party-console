@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Restore attack range before continuing ordinary combat kiting, preventing prolonged disengagement while preserving terrain and attacker clearance.
+
 - Recover shared return completion when a character has already acknowledged its final native transition, preventing its peers from waiting indefinitely without replaying the transition.
 
 - Retire obsolete event-exit instructions in heartbeats while preserving deferred checkpoints, so characters can enter a new event without waiting on an old return.

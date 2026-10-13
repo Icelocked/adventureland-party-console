@@ -16531,7 +16531,7 @@
         return enemy && enemy.type === "monster" && enemy.visible && !enemy.dead && enemy.target === character.name;
       }).sort(function (a, b) { return combatDistance(a) - combatDistance(b); })[0];
     if (!attacker || attacker.dead) { kiteState.targetId = null; return false; }
-    if (eventBossMovement(target) && !is_in_range(target) && await approachCombatTarget(target)) return true;
+    if (target && (target.id === attacker.id || eventBossMovement(target)) && !is_in_range(target) && await approachCombatTarget(target)) return true;
     if (kiteState.targetId !== attacker.id) { kiteState.targetId = attacker.id; kiteState.direction = 1; }
     var dx = character.x - attacker.x, dy = character.y - attacker.y;
     var radius = Math.hypot(dx, dy), angle = Math.atan2(dy, dx);
