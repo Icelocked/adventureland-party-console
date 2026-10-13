@@ -612,8 +612,33 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   let farmTravel=await acceptRoom(farm);
   expect(farmTravel?.travel?.target.id).toBe(farm.id);
   const farmArrivals=new Map<string,unknown>();
+  const farmPacketCandidates=new Map<string,any>();
+  let farmAcceptedAt=Date.now();
   const recordFarmArrival=(native:any,status:any,observedAt:number)=>{
     const expected='cave-travel:'+cave.run+':'+farmTravel.travel.serial+':'+native.name;
+    const receipt=native.runtime?.action;
+    for(const packet of native.arrivalPackets||[]){
+      const o=packet.caveOwner,p=packet.data;
+      if(packet.at<farmAcceptedAt||packet.at>native.at+500||o?.command?.id!==expected||
+        o.command.action!=='move'||o.command.run!==cave.run||o.runtimeGeneration!==native.runtimeGeneration||
+        !o.codeHash||o.codeHash!==native.codeHash||o.name!==native.name||
+        o.run!==cave.run||o.floor!==cave.floor||o.map!==farm.map||String(o.in??o.map)!==farm.map||
+        o.rip||!(o.hp>0)||p?.id!==native.name||p?.rip||!(p?.hp>0)||p.map!==farm.map||String(p.in??p.map)!==farm.map||
+        Math.hypot(p.x-farm.x,p.y-farm.y)>=70)continue;
+      farmPacketCandidates.set(native.name,{at:packet.at,id:expected,map:p.map,in:p.in,x:p.x,y:p.y,
+        runtimeGeneration:o.runtimeGeneration,codeHash:o.codeHash,source:'authoritative player packet'});
+    }
+    const candidate=farmPacketCandidates.get(native.name);
+    if(candidate&&receipt?.id===expected&&receipt.status==='complete'&&native.commandIdentity?.id===expected&&
+      native.commandIdentity.action==='move'&&native.commandIdentity.run===cave.run&&
+      Date.now()-native.at<=3000&&native.at<=Date.now()+500&&
+      candidate.runtimeGeneration===native.runtimeGeneration&&candidate.codeHash===native.codeHash&&
+      native.runtime?.travel?.id===expected&&native.cave?.run===cave.run&&native.cave.floor===cave.floor&&
+      native.map===farm.map&&String(native.in??native.map)===farm.map&&!native.rip&&native.hp>0&&
+      status&&observedAt-status.seenAt<=3000&&status.seenAt<=observedAt+500&&!status.rip&&status.hp>0&&
+      status.dungeon?.cave?.run===cave.run&&status.dungeon.cave.floor===cave.floor){
+      farmArrivals.set(native.name,candidate);return;
+    }
     if(farmArrivals.has(native.name)||!status||observedAt-status.seenAt>3000||status.seenAt>observedAt+500||
       Date.now()-native.at>3000||native.at>Date.now()+500||status.rip||!(status.hp>0)||
       status.dungeon?.cave?.run!==cave.run||status.dungeon.cave.floor!==cave.floor||
@@ -630,24 +655,27 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     if(farmArrivals.size<2){
       const continued=await continueRoomChoice(farm);
       if(continued?.travel?.serial!==undefined&&continued.travel.serial!==farmTravel.travel.serial){
-        farmTravel=continued;farmArrivals.clear();
+        farmTravel=continued;farmArrivals.clear();farmPacketCandidates.clear();farmAcceptedAt=Date.now();
       }
     }
     if(Date.now()-farmSampledAt>=5_000&&farmCombatSamples.length<125){
       farmSampledAt=Date.now();
-      const native=await Promise.all(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].frame.evaluate(()=>{
+      const native=await Promise.all(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].frame.evaluate(({goal,acceptedAt})=>{
         const p=window as any,w=(document.getElementById('maincode') as HTMLIFrameElement).contentWindow as any;
         const c=w.character,control=w.__partyGroupedCombat,entity=control?.target?.id?w.get_entity(control.target.id):null;
         const clock=w.__partyTravelTransport?.clock,now=Date.now(),selected=w.sharedRoutine?.getDungeonTarget?.();
         const raw=entity?Object.fromEntries(['id','type','visible','dead','hp','map','in','x','y','real_x','real_y','range','target','cave'].map(key=>[key,entity[key]])):null;
         return {at:now,name:c.name,map:c.map,in:c.in,x:c.real_x,y:c.real_y,rip:c.rip,hp:c.hp,cave:c.cave,
+          runtimeGeneration:w.__partyRuntimeGeneration,codeHash:w.__partyCodeHash,commandIdentity:w.__partyDungeonRuntime?.commandIdentity?.(),
+          arrivalPackets:(p.__e2eEvents||[]).filter((e:any)=>e.event==='player'&&e.at>=acceptedAt&&
+            e.caveOwner?.name===c.name&&Math.hypot(e.data?.x-goal.x,e.data?.y-goal.y)<70).slice(-20),
           clock,adjustedAge:control?now+(clock?.offset||0)-control.seenAt:null,
           control:control?Object.fromEntries(['key','seenAt','target','committed','selection','members','caveScope'].map(key=>[key,control[key]])):null,
           entity:raw,selected:selected?.id||null,knownDead:entity?!!w.partyRoleRunner?.isKnownDead(entity.id):null,
           nativeWalk:entity?w.can_move_to(entity.x,entity.y):null,
           attackAllowed:entity?!!w.sharedRoutine?.groupedAttackAllowed?.(entity):null,
           runtime:w.__partyDungeonRuntime?.report(),occupied:w.sharedRoutine?.isOccupied?.()};
-      })));
+      },{goal:{x:farm.x,y:farm.y},acceptedAt:farmAcceptedAt})));
       for(const member of native)recordFarmArrival(member,s.characters[member.name],farmSampledAt);
       farmCombatSamples.push({at:farmSampledAt,native,characters:Object.fromEntries(['E2EWarrior','E2EPriest'].map(name=>[name,{dungeon:s.characters[name].dungeon,movement:s.characters[name].movement}]))});
     }
@@ -656,7 +684,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   console.log('[Cave verified] Both characters arrived at the original native farm');
   }finally{
     await info.attach('native-cave-farm-combat-samples',{body:JSON.stringify(farmCombatSamples),contentType:'application/json'});
-    await info.attach('native-cave-farm-arrivals',{body:JSON.stringify({arrivals:Object.fromEntries(farmArrivals),travel:farmTravel}),contentType:'application/json'});
+    await info.attach('native-cave-farm-arrivals',{body:JSON.stringify({arrivals:Object.fromEntries(farmArrivals),packetCandidates:Object.fromEntries(farmPacketCandidates),acceptedAt:farmAcceptedAt,travel:farmTravel}),contentType:'application/json'});
   }
   await controls.getByRole('button',{name:'Stop travel',exact:true}).click();
   await waitForStoppedTravel();

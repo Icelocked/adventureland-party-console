@@ -98,7 +98,14 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
       }
       // Incoming observations only; no synthetic packets.
       for(const event of ['hit','death','game_response','game_log','chest_opened','disappear','new_map','party_update','player'])socket.on(event,(data:unknown)=>{
-        game.__e2eEvents.push({sequence:++game.__e2eEventSequence,at:Date.now(),event,data:JSON.parse(JSON.stringify(data ?? null))});
+        const runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+        const c=runner?.character,command=event==='player'&&game.socket===socket?
+          runner?.__partyDungeonRuntime?.commandIdentity?.():undefined;
+        const caveOwner=command&&c?{command,runtimeGeneration:runner.__partyRuntimeGeneration,
+          codeHash:runner.__partyCodeHash,name:c.name,map:c.map,in:c.in,
+          run:c.cave?.run,floor:c.cave?.floor,hp:c.hp,rip:c.rip}:undefined;
+        game.__e2eEvents.push({sequence:++game.__e2eEventSequence,at:Date.now(),event,
+          data:JSON.parse(JSON.stringify(data ?? null)),caveOwner});
         if(game.__e2eEvents.length>2000)game.__e2eEvents.shift();
       });
     },randomUUID());
