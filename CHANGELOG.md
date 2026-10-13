@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- Require an exhausted owned walking route to settle at its destination before reporting arrival, preventing false Cave regroup completion after combat displacement.
+
+- Verify brief manual merchant weapon swaps using ordered native item receipts, retaining gathering restoration and restart checks.
+
+- Verify headless movement after a console reload from the character's actual settled position, avoiding contradictory endpoint assumptions in native deployment tests.
+
+- Keep native Cave regroup tests clear of encounter pauses by resolving the actual entry-shop choice during setup and checking unfinished encounter clearance before walking.
+
+- Give native event-return tests a separate bounded recovery window after their deliberate CODE replacement, with retained reload and arrival timestamps.
+
+- Verify terrain recovery against actual native movement segments and independent approach ownership, preserving strict movement and attack timing checks.
+
+- Identify the exact native Cave farewell encounter in stairs regression tests, so a different encounter with the same title cannot start the continuation deadline early.
+
+- Make native queued-target regression scenarios introduce successors during a confirmed fight, preserving real movement and fresh-confirmation checks without assuming pre-fight target rankings stay fixed.
+
+- Preserve independent combat route ownership in movement diagnostics from the very first step; keep declared native Halloween encounter charge consistent throughout E2E scenarios.
+
 - Start individual combat routes immediately and recheck range as soon as an owned route finishes or fails, avoiding extra polling delays between smaller-radius approach attempts.
 
 - Keep independent combat approach and attack readiness consistent across full heartbeats and fast combat reports.

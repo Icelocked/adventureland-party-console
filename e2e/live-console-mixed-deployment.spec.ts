@@ -27,8 +27,9 @@ test('one deployment barrier covers the native browser and real headless workers
   const origin={map:'main',x:349,y:1532};
   const destination=await live.admin(`output=(()=>{const p=get_player('${P}');if(!p)throw Error('Headless Priest missing');for(const [dx,dy] of [[75,0],[-75,0],[0,75],[0,-75]]){const point={map:p.map,x:p.x+dx,y:p.y+dy};if(can_move({...p,going_x:point.x,going_y:point.y})&&can_move({...p,x:point.x,y:point.y,going_x:point.x,going_y:point.y}))return point;}throw Error('No native short collision-clear lifecycle endpoint');})()`);
   async function nativeWalking(goal:{map:string;x:number;y:number},label:string){
+    let before:any;
     try{
-    const before=await live.admin(`output=(()=>{const p=get_player('${P}');if(!p)throw Error('Headless Priest missing');return {name:p.name,map:p.map,in:p.in,x:p.x,y:p.y,hp:p.hp,rip:p.rip,blocked:!can_move({...p,going_x:${goal.x},going_y:${goal.y}}),goalClear:can_move({...p,x:${goal.x},y:${goal.y},going_x:${goal.x},going_y:${goal.y}})};})()`);
+    before=await live.admin(`output=(()=>{const p=get_player('${P}');if(!p)throw Error('Headless Priest missing');return {name:p.name,map:p.map,in:p.in,x:p.x,y:p.y,hp:p.hp,rip:p.rip,blocked:!can_move({...p,going_x:${goal.x},going_y:${goal.y}}),goalClear:can_move({...p,x:${goal.x},y:${goal.y},going_x:${goal.x},going_y:${goal.y}})};})()`);
     expect(before.blocked,'Declared lifecycle approach must be collision-clear').toBe(false);expect(before.goalClear).toBe(true);
     expect(Math.hypot(before.x-goal.x,before.y-goal.y)).toBeGreaterThanOrEqual(70);
     const priorJourney=(await live.state()).characters[P]?.movement?.id;
@@ -41,7 +42,7 @@ test('one deployment barrier covers the native browser and real headless workers
       if(movementSamples.length<160)movementSamples.push({label,at:Date.now(),runtime:character?.runtime,codeHash:character?.codeHash,client:{x:character?.x,y:character?.y,map:character?.map,seenAt:character?.seenAt},movement,actual});
       return nativePlanning&&movement?.done===true&&movement.id!==priorJourney&&character?.runtime==='headless'&&Date.now()-character.seenAt<3000&&character.map===goal.map&&Math.hypot(character.x-goal.x,character.y-goal.y)<15&&Math.hypot(character.x-before.x,character.y-before.y)>=30&&actual?.hp>0&&!actual.rip&&actual.map===goal.map&&Math.hypot(actual.x-goal.x,actual.y-goal.y)<15;
     },{timeout:60000,intervals:[500],message:'Actual headless native planning and physical arrival '+label}).toBe(true);
-    }finally{await info.attach('native-headless-walking-'+label.replaceAll(' ','-'),{body:JSON.stringify({goal,movementSamples,final:await live.state()}),contentType:'application/json'});}
+    }finally{await info.attach('native-headless-walking-'+label.replaceAll(' ','-'),{body:JSON.stringify({goal,before,movementSamples,final:await live.state()}),contentType:'application/json'});}
   }
   await nativeWalking(destination,'before CODE retirement');
   const original:GameManifest=JSON.parse(await readFile('.build/game/manifest.json','utf8'));
@@ -78,7 +79,9 @@ test('one deployment barrier covers the native browser and real headless workers
     const final=await live.state();expect(final.characters[W].runtime).toBe('native');expect(final.characters[P].runtime).toBe('headless');expect(final.characters[M].runtime).toBe('headless');
     expect((await store.references()).active).toBe(next.manifest.id);expect(samples.some(sample=>names.every(name=>sample.reports[name].hold?.ready===true))).toBe(true);
     expect(final.characters[W].rip).toBe(false);
-    await nativeWalking(origin,'after CODE retirement');
+    await expect.poll(()=>live.admin(`output=(()=>{const p=get_player('${P}');return !!p&&!p.moving;})()`),{timeout:10000,message:'Native headless movement must settle before declaring the post-retirement leg'}).toBe(true);
+    const postRetirementDestination=await live.admin(`output=(()=>{const p=get_player('${P}');if(!p||p.moving)throw Error('Headless Priest is not settled');for(const [dx,dy] of [[75,0],[-75,0],[0,75],[0,-75]]){const point={map:p.map,x:p.x+dx,y:p.y+dy};if(can_move({...p,going_x:point.x,going_y:point.y})&&can_move({...p,x:point.x,y:point.y,going_x:point.x,going_y:point.y}))return point;}throw Error('No native post-retirement collision-clear endpoint');})()`);
+    await nativeWalking(postRetirementDestination,'after CODE retirement');
     await info.attach('native-mixed-deployment-barrier',{body:JSON.stringify({operation,journal:await store.journal(),samples}),contentType:'application/json'});
   }finally{await info.attach('native-headless-planner-code-retirement',{body:JSON.stringify({origin,destination,movementSamples,final:await live.state()}),contentType:'application/json'});await drain.releaseSafeWait((await store.journal())?.id||'');}
 });

@@ -32,6 +32,7 @@ test('healthy warrior reaches an engaged Phoenix through its open side',async({l
   await live.post('/focus',{monsterFocus:['phoenix'],monsterPriorities:{phoenix:999},monsterSearchRadius:400});
   await live.post('/farming-mode',{character:W,mode:'default'});
   await live.post('/checkpoint',{});
+  await live.clients[W].run('parent.__e2eObserveMoves=true;parent.__e2eObservedMoveCount=0');
   const monster=await live.admin(`output=(()=>{const original=G.monsters.phoenix;globalThis.__e2eEngagedPhoenixOriginal=original;try{
     // Declared parked-tank fixture: preserve native collision, attacks and targeting.
     G.monsters.phoenix={...original,speed:0,charge:0,hp:10000000};
@@ -57,11 +58,19 @@ test('healthy warrior reaches an engaged Phoenix through its open side',async({l
       return (await live.clients[W].events()).some((event:any)=>event.event==='hit'&&String(event.data?.id)===monster.id&&
         event.data?.hid===W&&event.data?.damage>1&&event.data?.source!=='taunt');
     },{timeout:60000,intervals:[100,250],message:'Native warrior attack must land after a terrain detour to the engaged monster'}).toBe(true);
-    const combatMoves=samples.filter(sample=>sample.positioning?.movementOwner==='combat'&&sample.positioning?.target===monster.id&&sample.positioning?.destination);
-    expect(combatMoves.length,'The warrior must move under combat ownership toward the actual engaged monster').toBeGreaterThan(0);
-    expect(combatMoves.every(sample=>sample.segmentClear),'Every observed combat segment must clear native terrain').toBe(true);
+    const nativeMoves=await live.clients[W].events();
+    const firstOwnedDamage=nativeMoves.find(event=>event.event==='hit'&&String(event.data?.id)===monster.id&&event.data?.hid===W&&event.data?.source!=='taunt'&&event.data?.damage>1);
+    expect(firstOwnedDamage,'Owned route evidence must precede actual native damage').toBeTruthy();
+    const combatMoves=nativeMoves.filter(event=>{const p=event.motion?.position,r=event.motion?.independentRoute,d=event.data;
+      return event.event==='move-issued'&&event.at<=firstOwnedDamage!.at&&p?.target===monster.id&&
+        (p.movementOwner==='combat'||p.mode==='independent-approach'&&p.movementOwner==='combat-approach'&&p.approachId&&r?.id===p.approachId&&r.target===monster.id)&&
+        Number.isFinite(d?.x)&&Number.isFinite(d?.y)&&Number.isFinite(d?.going_x)&&Number.isFinite(d?.going_y)&&Math.hypot(d.going_x-d.x,d.going_y-d.y)>1;
+    });
+    await info.attach('native-owned-combat-route',{body:JSON.stringify({target:monster.id,firstDamage:firstOwnedDamage,combatMoves}),contentType:'application/json'});
+    expect(combatMoves.length,'Actual native packets must show matching owned combat movement').toBeGreaterThan(0);
+    expect(combatMoves.every(event=>event.motion?.clear===true),'Every observed native combat segment must clear terrain').toBe(true);
     const dx=monster.x-geometry.origin.x,dy=monster.y-geometry.origin.y,length=Math.hypot(dx,dy);
-    expect(combatMoves.some(sample=>Math.abs(dx*(sample.y-geometry.origin.y)-dy*(sample.x-geometry.origin.x))/length>20),
+    expect(combatMoves.some(sample=>Math.abs(dx*(sample.data.y-geometry.origin.y)-dy*(sample.data.x-geometry.origin.x))/length>20),
       'Combat movement must bend around the originally blocked direct bearing').toBe(true);
     expect(await live.clients[W].run('character.rip')).toBeFalsy();
     nextMonster=await live.admin(`output=(()=>{
@@ -79,6 +88,7 @@ test('healthy warrior reaches an engaged Phoenix through its open side',async({l
       String(event.data?.id)===nextMonster.id&&event.data?.hid===W&&event.data?.damage>1&&event.data?.source!=='taunt'),
       {timeout:45000,message:'A new native target must be approached and attacked after the old detour ends'}).toBe(true);
   }finally{
+    await live.clients[W].run('parent.__e2eObserveMoves=false');
     try {
       const targetIds=[monster.id,nextMonster?.id].filter(Boolean);
       const hits=(await live.clients[W].events()).filter((event:any)=>event.event==='hit'&&

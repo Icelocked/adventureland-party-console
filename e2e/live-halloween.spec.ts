@@ -23,6 +23,11 @@ test.beforeEach(async ({live},info) => {
   // Reset only declarations from previous Halloween cases, before this case
   // creates any encounter. Never manufacture a kill or absence during a fight.
   const cleanup=await live.admin(`output=(()=>{
+    for(const [type,entry] of Object.entries(globalThis.__e2eHalloweenCatalogs||{})){
+      if(G.monsters[type]!==entry.configured)throw Error('Declared native catalog changed before cleanup: '+type);
+      G.monsters[type]=entry.original;
+    }
+    globalThis.__e2eHalloweenCatalogs={};
     const declared=globalThis.__e2eHalloweenDeclared||{},owned=new Set(Object.keys(declared));
     const monsters=Object.values(instances).flatMap(instance=>Object.values(instance.monsters||{}));
     // Native irregular reconstitution drops ad-hoc fields. Keep fixture identity
@@ -54,6 +59,7 @@ test.beforeEach(async ({live},info) => {
 });
 
 test.afterEach(async({live},info)=>{
+  try{
   if(info.status!==info.expectedStatus){
     const geometry=await Promise.allSettled(fighters.map(name=>live.clients[name].run(`(()=>{
       const movement=globalThis.__partyMovement;return {name:character.name,version:G.version,
@@ -63,7 +69,15 @@ test.afterEach(async({live},info)=>{
     })()`)));
     await info.attach('native-halloween-return-geometry',{body:JSON.stringify(geometry),contentType:'application/json'});
   }
-  await live.admin(`if(globalThis.__e2eHalloweenSpawnOriginal){new_monster=globalThis.__e2eHalloweenSpawnOriginal;delete globalThis.__e2eHalloweenSpawnOriginal;}output=true`);
+  }finally{
+  const restored=await live.admin(`output=(()=>{const restored=[];for(const [type,entry] of Object.entries(globalThis.__e2eHalloweenCatalogs||{})){
+    if(G.monsters[type]!==entry.configured)throw Error('Declared native catalog changed during encounter: '+type);
+    G.monsters[type]=entry.original;
+    restored.push({type,declaredCharge:entry.configured.charge,originalCharge:entry.original.charge,restoredOriginal:G.monsters[type]===entry.original});
+  }globalThis.__e2eHalloweenCatalogs={};
+  if(globalThis.__e2eHalloweenSpawnOriginal){new_monster=globalThis.__e2eHalloweenSpawnOriginal;delete globalThis.__e2eHalloweenSpawnOriginal;}return restored;})()`);
+  await info.attach('native-halloween-catalog-restoration',{body:JSON.stringify(restored),contentType:'application/json'});
+  }
 });
 
 // Failure inventory, written before runtime implementation: unsupported native
@@ -128,7 +142,8 @@ async function announceSpawn(live: LiveGame, event: string, leadMs: number) {
 async function spawn(live: LiveGame, event: string, map: string, x: number, y: number, nativeAdds = false) {
   return live.admin(`output=(()=>{
     const type=${JSON.stringify(event)}, original=G.monsters[type];
-    if(get_monster(type))throw Error('Expected clean native encounter');
+    if(Object.values(instances).some(instance=>Object.values(instance.monsters||{}).some(monster=>monster.type===type)))throw Error('Expected clean native encounter');
+    const configured={...original,charge:0};let constructed=false;
     const eligible=${JSON.stringify(fighters)}.map(name=>get_player(name)).filter(p=>{
       const damage=p.damage_type||G.items[p.slots?.mainhand?.name]?.damage_type||G.classes[p.ctype]?.damage_type;
       return type!=='slenderman'||['physical','pure'].includes(damage);
@@ -141,13 +156,14 @@ async function spawn(live: LiveGame, event: string, map: string, x: number, y: n
       const m=new_monster(${JSON.stringify(map)},{type,count:1,boundary:[${x},${y},${x},${y}]},{temp:1});
       m.e2eHalloween=true;
       m.zone_stats={...G.monsters[type]};
+      (globalThis.__e2eHalloweenCatalogs||={})[type]={original,configured};constructed=true;
       (globalThis.__e2eHalloweenDeclared||={})[String(m.id)]={type,map:m.map,definition:{...G.monsters[type]}};
       E[type]={live:true,map:m.map,hp:m.hp,max_hp:m.max_hp,target:m.target};
       // Native Slender status deliberately omits coordinates.
       if(type!=='slenderman'){E[type].x=m.x;E[type].y=m.y;}
       broadcast_e();return {id:m.id,type,map:m.map,x:m.x,y:m.y,hp:m.hp,eligibleFighters:eligible.map(p=>p.name),difficultyDps:dps,
-        difficulty:{nominalSeconds,observedNativeCadence:93/240,nominalCadence:1.2,scope:'initial encounter HP only'},initialDefinition:G.monsters[type],nativeStatus:E[type]};
-    } finally {G.monsters[type]=original;}
+        difficulty:{nominalSeconds,observedNativeCadence:93/240,nominalCadence:1.2,scope:'initial encounter HP only'},initialDefinition:G.monsters[type],catalogLifetime:{type,declaredCharge:configured.charge,originalCharge:original.charge,onlyChangedProperty:'charge'},nativeStatus:E[type]};
+    } finally {G.monsters[type]=constructed?configured:original;}
   })()`);
 }
 
@@ -276,7 +292,10 @@ for (const original of [{ id: 'mrgreen' }, { id: 'mrpumpkin' }]) {
         return native.players[W] && !native.players[W].rip && native.players[W].map === encounter.map && state.characters[W]?.joinedEvent === encounter.id && reentryHit;
       }, { timeout: 180_000, message: 'Native death must preserve event reentry instead of losing the saved activity' }).toBe(true);
       await info.attach('native-halloween-death-and-reentry', { body: JSON.stringify({ death, native: await world(live, encounter.id), coordinator: await live.state() }), contentType: 'application/json' });
-      const returnDeadline = Date.now() + (encounter.id === 'mrgreen' ? 240_000 : 180_000);
+      const returnPhases:{deselectedAt:number;replacementRequestedAt?:number;replacementAcknowledgedAt?:number;recoveryStartedAt:number;recoveryDeadline:number;arrivalObservedAt?:number}={
+        deselectedAt:Date.now(),recoveryStartedAt:Date.now(),recoveryDeadline:0};
+      let returnDeadline = returnPhases.deselectedAt + (encounter.id === 'mrgreen' ? 240_000 : 180_000);
+      returnPhases.recoveryDeadline=returnDeadline;
       await live.post('/formation', { character: W, eventSelections: [] });
       if (encounter.id === 'mrgreen') {
         let before:any, after:any;
@@ -293,6 +312,7 @@ for (const original of [{ id: 'mrgreen' }, { id: 'mrpumpkin' }]) {
               warrior.lastCommandId<=parent.command.id||warrior?.movement?.progress?.phase!=='walking')return false;
             before=state;return true;
           },{timeout:90_000,message:'Turn over CODE only during the actual owned event-exit child walk'}).toBe(true);
+          returnPhases.replacementRequestedAt=Date.now();
           await live.clients[W].frame.evaluate(()=>{
             const game=window as any,runner=(document.getElementById('maincode') as HTMLIFrameElement).contentWindow as any;
             game.start_runner('maincode',`$.getScript(${JSON.stringify(runner.__partyServer+'/CODE/adventure_land/universal-loader.js')});`);
@@ -305,17 +325,27 @@ for (const original of [{ id: 'mrgreen' }, { id: 'mrpumpkin' }]) {
             const original=before.eventReturn;
             expect(state.eventReturn?.cycleId).toBe(original.cycleId);
             for(const name of fighters)expect(state.eventReturn?.waypoints[name].revision).toBe(original.waypoints[name].revision);
-            after=state;return true;
+            after=state;returnPhases.replacementAcknowledgedAt=Date.now();return true;
           },{timeout:30_000,message:'A fresh replacement CODE runtime must retain the original event-return owner'}).toBe(true);
+          returnPhases.recoveryStartedAt=returnPhases.replacementAcknowledgedAt!;
+          returnDeadline=returnPhases.recoveryDeadline=returnPhases.recoveryStartedAt+240_000;
         } finally {
-          await info.attach('native-green-exit-code-turnover',{body:JSON.stringify({before,after,observations,native:await world(live,encounter.id)}),contentType:'application/json'});
+          await info.attach('native-green-exit-code-turnover',{body:JSON.stringify({before,after,observations,phases:returnPhases,native:await world(live,encounter.id)}),contentType:'application/json'});
         }
       }
       await expect.poll(async () => {
         const native = await world(live, encounter.id);
         return fighters.every(name => native.players[name] && native.players[name].map === encounter.map && Math.hypot(native.players[name].x - (encounter.x + 160), native.players[name].y - encounter.y) < 100);
       }, { timeout: Math.max(1,returnDeadline-Date.now()), message: 'Deselection must return both actual clients to their saved pre-event checkpoint' }).toBe(true);
-      await info.attach('halloween-saved-checkpoint-return', { body: JSON.stringify({ native: await world(live, encounter.id), coordinator: await live.state() }), contentType: 'application/json' });
+      returnPhases.arrivalObservedAt=Date.now();
+      const nativeArrivalReceipts=await Promise.all(fighters.map(async name=>{
+        const events=await live.clients[name].events(),main=events.filter((event:any)=>event.event==='new_map'&&
+          event.at>=returnPhases.recoveryStartedAt&&event.data?.name==='main').at(-1);
+        const arrival=main&&events.find((event:any)=>event.event==='player'&&event.at>main.at&&event.data?.map===encounter.map&&
+          Math.hypot(event.data.x-(encounter.x+160),event.data.y-encounter.y)<100);
+        return {name,main,arrival};
+      }));
+      await info.attach('halloween-saved-checkpoint-return', { body: JSON.stringify({phases:returnPhases,nativeArrivalReceipts, native: await world(live, encounter.id), coordinator: await live.state() }), contentType: 'application/json' });
     });
   });
 }

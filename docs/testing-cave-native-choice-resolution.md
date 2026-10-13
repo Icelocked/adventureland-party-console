@@ -39,3 +39,21 @@ The new-floor block must use the existing bounded same-choice acknowledgement
 helper with explicit floor 1. It must not click an already-completed vote merely
 because prior telemetry lags, and it must still require exact actual votes for
 both members before dismissing the real native result. No timeout increases.
+
+## Farewell continuation identity
+
+Full run 38440823973 on `00a2562` started its 300-second post-vote
+continuation from natural choice 212, titled "Before You Leave". The declared
+`e2e-farewell` room at (672, 1952) was still unfinished; the actors were at
+(1357, 1072). The declared room later resolved choice 317. Native route 9 took
+about 269 seconds, followed by combat and regrouping. The early continuation
+deadline expired about two seconds before regrouping completed. Both actors
+were alive at the assembly point, with 533 seconds remaining in the visit.
+The evidence does not establish an acknowledgement deadlock or visit expiry.
+
+Match the native `run.cave.vote.id` and `vote.room.id` to the declared room
+before starting the continuation window. Continue answering every intervening
+native UI choice. At acknowledgement, require the declared room to be done
+and its retained `room.vote.id` to match the selected farewell. Preserve the
+600-second approach and 300-second continuation deadlines and actual floor
+transport checks. Retain native room, vote and player coordinates as evidence.
