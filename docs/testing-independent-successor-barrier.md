@@ -1,0 +1,5 @@
+# Cached successor attack barrier inventory
+
+Before amending successor promotion, death() copies a cached grant into committed:true. This bypasses the newly required all-fighter native range/LOS barrier for the next target, even though the coordinator's normal planned commit path is guarded. The actor can learn the next target immediately, but that local cached target is not an all-ready attack grant.
+
+Risks: disabling prompt target approach altogether, losing legacy fast grants, dropping confirmed predecessor death ownership, allowing repeated/expired/revoked grants, or reconciling an uncommitted coordinator snapshot as committed. A retained actual successor-client regression is written first: an independent snapshot promotes B from A death but remains uncommitted through the coordinator's not-ready snapshot, then adopts a committed authoritative snapshot. Legacy fast promotion remains covered unchanged. Only local promotion's committed value changes; target/selection/grant consumption and all existing ownership guards remain.

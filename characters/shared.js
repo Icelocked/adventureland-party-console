@@ -13736,7 +13736,7 @@
   function queueReport() {
     return {name:character.name,monsterHunt:monsterHuntStatus(),rareObservation:rareObservationReport(),map:character.map,in:character.in,server:reunionRealm(),x:character.x,y:character.y,hp:character.hp,max_hp:character.max_hp,lastDeath:lastDeathInfo,rip:!!character.rip,
       combatSelection:Object.assign({},combatSelection,{runtimeId:convoyRuntimeId,target:groupedNomination()}),
-      groupedCombat:{independentApproach:root.partyQueueClient && root.partyQueueClient.independent && !dungeonOwned() ? true:undefined,formationRecovery:root.partyQueueClient && root.partyQueueClient.formation ? root.partyQueueClient.formation.report() : undefined,approach:groupedApproachReport(),pursuitAck:groupedCombat && groupedCombat.pursuit && groupedCombat.pursuit.revoking || null,lootPending:!!(root.partyLootClient && root.partyLootClient.huntPending()),reportedAt:Date.now()+coordinatorClockOffset,protocol:4,observationAt:root.__partyEntitiesObservedAt||0,passingEncounters:passingEncounterReport(),passingAcknowledgement:root.partyQueueClient && root.partyQueueClient.passingAcknowledgement && root.partyQueueClient.passingAcknowledgement(),huntDefense:huntTravelDefense(),returnDefense:typeof returnCombatActive==='function' && returnCombatActive() || returnDepartureDefense(),currentAttackers:currentTravelAttackers(),travelCandidates:typeof returnCombatActive==='function' && returnCombatActive()?[]:travelStopCandidates(),currentAttackersAt:travelObservationAt(),travelCommand:localTravelCommand(),epoch:root.__partyCombatResetAt||0,claims:typeof returnCombatActive==='function' && returnCombatActive()?[]:queueClaims(),candidates:typeof returnCombatActive==='function' && returnCombatActive()?[]:queueCandidates(),retentions:typeof returnCombatActive==='function' && returnCombatActive()?[]:queueRetentions(),evidence:root.partyQueueClient ? root.partyQueueClient.reportEvidence(fightDeaths) : [],deaths:fightDeaths,
+      groupedCombat:{independentReady:root.partyQueueClient && root.partyQueueClient.independent ? root.partyQueueClient.independent.readiness():undefined,independentApproach:root.partyQueueClient && root.partyQueueClient.independent && !dungeonOwned() ? true:undefined,formationRecovery:root.partyQueueClient && root.partyQueueClient.formation ? root.partyQueueClient.formation.report() : undefined,approach:groupedApproachReport(),pursuitAck:groupedCombat && groupedCombat.pursuit && groupedCombat.pursuit.revoking || null,lootPending:!!(root.partyLootClient && root.partyLootClient.huntPending()),reportedAt:Date.now()+coordinatorClockOffset,protocol:4,observationAt:root.__partyEntitiesObservedAt||0,passingEncounters:passingEncounterReport(),passingAcknowledgement:root.partyQueueClient && root.partyQueueClient.passingAcknowledgement && root.partyQueueClient.passingAcknowledgement(),huntDefense:huntTravelDefense(),returnDefense:typeof returnCombatActive==='function' && returnCombatActive() || returnDepartureDefense(),currentAttackers:currentTravelAttackers(),travelCandidates:typeof returnCombatActive==='function' && returnCombatActive()?[]:travelStopCandidates(),currentAttackersAt:travelObservationAt(),travelCommand:localTravelCommand(),epoch:root.__partyCombatResetAt||0,claims:typeof returnCombatActive==='function' && returnCombatActive()?[]:queueClaims(),candidates:typeof returnCombatActive==='function' && returnCombatActive()?[]:queueCandidates(),retentions:typeof returnCombatActive==='function' && returnCombatActive()?[]:queueRetentions(),evidence:root.partyQueueClient ? root.partyQueueClient.reportEvidence(fightDeaths) : [],deaths:fightDeaths,
         threats:groupedThreatReports(),sightings:groupedSightings(),ack:groupedAcknowledgement(),handoff:root.partyQueueClient && root.partyQueueClient.handoff && root.partyQueueClient.handoff.report(),queueAck:groupedCombat && groupedCombat.queueRevision,
         anchorVisible:groupedAnchorVisible(),state:groupedCombat}};
   }
@@ -16040,11 +16040,11 @@
         e.visible && !e.dead && e.hp>0 && (!coordinated || t.map===character.map && t.in===character.in && t.server===reunionRealm()) &&
         !Object.values(parent.entities||{}).some(function(other){return other && other.type==='monster' && !other.dead &&
           (other.target===character.name || other.id!==e.id && isAttackingPartyMember(other));}));
-      return {allowed:allowed,planned:coordinated?t.state==='planned':true,target:String(t.id),
+      return {allowed:allowed,planned:coordinated?t.state==='planned':true,selection:coordinated?groupedCombat.selection:undefined,committed:coordinated?!!groupedCombat.committed:true,target:String(t.id),
         key:JSON.stringify([t.id,character.map,character.in,reunionRealm(),navigationIntent.revision,coordinated?[groupedCombat.key,groupedCombat.selection,groupedCombat.resetAt]:joinedEvent]),point:{x:e.x,y:e.y},radius:Math.max(1,Number(character.range)-3)};
     }
     return {
-      context:context,
+      context:context,now:function(){return Date.now()+coordinatorClockOffset;},
       ready:function(){var c=context(),e=c && get_entity(c.target);return !!(e && is_in_range(e) && can_move_to(e.x,e.y));},
       goal:function(point,radius){
         var c=context(),e=c && get_entity(c.target);if(!e)return null;
@@ -16058,7 +16058,7 @@
       owned:function(id){var report=movement.report();return !!(report && report.owner && report.owner.recoveryStage===id);},
       cancel:function(id){var report=movement.report();if(report && report.owner && report.owner.recoveryStage===id)movement.cancel('Individual combat approach ended');},
       position:function(id,target,radius,goal,phase){root.partyCombatPosition={at:Date.now(),mode:'independent-approach',movementOwner:'combat-approach',
-        approachId:id,target:target,radius:radius,phase:phase,destination:goal,reason:'Independently approaching native attack range'};}
+        approachId:id,target:target,radius:radius,phase:phase,destination:goal,reason:phase==='ready'?'In native attack range with sightline; waiting for every fighter':'Independently approaching native attack range'};}
     };
   }
   function formationMove(target) {

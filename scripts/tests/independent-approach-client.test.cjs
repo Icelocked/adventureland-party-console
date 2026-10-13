@@ -1,10 +1,10 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const {createIndependentApproachClient}=require('../../runtime/combat/independent-approach-client.ts');
-function fixture(){const ctx={allowed:true,planned:true,key:'USII:uhills:target',target:'target',point:{x:100,y:100},radius:200};let owner=null,throwing=false;
- const routes=[];const client=createIndependentApproachClient({context:()=>ctx,ready:()=>false,goal:(p,r)=>({x:p.x-r,y:p.y}),
+function fixture(){const ctx={allowed:true,planned:true,key:'USII:uhills:target',target:'target',point:{x:100,y:100},radius:200,selection:'s1',committed:false};let owner=null,throwing=false,ready=false;
+ const routes=[];const client=createIndependentApproachClient({context:()=>ctx,now:()=>10000,ready:()=>ready,goal:(p,r)=>({x:p.x-r,y:p.y}),
   start:(goal,id)=>{if(throwing)throw Error('native start rejected');owner=id;return new Promise((resolve,reject)=>routes.push({goal,id,resolve,reject}));},
   owned:id=>owner===id,cancel:id=>{if(owner===id)owner=null;},position:()=>{}});
- return {client,routes,ctx,get owner(){return owner;},set throwing(v){throwing=v;}};}
+ return {client,routes,ctx,get owner(){return owner;},set throwing(v){throwing=v;},set ready(v){ready=v;}};}
 test('late caster begins own route after shared target engagement',()=>{const f=fixture();f.ctx.planned=false;assert.equal(f.client.tick(),true);assert.equal(f.routes.length,1);assert.equal(f.client.report().target,'target');});
 test('synchronous native start rejection becomes bounded approach failure',()=>{const f=fixture();f.throwing=true;assert.doesNotThrow(()=>f.client.tick());for(let i=0;i<12;i++)assert.doesNotThrow(()=>f.client.tick());assert.equal(f.client.report().phase,'unreachable');assert.ok(f.client.report().level<=8);});
 test('old native completion cannot settle newer owned route',async()=>{const f=fixture();f.client.tick();const first=f.routes[0];f.ctx.point={x:130,y:100};f.client.tick();const second=f.routes[1];first.resolve();await Promise.resolve();assert.equal(f.client.report().pending,true);assert.equal(f.owner,second.id);assert.equal(f.client.report().id,second.id);});
@@ -32,3 +32,6 @@ test('blocked sightline inside weapon range reports active approach for existing
   root:{partyCombatPosition:{target:'boss',mode:'independent-approach'},sharedRoutine:{isOccupied:()=>false},partyQueueClient:{independent:{report:()=>({target:'boss',id:'combat-approach:1',phase:'unreachable',goal:{x:10,y:10}})}}}});
  vm.runInContext(source.slice(start,end),c);const report=c.groupedApproachReport();assert.equal(report.active,true);assert.equal(report.intent,'approach');assert.equal(report.deficit,0);assert.equal(report.waypoint.key,'combat-approach:1');
 });
+
+test('early native-ready actor holds position while another participant has not committed readiness',()=>{const f=fixture();f.ready=true;assert.equal(f.client.tick(),true);assert.equal(f.routes.length,0);assert.equal(f.client.report().phase,'ready');assert.equal(f.client.readiness().ready,true);f.ctx.committed=true;assert.equal(f.client.tick(),false);assert.equal(f.routes.length,0);});
+test('readiness rejects stale ownership and changed selected target',()=>{const f=fixture();f.client.tick();f.ready=true;f.ctx.selection='s2';f.ctx.key='new-selection';assert.equal(f.client.readiness().ready,false);f.ctx.allowed=false;assert.equal(f.client.readiness(),undefined);});

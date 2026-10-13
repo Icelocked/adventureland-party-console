@@ -114,7 +114,8 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
                 target:runner.__partyGroupedCombat.formationRecovery.target,mover:runner.__partyGroupedCombat.formationRecovery.mover,
                 phase:runner.__partyGroupedCombat.formationRecovery.phase,attempt:runner.__partyGroupedCombat.formationRecovery.attempt},
               position:runner?.partyCombatPosition&&{mode:runner.partyCombatPosition.mode,reason:runner.partyCombatPosition.reason,
-                target:runner.partyCombatPosition.target,issuedAt:runner.partyCombatPosition.issuedAt},runtimeGeneration:runner?.__partyRuntimeGeneration,
+                target:runner.partyCombatPosition.target,issuedAt:runner.partyCombatPosition.issuedAt,movementOwner:runner.partyCombatPosition.movementOwner,
+                approachId:runner.partyCombatPosition.approachId,radius:runner.partyCombatPosition.radius,phase:runner.partyCombatPosition.phase},runtimeGeneration:runner?.__partyRuntimeGeneration,
               codeHash:runner?.__partyCodeHash,observerGeneration:game.__e2eObserverGeneration}});
           if(game.__e2eEvents.length>2000)game.__e2eEvents.shift();
           return;
@@ -124,10 +125,21 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
         if(!c?.name || game.socket!==socket || args[0]?.id==null)return;
         let candidate:any,convoy:any;
         try { candidate=runner?.sharedRoutine?.getWalkingPassiveTarget?.(true);convoy=runner?.sharedRoutine?.combatTraceSnapshot?.(); } catch { return; }
+        let independent:any;
+        if(game.__e2eObserveMoves&&(game.__e2eIndependentObservedAttackCount||0)<3){
+          const group=runner?.__partyGroupedCombat;
+          if(group?.independentApproach){
+            game.__e2eIndependentObservedAttackCount=(game.__e2eIndependentObservedAttackCount||0)+1;
+            independent={selection:group.selection,target:String(group.target?.id),committed:group.committed,
+              serverAt:Date.now()+Number(runner?.sharedRoutine?.queueClockOffset?.()||0),
+              ready:group.independentReadiness&&Object.fromEntries(Object.entries(group.independentReadiness).map(([name,value]:[string,any])=>[name,
+                value&&{selection:value.selection,target:value.target,at:value.at,ready:value.ready}]))};
+          }
+        }
         game.__e2eEvents.push({sequence:++game.__e2eEventSequence,at:Date.now(),event:'attack-issued',
           data:{id:String(args[0]?.id),actor:c.name},motion:{map:c.map,in:c.in??c.map,server:String(game.server_region||'')+String(game.server_identifier||''),
             x:c.real_x??c.x,y:c.real_y??c.y,moving:!!c.moving,owner:runner?.__partyCombatOwner,
-            convoyId:convoy?.convoy,convoyPhase:convoy?.convoyPhase,convoyEpoch:convoy?.convoyEpoch,
+            independent,convoyId:convoy?.convoy,convoyPhase:convoy?.convoyPhase,convoyEpoch:convoy?.convoyEpoch,
             candidate:candidate&&{id:String(candidate.id),mtype:candidate.mtype}}});
         if(game.__e2eEvents.length>2000)game.__e2eEvents.shift();
       };

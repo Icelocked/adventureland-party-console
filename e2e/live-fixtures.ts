@@ -34,7 +34,7 @@ export type LiveGame = {
   reconnectClient(name: string): Promise<void>;
 };
 
-export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primaryClass: 'warrior' | 'ranger' | 'mage'; extraFighter: 'mage' | null; merchantDefault: string | null; liveHeadless: boolean; recordNativeVideo: boolean; movementMode: 'alclient' | 'shadow'; staleWorkerRealm: string | null; initialPosition: {map: string; x: number; y: number} | null; initialPositions: Record<string,{map:string;x:number;y:number}> | null; initialEventSpawn: string | null; initialMonsterSpawn: string | null }>({
+export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primaryClass: 'warrior' | 'ranger' | 'mage'; extraFighter: 'mage' | null; merchantDefault: string | null; liveHeadless: boolean; recordNativeVideo: boolean; movementMode: 'alclient' | 'shadow'; staleWorkerRealm: string | null; initialPosition: {map: string; x: number; y: number} | null; initialPositions: Record<string,{map:string;x:number;y:number}> | null; initialEventSpawn: string | null; initialMonsterSpawn: string | null; initialConsoleHold: boolean }>({
   loadout: ['god', {option:true}],
   primaryClass: ['warrior', {option:true}],
   extraFighter: [null, {option:true}],
@@ -42,12 +42,13 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
   initialPosition: [null, {option:true}],
   initialPositions: [null, {option:true}],
   initialMonsterSpawn: [null, {option:true}],
+  initialConsoleHold: [false, {option:true}],
   initialEventSpawn: [null, {option:true}],
   liveHeadless: [false, {option:true}],
   recordNativeVideo: [process.env.E2E_NATIVE_VIDEO==='1', {option:true}],
   movementMode: ['alclient', {option:true}],
   staleWorkerRealm: [null, {option:true}],
-  live: [async ({ browser, dashboard, loadout, primaryClass, extraFighter, merchantDefault, initialPosition, initialPositions, initialEventSpawn, initialMonsterSpawn, liveHeadless, recordNativeVideo, movementMode, staleWorkerRealm }, use, testInfo) => {
+  live: [async ({ browser, dashboard, loadout, primaryClass, extraFighter, merchantDefault, initialPosition, initialPositions, initialEventSpawn, initialMonsterSpawn, initialConsoleHold, liveHeadless, recordNativeVideo, movementMode, staleWorkerRealm }, use, testInfo) => {
     const directory = path.join(root, '.build/e2e', `live-${randomUUID()}`);
     mkdirSync(directory, { recursive: true });
     const manifest = await game.reset();
@@ -223,6 +224,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           await expect.poll(async () => (await live!.state()).steamSwitch?.phase, { timeout: 90_000 }).toBe('complete');
         },
       };
+      if(initialConsoleHold)live.consoleDrainLease('native-initial-setup',Date.now()+600000,{loadMode:'now',phase:'holding'});
       await live.post('/formation', { leader: null });
       for (const name of names)
         await live.post('/formation', { character: name, follow: false, eventSelections: [] });

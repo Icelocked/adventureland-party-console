@@ -15,3 +15,14 @@ export function independentApproach(members:Member[],now:number):boolean {
   const anchor=members[0]?.status;
   return !!anchor && members.every(member=>available(member) && samePlace(member.status,anchor) && currentCapability(member.status,now));
 }
+
+export interface IndependentReady {selection:string;target:string;at:number;ready:boolean}
+/** Snapshot only actual actor reports; capability and target ACK remain separate. */
+export function independentReadiness(members:Member[]):Record<string,IndependentReady> {
+  return Object.fromEntries(members.flatMap(member=>{const r=member.status?.groupedCombat?.independentReady;
+    return r?[[member.name,{selection:r.selection,target:r.target,at:r.at,ready:r.ready}]]:[];}));
+}
+export function allIndependentReady(members:Member[],selection:string|null,target:string,now:number):boolean {
+  return !!selection && members.every(member=>{const r=member.status?.groupedCombat?.independentReady;
+    return !!r && r.ready===true && r.selection===selection && r.target===target && now-r.at<=3000 && r.at<=now+500;});
+}

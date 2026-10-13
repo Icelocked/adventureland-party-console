@@ -1,4 +1,4 @@
-import {independentApproach as supportsIndependentApproach} from './independent-approach.ts';
+import {independentApproach as supportsIndependentApproach,independentReadiness,allIndependentReady,type IndependentReady} from './independent-approach.ts';
 import {pairRevision} from './locked-pair.ts';
 import type {HandoffReport, SuccessorGrant} from './successor-grant.ts';
 import type {PassingEncounter} from './passing.ts';
@@ -21,7 +21,7 @@ export interface Member {
     moving?:import('typed-adventureland').CharacterEntity['moving'];
     x: number; y: number; range?: number; max_hp?: number; joinedEvent?: unknown; activeEvent?: unknown; mapEvent?: unknown;
     combatSelection?: { id: string | null; map: string | null; revision: number; runtimeId: string; target?: Target | null };
-    groupedCombat?: { independentApproach?:boolean; handoff?:HandoffReport; travelCommitted?: Fight[]; travelCandidates?: Target[]; huntDefense?: boolean; passingAcknowledgement?: PassingAcknowledgement; returnDefense?: boolean; passingEncounters?: PassingEncounter[]; formationRecovery?: FormationRecoveryReport; approach?: ApproachReport; pursuitAck?: string | null; currentAttackers?: CurrentAttacker[];
+    groupedCombat?: { independentReady?:IndependentReady; independentApproach?:boolean; handoff?:HandoffReport; travelCommitted?: Fight[]; travelCandidates?: Target[]; huntDefense?: boolean; passingAcknowledgement?: PassingAcknowledgement; returnDefense?: boolean; passingEncounters?: PassingEncounter[]; formationRecovery?: FormationRecoveryReport; approach?: ApproachReport; pursuitAck?: string | null; currentAttackers?: CurrentAttacker[];
       currentAttackersAt?: number; travelCommand?: {id:number;revision:number} | null; retentions?:Retention[];retentionPaused?:boolean; observationAt?:number; lootPending?: boolean; epoch?: number; claims?: ClaimObservation[]; candidates?: Candidate[]; evidence?: Evidence[]; queueAck?: string | null; protocol?: number; ack?: string | null; anchorVisible?: boolean; deaths?: Death[]; threats?: Target[]; sightings?: Target[]; state?: Group | null };
   };
 }
@@ -31,6 +31,7 @@ export interface Target { level?: import('typed-adventureland').MonsterEntity['l
 export interface Group {
   /** Every current actor can own its same-target approach independently. */
   independentApproach?:boolean;
+  independentReadiness?:Record<string,IndependentReady>;
   caveScope?: string;
   pairRevision?:string | null; successorGrant?:SuccessorGrant;
   handoffTiming?: {selectedAt: number; committedAt: number | null};
@@ -112,8 +113,10 @@ export function evaluateGroup(previous: Group | null, members: Member[], leader:
   const pairAcknowledged = !!previous?.pairRevision && members.length>0 && members.every(m=>fresh(m.status) && m.status?.groupedCombat?.handoff?.pairAck===previous.pairRevision) && previous.queue.slice(0,2).some(t=>t.id===target?.id && t.server===(target as Fight)?.server && t.map===target?.map && t.in===target?.in);
   const preack = pairAcknowledged || !!previous?.queueRevision && members.length>0 && members.every(m=>fresh(m.status) && m.status?.groupedCombat?.queueAck===previous.queueRevision) && previous.queue.some(t=>t.id===target?.id && t.server===(target as Fight)?.server);
   const terrainRecovery=independentApproach?undefined:formationRecovery(same ? previous : null,members,target,key,now,pullsPaused,range);
-  const committed = !terrainRecovery && !pursuit?.revoking && !!selection && (target?.state!=='planned' || !pullsPaused) && (target?.state==='engaged' || ready && recovering.length===0 &&
+  const approachReady=!independentApproach || target?.state!=='planned' || allIndependentReady(members,selection,target.id,now);
+  const committed = approachReady && !terrainRecovery && !pursuit?.revoking && !!selection && (target?.state!=='planned' || !pullsPaused) && (target?.state==='engaged' || ready && recovering.length===0 &&
     (same && previous.selection===selection && previous.committed || acknowledged || preack));
+  if(!approachReady)blockers.push('waiting for every fighter in native attack range and sightline');
   if (!blockers.length && !ready) blockers.push('waiting for stable formation');
   const priorTiming=previous?.selection===selection ? previous.handoffTiming : undefined;
   const handoffTiming=selection ? {selectedAt:priorTiming?.selectedAt??now,committedAt:committed ? priorTiming?.committedAt??now : null} : undefined;
@@ -127,7 +130,7 @@ export function evaluateGroup(previous: Group | null, members: Member[], leader:
   }
   if(restored?.target?.id!==target?.id||lostTargets.length!==(restored?.lostTargets||[]).length)
     transitionTrace.push({at:now,target:target?.id||null,reason:lostTargets.length>(restored?.lostTargets||[]).length?'target retired as lost':'queue target changed'});
-  return {independentApproach,pairRevision:members.every(m=>m.status?.groupedCombat?.handoff?.capability===1)?pairRevision(key,resetAt,queue):null,passingEncounters,protocol:4, formationRecovery:terrainRecovery, pursuit, pursuitExclusions, lostTargets, searches, transitionTrace, resetAt, claims, rareRejections, observers, queue, queueRevision, deaths, evidence, fights, threats, fighter, targetLeader, participating, recovering, recoverySince, key,phase:!ready?'regrouping':!target?'ready':target.state==='engaged'?'engaged':target.state==='pending'?'attack-pending':committed?'approaching':'selecting',leader,
+  return {independentReadiness:independentApproach?independentReadiness(members):undefined,independentApproach,pairRevision:members.every(m=>m.status?.groupedCombat?.handoff?.capability===1)?pairRevision(key,resetAt,queue):null,passingEncounters,protocol:4, formationRecovery:terrainRecovery, pursuit, pursuitExclusions, lostTargets, searches, transitionTrace, resetAt, claims, rareRejections, observers, queue, queueRevision, deaths, evidence, fights, threats, fighter, targetLeader, participating, recovering, recoverySince, key,phase:!ready?'regrouping':!target?'ready':target.state==='engaged'?'engaged':target.state==='pending'?'attack-pending':committed?'approaching':'selecting',leader,
     handoffTiming,members:members.map(m=>m.name),priest:priest?.name || null,
     anchor:anchor && anchorMember && fresh(anchor) && !anchor.rip && anchor.hp>0 ?
       {name:anchorMember.name,map:anchor.map,in:anchor.in,server:anchor.server,x:anchor.x,y:anchor.y}:null,

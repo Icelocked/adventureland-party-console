@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Replace shared next-target movement with independent native routes for each fighter; check attack range and line of sight on arrival and progressively halve blocked approach distances before returning to normal combat.
+- Replace shared next-target movement with independent native routes for each fighter; halve blocked approach distances and hold fire until every fighter confirms attack range and line of sight to the selected target.
 
 - Reduce native E2E recording overhead while retaining screenshots, traces and game-event evidence; enable diagnostic video explicitly with E2E_NATIVE_VIDEO=1.
 
