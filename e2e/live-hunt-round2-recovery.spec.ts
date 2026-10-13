@@ -1,4 +1,5 @@
 import {test,expect} from './live-fixtures';
+import {anniversaryStatusFaultSource} from './anniversary-status-fault';
 import {killNativeCharacter} from './hunt-interruption-helpers';
 import {W,P,M,world,beginAnniversary,endAnniversary} from './game/hunt-events';
 
@@ -169,21 +170,31 @@ test('native Anniversary staging survives an old-round slice without repeated To
   await live.admin(`output=(()=>{const p=get_player('${W}');p.items[20]={name:'slice_strawberry',q:1};resend(p,'u+cid');return true;})()`);
   await live.post('/command',{character:M,type:'bank'});
   await expect.poll(async()=>(await world(live)).players[M].map,{timeout:60_000}).toBe('bank');
-  let scheduled=true;const next=Date.now()+50_000;
+  const next=Date.now()+50_000;
+  const faultOwners=Object.keys(live.clients);
+  const installed:Record<string,any>={};
+  const readFaults=async()=>{
+    const observations:Record<string,any>={};
+    for(const name of faultOwners)observations[name]=await live.clients[name].run('globalThis.__e2eAnniversaryStatusFault');
+    return observations;
+  };
+  const disableFaults=async()=>{
+    for(const name of Object.keys(installed))await live.clients[name].run('if(globalThis.__e2eAnniversaryStatusFault)globalThis.__e2eAnniversaryStatusFault.enabled=false');
+  };
+  const samples:any[]=[];
+  try{
   await live.admin(`output=(()=>{
     const original=broadcast_e;globalThis.__e2eStagingBroadcast=original;
     broadcast_e=function(dontSend){if(dontSend)return;broadcast('server_info',{...E,anniversary:{live:false,next:${next},target:'${P}',available:true}});};
     globalThis.__e2eStagingTimer=setInterval(()=>broadcast_e(),500);broadcast_e();return true;})()`);
-  const context=live.clients[W].page.context();
-  await context.route('**/party-api/status',async route=>{
-    const response=await route.fetch(),state=await response.json();
-    if(scheduled)state.anniversary={...state.anniversary,merchant:M,handoffTargets:[{name:W,round:'historical-earlier-round',slice:'slice_strawberry'}]};
-    await route.fulfill({response,json:state});
-  });
+    for(const name of faultOwners)installed[name]=await live.clients[name].run(anniversaryStatusFaultSource(W,M));
   await live.post('/formation',{character:W,eventSelections:['anniversary']});
-  const samples:any[]=[];
-  try{
     await expect.poll(async()=>{const p=(await world(live)).players[W];return p.map==='main'&&Math.hypot(p.x,p.y)<=100;},{timeout:60_000}).toBe(true);
+    const faults=await readFaults();
+    for(const name of faultOwners){
+      expect(faults[name]?.count,`${name}: actual historical status JSON was transformed`).toBeGreaterThan(0);
+      expect(faults[name]?.generation).toBe(installed[name].generation);
+    }
     const started=Date.now();
     await expect.poll(async()=>{const native=await world(live);samples.push({at:Date.now(),players:native.players});
       expect(Math.hypot(native.players[W].x,native.players[W].y)).toBeLessThanOrEqual(110);
@@ -202,12 +213,12 @@ test('native Anniversary staging survives an old-round slice without repeated To
     }
     const casts=castStarts.filter(packet=>packet.at>=started);
     expect(casts.length).toBe(0);
-    scheduled=false;
+    await disableFaults();
     await live.admin('clearInterval(globalThis.__e2eStagingTimer);broadcast_e=globalThis.__e2eStagingBroadcast;delete globalThis.__e2eStagingBroadcast;output=true');
     const seed=await beginAnniversary(live,P);
     await expect.poll(async()=>(await world(live)).players[W].conditions.anniversary_kiss,{timeout:90_000}).toBeTruthy();
-    await info.attach('native-anniversary-staging-history',{body:JSON.stringify({next,samples,casts,seed,final:await world(live),state:await live.state()}),contentType:'application/json'});
-  }finally{scheduled=false;await context.unrouteAll({behavior:'ignoreErrors'});
+    await info.attach('native-anniversary-staging-history',{body:JSON.stringify({next,installed,faults,samples,casts,seed,final:await world(live),state:await live.state()}),contentType:'application/json'});
+  }finally{await disableFaults();
     await live.admin('clearInterval(globalThis.__e2eStagingTimer);if(globalThis.__e2eStagingBroadcast){broadcast_e=globalThis.__e2eStagingBroadcast;delete globalThis.__e2eStagingBroadcast;}output=true');
     await live.post('/formation',{character:W,eventSelections:[]});await endAnniversary(live);}
 });
