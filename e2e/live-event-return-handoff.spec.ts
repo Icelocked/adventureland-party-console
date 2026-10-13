@@ -4,9 +4,7 @@ import {test,expect} from './live-fixtures';
 
 const W='E2EWarrior',P='E2EPriest',fighters=[W,P];
 const checkpoint={map:'halloween',x:-550,y:-290};
-test.use({initialPosition:checkpoint,disableNativeVideo:async({},use,info)=>{
-  await use(['active event return hands off when leaving Green','active event return hands off when following a Pumpkin leader'].includes(info.title));
-}});
+test.use({initialPosition:checkpoint});
 
 const transportObservers=new Map<string,Awaited<ReturnType<typeof observeNativeTransport>>>();
 const statusObservers=new Map<string,Awaited<ReturnType<typeof observeNativeStatus>>>();

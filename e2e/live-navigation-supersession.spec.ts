@@ -40,16 +40,16 @@ test('superseded native Town progress ends quietly and stale pending membership 
   test.setTimeout(180_000);
   await live.post('/formation',{leader:W});
   await live.post('/formation',{character:P,follow:true});
-  const stagingStartedAt=Date.now(),origin={map:'main',x:350,y:0};
+  const stagingStartedAt=Date.now(),origin={map:'main',x:0,y:350};
   const previousReceipt=await live.clients[P].run('globalThis.__partyLastCommand||0');
-  expect(await live.clients[P].run("can_move({map:'main',x:350,y:0,going_x:350,going_y:0,base:character.base})"),'The declared native Town origin must be walkable').toBe(true);
+  expect(await live.clients[P].run("can_move({map:'main',x:0,y:350,going_x:0,going_y:350,base:character.base})"),'The declared native Town origin must be walkable').toBe(true);
   const admission=await live.post('/command',{character:P,type:'character-travel',location:origin,label:'Native Town supersession origin'});
   await expect.poll(async()=>{
     const native=await live.clients[P].snapshot(),state=await live.state(),report=state.characters[P];
     const receipt=await live.clients[P].run('globalThis.__partyLastCommand||0');
-    const server=await live.admin(`output=(()=>{const p=get_player('${P}');return !!p&&p.map==='main'&&!p.moving&&Math.hypot(p.x-350,p.y)<25})()`);
-    return server&&receipt>previousReceipt&&native.map==='main'&&Math.hypot(native.x-350,native.y)<25&&
-      report?.seenAt>=stagingStartedAt&&report.map==='main'&&!report.moving&&Math.hypot(report.x-350,report.y)<25;
+    const server=await live.admin(`output=(()=>{const p=get_player('${P}');return !!p&&p.map==='main'&&!p.moving&&Math.hypot(p.x,p.y-350)<25})()`);
+    return server&&receipt>previousReceipt&&native.map==='main'&&Math.hypot(native.x,native.y-350)<25&&
+      report?.seenAt>=stagingStartedAt&&report.map==='main'&&!report.moving&&Math.hypot(report.x,report.y-350)<25;
   },{timeout:30_000,message:'Native priest, authoritative server and fresh receipt must reach the real Town incident origin'}).toBe(true);
   const staging={origin,admission,previousReceipt,currentReceipt:await live.clients[P].run('globalThis.__partyLastCommand'),native:await live.clients[P].snapshot()};
   let held=false,heldAt=0,releasedAt=0,release!:()=>void,heldBody:{navigationRevision:number;cycleId:string}|undefined;

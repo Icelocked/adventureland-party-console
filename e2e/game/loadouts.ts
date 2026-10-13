@@ -64,13 +64,14 @@ export async function seedLoadout(admin: (code: string) => Promise<unknown>, pro
     }
     return result;
   })()`);
-  const seed=result as {profile?:unknown;characters?:{name?:string;slots?:Record<string,Equipment>}[]}|null;
+  const seed=result as {profile?:unknown;characters?:{name?:string;type?:string;slots?:Record<string,Equipment>}[]}|null;
   if(seed?.profile!==profile||!Array.isArray(seed.characters)||seed.characters.length!==names.length)
     throw Error('Native loadout returned an incomplete seed: '+JSON.stringify(result));
   for(const name of names) {
     const character=seed.characters.find(entry=>entry.name===name);
-    const weaponLevel=selected.weaponLevel;
-    if(character?.slots?.mainhand?.level!==weaponLevel)
+    const followStaff=profile==='combat-follow-range'&&(character?.type==='priest'||character?.type==='mage');
+    const weaponLevel=followStaff?(character.type==='priest'?12:15):selected.weaponLevel;
+    if(character?.slots?.mainhand?.level!==weaponLevel||followStaff&&character.slots.mainhand.name!=='staff')
       throw Error('Native loadout weapon mismatch: '+name);
     for(const [slot,expected] of Object.entries(selected.armor)) {
       const actual=character.slots[slot];

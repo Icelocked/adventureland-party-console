@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reduce native E2E recording overhead while retaining screenshots, traces and game-event evidence; enable diagnostic video explicitly with E2E_NATIVE_VIDEO=1.
+
 - Fix formation recovery stalling before a selected monster when the leader position is unsafe for ranged followers; choose nearby certified follow positions and replan after leader movement or changing monster clearance.
 
 - Fixed merchant collection getting stuck approaching inaccessible transporter centers, including Desertland; use collision-clear points within the native interaction range.

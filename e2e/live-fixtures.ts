@@ -34,7 +34,7 @@ export type LiveGame = {
   reconnectClient(name: string): Promise<void>;
 };
 
-export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primaryClass: 'warrior' | 'ranger' | 'mage'; extraFighter: 'mage' | null; merchantDefault: string | null; liveHeadless: boolean; disableNativeVideo: boolean; movementMode: 'alclient' | 'shadow'; staleWorkerRealm: string | null; initialPosition: {map: string; x: number; y: number} | null; initialPositions: Record<string,{map:string;x:number;y:number}> | null; initialEventSpawn: string | null; initialMonsterSpawn: string | null }>({
+export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primaryClass: 'warrior' | 'ranger' | 'mage'; extraFighter: 'mage' | null; merchantDefault: string | null; liveHeadless: boolean; recordNativeVideo: boolean; movementMode: 'alclient' | 'shadow'; staleWorkerRealm: string | null; initialPosition: {map: string; x: number; y: number} | null; initialPositions: Record<string,{map:string;x:number;y:number}> | null; initialEventSpawn: string | null; initialMonsterSpawn: string | null }>({
   loadout: ['god', {option:true}],
   primaryClass: ['warrior', {option:true}],
   extraFighter: [null, {option:true}],
@@ -44,10 +44,10 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
   initialMonsterSpawn: [null, {option:true}],
   initialEventSpawn: [null, {option:true}],
   liveHeadless: [false, {option:true}],
-  disableNativeVideo: [false, {option:true}],
+  recordNativeVideo: [process.env.E2E_NATIVE_VIDEO==='1', {option:true}],
   movementMode: ['alclient', {option:true}],
   staleWorkerRealm: [null, {option:true}],
-  live: [async ({ browser, dashboard, loadout, primaryClass, extraFighter, merchantDefault, initialPosition, initialPositions, initialEventSpawn, initialMonsterSpawn, liveHeadless, disableNativeVideo, movementMode, staleWorkerRealm }, use, testInfo) => {
+  live: [async ({ browser, dashboard, loadout, primaryClass, extraFighter, merchantDefault, initialPosition, initialPositions, initialEventSpawn, initialMonsterSpawn, liveHeadless, recordNativeVideo, movementMode, staleWorkerRealm }, use, testInfo) => {
     const directory = path.join(root, '.build/e2e', `live-${randomUUID()}`);
     mkdirSync(directory, { recursive: true });
     const manifest = await game.reset();
@@ -85,8 +85,8 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
     const blocked: string[] = [];
     const network=await nativeNetworkIsolation(blocked);
     const context = await browser.newContext({proxy:network.proxy, viewport: { width: 1280, height: 900 },
-      ...(disableNativeVideo ? {} : {recordVideo: { dir: testInfo.outputPath('native-video'), size: { width: 960, height: 675 } }}) }).catch(async error=>{await network.close();throw error;});
-    await testInfo.attach('native-video-recording-policy',{body:JSON.stringify({enabled:!disableNativeVideo}),contentType:'application/json'});
+      ...(recordNativeVideo ? {recordVideo: { dir: testInfo.outputPath('native-video'), size: { width: 960, height: 675 } }} : {}) }).catch(async error=>{await network.close();throw error;});
+    await testInfo.attach('native-video-recording-policy',{body:JSON.stringify({enabled:recordNativeVideo}),contentType:'application/json'});
     const nativePages = new Set<Page>();
     context.on('page', page => nativePages.add(page));
     await context.addCookies([{ name: 'auth', value: manifest.auth, url: manifest.webUrl }]);

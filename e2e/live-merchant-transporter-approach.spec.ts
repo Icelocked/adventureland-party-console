@@ -15,16 +15,17 @@ test('native headless merchant approaches Desert transporter within range and co
  await expect.poll(async()=>{const c=(await live.state()).characters[M],actual=await live.admin(`output=(()=>{const p=get_player('${M}');return p&&{map:p.map,x:p.x,y:p.y,hp:p.hp,rip:p.rip,clear:can_move({...p,going_x:p.x,going_y:p.y})};})()`);return c?.runtime==='headless'&&Date.now()-c.seenAt<3000&&c.map==='desertland'&&Math.hypot(c.x,c.y)<15&&actual?.map==='desertland'&&Math.hypot(actual.x,actual.y)<15&&actual.hp>0&&!actual.rip&&actual.clear;},{timeout:90000}).toBe(true);
  try{
   await live.post('/config',{itemCollectionThreshold:1});await seedCargo(live,W);expect(await totalLeather(live)).toBe(7);
+  await live.admin(`output=(()=>{const p=get_player('${M}');if(!p||typeof p.socket.prependListener!=='function')throw Error('Native transport socket observer unavailable');const observation={socket:p.socket,samples:[],listener:null};observation.listener=function(packet){if(observation.samples.length>=16)return;const npc=G.maps.desertland.npcs.find(n=>n.id==='transporter').position;observation.samples.push({at:Date.now(),from:{map:p.map,x:p.x,y:p.y},range:Math.hypot(p.x-npc[0],p.y-npc[1]),clear:can_move({...p,going_x:p.x,going_y:p.y}),to:packet?.to,spawn:packet?.s});};p.socket.prependListener('transport',observation.listener);globalThis.__e2eMerchantTransportObservation=observation;return true;})()`);
   await live.post('/merchant/routine-priorities',{priorities:{},enabled:{'party collection':true}});
   await live.post('/merchant/force-stand',{enabled:false});
   let approached=false,crossed=false;
   await expect.poll(async()=>{
-   const s=await live.state(),actual=await live.admin(`output=(()=>{const m=get_player('${M}'),w=get_player('${W}'),npc=G.maps.desertland.npcs.find(n=>n.id==='transporter').position;return {merchant:m&&{map:m.map,x:m.x,y:m.y,hp:m.hp,rip:m.rip,range:Math.hypot(m.x-npc[0],m.y-npc[1]),clear:can_move({...m,going_x:m.x,going_y:m.y})},stock:w.items.reduce((n,i)=>n+(i?.name==='leather'?i.q||1:0),0)};})()`);
-   approached ||= actual.merchant?.map==='desertland'&&actual.merchant.range<75&&actual.merchant.clear;
+   const s=await live.state(),actual=await live.admin(`output=(()=>{const m=get_player('${M}'),w=get_player('${W}'),npc=G.maps.desertland.npcs.find(n=>n.id==='transporter').position;return {merchant:m&&{map:m.map,x:m.x,y:m.y,hp:m.hp,rip:m.rip,range:Math.hypot(m.x-npc[0],m.y-npc[1]),clear:can_move({...m,going_x:m.x,going_y:m.y})},stock:w.items.reduce((n,i)=>n+(i?.name==='leather'?i.q||1:0),0),transports:globalThis.__e2eMerchantTransportObservation?.samples||[]};})()`);
+   approached ||= actual.transports.some((packet:any)=>packet.from.map==='desertland'&&packet.range<75&&packet.clear&&packet.to==='main');
    crossed ||= actual.merchant?.map==='main';
    if(samples.length<200)samples.push({at:Date.now(),actual,movement:s.characters[M]?.movement,current:s.merchantCurrent,queue:s.merchantQueue});
    return approached&&crossed&&actual.stock===0;
   },{timeout:120000,intervals:[200,500],message:'Native transporter approach, actual transport and real cargo receipt'}).toBe(true);
   expect(await totalLeather(live)).toBe(7);
- }finally{await info.attach('native-merchant-desert-transporter-collection',{body:JSON.stringify({samples,final:await live.state(),total:await totalLeather(live)}),contentType:'application/json'});}
+ }finally{const transports=await live.admin(`output=(()=>{const o=globalThis.__e2eMerchantTransportObservation;if(!o)return [];o.socket.removeListener('transport',o.listener);delete globalThis.__e2eMerchantTransportObservation;return o.samples;})()`);await info.attach('native-merchant-desert-transporter-collection',{body:JSON.stringify({samples,transports,final:await live.state(),total:await totalLeather(live)}),contentType:'application/json'});}
 });
