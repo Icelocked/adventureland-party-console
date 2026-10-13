@@ -253,7 +253,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
       await testInfo.attach('live-server-initial', { body: JSON.stringify(await live.admin(`output=Object.fromEntries(Object.values(players).filter(p=>${JSON.stringify(names)}.includes(p.name)).map(p=>[p.name,{name:p.name,map:p.map,x:p.x,y:p.y,hp:p.hp,max_hp:p.max_hp,mp:p.mp,max_mp:p.max_mp,attack:p.attack,frequency:p.frequency,speed:p.speed,armor:p.armor,resistance:p.resistance,gold:p.gold,xp:p.xp,items:p.items,slots:p.slots,s:p.s}]))`), null, 2), contentType: 'application/json' });
       // Guard the fixture contract: native recalculation must clamp initial pools.
       // Reading these values never repairs or changes a character's live stats.
-      const nativeStats = await live.admin(`output=${JSON.stringify(names)}.map(name=>{const p=get_player(name);return {name,hp:p.hp,max_hp:p.max_hp,mp:p.mp,max_mp:p.max_mp,attack:p.attack,frequency:p.frequency,speed:p.speed,slots:p.slots}})`);
+      const nativeStats = await live.admin(`output=${JSON.stringify(names)}.map(name=>{const p=get_player(name);return {name,type:p.type,hp:p.hp,max_hp:p.max_hp,mp:p.mp,max_mp:p.max_mp,attack:p.attack,frequency:p.frequency,speed:p.speed,slots:p.slots}})`);
       for (const stats of nativeStats) {
         for (const key of ['hp','max_hp','mp','max_mp','attack','frequency','speed'])
           expect(Number.isFinite(stats[key]), `${loadout} ${stats.name} native ${key}`).toBe(true);
@@ -261,7 +261,10 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
         expect(stats.mp).toBeLessThanOrEqual(stats.max_mp);
         expect(stats.max_hp).toBeGreaterThan(0);
         expect(stats.speed).toBeGreaterThan(0);
-        expect(stats.slots.mainhand.level, `${loadout} ${stats.name} native weapon`).toBe(loadouts[loadout].weaponLevel);
+        const followStaff=loadout==='combat-follow-range'&&(stats.type==='priest'||stats.type==='mage');
+        const weaponLevel=followStaff?(stats.type==='priest'?12:15):loadouts[loadout].weaponLevel;
+        expect(stats.slots.mainhand.level, `${loadout} ${stats.name} native weapon`).toBe(weaponLevel);
+        if(followStaff)expect(stats.slots.mainhand.name, `${loadout} ${stats.name} native staff`).toBe('staff');
         for (const [slot, equipped] of Object.entries(loadouts[loadout].armor))
           expect(stats.slots[slot], `${loadout} ${stats.name} native ${slot}`).toMatchObject(equipped);
       }
