@@ -7,18 +7,31 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
   const transitionFlags=await Promise.all([W,P].map(async name=>({name,previous:await live.clients[name].frame.evaluate(()=>{const g=window as any,old=g.__e2eObserveTransitions;g.__e2eObserveTransitions=true;return old===true;})})));
   const context=page.context(),ledger:Record<string,any>[]=[];let owner:any,held:Route|undefined,release:(()=>void)|undefined,holdGate:Promise<void>|undefined;
   const pendingHolds=new Set<Promise<void>>(),samples:Record<string,unknown>[]=[];
+  const forwardingErrors:string[]=[];let forwarded=0,acceptedObservations=0;
   let dropping=false,closed=false,peerReleased:any,receipt:any,nativeIssued:any;
   const body=(route:Route)=>{try{return route.request().postDataJSON();}catch{return null;}};
   function same(value:any){return owner && ['convoyId','epoch','commandId','navigationRevision','runtimeId','routeVersion'].every(key=>value?.[key]===owner[key]);}
   const status=async(route:Route)=>{
-    if(dropping && body(route)?.name===W){if(ledger.length<128)ledger.push({at:Date.now(),action:'status-aborted',name:W});await route.abort('failed');}
-    else await route.fallback();
+    const value=body(route);
+    if(dropping && value?.name===W){
+      try{
+        const response=await route.fetch({maxRetries:0,maxRedirects:0,timeout:5000});
+        if(!response.ok())throw Error('Actual status observation rejected with HTTP '+response.status());
+        const result=await response.json();forwarded++;
+        const sequence=value.travelSample?.sequence,actualReceipt=result.combatReportReceipt;
+        if(value.combatWait!==true && (value.combatOnly===true ? actualReceipt?.sequence===sequence && Number.isFinite(actualReceipt?.receivedAt) : Number.isFinite(result.serverNow)))acceptedObservations++;
+        if(ledger.length<128)ledger.push({at:Date.now(),action:'genuine-status-forwarded-response-discarded',name:W,status:response.status(),
+          sequence:value.travelSample?.sequence,kind:value.combatOnly?'report':value.combatWait?'wait':'full',serverNow:result.serverNow,
+          receipt:actualReceipt?{sequence:actualReceipt.sequence,receivedAt:actualReceipt.receivedAt,evaluatedAt:actualReceipt.evaluatedAt}:undefined});
+      }catch(error){if(forwardingErrors.length<8)forwardingErrors.push(String(error));}
+      await route.abort('failed');
+    }else await route.fallback();
   };
   const barrier=async(route:Route)=>{
     const value=body(route);
     if(!owner && value?.character===W && value.completed===true && value.destination?.method==='leave' && value.destination.map==='main'){
       owner={...value};dropping=true;holdGate=new Promise<void>(resolve=>{release=resolve;});
-      ledger.push({at:Date.now(),action:'armed-candidate-status-drop',owner});
+      ledger.push({at:Date.now(),action:'armed-candidate-control-response-loss',owner});
       const actual=await live.clients[W].run(`(()=>{const m=globalThis.__partyMovement,r=m?.report?.(),s=m?.state,c=character;return {report:r?{id:r.id,owner:r.owner}:null,
         goal:s?{map:s.map,in:s.in,x:s.x,y:s.y}:null,plot:s?.plot?.map(p=>({map:p.map,in:p.in,x:p.x,y:p.y,town:p.town,transport:p.transport,s:p.s,method:p.method})),
         native:{map:c.map,in:c.in,x:c.real_x,y:c.real_y,rip:c.rip,moving:c.moving}}})()`);
@@ -64,6 +77,8 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
         },{timeout:Math.min(10_000,Math.max(1,deadline-Date.now())),message:'A genuine acknowledged terminal settlement must replace the undelivered completion POST'}).toBe(true);
       }finally{dropping=false;release?.();}
       await expect.poll(()=>!!peerReleased,{timeout:Math.min(20_000,Math.max(1,deadline-Date.now())),message:'Fresh native terminal receipt must release the actual peer barrier before Warrior convoy completion'}).toBe(true);
+      expect(acceptedObservations,'The coordinator must accept genuine full or combatOnly native observations while their actual control responses are lost').toBeGreaterThan(0);
+      expect(forwardingErrors,'The declared fault must not become a missing-observation transport failure').toEqual([]);
       const nativeEvents=await live.clients[W].events();
       const windowEvents=nativeEvents.filter((event:any)=>event.at>=startedAt&&event.at<=peerReleased.at);
       const issued=windowEvents.filter((event:any)=>event.event==='leave-issued'&&event.data?.actor===W);
@@ -71,11 +86,11 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
       expect(issued,'Only one real native leave may be issued during the faulted exit').toHaveLength(1);
       expect(acknowledgements,'Only one actual successful native leave acknowledgement may complete the exit').toHaveLength(1);
       expect(['convoyId','epoch','commandId','navigationRevision','routeVersion'].every(key=>issued[0].data.owner?.[key]===owner[key])).toBe(true);
-      return {startedAt,owner,nativeIssued,receipt,peerReleased,ledger,samples,issued,acknowledgements,nativeEvents};
+      return {startedAt,owner,nativeIssued,receipt,peerReleased,ledger,samples,forwarded,acceptedObservations,forwardingErrors,issued,acknowledgements,nativeEvents};
     },
     async finish(){if(!closed){closed=true;dropping=false;release?.();await Promise.allSettled([...pendingHolds]);page.off('response',response);
       await context.unroute('**/party-api/status',status);await context.unroute('**/party-api/movement-barrier',barrier);await context.unroute('**/party-api/convoy-complete',complete);
       await Promise.all(transitionFlags.map(async value=>live.clients[value.name].frame.evaluate(previous=>{(window as any).__e2eObserveTransitions=previous;},value.previous)));}
-      return {owner,nativeIssued,receipt,peerReleased,ledger,samples,pendingHeld:!!held};}
+      return {owner,nativeIssued,receipt,peerReleased,ledger,samples,forwarded,acceptedObservations,forwardingErrors,pendingHeld:!!held};}
   };
 }
