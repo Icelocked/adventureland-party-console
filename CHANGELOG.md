@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Verify headless movement after a console reload from the character's actual settled position, avoiding contradictory endpoint assumptions in native deployment tests.
+
 - Keep native Cave regroup tests clear of encounter pauses by resolving the actual entry-shop choice during setup and checking unfinished encounter clearance before walking.
 
 - Give native event-return tests a separate bounded recovery window after their deliberate CODE replacement, with retained reload and arrival timestamps.
