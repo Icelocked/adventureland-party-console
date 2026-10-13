@@ -147,7 +147,8 @@ test.describe('retired event exit ownership',()=>{
         if(exitOwnerSamples.length===64)exitOwnerSamples.shift();
         exitOwnerSamples.push({at:Date.now(),native,diagnostics:Object.fromEntries(fighters.map(name=>[name,s.characters[name]?.eventRecovery]))});
         return fighters.every(name=>s.characters[name]?.dashboardRuntime===started.characters[name].dashboardRuntime &&
-          native[name].selectionPublished && native[name].selectedCycle!==oldCycle && (!native[name].owner || native[name].owner.cancelled || native[name].owner.cycleId!==oldCycle));
+          native[name].selectionPublished && native[name].selectedCycle!==oldCycle && (!native[name].owner || native[name].owner.cancelled || native[name].owner.cycleId!==oldCycle) &&
+          (!deferred || !s.deferredEventReturns[name] && s.farmingProfiles[W].eventSessions[name]?.participants?.includes(name)));
       },{timeout:15_000}).toBe(true);
       if(deferred){const resumed=await live.state();for(const name of fighters){
         expect(resumed.deferredEventReturns[name]).toBeUndefined();
