@@ -280,6 +280,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           await attach('live-server-final', await live.admin("output=Object.fromEntries(Object.values(players).filter(p=>['E2EWarrior','E2EPriest','E2EMerchant'].includes(p.name)).map(p=>[p.name,{name:p.name,map:p.map,x:p.x,y:p.y,hp:p.hp,mp:p.mp,gold:p.gold,xp:p.xp,items:p.items,slots:p.slots,s:p.s}]))").catch(error => ({ error: String(error) })));
         }
         for (const [name, client] of Object.entries(clients)) {
+          await attach(name + '-native-disconnects', client.disconnects());
           await attach(name + '-native-events', await diagnostic(client.events()));
           await attach(name + '-character', await diagnostic(client.snapshot()));
           await attach(name + '-errors', client.errors);

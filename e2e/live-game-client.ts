@@ -17,6 +17,7 @@ export interface LiveClient {
   errors: string[];
   snapshot(): Promise<any>;
   events(): Promise<any[]>;
+  disconnects(): ReadonlyArray<Record<string, unknown>>;
   run(expression: string): Promise<any>;
 }
 
@@ -28,6 +29,13 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
   const page = options.primary?.page || await context.newPage();
   if(!options.primary)await installCompanionGraphicsDiagnostic(context,options,process.env.E2E_COMPANION_NO_GRAPHICS==='1');
   const errors: string[] = options.primary?.errors || [];
+  const disconnectJournal:Array<Record<string,unknown>>=[];
+  const disconnectBinding='nativeDisconnect_'+randomUUID().replaceAll('-','');
+  await page.exposeBinding(disconnectBinding, (_source, entry:Record<string,unknown>)=>{
+    if(entry?.name!==options.name)return;
+    disconnectJournal.push(entry);
+    if(disconnectJournal.length>32)disconnectJournal.shift();
+  });
   let native: Frame;
   if (options.primary) {
     // /steam/action login asks the production bridge to use native start_character_runner.
@@ -61,7 +69,7 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
   const seenEvents=new Set<string>();
   let lastEventGeneration='',lastEventSequence=0;
   async function installNativeObservers(frame:Frame):Promise<void> {
-    await frame.evaluate(generation=>{
+    await frame.evaluate(({generation,disconnectBinding,name})=>{
       const game=window as any,socket=game.socket;
       if(!game.character || !socket)throw Error('Native game not initialized');
       game.__e2eEvents ||= [];
@@ -70,6 +78,24 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
       const observed:WeakSet<object>=game.__e2eObservedSockets ||= new WeakSet();
       if(observed.has(socket))return;
       observed.add(socket);
+      const socketGeneration=game.__e2eSocketObservationGeneration=(game.__e2eSocketObservationGeneration||0)+1;
+      socket.on('disconnect',(reason:unknown)=>{
+        // Node retains this real event after native auto-reload retires the frame.
+        // Diagnostics must never change or interrupt Socket.IO/reload dispatch.
+        try{
+          const runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+          let manuallyStopped=false;
+          try{manuallyStopped=localStorage.getItem('party-code-stopped:'+name)==='1';}catch{}
+          const scalar=(value:unknown)=>typeof value==='string'||typeof value==='number'||typeof value==='boolean'?value:null;
+          const entry={at:Date.now(),name,reason:typeof reason==='string'?reason:null,
+            observerGeneration:game.__e2eObserverGeneration,socketGeneration,connected:!!socket.connected,
+            autoReload:scalar(game.auto_reload),reloadState:scalar(game.reload_state),reloadTimer:scalar(game.reload_timer),
+            characterToLoad:typeof game.character_to_load==='string'?game.character_to_load:null,
+            manuallyStopped,path:location.pathname,runtimeGeneration:scalar(runner?.__partyRuntimeGeneration),
+            eventReturnCycleId:scalar(runner?.__partyEventRecoveryCycleId)};
+          Promise.resolve(game[disconnectBinding](entry)).catch(()=>{});
+        }catch{}
+      });
       const observeOutgoing=(event:string,...args:any[])=>{
         if(event==='move'){
           if(!game.__e2eObserveMoves||game.socket!==socket||!game.character?.name||!args[0]||typeof args[0]!=='object')return;
@@ -127,7 +153,7 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
           data:JSON.parse(JSON.stringify(data ?? null)),caveOwner});
         if(game.__e2eEvents.length>2000)game.__e2eEvents.shift();
       });
-    },randomUUID());
+    },{generation:randomUUID(),disconnectBinding,name:options.name});
   }
   async function retainEvents(frame:Frame):Promise<void> {
     const observed=await frame.evaluate(({generation,sequence})=>{
@@ -198,6 +224,7 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
           runtimeGeneration: runner?.__partyRuntimeGeneration, commandObservation }));
       }));
     },
+    disconnects() { return disconnectJournal.map(entry=>({...entry})); },
     async events() { return observe(async frame=>{await retainEvents(frame);return [...eventLedger];}); },
     async run(expression) {
       // Reacquire before evaluation; never replay a potentially mutating expression.
