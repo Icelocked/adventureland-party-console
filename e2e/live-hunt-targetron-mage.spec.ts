@@ -82,10 +82,11 @@ test('mage reengages a blocked Targetron from the reported UHills screenshot',as
         moving:!!character.moving,going:{x:character.going_x,y:character.going_y},
         segmentClear:character.moving?can_move_to(character.going_x,character.going_y):null,
         distance:t?distance(character,t):null,positioning:p?{at:p.at,mode:p.mode,movementOwner:p.movementOwner,target:p.target,
-          reason:p.reason,constraint:p.constraint,healingDistance:p.healingDistance,healingRange:p.healingRange}:null};
+          reason:p.reason,constraint:p.constraint,healingDistance:p.healingDistance,healingRange:p.healingRange,approachId:p.approachId}:null};
+      const owns=p=>p?.movementOwner==='combat'||p?.movementOwner==='combat-approach'&&p.mode==='independent-approach'&&typeof p.approachId==='string';
       const previous=observation.previous,displacement=previous?Math.hypot(current.x-previous.x,current.y-previous.y):0;
       const ownedDisplacement=displacement>1&&previous.map===current.map&&previous.in===current.in&&
-        previous.positioning?.movementOwner==='combat'&&current.positioning?.movementOwner==='combat'&&
+        owns(previous.positioning)&&owns(current.positioning)&&
         String(previous.positioning?.target)===${JSON.stringify(seed.id)}&&String(current.positioning?.target)===${JSON.stringify(seed.id)};
       observation.samples.push({...current,previous:previous?{at:previous.at,map:previous.map,in:previous.in,x:previous.x,y:previous.y,positioning:previous.positioning}:null,
         displacement,ownedDisplacement,observedSegmentClear:ownedDisplacement?can_move({map:current.map,x:previous.x,y:previous.y,
@@ -107,7 +108,7 @@ test('mage reengages a blocked Targetron from the reported UHills screenshot',as
       samples.push(...observed);
       for(const sample of observed){
         expect(sample.map,'Combat recovery must not send the mage to jail or another map').toBe('uhills');
-        if(sample.moving&&sample.positioning?.movementOwner==='combat'&&sample.positioning?.target===seed.id)
+        if(sample.moving&&['combat','combat-approach'].includes(sample.positioning?.movementOwner)&&sample.positioning?.target===seed.id)
           expect(sample.segmentClear,'Every observed combat-owned movement segment must be collision clear').toBe(true);
       }
       return (await live.clients[W].events()).some((event:any)=>event.event==='hit'&&String(event.data?.id)===seed.id&&event.data?.hid===W&&event.data?.damage>0);
@@ -115,7 +116,7 @@ test('mage reengages a blocked Targetron from the reported UHills screenshot',as
     expect(samples.some(sample=>sample.distance!==null&&sample.distance<=geometry.range),
       'The mage must reach native attack range').toBe(true);
     expect(samples.some(sample=>sample.ownedDisplacement&&sample.observedSegmentClear||
-      sample.moving&&sample.segmentClear&&sample.positioning?.movementOwner==='combat'&&sample.positioning?.target===seed.id),
+      sample.moving&&sample.segmentClear&&(sample.positioning?.movementOwner==='combat'||sample.positioning?.movementOwner==='combat-approach'&&sample.positioning.mode==='independent-approach'&&typeof sample.positioning.approachId==='string')&&sample.positioning?.target===seed.id),
       'The selected native encounter must own collision-clear combat movement').toBe(true);
     expect(samples.some(sample=>Math.hypot(sample.x-geometry.origin.x,sample.y-geometry.origin.y)>10),
       'The mage must actually leave its initially blocked position').toBe(true);

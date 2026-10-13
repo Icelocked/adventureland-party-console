@@ -131,22 +131,26 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
         const c=game.character,runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
         if(!c?.name || game.socket!==socket || !hostileSkill&&args[0]?.id==null)return;
         const payload=args[0]||{},ids=hostileSkill?[...(payload.id==null?[]:[payload.id]),...(Array.isArray(payload.ids)?payload.ids:[]),...(Array.isArray(payload.targets)?payload.targets.map((value:any)=>Array.isArray(value)?value[0]:value):[])].map(String):undefined;
+        const attackTarget=game.entities?.[String(payload.id??runner?.__partyGroupedCombat?.target?.id)];
         let candidate:any,convoy:any;
         try { candidate=runner?.sharedRoutine?.getWalkingPassiveTarget?.(true);convoy=runner?.sharedRoutine?.combatTraceSnapshot?.(); } catch { return; }
         let independent:any;
-        if(game.__e2eObserveMoves&&(game.__e2eIndependentObservedAttackCount||0)<3){
+        if(game.__e2eObserveMoves&&(game.__e2eIndependentObservedAttackCount||0)<100){
           const group=runner?.__partyGroupedCombat;
-          if(group?.independentApproach){
+          const targetKey=String(group?.target?.id),observed=game.__e2eIndependentObservedTargets||(game.__e2eIndependentObservedTargets={});
+          if(group?.independentApproach&&(observed[targetKey]||0)<3&&(Object.keys(observed).length<10||targetKey in observed)){
+            observed[targetKey]=(observed[targetKey]||0)+1;
             game.__e2eIndependentObservedAttackCount=(game.__e2eIndependentObservedAttackCount||0)+1;
-            independent={selection:group.selection,target:String(group.target?.id),committed:group.committed,
+            independent={selection:group.selection,target:String(group.target?.id),committed:group.committed,confirmation:group.independentConfirmation,
               serverAt:Date.now()+Number(runner?.sharedRoutine?.queueClockOffset?.()||0),
               ready:group.independentReadiness&&Object.fromEntries(Object.entries(group.independentReadiness).map(([name,value]:[string,any])=>[name,
-                value&&{selection:value.selection,target:value.target,at:value.at,ready:value.ready}]))};
+                value&&{selection:value.selection,target:value.target,at:value.at,ready:value.ready,confirmation:value.confirmation}]))};
           }
         }
         game.__e2eEvents.push({sequence:++game.__e2eEventSequence,at:Date.now(),event:hostileSkill?'offensive-skill-issued':'attack-issued',
           data:{id:payload.id==null?undefined:String(payload.id),actor:c.name,ids,skill:hostileSkill?String(payload.name):undefined},motion:{map:c.map,in:c.in??c.map,server:String(game.server_region||'')+String(game.server_identifier||''),
             x:c.real_x??c.x,y:c.real_y??c.y,moving:!!c.moving,owner:runner?.__partyCombatOwner,
+            inRange:runner?.is_in_range?.(attackTarget),range:c.range,attackTarget:attackTarget&&{id:String(attackTarget.id),x:attackTarget.real_x??attackTarget.x,y:attackTarget.real_y??attackTarget.y},
             independent,convoyId:convoy?.convoy,convoyPhase:convoy?.convoyPhase,convoyEpoch:convoy?.convoyEpoch,
             candidate:candidate&&{id:String(candidate.id),mtype:candidate.mtype}}});
         if(game.__e2eEvents.length>2000)game.__e2eEvents.shift();

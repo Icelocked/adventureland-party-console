@@ -14,7 +14,9 @@ export function installQueueClient(root:any, shared:any) {
   root.partyQueueClient?.stop();
   let active=true,busy=false,waiting=false,dirty=false,signature='',sentAt=0,retryAt=0,revision='',serial=0;
   let sentAcknowledgement='';
-  const acknowledgement=(report:{groupedCombat?:{ack?:string|null;queueAck?:string|null;handoff?:HandoffReport}})=>JSON.stringify([report.groupedCombat?.ack,report.groupedCombat?.queueAck,report.groupedCombat?.handoff]);
+  type Ready=NonNullable<ReturnType<ReturnType<typeof createIndependentApproachClient>['readiness']>>;
+  const readySignature=(ready?:Ready)=>[ready?.selection,ready?.target,ready?.ready,ready?.confirmation];
+  const acknowledgement=(report:{groupedCombat?:{independentReady?:Ready;ack?:string|null;queueAck?:string|null;handoff?:HandoffReport}})=>JSON.stringify([report.groupedCombat?.ack,report.groupedCombat?.queueAck,report.groupedCombat?.handoff,readySignature(report.groupedCombat?.independentReady)]);
   const timing=createHandoffTiming(root.__partyHandoffTrace ||= []);
   const handoff=createSuccessorClient({now:()=>Date.now(),monotonic:()=>performance.now(),serverNow:()=>Date.now()+shared.queueClockOffset(),
     allowed:g=>!!shared.successorAllowed?.(g),live:g=>!!shared.successorVisible?.(g),trace:(stage,details)=>timing.event(stage,details)});
@@ -112,7 +114,7 @@ export function installQueueClient(root:any, shared:any) {
     if(busy)return;
     dirty=false;
     const report=shared.queueReport();report.groupedCombat.evidence=reportEvidence(report.groupedCombat.deaths).filter(e=>e.server===report.server&&e.map===character.map&&e.in===character.in);
-    const next=JSON.stringify([report.x,report.y,report.hp,report.rip,report.lastDeath,report.groupedCombat.epoch,report.groupedCombat.currentAttackers,report.groupedCombat.travelCandidates,report.groupedCombat.huntDefense,report.groupedCombat.passingAcknowledgement,report.groupedCombat.passingEncounters,report.groupedCombat.formationRecovery,report.groupedCombat.pursuitAck,report.groupedCombat.lootPending,report.groupedCombat.claims?.map((c:any)=>[c.id,c.map,c.in,c.server,c.external]),report.groupedCombat.candidates,report.groupedCombat.threats,report.groupedCombat.sightings,report.groupedCombat.evidence,report.groupedCombat.deaths,report.groupedCombat.queueAck,report.groupedCombat.ack,report.groupedCombat.handoff,report.monsterHunt]);
+    const next=JSON.stringify([report.x,report.y,report.hp,report.rip,report.lastDeath,report.groupedCombat.epoch,readySignature(report.groupedCombat.independentReady),report.groupedCombat.currentAttackers,report.groupedCombat.travelCandidates,report.groupedCombat.huntDefense,report.groupedCombat.passingAcknowledgement,report.groupedCombat.passingEncounters,report.groupedCombat.formationRecovery,report.groupedCombat.pursuitAck,report.groupedCombat.lootPending,report.groupedCombat.claims?.map((c:any)=>[c.id,c.map,c.in,c.server,c.external]),report.groupedCombat.candidates,report.groupedCombat.threats,report.groupedCombat.sightings,report.groupedCombat.evidence,report.groupedCombat.deaths,report.groupedCombat.queueAck,report.groupedCombat.ack,report.groupedCombat.handoff,report.monsterHunt]);
     if(next===signature&&Date.now()-sentAt<1000)return;
     signature=next;sentAt=Date.now();busy=true;sentAcknowledgement=acknowledgement(report);
     const started=performance.now(),body={...report,combatOnly:true};
@@ -126,6 +128,12 @@ export function installQueueClient(root:any, shared:any) {
     }).catch(()=>{signature='';retryAt=Date.now()+1000;})
       .finally(()=>{busy=false;if(dirty)tick();});
   }
+  const socket=host.socket;let wakeQueued=false;
+  function nativePositionChanged(){
+    if(!active||wakeQueued)return;wakeQueued=true;dirty=true;
+    queueMicrotask(()=>{wakeQueued=false;if(active)tick();});
+  }
+  socket?.on?.('player',nativePositionChanged);socket?.on?.('entities',nativePositionChanged);
   const timer=setInterval(tick,100);
   function preparePassing(target:Target,reserveOnly=false) {
     if(target.type!=='monster')return false;
@@ -138,6 +146,6 @@ export function installQueueClient(root:any, shared:any) {
     return true;
   }
   const api={tick,flush,hit,evidence,events,reportEvidence,sight,formation,independent,timing,handoff,
-    death(id:string){const next=handoff.death(id);if(next){shared.acceptQueue(next);timing.selection(next);root.partyRoleRunner?.wake();}flush();},preparePassing,passingAcknowledgement:passing.report,reset(){handoff.reset();events.length=0;sight.reset();signature='';sentAt=0;},stop(){independent?.stop();formation?.stop();active=false;clearInterval(timer);}};
+    death(id:string){const next=handoff.death(id);if(next){shared.acceptQueue(next);timing.selection(next);root.partyRoleRunner?.wake();}flush();},preparePassing,passingAcknowledgement:passing.report,reset(){handoff.reset();events.length=0;sight.reset();signature='';sentAt=0;},stop(){independent?.stop();formation?.stop();active=false;socket?.off?.('player',nativePositionChanged);socket?.off?.('entities',nativePositionChanged);clearInterval(timer);}};
   root.partyQueueClient=api;return api;
 }

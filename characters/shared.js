@@ -13852,6 +13852,14 @@
     return anchor.map === character.map && anchor.in === character.in &&
       Math.hypot(character.x-anchor.x,character.y-anchor.y) <= groupedCombat.range;
   }
+  function independentPullReady(target) {
+    if(!groupedCombat.independentApproach || groupedCombat.target.state!=='planned')return true;
+    var confirmation=groupedCombat.independentConfirmation,client=root.partyQueueClient,proof=client && client.independent && client.independent.readiness();
+    var valid=!!(confirmation && confirmation.selection===groupedCombat.selection && confirmation.target===String(target.id) &&
+      Date.now()+coordinatorClockOffset<confirmation.expiresAt && proof && proof.ready && proof.target===String(target.id) &&
+      proof.selection===groupedCombat.selection && proof.confirmation===confirmation.id);
+    if(!valid && client && client.flush)client.flush();return valid;
+  }
   function groupedAttackAllowed(target) {
     if (!consoleDrainAllows(target)) return false;
     if (dungeonOwned()) return !!(character.cave && !character.cave.paused && dungeonTargetAllowed(target) && groupedFresh() &&
@@ -13865,7 +13873,7 @@
     if(groupedCombat.target.map!==character.map || groupedCombat.target.in!==character.in || groupedCombat.target.server!==reunionRealm())return false;
     if(groupedCombat.target.state==='engaged')return true;
     if(groupedCombat.pursuit && groupedCombat.pursuit.revoking)return false;
-    if(!groupedFresh() || !groupedCombat.committed)return false;
+    if(!groupedFresh() || !groupedCombat.committed || !independentPullReady(target))return false;
     return !Object.values(parent.entities||{}).some(function(e){return e && e.visible && !e.dead && e.type==='monster' && e.id!==target.id && isAttackingPartyMember(e);}) || groupedCombat.target.state==='pending';
   }
 
@@ -16043,12 +16051,13 @@
         (coordinated || e.visible && !e.dead && e.hp>0) && (!coordinated || t.map===character.map && t.in===character.in && t.server===reunionRealm()) &&
         !Object.values(parent.entities||{}).some(function(other){return other && other.type==='monster' && !other.dead &&
           (other.target===character.name || other.id!==e.id && isAttackingPartyMember(other));}));
-      return {allowed:allowed,planned:coordinated?t.state==='planned':true,selection:coordinated?groupedCombat.selection:undefined,committed:coordinated?!!groupedCombat.committed:true,target:String(t.id),
+      return {allowed:allowed,planned:coordinated?t.state==='planned':true,selection:coordinated?groupedCombat.selection:undefined,committed:coordinated?!!groupedCombat.committed:true,confirmation:coordinated && groupedCombat.independentConfirmation && groupedCombat.independentConfirmation.selection===groupedCombat.selection && groupedCombat.independentConfirmation.target===String(t.id)?groupedCombat.independentConfirmation.id:undefined,target:String(t.id),
         key:JSON.stringify([t.id,character.map,character.in,reunionRealm(),navigationIntent.revision,coordinated?[groupedCombat.key,groupedCombat.selection,groupedCombat.resetAt]:joinedEvent]),point:{x:e.x,y:e.y},radius:Math.max(1,Number(character.range)-3)};
     }
     return {
       context:context,now:function(){return Date.now()+coordinatorClockOffset;},
-      ready:function(){var c=context(),e=c && get_entity(c.target);return !!(c && c.allowed && e && e.visible && !e.dead && e.hp>0 && is_in_range(e) && can_move_to(e.x,e.y));},
+      ready:function(){var c=context(),e=c && get_entity(c.target);return !!(c && c.allowed && e && e.visible && !e.dead && e.hp>0 && is_in_range(e));},
+      clear:function(goal){return can_move({map:character.map,x:character.real_x,y:character.real_y,going_x:goal.x,going_y:goal.y,base:character.base});},
       goal:function(point,radius){
         var c=context(),observed=c && get_entity(c.target),e=observed && observed.visible?observed:groupedCombat && groupedCombat.target;
         if(!c || !c.allowed || !e || String(e.id)!==c.target)return null;
@@ -16057,12 +16066,15 @@
           if(can_move({map:character.map,x:p.x,y:p.y,going_x:p.x,going_y:p.y,base:character.base}))goals.push(p);}
         goals.sort(function(a,b){return Math.hypot(a.x-character.real_x,a.y-character.real_y)-Math.hypot(b.x-character.real_x,b.y-character.real_y);});return goals[0]||null;
       },
-      start:function(goal,id){cancelGroupRoute();cancelFightRoute();cancelFarmApproach('individual combat approach');resetCombatMovement();
-        return movement.move({map:character.map,in:character.in,x:goal.x,y:goal.y},undefined,{native:true,town:false,arrivalTolerance:3,owner:{recoveryStage:id}});},
+      start:function(goal,id,direct){cancelGroupRoute();cancelFightRoute();cancelFarmApproach('individual combat approach');resetCombatMovement();
+        var walking=movement.move({map:character.map,in:character.in,x:goal.x,y:goal.y},undefined,{native:true,town:false,arrivalTolerance:3,owner:{recoveryStage:id}});
+        if(direct){try{movement.install([{map:character.map,in:character.in,x:goal.x,y:goal.y}],movement.identity,'direct');}
+          catch(error){var report=movement.report();if(report && report.owner && report.owner.recoveryStage===id){try{movement.cancel('Direct combat approach rejected: '+String(error));}catch(_cancelError){}}}}
+        return walking;},
       owned:function(id){var report=movement.report();return !!(report && report.owner && report.owner.recoveryStage===id);},
       cancel:function(id){var report=movement.report();if(report && report.owner && report.owner.recoveryStage===id)movement.cancel('Individual combat approach ended');},
       position:function(id,target,radius,goal,phase){root.partyCombatPosition={at:Date.now(),mode:'independent-approach',movementOwner:'combat-approach',
-        approachId:id,target:target,radius:radius,phase:phase,destination:goal,reason:phase==='ready'?'In native attack range with sightline; waiting for every fighter':'Independently approaching native attack range'};}
+        approachId:id,target:target,radius:radius,phase:phase,destination:goal,reason:phase==='ready'?'In native attack range; waiting for every fighter':'Independently approaching native attack range'};}
     };
   }
   function formationMove(target) {
