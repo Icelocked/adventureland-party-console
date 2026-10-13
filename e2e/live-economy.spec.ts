@@ -1,3 +1,4 @@
+import {gateNativeAjaxInput} from './native-ajax-input';
 import { test, expect, type LiveGame } from './live-fixtures';
 import type { TestInfo } from '@playwright/test';
 import type { Item } from '../runtime/coordinator/contracts/item';
@@ -296,7 +297,6 @@ for(const locked of [false,true]) test(`best-effort lucky restoration preserves 
   test.setTimeout(480_000);
   const slot=4,movedSlot=27,checkpoints:any[]=[];
   let changed=false;
-  const context=live.clients[merchant].page.context();
   await live.clients[merchant].frame.evaluate(()=>{
     const game=window as any;
     game.__e2eLuckyRollPackets=[];
@@ -333,29 +333,49 @@ for(const locked of [false,true]) test(`best-effort lucky restoration preserves 
           globalThis.__e2eForbiddenRestoreSwaps.push({a,b,journal,items:character.items.map(i=>i&&({...i}))});
         return native(a,b)};return true})()`);
     const before=await economy(live),initial=await live.state();
-    await context.route('**/merchant/production',async route=>{
-      const body=route.request().postDataJSON(),journal=body.journal?.lucky;
-      if(!changed&&body.action==='checkpoint'&&journal?.phase==='restoring') {
-        changed=true;
-        expect(journal.to).toBe(slot);
-        const original=await live.clients[merchant].snapshot();
-        expect(original.items[slot]?.name).toBe('helmet');
-        expect(original.items[slot]?.level).toBe(1);
-        expect(original.items[journal.from]?.name).toBe('seashell');
-        await live.clients.E2EPriest.run(`send_item('${merchant}',10,1).then(()=>true)`);
-        await expect.poll(async()=>(await live.clients[merchant].snapshot()).items[journal.from]?.q).toBe(4);
-        expect((await live.clients[merchant].snapshot()).items[movedSlot]).toBeNull();
-        await live.clients[merchant].run(`swap(${slot},${movedSlot}).then(()=>true)`);
-        await expect.poll(async()=>(await live.clients[merchant].snapshot()).items[movedSlot]?.level).toBe(1);
-        await live.clients[merchant].run('globalThis.__e2eChangedLuckyLayout=true');
-        checkpoints.push({journal,original,changed:await live.clients[merchant].snapshot()});
-      }
-      await route.continue();
-    });
+    await live.clients[merchant].run(`(()=>{
+      const generation=globalThis.__partyRuntimeGeneration;
+      const owns=()=>globalThis.__partyRuntimeGeneration===generation&&parent.document.getElementById('maincode')?.contentWindow===globalThis;
+      const waitFor=async(check,description)=>{const deadline=Date.now()+30000;while(!check()){
+        if(!owns())throw Error('Native lucky input CODE ownership changed');
+        if(Date.now()>=deadline)throw Error('Native lucky input timed out: '+description);
+        await new Promise(resolve=>setTimeout(resolve,100));
+      }};
+      globalThis.__e2eLuckyInput=null;globalThis.__e2eLuckyInputError=null;
+      globalThis.__e2eRestoreCheckpointAjax=(${gateNativeAjaxInput.toString()})(globalThis,options=>{
+        if(!String(options?.url).endsWith('/merchant/production'))return false;
+        const body=typeof options.data==='string'?JSON.parse(options.data):null,journal=body?.journal?.lucky;
+        const matches=body?.character===character.name&&body.action==='checkpoint'&&typeof body.id==='string'&&body.id===body.journal.id&&journal?.phase==='restoring';
+        if(matches)globalThis.__e2eLuckyInputCheckpoint=body;return matches;
+      },async()=>{
+        try{
+          const body=globalThis.__e2eLuckyInputCheckpoint,journal=body.journal.lucky;
+          const local=JSON.parse(localStorage.getItem('party-lucky-upgrade:'+character.name)||'null');
+          if(local?.from!==journal.from||local.to!==journal.to||local.phase!==journal.phase)throw Error('Native lucky checkpoint ownership mismatch');
+          if(journal?.to!==${slot}||journal.phase!=='restoring')throw Error('Actual restoring lucky checkpoint changed');
+          const original={items:character.items.map(item=>item&&({...item}))};
+          if(original.items[${slot}]?.name!=='helmet'||original.items[${slot}]?.level!==1||original.items[journal.from]?.name!=='seashell')throw Error('Native lucky checkpoint input inventory mismatch');
+          const priestGame=parent.parent.document.getElementById('ichare2epriest')?.contentWindow;
+          const priest=priestGame?.document.getElementById('maincode')?.contentWindow;
+          if(priest?.character?.name!=='E2EPriest'||typeof priest.send_item!=='function')throw Error('Missing actual Priest CODE for native lucky input');
+          await priest.send_item(character.name,10,1);
+          await waitFor(()=>character.items[journal.from]?.q===4,'native delivery merge');
+          if(character.items[${movedSlot}])throw Error('Native lucky input destination occupied');
+          await swap(${slot},${movedSlot});
+          await waitFor(()=>character.items[${movedSlot}]?.name==='helmet'&&character.items[${movedSlot}]?.level===1,'native cargo swap');
+          globalThis.__e2eChangedLuckyLayout=true;
+          globalThis.__e2eLuckyInput={journal,original,changed:{items:character.items.map(item=>item&&({...item}))}};
+        }catch(error){globalThis.__e2eLuckyInputError=String(error);throw error;}
+      },owns);return true;
+    })()`);
     const first=await live.post('/merchant/order',{buys:[{id:'helmet',quantity:1,level:1}],crafts:[]});
-    await expect.poll(()=>changed,{timeout:150_000}).toBe(true);
+    await expect.poll(async()=>{
+      const input=await live.clients[merchant].run('({result:globalThis.__e2eLuckyInput,error:globalThis.__e2eLuckyInputError})');
+      if(input.error)throw Error(input.error);
+      if(input.result){changed=true;checkpoints.push(input.result);return true;}return false;
+    },{timeout:150_000}).toBe(true);
     await finish(first.jobId);
-    await context.unroute('**/merchant/production');
+    await live.clients[merchant].run('globalThis.__e2eRestoreCheckpointAjax()');
     const after=await economy(live);
     expect(quantity(after.characters[merchant].items,'seashell')-quantity(before.characters[merchant].items,'seashell')).toBe(1);
     expect(after.characters[merchant].items.filter(item=>item?.name==='helmet'&&item.level===1)).toHaveLength(1);
@@ -389,7 +409,7 @@ for(const locked of [false,true]) test(`best-effort lucky restoration preserves 
     expect(inventory.characters[merchant].items.filter(item=>item?.name==='helmet'&&item.level===1)).toHaveLength(2);
     expect(quantity(inventory.characters[merchant].items,'seashell')).toBe(4);
   } finally {
-    await context.unroute('**/merchant/production');
+    await live.clients[merchant].frame.evaluate(()=>{const runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;runner?.__e2eRestoreCheckpointAjax?.();});
     await info.attach('lucky-best-effort-native-evidence',{body:JSON.stringify({locked,changed,checkpoints,
       tracking:await live.clients[merchant].frame.evaluate(()=>{
         const game=window as any,stored:Record<string,unknown>={};

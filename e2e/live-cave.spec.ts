@@ -805,7 +805,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
           return {at:Date.now(),name:c.name,map:c.map,in:c.in,x:c.real_x,y:c.real_y,
             paused:!!w.__partyMovementPaused || !w.__partyDungeonRuntime?.canMove(),
             movementPaused:!!w.__partyMovementPaused,dungeonCanMove:w.__partyDungeonRuntime?.canMove(),
-            nativePlanning:w.__partyMovement?.nativePlanning?.(),schedulerGate:!!w.__partyMovement?.gate?.owner,
+            nativePlanning:w.__partyMovement?.nativePlanning?.(),planningSchedule:w.__partyMovement?.report?.()?.planningSchedule,schedulerGate:!!w.__partyMovement?.gate?.owner,
             nativeMoving:!!c.moving,transporting:!!p.transporting,cavePaused:!!c.cave?.paused,
             nativeGraphics:{noGraphics:!!p.no_graphics,noHtml:p.no_html},
             nativeBodies:{self:{id:c.id||c.name,awidth:c.awidth,aheight:c.aheight,base:c.base,dimensions:p.G.dimensions[c.type]},
@@ -994,6 +994,20 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   let lastStairKey='';
   let blockedStairAt=0,blockedStairId='';
   const stairNativeReads:Promise<unknown>[]=[];
+  const stairPlanningReads:Promise<unknown>[]=[];
+  const stairPlanningStarted=Date.now();
+  const captureStairPlanning=()=>{
+    const thresholds=[15000,60000,120000];
+    if(answeredFarewell||stairPlanningReads.length>=thresholds.length||Date.now()-stairPlanningStarted<thresholds[stairPlanningReads.length])return;
+    stairPlanningReads.push(Promise.allSettled(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].frame.evaluate(()=>{
+      const p=window as any,w=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+      const c=w?.character,m=w?.__partyMovement;
+      return {at:Date.now(),name:c?.name,map:c?.map,in:c?.in,x:c?.real_x,y:c?.real_y,hp:c?.hp,rip:c?.rip,
+        cavePaused:c?.cave?.paused,moving:c?.moving,transporting:p.transporting,
+        schedulerGate:!!m?.gate?.owner,nativePlanning:m?.nativePlanning?.(),movement:m?.report?.()};
+    }))));
+  };
+
   const captureBlockedStairs=(v:any)=>{
     const t=v.state.travel,id=t?`${v.state.run}:${t.serial}:${t.target.id}`:'';
     if(!id){blockedStairAt=0;blockedStairId='';return;}
@@ -1007,7 +1021,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
       const near=o=>Math.hypot((o.real_x??o.x)-c.x,(o.real_y??o.y)-c.y)<=500;
       return {at:now,code:body(c),parent:body(p),connected:parent.socket?.connected,
         codeActive:parent.code_active,runtimeGeneration:globalThis.__partyRuntimeGeneration,
-        statusAt:globalThis.__partyStatusSuccessAt,
+        statusAt:globalThis.__partyStatusSuccessAt,planningSchedule:globalThis.__partyMovement?.report?.()?.planningSchedule,
         entities:Object.values(parent.entities||{}).filter(near).slice(0,30).map(o=>({...body(o),
           id:o.id,mtype:o.mtype,type:o.type,target:o.target,dead:o.dead,visible:o.visible,side:o.cave?.side})),
         chests:Object.entries(parent.chests||{}).filter(([id,o])=>near(o)).slice(0,20).map(([id,o])=>({
@@ -1034,7 +1048,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   };
   const advanceStairs=async()=>{
     const v=await dungeon(),c=v.members[0].observation.cave;
-    recordStairs(v);
+    recordStairs(v);captureStairPlanning();
     if(v.members.every((m:any)=>m.observation?.cave?.floor===1))return true;
     if(c?.choice&&!c.choice.resolved&&!stairReplies.some(r=>r.id===c.choice.id)){
       const reply=c.choice.options.find((o:any)=>!o.unavailable&&!o.cost&&!o.amber);
@@ -1051,6 +1065,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   };
   // A long native approach can consume this entire window before its vote.
   // Give the acknowledged continuation its own bounded planning/travel window.
+  try{
   await expect.poll(async()=>{await advanceStairs();return answeredFarewell;},
     {timeout:600_000,message:'Manual stairs must reach and answer the native farewell'}).toBe(true);
   const farewell=stairReplies.find(r=>r.title==='Before You Leave')!;
@@ -1059,12 +1074,11 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
       m.observation.cave.choice.id!==farewell.id||m.observation.cave.choice.resolved)),
     {timeout:30_000,message:'Both native farewell votes must acknowledge before continuation'}).toBe(true);
   await info.attach('native-cave-farewell-acknowledgement',{body:JSON.stringify({farewell,dungeon:await dungeon()}),contentType:'application/json'});
-  try{
     await expect.poll(async()=>{const completed=await advanceStairs();const latest=stairSamples.at(-1);
       if(latest)captureBlockedStairs({state:{phase:latest.phase,run:latest.run,travel:latest.travel}});return completed;},
       {timeout:300_000,message:'Manual stairs must continue after the farewell vote and transport both members'}).toBe(true);
   }finally{
-    await info.attach('native-cave-stairs-readiness',{body:JSON.stringify({samples:stairSamples,native:await Promise.allSettled(stairNativeReads),
+    await info.attach('native-cave-stairs-readiness',{body:JSON.stringify({samples:stairSamples,planning:await Promise.allSettled(stairPlanningReads),native:await Promise.allSettled(stairNativeReads),
       unavailable:['Coordinator status position/seenAt and CODE loading/socket ownership are not exposed by this dungeon response.']}),contentType:'application/json'});
   }
   expect(answeredFarewell).toBe(true);
