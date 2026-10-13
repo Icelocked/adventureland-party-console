@@ -1292,8 +1292,10 @@ test('Cave assembly regroups displaced completed participants before departure',
       shopSetupEvidence.push({stage:'walking',native});
       entryChoice=v.members[0]?.observation?.cave?.choice;
       return native.run===shop.run&&!!entryChoice&&!!native.room?.vote&&native.room.vote.id===entryChoice.id&&!entryChoice.resolved;},{timeout:Math.max(1,30_000-(Date.now()-shopSetupStarted)),message:'Real entry shop must present its own native choice'}).toBe(true);
-    const option=entryChoice.options.find((o:any)=>o.id==='e31_2'&&!o.unavailable&&!o.cost&&!o.amber);
+    shopSetupEvidence.push({stage:'choice',choice:entryChoice});
+    const option=entryChoice.options.find((o:any)=>o.label==='Keep our gold and move on.'&&!o.unavailable&&!o.cost&&!o.amber);
     expect(option,'Only the free noncombat entry-shop reply may be used for setup').toBeTruthy();
+    shopSetupEvidence.push({stage:'selected-reply',choice:entryChoice.id,option});
     await act({action:'vote',run:shop.run,choice:entryChoice.id,option:option.id});
     await expect.poll(async()=>{
       const native=await nativeShop(),v=await view();
