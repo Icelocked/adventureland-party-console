@@ -33,27 +33,25 @@ test('designated tank persists through restart, renders in the dashboard, and ho
     // "tank-approaching" fires the instant a move command is issued, well before arrival;
     // wait specifically for "tank-holding" so the distance check below reflects having
     // actually closed to melee range, not an in-flight walk toward a still-distant target.
+    // Read the mode and the distance in one evaluation: a moving target can send the tank
+    // back to tank-approaching between two separate reads, measuring an in-flight chase.
+    let engaged: { isTank: boolean; range: number; mode: string | null; distance: number | null } | undefined;
     await expect.poll(async () => {
-      const client = await live.clients[R].run(
-        '({isTank: sharedRoutine.isTank?.(), mode: globalThis.partyCombatPosition?.mode || null})',
+      engaged = await live.clients[R].run(
+        `(() => { const p = globalThis.partyCombatPosition, e = p?.target && get_entity(p.target);
+          return {isTank: !!sharedRoutine.isTank?.(), range: character.range, mode: p?.mode || null,
+            distance: e ? Math.hypot(character.x - e.x, character.y - e.y) : null}; })()`,
       );
-      return client.isTank && client.mode;
+      return engaged!.isTank && engaged!.mode;
     }, { timeout: 120_000, intervals: [500, 1000], message: 'The designated ranger tank must reach tank-holding once in melee range' }).toBe('tank-holding');
-
-    const engaged = await live.clients[R].run(
-      `({range: character.range, mode: globalThis.partyCombatPosition?.mode || null,
-        distance: globalThis.partyCombatPosition?.target && get_entity(globalThis.partyCombatPosition.target)
-          ? Math.hypot(character.x - get_entity(globalThis.partyCombatPosition.target).x, character.y - get_entity(globalThis.partyCombatPosition.target).y)
-          : null})`,
-    );
     await info.attach('tank-melee-override', { body: JSON.stringify(engaged), contentType: 'application/json' });
-    expect(engaged.distance).not.toBeNull();
+    expect(engaged!.distance).not.toBeNull();
     // tankMovementTick holds at a near-melee clamp (desiredCombatRange() capped to 30), but
     // combatDistance() is hitbox-adjusted while this raw center-to-center hypot is not, so the
     // bound here is deliberately generous — the point is "near melee," not an exact number.
     // A ranger's own range (869 in this live run) makes the contrast unmistakable either way.
-    expect(engaged.distance).toBeLessThanOrEqual(100);
-    expect(engaged.distance).toBeLessThan(engaged.range / 2);
+    expect(engaged!.distance).toBeLessThanOrEqual(100);
+    expect(engaged!.distance).toBeLessThan(engaged!.range / 2);
   } finally {
     await page.close();
   }
