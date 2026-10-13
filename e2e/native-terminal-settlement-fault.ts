@@ -5,7 +5,8 @@ const W='E2EWarrior',P='E2EPriest';
 export async function installTerminalSettlementFault(live:LiveGame,page:Page){
   const startedAt=Date.now();
   const transitionFlags=await Promise.all([W,P].map(async name=>({name,previous:await live.clients[name].frame.evaluate(()=>{const g=window as any,old=g.__e2eObserveTransitions;g.__e2eObserveTransitions=true;return old===true;})})));
-  const context=page.context(),ledger:Record<string,any>[]=[];let owner:any,held:Route|undefined,release:(()=>void)|undefined,heldDone:Promise<void>|undefined,finishHeld:(()=>void)|undefined;
+  const context=page.context(),ledger:Record<string,any>[]=[];let owner:any,held:Route|undefined,release:(()=>void)|undefined,holdGate:Promise<void>|undefined;
+  const pendingHolds=new Set<Promise<void>>(),samples:Record<string,unknown>[]=[];
   let dropping=false,closed=false,peerReleased:any,receipt:any,nativeIssued:any;
   const body=(route:Route)=>{try{return route.request().postDataJSON();}catch{return null;}};
   function same(value:any){return owner && ['convoyId','epoch','commandId','navigationRevision','runtimeId','routeVersion'].every(key=>value?.[key]===owner[key]);}
@@ -16,6 +17,8 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
   const barrier=async(route:Route)=>{
     const value=body(route);
     if(!owner && value?.character===W && value.completed===true && value.destination?.method==='leave' && value.destination.map==='main'){
+      owner={...value};dropping=true;holdGate=new Promise<void>(resolve=>{release=resolve;});
+      ledger.push({at:Date.now(),action:'armed-candidate-status-drop',owner});
       const actual=await live.clients[W].run(`(()=>{const m=globalThis.__partyMovement,r=m?.report?.(),s=m?.state,c=character;return {report:r?{id:r.id,owner:r.owner}:null,
         goal:s?{map:s.map,in:s.in,x:s.x,y:s.y}:null,plot:s?.plot?.map(p=>({map:p.map,in:p.in,x:p.x,y:p.y,town:p.town,transport:p.transport,s:p.s,method:p.method})),
         native:{map:c.map,in:c.in,x:c.real_x,y:c.real_y,rip:c.rip,moving:c.moving}}})()`);
@@ -23,12 +26,14 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
       const final=actual.plot?.length===1 && last?.method==='leave' && last.map==='main' &&
         ['map','x','y'].every(key=>last[key]===value.destination[key] && goal?.[key]===last[key]) &&
         ['convoyId','epoch','commandId','navigationRevision','routeVersion'].every(key=>current?.[key]===value[key]);
-      if(!final){if(ledger.length<128)ledger.push({at:Date.now(),action:'intermediate-leave-not-faulted',actual});await route.fallback();return;}
-      nativeIssued=actual;owner={...value};held=route;heldDone=new Promise<void>(resolve=>{finishHeld=resolve;});dropping=true;ledger.push({at:Date.now(),action:'held-unforwarded-final-completion',owner});
-      await new Promise<void>(resolve=>{release=resolve;});
-      try{await route.abort('failed');ledger.push({at:Date.now(),action:'completion-aborted-without-forwarding'});}finally{held=undefined;finishHeld?.();}
+      if(!final){dropping=false;owner=undefined;release?.();if(ledger.length<128)ledger.push({at:Date.now(),action:'intermediate-leave-not-faulted',actual});await route.fallback();return;}
+      nativeIssued=actual;held=route;ledger.push({at:Date.now(),action:'held-unforwarded-final-completion',owner});
+      const task=(async()=>{await holdGate;try{await route.abort('failed');ledger.push({at:Date.now(),action:'completion-aborted-without-forwarding'});}finally{held=undefined;}})();
+      pendingHolds.add(task);try{await task;}finally{pendingHolds.delete(task);}
     }else if(owner && value?.character===W && value.completed===true && same(value)){
-      ledger.push({at:Date.now(),action:'duplicate-completion-aborted'});await route.abort('failed');
+      ledger.push({at:Date.now(),action:'duplicate-completion-held-unforwarded'});
+      const task=(async()=>{await holdGate;if(owner)await route.abort('failed');else await route.fallback();})();
+      pendingHolds.add(task);try{await task;}finally{pendingHolds.delete(task);}
     }else await route.fallback();
   };
   const complete=async(route:Route)=>{
@@ -47,10 +52,11 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
   await context.route('**/party-api/convoy-complete',complete);page.on('response',response);
   return {
     async prove(deadline:number){
-      await expect.poll(()=>!!owner,{timeout:Math.max(1,deadline-Date.now()),message:'Fault must capture the actual completed native final leave request'}).toBe(true);
+      await expect.poll(()=>!!owner&&!!nativeIssued,{timeout:Math.max(1,deadline-Date.now()),message:'Fault must capture the actual completed native final leave request'}).toBe(true);
       try{
         await expect.poll(async()=>{
-          const value=await live.clients[W].run('globalThis.__partyMovement?.last?.()');
+          const sample=await live.clients[W].run(`(()=>{const m=globalThis.__partyMovement,c=character;return {active:m?.report?.(),last:m?.last?.(),found:m?.state?.found,moving:m?.state?.moving,remaining:m?.state?.plot?.length,paused:!!globalThis.__partyMovementPaused,native:{map:c.map,in:c.in,x:c.real_x,y:c.real_y,moving:c.moving,rip:c.rip}}})()`);
+          if(samples.length<32)samples.push({at:Date.now(),...sample});const value=sample.last;
           if(value?.done!==true || !value.terminalSettlement)return false;
           const proof=value.terminalSettlement;
           if(!same(proof)||proof.step!==owner.step||proof.destination?.method!=='leave'||proof.destination.map!=='main')return false;
@@ -65,11 +71,11 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
       expect(issued,'Only one real native leave may be issued during the faulted exit').toHaveLength(1);
       expect(acknowledgements,'Only one actual successful native leave acknowledgement may complete the exit').toHaveLength(1);
       expect(['convoyId','epoch','commandId','navigationRevision','routeVersion'].every(key=>issued[0].data.owner?.[key]===owner[key])).toBe(true);
-      return {startedAt,owner,nativeIssued,receipt,peerReleased,ledger,issued,acknowledgements,nativeEvents};
+      return {startedAt,owner,nativeIssued,receipt,peerReleased,ledger,samples,issued,acknowledgements,nativeEvents};
     },
-    async finish(){if(!closed){closed=true;dropping=false;release?.();await heldDone;page.off('response',response);
+    async finish(){if(!closed){closed=true;dropping=false;release?.();await Promise.allSettled([...pendingHolds]);page.off('response',response);
       await context.unroute('**/party-api/status',status);await context.unroute('**/party-api/movement-barrier',barrier);await context.unroute('**/party-api/convoy-complete',complete);
       await Promise.all(transitionFlags.map(async value=>live.clients[value.name].frame.evaluate(previous=>{(window as any).__e2eObserveTransitions=previous;},value.previous)));}
-      return {owner,nativeIssued,receipt,peerReleased,ledger,pendingHeld:!!held};}
+      return {owner,nativeIssued,receipt,peerReleased,ledger,samples,pendingHeld:!!held};}
   };
 }
