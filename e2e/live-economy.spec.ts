@@ -634,28 +634,20 @@ test('buy with upgrade target survives lucky restoration failure and missing cli
   await live.restoreHistoricalSettings(() => ({ luckyUpgradeSlots: { [merchant]: 30 } }));
   await catalog(live, 'helmet');
   const context = live.clients[merchant].page.context();
-  let holdRecovery = false;
-  await context.route('**/merchant/production', async route => {
-    const body = route.request().postDataJSON();
-    if (holdRecovery && body.action === 'pending') await route.abort('failed');
-    else await route.continue();
-  });
   await live.clients[merchant].run(`(()=>{
     const nativeSwap=swap;globalThis.__e2eLuckyRestoreFault=false;globalThis.__e2eLuckyRestores=0;
     swap=function(a,b){const j=JSON.parse(localStorage.getItem('party-lucky-upgrade:'+character.name)||'null');
       if(j?.phase==='restoring'&&!globalThis.__e2eLuckyRestoreFault&&++globalThis.__e2eLuckyRestores===2){globalThis.__e2eLuckyRestoreFault=true;throw Error('Injected lost lucky restoration swap');}
       return nativeSwap(a,b);};return true;
   })()`);
-  // Pending inspection is also used before the first operation: admit the
-  // first healthy probe, then hold only once the real swap failure has occurred.
-  await context.unroute('**/merchant/production');
-  await context.route('**/merchant/production', async route => {
-    const body = route.request().postDataJSON();
-    if (body.action === 'checkpoint' && body.journal?.phase === 'complete') completedJournal = body.journal;
-    const fault = await live.clients[merchant].run('!!globalThis.__e2eLuckyRestoreFault');
-    if (holdRecovery && fault && ['pending', 'inspect'].includes(body.action)) await route.abort('failed');
-    else await route.continue();
-  });
+  // Best-effort swapback does not hold production recovery. Observe only the
+  // actual checkpoint packet; never delay its route while reading a CODE frame.
+  const checkpointObserved=async(route:import('@playwright/test').Route)=>{
+    const body=route.request().postDataJSON();
+    if(body.character===merchant&&body.action==='checkpoint'&&body.id===body.journal?.id&&body.journal?.phase==='complete')completedJournal=body.journal;
+    await route.continue();
+  };
+  await context.route('**/merchant/production',checkpointObserved);
   const before = await economy(live);
   const order = await live.post('/merchant/order', { buys: [{ id: 'helmet', quantity: 2, level: 1 }], crafts: [] });
   await expect.poll(() => live.clients[merchant].run('!!globalThis.__e2eLuckyRestoreFault'), { timeout: 300_000 }).toBe(true);
@@ -667,7 +659,6 @@ test('buy with upgrade target survives lucky restoration failure and missing cli
   expect(completedJournal).toBeDefined();
   await live.clients[merchant].run(`(()=>{localStorage.setItem('party-production:'+character.name,${JSON.stringify(JSON.stringify({...completedJournal, phase: 'running'}))});localStorage.removeItem('party-lucky-upgrade:'+character.name);localStorage.removeItem('party-commerce:${order.jobId}');return true})()`);
   await live.restartCoordinator();
-  holdRecovery = false;
   await expect.poll(async () => {
     const state = await live.state();
     return ![state.merchantCurrent, ...state.merchantQueue].some((job: any) => job?.commerceOrderId === order.jobId);
@@ -686,7 +677,7 @@ test('buy with upgrade target survives lucky restoration failure and missing cli
   },{timeout:180_000}).toBe(true);
   expect(upgradedShoes(await economy(live))-shoesBefore).toBe(1);
   await expect.poll(() => live.clients[merchant].run(`localStorage.getItem('party-production:'+character.name)`)).toBeNull();
-  await context.unroute('**/merchant/production');
+  await context.unroute('**/merchant/production',checkpointObserved);
   await restartAndObserve(live);
   expect(results(await economy(live))).toBe(results(after));
   await record(live, info, 'buy-upgrade-lucky-journal-recovery', before, { order, held, after, followup });
