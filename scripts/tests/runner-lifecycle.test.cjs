@@ -21,6 +21,25 @@ test('game methods preserve explicit entity receivers and revoke saved bound fun
     assert.throws(invoke, RetiredRunnerError);
 });
 
+test('values read through a facade and written back restore the original host values', () => {
+  const visible = function () { return this === host; };
+  const socket = { emit() {} };
+  const host = { is_hidden: visible, socket };
+  const scope = new RunnerScope(), parent = scope.facade(host);
+  const saved = parent.is_hidden, savedSocket = parent.socket;
+  parent.is_hidden = () => false;
+  assert.equal(host.is_hidden(), false);
+  parent.is_hidden = saved;
+  parent.socket = savedSocket;
+  assert.equal(host.is_hidden, visible);
+  assert.equal(host.socket, socket);
+  assert.equal(parent.is_hidden(), true);
+  scope.dispose();
+  assert.equal(host.is_hidden(), true);
+  const next = new RunnerScope().facade(host);
+  assert.equal(next.is_hidden(), true);
+});
+
 test('subscription facades preserve listener IDs and remove only their own registrations', () => {
   const listeners = new Map([['game', () => {}]]);
   let next = 0;
