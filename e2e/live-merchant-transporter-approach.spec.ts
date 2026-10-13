@@ -4,6 +4,7 @@ test.use({liveHeadless:true,initialPositions:{E2EWarrior:{map:'main',x:0,y:0},E2
 test('native headless merchant approaches Desert transporter within range and collects real cargo',async({live},info)=>{
  test.setTimeout(240000);const samples:any[]=[];
  await live.post('/focus',{monsterFocus:[],monsterPriorities:{}});
+ await live.post('/merchant/stand-location',{map:'desertland',x:0,y:0});
  await live.post('/merchant/force-stand',{enabled:true});
  await live.post('/steam/action',{character:M,action:'logout'});
  await expect.poll(async()=>{const s=await live.state();return !s.activeSlots.some((slot:any)=>slot.character===M)&&(!s.steamSwitch||s.steamSwitch.phase==='complete');},{timeout:60000}).toBe(true);
@@ -13,6 +14,7 @@ test('native headless merchant approaches Desert transporter within range and co
  await expect.poll(async()=>{const c=(await live.state()).characters[M];return c?.runtime==='headless'&&c.map==='desertland'&&Math.hypot(c.x,c.y)<15;},{timeout:90000}).toBe(true);
  try{
   await live.post('/config',{itemCollectionThreshold:1});await seedCargo(live,W);expect(await totalLeather(live)).toBe(7);
+  await live.post('/merchant/routine-priorities',{priorities:{},enabled:{'party collection':true}});
   await live.post('/merchant/force-stand',{enabled:false});
   let approached=false,crossed=false;
   await expect.poll(async()=>{
