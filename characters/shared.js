@@ -6257,7 +6257,7 @@
     var needsBank = names.some(function (name) { return itemAvailability(name).onPlayer < needs[name]; });
     if (needsBank) await merchantVisitBank(command, activity);
     for (var n = 0; n < names.length; n += 1) {
-      await retrieveFromBankUntil(names[n], needs[n]);
+      await retrieveFromBankUntil(names[n], needs[names[n]]);
     }
     var purchasableStatScrolls = { strscroll: true, intscroll: true, dexscroll: true, vitscroll: true };
     for (var requiredIndex = 0; requiredIndex < names.length; requiredIndex += 1) {
