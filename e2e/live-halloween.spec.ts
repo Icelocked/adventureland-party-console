@@ -1,3 +1,4 @@
+import {observeNativeNavigationHttp} from './native-navigation-http-observer';
 import {observeNativeStatus} from './native-status-observer';
 import { test, expect, type LiveGame } from './live-fixtures';
 import { killNativeCharacter } from './hunt-interruption-helpers';
@@ -291,6 +292,8 @@ for (const original of [{ id: 'mrgreen' }, { id: 'mrpumpkin' }]) {
         return native.players[W] && !native.players[W].rip && native.players[W].map === encounter.map && state.characters[W]?.joinedEvent === encounter.id && reentryHit;
       }, { timeout: 180_000, message: 'Native death must preserve event reentry instead of losing the saved activity' }).toBe(true);
       await info.attach('native-halloween-death-and-reentry', { body: JSON.stringify({ death, native: await world(live, encounter.id), coordinator: await live.state() }), contentType: 'application/json' });
+      const navigationHttp=encounter.id==='mrpumpkin'?observeNativeNavigationHttp(live.clients[W].page):null;
+      try{
       const returnPhases:{deselectedAt:number;replacementRequestedAt?:number;replacementAcknowledgedAt?:number;recoveryStartedAt:number;recoveryDeadline:number;arrivalObservedAt?:number}={
         deselectedAt:Date.now(),recoveryStartedAt:Date.now(),recoveryDeadline:0};
       let returnDeadline = returnPhases.deselectedAt + (encounter.id === 'mrgreen' ? 240_000 : 180_000);
@@ -345,6 +348,7 @@ for (const original of [{ id: 'mrgreen' }, { id: 'mrpumpkin' }]) {
         return {name,main,arrival};
       }));
       await info.attach('halloween-saved-checkpoint-return', { body: JSON.stringify({phases:returnPhases,nativeArrivalReceipts, native: await world(live, encounter.id), coordinator: await live.state() }), contentType: 'application/json' });
+      }finally{if(navigationHttp)await info.attach('native-pumpkin-return-http',{body:JSON.stringify(await navigationHttp.finish()),contentType:'application/json'});}
     });
   });
 }
