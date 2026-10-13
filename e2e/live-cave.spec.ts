@@ -1022,14 +1022,15 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   console.log('[Cave verified] Required native rooms completed');
   const stairs=(await dungeon()).members[0].observation.cave.points.find((p:any)=>p.down);
   expect(stairs.locked).toBe(false);
-  await live.admin(`output=(()=>{
+  const farewellDeclaration=await live.admin(`output=(()=>{
     const p=get_player('E2EWarrior'),run=generated_entry(p).record,source=G.events.dreams.encounters.find(e=>e.id==='e50');
     const room={id:'e2e-farewell',floor:0,map:p.map,x:${stairs.x},y:${stairs.y},kind:'encounter',required:false,revealed:true,started:false,done:false,actors:[],enemies:[],encounter:source};
-    run.cave.rooms.push(room);cave_activate(run,room);cave_publish(run,true);return {room:room.id};
+    run.cave.rooms.push(room);cave_activate(run,room);cave_publish(run,true);return {run:run.key,room:room.id,map:room.map,x:room.x,y:room.y};
   })()`);
   await acceptRoom(stairs);
   let answeredFarewell=false;
-  const stairReplies:{id:string;title:string;option:string}[]=[];
+  const stairReplies:{id:string;title:string;option:string;room:string;run:string}[]=[];
+  const stairNativeChoices:any[]=[];
   const stairSamples:any[]=[];
   let lastStairKey='';
   let blockedStairAt=0,blockedStairId='';
@@ -1091,6 +1092,9 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     recordStairs(v);captureStairPlanning();
     if(v.members.every((m:any)=>m.observation?.cave?.floor===1))return true;
     if(c?.choice&&!c.choice.resolved&&!stairReplies.some(r=>r.id===c.choice.id)){
+      const identity=await live.admin(`output=(()=>{const p=get_player('E2EWarrior'),run=generated_entry(p).record,vote=run.cave.vote;return {run:run.key,id:vote?.id,room:vote?.room?.id,map:vote?.room?.map,x:vote?.room?.x,y:vote?.room?.y,resolved:vote?.resolved,players:cave_players(run).map(p=>({name:p.name,map:p.map,x:p.x,y:p.y,hp:p.hp}))};})()`);
+      stairNativeChoices.push({at:Date.now(),advertised:c.choice.id,...identity});if(stairNativeChoices.length>100)stairNativeChoices.splice(5,1);
+      if(identity.run!==c.run||identity.id!==c.choice.id||identity.resolved)return false;
       const reply=c.choice.options.find((o:any)=>!o.unavailable&&!o.cost&&!o.amber);
       try{
         await choice.getByRole('button',{name:reply.label,exact:true}).click();
@@ -1098,8 +1102,8 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
         if((await dungeon()).members.every((m:any)=>m.observation?.cave?.floor===1))return true;
         throw error;
       }
-      stairReplies.push({id:c.choice.id,title:c.choice.title,option:reply.label});
-      answeredFarewell ||= c.choice.title==='Before You Leave';
+      stairReplies.push({id:c.choice.id,title:c.choice.title,option:reply.label,room:identity.room,run:identity.run});
+      answeredFarewell ||= identity.run===farewellDeclaration.run&&identity.room===farewellDeclaration.room;
     }
     return v.members.every((m:any)=>m.observation?.cave?.floor===1);
   };
@@ -1108,17 +1112,21 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   try{
   await expect.poll(async()=>{await advanceStairs();return answeredFarewell;},
     {timeout:600_000,message:'Manual stairs must reach and answer the native farewell'}).toBe(true);
-  const farewell=stairReplies.find(r=>r.title==='Before You Leave')!;
+  const farewell=stairReplies.find(r=>r.run===farewellDeclaration.run&&r.room===farewellDeclaration.room)!;
   await expect.poll(async()=>(await dungeon()).members.every((m:any)=>
     m.fresh&&m.observation?.cave&&(!m.observation.cave.choice||
       m.observation.cave.choice.id!==farewell.id||m.observation.cave.choice.resolved)),
     {timeout:30_000,message:'Both native farewell votes must acknowledge before continuation'}).toBe(true);
-  await info.attach('native-cave-farewell-acknowledgement',{body:JSON.stringify({farewell,dungeon:await dungeon()}),contentType:'application/json'});
+  const nativeFarewell=await live.admin(`output=(()=>{const p=get_player('E2EWarrior'),run=generated_entry(p).record,room=run.cave.rooms.find(r=>r.id===${JSON.stringify(farewellDeclaration.room)});return {run:run.key,room:room?.id,done:room?.done,vote:room?.vote?{id:room.vote.id,resolved:room.vote.resolved}:null,map:room?.map,x:room?.x,y:room?.y,players:cave_players(run).map(p=>({name:p.name,map:p.map,x:p.x,y:p.y,hp:p.hp}))};})()`);
+  expect(nativeFarewell.run).toBe(farewellDeclaration.run);expect(nativeFarewell.room).toBe(farewellDeclaration.room);
+  expect(nativeFarewell.done,'The exact declared native farewell room must complete').toBe(true);
+  expect(nativeFarewell.vote?.id).toBe(farewell.id);expect(nativeFarewell.vote?.resolved).toBe(true);
+  await info.attach('native-cave-farewell-acknowledgement',{body:JSON.stringify({farewellDeclaration,farewell,nativeFarewell,dungeon:await dungeon()}),contentType:'application/json'});
     await expect.poll(async()=>{const completed=await advanceStairs();const latest=stairSamples.at(-1);
       if(latest)captureBlockedStairs({state:{phase:latest.phase,run:latest.run,travel:latest.travel}});return completed;},
       {timeout:300_000,message:'Manual stairs must continue after the farewell vote and transport both members'}).toBe(true);
   }finally{
-    await info.attach('native-cave-stairs-readiness',{body:JSON.stringify({samples:stairSamples,planning:await Promise.allSettled(stairPlanningReads),native:await Promise.allSettled(stairNativeReads),
+    await info.attach('native-cave-stairs-readiness',{body:JSON.stringify({farewellDeclaration,nativeChoices:stairNativeChoices,samples:stairSamples,planning:await Promise.allSettled(stairPlanningReads),native:await Promise.allSettled(stairNativeReads),
       unavailable:['Coordinator status position/seenAt and CODE loading/socket ownership are not exposed by this dungeon response.']}),contentType:'application/json'});
   }
   expect(answeredFarewell).toBe(true);

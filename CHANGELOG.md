@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Identify the exact native Cave farewell encounter in stairs regression tests, so a different encounter with the same title cannot start the continuation deadline early.
+
 - Make native queued-target regression scenarios introduce successors during a confirmed fight, preserving real movement and fresh-confirmation checks without assuming pre-fight target rankings stay fixed.
 
 - Preserve independent combat route ownership in movement diagnostics from the very first step; keep declared native Halloween encounter charge consistent throughout E2E scenarios.
