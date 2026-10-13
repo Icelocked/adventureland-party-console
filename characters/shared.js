@@ -7866,6 +7866,17 @@
     return null;
   }
 
+  // The server clears the exchange placeholder before add_item, so a stackable
+  // reward merges into a carried stack and exchange() reports no slot (#28).
+  // Rewards are the slots that are new or grew since the operation began.
+  function exchangeGains(held) {
+    return character.items.map(function (item, slot) {
+      var before = held[slot];
+      return item && !item.l && item.name !== "placeholder" &&
+        (!sameItemState(item, before) || itemQuantity(item) > itemQuantity(before)) ? fingerprint(item) : null;
+    }).filter(Boolean);
+  }
+
   async function merchantExchange(command) {
     var activity = [], lines = [], rewards = (command.exchangeRewards || []).slice();
     (command.exchanges || []).forEach(function (line) {
@@ -7969,7 +7980,7 @@
               !item.l && itemQuantity(item) >= required;
           });
           if (slot < 0) throw new Error("Exchange stack changed for " + line.id);
-          var result;
+          var result, held = character.items.map(fingerprint);
           if (line.reward) {
             // Select the verified stack explicitly; exchange_buy() otherwise
             // chooses the first stack, which may be locked or too small.
@@ -7982,8 +7993,9 @@
             await verifyMerchantItemMarks();
             result = await exchange(slot);
           }
-          if (result && Number.isInteger(result.num) && character.items[result.num])
-            rewards.push(fingerprint(character.items[result.num]));
+          exchangeGains(held).forEach(function (gain) {
+            if (!rewards.some(function (reward) { return sameItem(gain, reward); })) rewards.push(gain);
+          });
           var remaining = lines.slice(lineIndex).map(function (pendingLine, index) {
             return { id: pendingLine.id, level: pendingLine.level,
               ...(pendingLine.reward ? {reward:pendingLine.reward} : {}),
