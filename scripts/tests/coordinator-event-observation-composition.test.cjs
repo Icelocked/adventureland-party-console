@@ -38,3 +38,25 @@ test('event observation composition writes live sessions and resumes deferred tr
   assert.equal(state.commands.A.type, 'event-return-town'); assert.equal(state.commands.A.id, 7);
   assert.equal(state.commands.A.checkpoint, checkpoint); assert.equal(state.nextCommandId, 8);
 });
+
+for(const protection of ['none','new-revision','protected','unrelated'])test('retired same-event owned walk cancellation persists once; protection='+protection,()=>{
+ const checkpoint={map:'uhills',x:-550,y:-160};
+ const deferred={event:'mrpumpkin',cycleId:'old',checkpoint,navigationRevision:1,phase:'returning-to-town'};
+ const convoy={id:'walk',purpose:'shared-walk-return',walkingActivity:'event-return',participants:['A'],
+  walkingParents:{A:{revision:protection==='new-revision'?2:1,command:{cycleId:'old'}}},nonPreemptible:protection==='protected'};
+ if(protection==='unrelated')convoy.walkingParents.A.command.cycleId='different';
+ const state={activeConvoy:convoy,eventSessions:{A:{event:'mrpumpkin',id:'new',lastLiveAt:1000,checkpoint:null,waypoints:{},participants:[],wasLive:true}},
+  eventReturn:null,deferredEventReturns:{A:deferred},merchantCharacter:'M',anniversary:{eventCycle:null},
+  statuses:{A:{seenAt:1000,serverLiveEvents:[{name:'mrpumpkin',id:'new'}]}},commands:{A:{id:1,type:'party-monster-travel',convoyId:'walk'}},nextCommandId:2};
+ const saved=[];let cancelled=0;
+ const service=createCoordinatorEventObservations(state,{now:()=>1000,activeNames:()=>['A'],enabled:()=>true,checkpoint:()=>checkpoint,
+  persist:()=>saved.push({activeConvoy:state.activeConvoy}),log(){},goobrawlStillFighting:()=>false,begin(){},finishIfReady(){},
+  cancelConvoy(){cancelled++;state.activeConvoy=null;delete state.commands.A;},
+  navigation:{capture:()=>({}),location:()=>checkpoint,intent:()=>({revision:1})}});
+ service.observe({name:'A',serverLiveEvents:[{name:'mrpumpkin',id:'new'}]});
+ assert.equal(cancelled,protection==='none'?1:0);assert.equal(saved.length,protection==='none'?1:0);
+ if(protection==='none')assert.equal(saved[0].activeConvoy,null);
+ assert.equal(state.deferredEventReturns.A,deferred);assert.deepEqual(state.eventSessions.A.participants,[]);
+ service.observe({name:'A',serverLiveEvents:[{name:'mrpumpkin',id:'new'}]});
+ assert.equal(saved.length,protection==='none'?1:0);
+});

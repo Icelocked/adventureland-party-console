@@ -443,9 +443,27 @@ export function createEventObservations(
     return intent.revision;
   }
 
+  function awaitingRetiredSameEvent(name: string, recovery: DeferredRecovery): boolean {
+    const report=ports.statuses()[name], intent=ports.intent(name);
+    if(state.current || intent.cancelled || recovery.navigationRevision!==intent.revision ||
+      !freshDeferredFighter(report) || !liveFeedReady(report) || !ports.enabled(name,recovery.event))return false;
+    return !!report?.serverLiveEvents?.some(entry=>entry.name===recovery.event &&
+      !(entry.name==='slenderman' && report.slendermanSearchExhausted));
+  }
+  function retireOldDeferredContinuation(name: string, cycleId: string): void {
+    // Actual authorization adopts the checkpoint and records participation.
+    // These hooks reject unrelated commands, walks and renewed navigation.
+    ports.retireDeferredWalk?.(name,cycleId);
+    ports.retireDeferredCommand?.(name,cycleId);
+  }
   function resumeDeferred(body: EventReport): void {
     const recovery = state.deferred[body.name];
-    if (!recovery || ports.hasCommand(body.name) || nextLiveEvent(body.name, recovery.event)) return;
+    if (!recovery) return;
+    if(awaitingRetiredSameEvent(body.name,recovery)){
+      retireOldDeferredContinuation(body.name,recovery.cycleId);
+      return;
+    }
+    if (ports.hasCommand(body.name) || nextLiveEvent(body.name, recovery.event)) return;
     const atTown = body.map === "main" && Math.hypot(Number(body.x), Number(body.y)) <= 90;
     const revision = invalidateCheckpoint(recovery, body.name);
     if (atTown && !recovery.checkpoint) delete state.deferred[body.name];

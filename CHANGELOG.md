@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Let eligible live events retire obsolete deferred return commands before admission, preserving saved checkpoints and attendance limits.
+
 - Require an exhausted owned walking route to settle at its destination before reporting arrival, preventing false Cave regroup completion after combat displacement.
 
 - Verify brief manual merchant weapon swaps using ordered native item receipts, retaining gathering restoration and restart checks.

@@ -75,6 +75,7 @@ export function createCoordinatorEventObservations(
         if (!convoy || !convoy.participants.includes(name) ||
             !(ownsDeferredWalk(convoy, cycleId) || ownsActiveReturn(convoy, cycleId))) return;
         ports.cancelConvoy();
+        ports.persist();
       },
       retireDeferredCommand: (name, cycleId) => {
         const command = state.commands[name];
