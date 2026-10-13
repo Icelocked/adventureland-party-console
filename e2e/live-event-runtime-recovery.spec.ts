@@ -26,6 +26,7 @@ test('native fixed-end event timer survives clock resync and a limit added durin
   const checkpoint={map:'halloween',x:-550,y:-290};
   await live.post('/formation',{leader:W});
   await live.post('/formation',{character:P,follow:true});
+  await live.clients[W].run('parent.__e2eObserveMoves=true;parent.__e2eObservedMoveCount=0');
   await live.post('/travel',checkpoint);
   await expect.poll(async()=>{const s=await live.state();return !s.activeConvoy&&fighters.every(name=>
     s.characters[name]?.map===checkpoint.map&&Math.hypot(s.characters[name].x-checkpoint.x,s.characters[name].y-checkpoint.y)<100);},{timeout:90000}).toBe(true);
@@ -54,9 +55,11 @@ test('native fixed-end event timer survives clock resync and a limit added durin
       !s.characters[name]?.joinedEvent&&s.characters[name]?.map===checkpoint.map&&Math.hypot(s.characters[name].x-checkpoint.x,s.characters[name].y-checkpoint.y)<100);},{timeout:150000}).toBe(true);
     expect((await live.clients[W].events()).some(packet=>packet.event==='hit'&&String(packet.data?.id)===seed.id&&packet.data?.hid===W&&packet.data?.damage>0)).toBe(true);
   }finally{
-    await info.attach('fixed-end-event-timer',{body:JSON.stringify({seed,samples,state:await live.state(),events:await Promise.all(fighters.map(name=>live.clients[name].events()))}),contentType:'application/json'});
+    try{await info.attach('fixed-end-event-timer',{body:JSON.stringify({seed,samples,state:await live.state(),events:await Promise.all(fighters.map(name=>live.clients[name].events()))}),contentType:'application/json'});
+    }finally{try{await live.clients[W].run('parent.__e2eObserveMoves=false');}finally{
     await live.post('/formation',{character:W,eventSelections:[]});
     await live.admin(`output=(()=>{for(const i of Object.values(instances))for(const m of Object.values(i.monsters||{}))if(String(m.id)===${JSON.stringify(seed.id)})remove_monster(m,{silent:true});G.monsters.mrpumpkin=${JSON.stringify(seed.original)};delete E.mrpumpkin;broadcast_e();return true;})()`);
+    }}
   }
 });
 
