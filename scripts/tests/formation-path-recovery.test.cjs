@@ -202,3 +202,90 @@ test('cached follower terminal loses ownership when dynamic endpoint certificati
  assert.ok(c.api.followPoint({x:80,y:0}));safe=false;
  assert.equal(c.api.followPoint({x:80,y:0}),undefined);assert.equal(c.self.x,0);
 });
+test('certified role terminal may stay outside follow forty while inside the existing healing envelope',()=>{
+ const goal={x:240,y:0},terminal={x:120,y:0};
+ const c=client({segmentClear:()=>true,endpointSafe:()=>true,followGoals:()=>[terminal],followTerminalValid:(point,mover)=>Math.hypot(point.x-mover.x,point.y-mover.y)<=187});
+ const point=c.api.followPoint(goal);assert.deepEqual(point,terminal);assert.ok(Math.hypot(point.x-goal.x,point.y-goal.y)>40);
+});
+test('role terminals outside current healing coverage cannot authorize a follower waypoint',()=>{
+ const c=client({segmentClear:()=>true,endpointSafe:()=>true,followGoals:()=>[{x:0,y:0}],followTerminalValid:()=>false});
+ assert.equal(c.api.followPoint({x:80,y:0}),undefined);assert.equal(c.self.x,0);
+});
+test('a cached role terminal is discarded when actual healer coverage changes',()=>{
+ let covered=true;const c=client({segmentClear:()=>true,endpointSafe:()=>true,followGoals:()=>[{x:120,y:0}],followTerminalValid:()=>covered});
+ assert.ok(c.api.followPoint({x:240,y:0}));covered=false;assert.equal(c.api.followPoint({x:240,y:0}),undefined);
+});
+test('role terminal callbacks cannot waive the independent live enemy endpoint certificate',()=>{
+ const c=client({segmentClear:()=>true,endpointSafe:()=>false,followGoals:()=>[{x:120,y:0}],followTerminalValid:()=>true});
+ assert.equal(c.api.followPoint({x:240,y:0}),undefined);
+});
+test('bounded follower search reports unreachable under its exact control and clears on replacement',()=>{
+ const c=client({segmentClear:()=>false,endpointSafe:()=>false});c.control.mover='W';c.api.accept(c.control);
+ assert.equal(c.api.followPoint({x:80,y:0}),undefined);assert.equal(c.api.report().followerRoute,'unreachable');
+ c.api.accept({...c.control,attempt:2});assert.equal(c.api.report().followerRoute,undefined);
+ c.api.stop();assert.equal(c.api.report(),undefined);
+});
+test('pending follower search is planning rather than an unreachable report',()=>{
+ const c=client({segmentClear:()=>true});c.control.mover='W';c.api.accept(c.control);let clock=0;
+ const mock=test.mock.method(performance,'now',()=>clock+=5);
+ try{assert.equal(c.api.followPoint({x:80,y:0}),undefined);assert.equal(c.api.report().followerRoute,'planning');}
+ finally{mock.mock.restore();}
+});
+test('coverage-blocked report is specific to the actual owned mover gate and clears when coverage resumes',()=>{
+ let covered=false;const c=client({coveredStep:()=>covered,segmentClear:()=>true,stepSize:12});c.api.accept(c.control);
+ c.gate.owner.tick();c.gate.owner.tick();assert.equal(c.api.report().coverageBlocked,true);assert.equal(c.self.moving,false);
+ covered=true;c.gate.owner.tick();assert.equal(c.api.report().coverageBlocked,false);
+});
+
+
+function blockedCoverageFixture(){
+ const f=fixture();f.tick();f.ack();f.tick();
+ for(const m of f.members){m.status.moving=false;m.status.groupedCombat.formationRecovery={target:identity,at:f.now,ack:f.r.id,attempt:f.r.attempt};}
+ f.members[1].status.groupedCombat.formationRecovery.coverageBlocked=true;
+ f.members[0].status.groupedCombat.formationRecovery.followerRoute='unreachable';
+ f.members[2].status.groupedCombat.formationRecovery.followerRoute='arrived';
+ return f;
+}
+test('fresh owned exhausted follower coverage promptly fails only the current recovery attempt',()=>{
+ const f=blockedCoverageFixture();const before=f.r;const r=f.tick();
+ assert.equal(r.phase,'retry');assert.equal(r.attempt,1);assert.equal(r.id,before.id);
+ assert.equal(r.retryAt,f.now+5000);assert.match(r.reason,/follower.*unreachable/);
+ assert.equal(r.failedGoals.length,1);
+});
+test('early coverage failure preserves native progress, older clients and unfinished searches',()=>{
+ for(const mutate of [
+  f=>delete f.members[1].status.groupedCombat.formationRecovery.coverageBlocked,
+  f=>delete f.members[0].status.groupedCombat.formationRecovery.followerRoute,
+  f=>f.members[0].status.groupedCombat.formationRecovery.followerRoute='planning',
+  f=>f.members[0].status.groupedCombat.formationRecovery.followerRoute='routing',
+  f=>f.members[1].status.moving=true,
+  f=>f.members[0].status.moving=true,
+  f=>f.members[2].status.moving=true,
+  f=>f.members[1].status.groupedCombat.formationRecovery.approachReady=true,
+  f=>f.members[0].status.groupedCombat.formationRecovery.attempt=2,
+  f=>f.members[2].status.groupedCombat.formationRecovery.ack='retired',
+  f=>f.members[0].status.groupedCombat.formationRecovery.target='foreign',
+ ]){const f=blockedCoverageFixture();mutate(f);assert.equal(f.tick().phase,'routing');}
+});
+test('early coverage failure never preserves recovery over fresh combat or changed ownership',()=>{
+ for(const mutate of [
+  f=>f.target.state='engaged',
+  f=>f.target.state='pending',
+  f=>f.members[0].status.groupedCombat.currentAttackers=[{id:'aggro'}],
+  f=>f.members[0].status.groupedCombat.evidence=[{state:'pending'}],
+  f=>f.members[0].status.groupedCombat.travelCommand={id:123},
+  f=>f.members[0].cancelled=true,
+ ]){const f=blockedCoverageFixture();mutate(f);assert.equal(f.tick(),undefined);}
+ const f=blockedCoverageFixture();f.members[0].status.groupedCombat.currentAttackersAt=0;
+ assert.equal(formationRecovery({formationRecovery:f.r},f.members,f.target,'key',f.now+100,false,160),undefined);
+});
+
+test('expired follower or earlier phase results cannot prompt early coverage failure',()=>{
+ for(const at of [0,10000,100000]){const f=blockedCoverageFixture();f.members[0].status.groupedCombat.formationRecovery.at=at;
+  const r=formationRecovery({formationRecovery:f.r},f.members,f.target,'key',f.now+100,false,160);assert.equal(r.phase,'routing');}
+});
+
+test('an older or not-yet-certified third follower cannot prompt early coverage failure',()=>{
+ const f=blockedCoverageFixture();delete f.members[2].status.groupedCombat.formationRecovery.followerRoute;
+ assert.equal(f.tick().phase,'routing');
+});

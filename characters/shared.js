@@ -15872,16 +15872,54 @@
     var goal=combatApproachPoint(reference,desired);
     return can_move_to(goal.x,goal.y) && formationRecoverySafePoint(goal);
   }
+  function terrainRecoveryFollowerTerminal(point,goal) {
+    var members=formationMembers(),g=groupedCombat,r=g && g.formationRecovery;
+    var mover=r && members.find(function(m){return m.name===r.mover;});
+    if(!mover)return false;
+    var priest=members.find(function(m){return m.ctype==='priest';});
+    if(!priest)return !g.priest && Math.hypot(point.x-goal.x,point.y-goal.y)<=40;
+    var reach=Number(priest.range)-Math.min(20,Math.max(8,Number(priest.range)*0.1));
+    if(!Number.isFinite(reach)||reach<=0)return false;
+    var centerReach=Math.max(10,(Number.isFinite(Number(g.range))?Number(g.range):reach)-10);
+    var healer=formationBody(priest,priest.name===character.name?point:priest.name===mover.name?goal:undefined);
+    return members.every(function(m){
+      var body=formationBody(m,m.name===character.name?point:m.name===mover.name?goal:undefined);
+      return formationDistance(body,healer)<=reach+0.01 && Math.hypot(body.x-healer.x,body.y-healer.y)<=centerReach+0.01;
+    });
+  }
+  function terrainRecoveryFollowerGoals(goal) {
+    var members=formationMembers(),g=groupedCombat,r=g && g.formationRecovery;
+    var mover=r && members.find(function(m){return m.name===r.mover;});
+    if(!mover||!g.target)return [];
+    var priest=members.find(function(m){return m.ctype==='priest';});
+    if(!priest && g.priest)return [];
+    var reach=priest?Number(priest.range)-Math.min(20,Math.max(8,Number(priest.range)*0.1)):40;
+    if(!Number.isFinite(reach)||reach<=0)return [];
+    var centerReach=priest?Math.max(10,(Number.isFinite(Number(g.range))?Number(g.range):reach)-10):40;
+    var goals=terrainRecoveryGoals(g.target,desiredCombatRange());
+    [Math.min(39,centerReach-1),centerReach-1].forEach(function(radius){
+      for(var i=0;i<16;i++){
+        goals.push({x:goal.x+Math.cos(i*Math.PI/8)*radius,y:goal.y+Math.sin(i*Math.PI/8)*radius});
+      }
+    });
+    goals.push({x:character.x,y:character.y});
+    return goals.filter(function(point){return terrainRecoveryFollowerTerminal(point,goal)&&terrainRecoverySafe(point,true);})
+      .sort(function(a,b){return Math.hypot(a.x-character.x,a.y-character.y)-Math.hypot(b.x-character.x,b.y-character.y);});
+  }
   function followTerrainRecovery() {
     var g=groupedCombat,r=g && g.formationRecovery;
     var mover=r && formationMembers().find(function(m){return m.name===r.mover;});
     if(!mover || !g.target)return;
     var distance=Math.hypot(mover.x-character.x,mover.y-character.y);
-    if(distance<=40){holdFormation(g.target,'waiting for recovery leader to advance');return;}
+    if(distance<=40 && terrainRecoveryFollowerTerminal({x:character.x,y:character.y},{x:mover.x,y:mover.y}) && terrainRecoverySafe({x:character.x,y:character.y},true)){holdFormation(g.target,'waiting for recovery leader to advance');return;}
     var client=root.partyQueueClient && root.partyQueueClient.formation;
     var waypoint=client && client.followPoint ? client.followPoint({x:mover.x,y:mover.y}) : mover;
-    if(!waypoint){holdFormation(g.target,'finding safe recovery follower route');return;}
-    var heading=Math.atan2(waypoint.y-character.y,waypoint.x-character.x),length=Math.min(Number(character.speed||40)*0.25,distance-40,Math.hypot(waypoint.x-character.x,waypoint.y-character.y));
+    if(!waypoint){
+      var followState=client && typeof client.report==='function' && client.report()?.followerRoute;
+      holdFormation(g.target,followState==='arrived'?'waiting at a safe healing position for recovery leader':
+        followState==='unreachable'?'no certified safe recovery follower route':'finding safe recovery follower route');return;
+    }
+    var heading=Math.atan2(waypoint.y-character.y,waypoint.x-character.x),length=Math.min(Number(character.speed||40)*0.25,Math.hypot(waypoint.x-character.x,waypoint.y-character.y));
     var offsets=[0,Math.PI/6,-Math.PI/6,Math.PI/3,-Math.PI/3,Math.PI/2,-Math.PI/2];
     for(var i=0;i<offsets.length;i++){
       var point={x:character.x+Math.cos(heading+offsets[i])*length,y:character.y+Math.sin(heading+offsets[i])*length};
@@ -15902,6 +15940,7 @@
       now:function(){return Date.now()+coordinatorClockOffset;},self:function(){return character;},context:terrainRecoveryContext,
       gate:sharedConvoyGate,smart:function(){return smart;},safe:terrainRecoverySafe,
       endpointSafe:function(point){return terrainRecoverySafe(point,true);},
+      followGoals:terrainRecoveryFollowerGoals,followTerminalValid:terrainRecoveryFollowerTerminal,
       segmentClear:function(from,to){return terrainRecoverySafe(to,false,from);},
       approachReady:terrainApproachReady,coveredStep:terrainCoverageStep,follow:followTerrainRecovery,stepSize:Math.max(1,Number(character.speed||40)*0.25),
       release:function(){resetCombatMovement();if(root.partyQueueClient)root.partyQueueClient.sight.reset();if(root.partyRoleRunner)root.partyRoleRunner.wake();},

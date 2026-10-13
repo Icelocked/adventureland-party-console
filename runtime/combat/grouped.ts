@@ -16,6 +16,8 @@ export interface Member {
   status?: {
     monsterHunt?: {id:string;count:number;remainingMs:number} | null;
     seenAt: number; lastDeath?: {at: number}; hp: number; rip?: boolean; map: string; in?: string | number; server?: string;
+    /** Native moving bit is optional in older partial status reports. */
+    moving?:import('typed-adventureland').CharacterEntity['moving'];
     x: number; y: number; range?: number; max_hp?: number; joinedEvent?: unknown; activeEvent?: unknown; mapEvent?: unknown;
     combatSelection?: { id: string | null; map: string | null; revision: number; runtimeId: string; target?: Target | null };
     groupedCombat?: { handoff?:HandoffReport; travelCommitted?: Fight[]; travelCandidates?: Target[]; huntDefense?: boolean; passingAcknowledgement?: PassingAcknowledgement; returnDefense?: boolean; passingEncounters?: PassingEncounter[]; formationRecovery?: FormationRecoveryReport; approach?: ApproachReport; pursuitAck?: string | null; currentAttackers?: CurrentAttacker[];

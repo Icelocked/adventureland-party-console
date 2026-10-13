@@ -664,3 +664,46 @@ test('return runner attacks and supports while planning or held without issuing 
   assert.equal(r.moves.length,0);assert.equal(c.partyCombatState.error,null);
  } finally {c.sharedRoutine.resetCombatMovement=()=>{};c.partyRoleRunner.stop();}
 });
+test('role follower goals use real healing coverage and remain outside every captured enemy envelope',()=>{
+ const r=setup(true);Object.assign(r.priest,{x:-825.7427489279485,y:-296.81719371323635,range:207,awidth:27,aheight:34});
+ Object.assign(r.warrior,{x:-685.9062960514897,y:-352.0792231731289,range:36,awidth:27,aheight:34});
+ const mage={...r.priest,name:'M',ctype:'mage',x:-829.7373953705331,y:-300.665292562237,range:215};
+ const rows=[['4295903',-715.3146116853552,-194.02972212265013,185,null],['4295988',-576.5554792745352,-188.41094661614653,185,null],
+  ['4296207',-653.6906953636296,-224.30108266806596,200,null],['4296298',-633.7286564653707,-363.96073366527446,200,null],
+  ['4296367',-610.9274303891598,-306.37724430702815,185,null],['4296428',-577.515883110854,-289.7409292478349,200,null],
+  ['4296538',-521.0003298853356,-237.2263675595063,200,'outsider']];
+ delete r.entities.A;
+ for(const [id,x,y,range,target]of rows)r.entities[id]={id,x,y,range,target,type:'monster',mtype:range===185?'sparkbot':'targetron',map:'main',visible:true,hp:100,awidth:31,aheight:34};
+ r.c.groupedCombat={target:{...r.entities['4295988'],state:'planned'},formationRecovery:{mover:'W'}};
+ r.c.formationMembers=()=>[r.warrior,r.priest,mage];
+ r.c.distance=(a,b)=>Math.hypot(Math.max(Math.abs(a.x-b.x)-(a.awidth+b.awidth)/2,0),Math.max(Math.abs(a.y-b.y)-Math.max(a.aheight,b.aheight),0));
+ r.c.can_move=()=>true;
+ const goal={x:r.warrior.x,y:r.warrior.y};
+ assert.equal(r.c.terrainRecoveryFollowerGoals(goal).length,0,'The captured cohort has no jointly safe formation-ready endpoint and must report bounded unreachability');
+ for(const id of Object.keys(r.entities))delete r.entities[id];
+ const goals=r.c.terrainRecoveryFollowerGoals(goal);assert.ok(goals.length,'With blockers absent, actual healing and formation-ready follower positions are available');
+ assert.ok(goals.some(point=>Math.hypot(point.x-goal.x,point.y-goal.y)>40));
+ for(const point of goals){assert.equal(r.c.terrainRecoveryFollowerTerminal(point,goal),true);assert.equal(r.c.terrainRecoverySafe(point,true),true);}
+ assert.equal(r.c.terrainRecoveryFollowerTerminal({x:-1000,y:-700},goal),false,'An arbitrary distant safe point cannot waive healing coverage');
+ r.c.groupedCombat.priest='P';r.c.formationMembers=()=>[r.warrior,mage];
+ assert.equal(r.c.terrainRecoveryFollowerTerminal(goal,goal),false,'A missing expected healer cannot authorize fallback follow movement');
+ assert.equal(r.c.terrainRecoveryFollowerGoals(goal).length,0);
+});
+test('role follower inside forty moves toward its certified retreat rather than reversing it',()=>{
+ const r=setup();Object.assign(r.warrior,{x:20,y:0});Object.assign(r.priest,{x:0,y:0});
+ r.c.groupedCombat={target:r.monster,formationRecovery:{mover:'P'}};
+ r.c.formationMembers=()=>[r.warrior,r.priest];r.c.partyQueueClient={formation:{followPoint:()=>({x:40,y:0})}};
+ r.c.terrainRecoveryFollowerTerminal=()=>false;r.c.terrainRecoverySafe=(point,endpoint)=>!endpoint||point.x!==20;
+ r.c.terrainCoverageStep=()=>true;r.c.can_move_to=()=>true;
+ r.c.followTerrainRecovery();assert.equal(r.moves.length,1);assert.ok(r.moves[0].x>20,'Issued step must have positive direction toward the certified waypoint');
+ assert.ok(r.moves[0].x<=40);
+});
+test('native healable terminal outside existing formation readiness is rejected',()=>{
+ const r=setup(true);Object.assign(r.priest,{x:0,y:0,range:207,awidth:27,aheight:34});
+ Object.assign(r.warrior,{x:200,y:0,awidth:27,aheight:34});
+ r.c.groupedCombat={range:187,priest:'P',target:r.monster,formationRecovery:{mover:'W'}};
+ r.c.formationMembers=()=>[r.warrior,r.priest];
+ r.c.distance=(a,b)=>Math.hypot(Math.max(Math.abs(a.x-b.x)-(a.awidth+b.awidth)/2,0),Math.max(Math.abs(a.y-b.y)-Math.max(a.aheight,b.aheight),0));
+ assert.ok(r.c.distance(r.priest,r.warrior)<187,'The actual hitboxes are within native healing reach');
+ assert.equal(r.c.terrainRecoveryFollowerTerminal({x:0,y:0},{x:200,y:0}),false,'Center readiness cannot be waived by native healing alone');
+});

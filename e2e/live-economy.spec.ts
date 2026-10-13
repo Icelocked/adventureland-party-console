@@ -206,6 +206,9 @@ test('production journal storage echoes retain the current native attempt owners
   await live.restoreHistoricalSettings(()=>({luckyUpgradeSlots:{[merchant]:30}}));
   await catalog(live,'helmet');
   const before=await economy(live);
+  await live.post('/merchant/force-stand',{enabled:true});
+  const cycleCost=await live.clients[merchant].run('Number(G.items.helmet.g)+3*Number(G.items.scroll0.g)');
+  expect(cycleCost).toBeGreaterThan(0);
   await live.clients[merchant].run(`(()=>{
     const key='party-production:'+character.name,set=Storage.prototype.setItem;
     let older=null;globalThis.__e2eProductionEchoes=0;
@@ -220,6 +223,18 @@ test('production journal storage echoes retain the current native attempt owners
     };return true;
   })()`);
   const order=await live.post('/merchant/order',{buys:[{id:'helmet',quantity:2,level:3}],crafts:[]});
+  let initialAllowance:any;
+  await live.restoreHistoricalSettings(settings=>{
+    if(settings.merchantCurrent?.id===order.jobId)throw Error('Storage echo allowance must precede native order admission');
+    const queued=settings.merchantQueue.find((job:any)=>job.id===order.jobId);
+    if(!queued||queued.resumeState||queued.order?.buys?.length!==1)throw Error('Exact initial storage echo order unavailable');
+    const line=queued.order.buys[0];
+    if(line.id!=='helmet'||line.quantity!==2||line.level!==3)throw Error('Storage echo initial order identity changed');
+    initialAllowance={jobId:queued.id,original:{...line},declaredCycles:10,cycleCost,budget:cycleCost*10};
+    return {merchantQueue:settings.merchantQueue.map((job:any)=>job.id===order.jobId?{...job,order:{...job.order,buys:[{...line,attempts:10,budget:cycleCost*10}]}}:job)};
+  });
+  await info.attach('declared-storage-echo-initial-order-allowance',{body:JSON.stringify(initialAllowance),contentType:'application/json'});
+  await live.post('/merchant/force-stand',{enabled:false});
   await expect.poll(async()=>{
     const state=await live.state();
     return ![state.merchantCurrent,...state.merchantQueue].some((job:any)=>job?.id===order.jobId||job?.commerceOrderId===order.jobId);
@@ -228,6 +243,8 @@ test('production journal storage echoes retain the current native attempt owners
   const after=await economy(live);
   const results=(value:Economy)=>value.characters[merchant].items.filter(item=>item?.name==='helmet'&&item.level===3).length;
   expect(results(after)-results(before)).toBe(2);
+  const nativeSuccesses=(await live.clients[merchant].events()).filter(event=>event.event==='game_response'&&event.data?.response==='upgrade_success');
+  expect(nativeSuccesses.filter(event=>[1,2,3].includes(Number(event.data.level))).length).toBeGreaterThanOrEqual(6);
   const pending=await live.post('/merchant/production',{character:merchant,action:'pending'});
   expect(pending.pending).toEqual([]);
   await restartAndObserve(live);

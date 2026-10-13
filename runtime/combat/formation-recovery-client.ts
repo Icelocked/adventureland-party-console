@@ -11,6 +11,7 @@ interface Ports {
   now():number;self():RecoveryPoint & {name:string;map:string;moving?:boolean;going_x?:number;going_y?:number};
   context():{allowed:boolean;key?:string;target?:string;covered?:boolean};
   smart():NativeSmart;gate():Gate;safe(point:RecoveryPoint):boolean;endpointSafe?(this:void,point:RecoveryPoint):boolean;
+  followGoals?(this:void,goal:RecoveryPoint):RecoveryPoint[];followTerminalValid?(this:void,point:RecoveryPoint,goal:RecoveryPoint):boolean;
   start(goal:RecoveryPoint):unknown;plan():void;stop():void;hold():void;
   segmentClear?(this:void,from:RecoveryPoint,to:RecoveryPoint):boolean;
   approachReady?():boolean; goals?():RecoveryPoint[];
@@ -26,7 +27,7 @@ export function createFormationRecoveryClient(p:Ports) {
   let control:FormationRecovery|undefined, proposal:FormationRecoveryReport|undefined;
   let outcome:FormationRecoveryReport|undefined, route:Route|null=null, seenId='', drawings:Drawing[]=[];
   let movementBlock:string|undefined;
-  let follower:{goal:RecoveryPoint;search:ReturnType<typeof recoveryRoute>;path?:RecoveryPoint[];terminal?:RecoveryPoint}|undefined;
+  let follower:{goal:RecoveryPoint;search:ReturnType<typeof recoveryRoute>;path?:RecoveryPoint[];terminal?:RecoveryPoint;failedAt?:number}|undefined;
   function clearDrawings(){for(const d of drawings)d?.destroy?.();drawings=[];}
   function cancel(){
     follower=undefined;
@@ -121,7 +122,9 @@ export function createFormationRecoveryClient(p:Ports) {
   }
   function activeReport():FormationRecoveryReport {
     return {...(outcome?.attempt===control!.attempt?outcome:undefined),target:control!.target,at:p.now(),ack:control!.id,attempt:control!.attempt,
-      approachReady:p.approachReady?.(),goals:control!.phase==='retry'?p.goals?.():undefined,remaining:route?.remaining};
+      approachReady:p.approachReady?.(),goals:control!.phase==='retry'?p.goals?.():undefined,remaining:route?.remaining,
+      coverageBlocked:movementBlock==='waiting for followers to preserve healing coverage',
+      followerRoute:control!.mover!==p.self().name?followerRoute():undefined};
   }
   function plan(current:Route,s:NativeSmart):void {
     if(!p.segmentClear){p.plan();return;}
@@ -150,23 +153,34 @@ export function createFormationRecoveryClient(p:Ports) {
     position();
     return true;
   }
+  function followerRoute():FormationRecoveryReport['followerRoute']{
+    if(!follower)return;
+    if(follower.failedAt!==undefined)return p.now()-follower.failedAt<1000?'unreachable':'planning';
+    return follower.path?(follower.path.length?'routing':'arrived'):'planning';
+  }
   function followGoals(goal:RecoveryPoint):RecoveryPoint[]{
+    if(p.followGoals)return p.followGoals(goal).filter(point=>terminalValid(point,goal)&&(!p.endpointSafe||p.endpointSafe(point)));
     if(!p.endpointSafe)return [goal];
     // Followers need proximity and healing coverage, not the mover's exact
     // position, which can be inside a different role's monster clearance.
     return [goal,...Array.from({length:16},(_,i)=>({
       x:goal.x+Math.cos(i*Math.PI/8)*39,y:goal.y+Math.sin(i*Math.PI/8)*39}))].filter(p.endpointSafe);
   }
+  function terminalValid(point:RecoveryPoint,goal:RecoveryPoint):boolean{
+    return p.followTerminalValid?p.followTerminalValid(point,goal):Math.hypot(point.x-goal.x,point.y-goal.y)<=40;
+  }
   function followerInvalid(goal:RecoveryPoint):boolean{
-    if(!follower || Math.hypot(goal.x-follower.goal.x,goal.y-follower.goal.y)>40)return true;
+    if(!follower)return true;
+    if(follower.failedAt!==undefined&&p.now()-follower.failedAt>=1000)return true;
     const terminal=follower.terminal;
-    return !!terminal && (Math.hypot(terminal.x-goal.x,terminal.y-goal.y)>40 ||
-      !!p.endpointSafe && !p.endpointSafe(terminal));
+    if(!terminal)return Math.hypot(goal.x-follower.goal.x,goal.y-follower.goal.y)>40;
+    return !terminalValid(terminal,goal)||!!p.endpointSafe&&!p.endpointSafe(terminal);
   }
   function followerPathReady(goal:RecoveryPoint):boolean{
+    if(follower!.failedAt!==undefined)return false;
     if(!follower!.path){
       const result=follower!.search.tick();
-      if(result===null){follower=undefined;return false;}
+      if(result===null){follower!.failedAt=p.now();return false;}
       follower!.path=result;follower!.terminal=result?.at(-1);
     }
     if(followerInvalid(goal)){follower=undefined;return false;}
