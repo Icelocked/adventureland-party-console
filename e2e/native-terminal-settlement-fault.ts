@@ -8,7 +8,7 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
   const context=page.context(),ledger:Record<string,any>[]=[];let owner:any,held:Route|undefined,release:(()=>void)|undefined,holdGate:Promise<void>|undefined;
   const pendingHolds=new Set<Promise<void>>(),samples:Record<string,unknown>[]=[];
   const forwardingErrors:string[]=[];let forwarded=0,acceptedObservations=0;
-  let dropping=false,closed=false,peerReleased:any,receipt:any,nativeIssued:any;
+  let dropping=false,closed=false,peerReleased:any,receipt:any,nativeIssued:any,faultArmedAt:number|undefined,alignedNative:any,nativeAcknowledgement:any,nativeScatter:any;
   const body=(route:Route)=>{try{return route.request().postDataJSON();}catch{return null;}};
   function same(value:any){return owner && ['convoyId','epoch','commandId','navigationRevision','runtimeId','routeVersion'].every(key=>value?.[key]===owner[key]);}
   const status=async(route:Route)=>{
@@ -41,7 +41,7 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
       if(!final){if(ledger.length<128)ledger.push({at:Date.now(),action:'intermediate-leave-not-faulted',actual});await route.fallback();return;}
       const response=await route.fetch({maxRetries:0,maxRedirects:0,timeout:5000}),result=await response.json();
       if(response.ok() && result.ready===true && !owner){
-        owner={...value};nativeIssued=actual;dropping=true;holdGate=new Promise<void>(resolve=>{release=resolve;});
+        owner={...value};nativeIssued=actual;holdGate=new Promise<void>(resolve=>{release=resolve;});
         ledger.push({at:Date.now(),action:'genuine-final-pre-barrier-released-response-delivered',began,owner,response:{status:response.status(),ready:result.ready}});
       }
       await route.fulfill({response});
@@ -68,6 +68,20 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
   return {
     async prove(deadline:number){
       await expect.poll(()=>!!owner&&!!nativeIssued,{timeout:Math.max(1,deadline-Date.now()),message:'Fault must deliver the genuinely released native final leave pre-barrier'}).toBe(true);
+      await expect.poll(async()=>{
+        const sample=await live.clients[W].run(`(()=>{const m=globalThis.__partyMovement,c=character;return {active:m?.report?.(),found:m?.state?.found,moving:m?.state?.moving,remaining:m?.state?.plot?.length,paused:!!globalThis.__partyMovementPaused,native:{map:c.map,in:c.in,x:c.real_x,y:c.real_y,moving:c.moving,rip:c.rip,hp:c.hp}}})()`);
+        if(samples.length<32)samples.push({at:Date.now(),stage:'alignment-before-fault',...sample});
+        const native=sample.native,current=sample.active;
+        if(!pendingHolds.size || !current || current.id!==nativeIssued.report.id || current.progress?.phase!=='barrier' ||
+          !['convoyId','epoch','commandId','navigationRevision','routeVersion'].every(key=>current.owner?.[key]===owner[key]) ||
+          sample.remaining!==1 || sample.paused || native.rip || !(native.hp>0) || native.moving ||
+          native.map!=='main' || String(native.in??native.map)!=='main' || Math.hypot(native.x-owner.destination.x,native.y-owner.destination.y)>1)return false;
+        const events=await live.clients[W].events();
+        const ack=events.filter((event:any)=>event.at>=startedAt&&event.event==='game_response'&&event.data?.success===true&&event.data?.place==='leave').at(-1);
+        if(!ack)return false;
+        alignedNative=sample;nativeAcknowledgement=ack;nativeScatter=events.filter((event:any)=>event.at>=startedAt&&event.event==='new_map'&&event.data?.name==='main').at(-1);faultArmedAt=Date.now();dropping=true;
+        ledger.push({at:faultArmedAt,action:'control-response-loss-armed-after-actual-native-alignment',native:sample.native,acknowledgement:ack,pendingCompletions:pendingHolds.size});return true;
+      },{intervals:[50,100],timeout:Math.max(1,deadline-Date.now()),message:'Only a genuine held completion POST and acknowledged stopped owned native endpoint may arm response loss'}).toBe(true);
       try{
         await expect.poll(async()=>{
           const sample=await live.clients[W].run(`(()=>{const m=globalThis.__partyMovement,c=character;return {active:m?.report?.(),last:m?.last?.(),found:m?.state?.found,moving:m?.state?.moving,remaining:m?.state?.plot?.length,paused:!!globalThis.__partyMovementPaused,native:{map:c.map,in:c.in,x:c.real_x,y:c.real_y,moving:c.moving,rip:c.rip}}})()`);
@@ -88,11 +102,11 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
       expect(issued,'Only one real native leave may be issued during the faulted exit').toHaveLength(1);
       expect(acknowledgements,'Only one actual successful native leave acknowledgement may complete the exit').toHaveLength(1);
       expect(['convoyId','epoch','commandId','navigationRevision','routeVersion'].every(key=>issued[0].data.owner?.[key]===owner[key])).toBe(true);
-      return {startedAt,owner,nativeIssued,receipt,peerReleased,ledger,samples,forwarded,acceptedObservations,forwardingErrors,issued,acknowledgements,nativeEvents};
+      return {startedAt,owner,nativeIssued,faultArmedAt,alignedNative,nativeAcknowledgement,nativeScatter,receipt,peerReleased,ledger,samples,forwarded,acceptedObservations,forwardingErrors,issued,acknowledgements,nativeEvents};
     },
     async finish(){if(!closed){closed=true;dropping=false;release?.();await Promise.allSettled([...pendingHolds]);page.off('response',response);
       await context.unroute('**/party-api/status',status);await context.unroute('**/party-api/movement-barrier',barrier);await context.unroute('**/party-api/convoy-complete',complete);
       await Promise.all(transitionFlags.map(async value=>live.clients[value.name].frame.evaluate(previous=>{(window as any).__e2eObserveTransitions=previous;},value.previous)));}
-      return {owner,nativeIssued,receipt,peerReleased,ledger,samples,forwarded,acceptedObservations,forwardingErrors,pendingHeld:!!held};}
+      return {owner,nativeIssued,faultArmedAt,alignedNative,nativeAcknowledgement,nativeScatter,receipt,peerReleased,ledger,samples,forwarded,acceptedObservations,forwardingErrors,pendingHeld:!!held};}
   };
 }
