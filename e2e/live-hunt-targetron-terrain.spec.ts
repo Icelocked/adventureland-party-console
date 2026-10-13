@@ -8,8 +8,17 @@ test('warrior recovers a blocked Targetron approach in the reported UHills layou
   // Failure inventory: docs/testing-targetron-terrain-recovery.md.
   await live.post('/merchant/force-stand',{enabled:true});
   await live.post('/formation',{leader:W});
+  await live.post('/focus',{monsterFocus:[]});
   // Isolate the declared terrain encounter from randomized roaming spawns.
   await live.admin(`output=(()=>{for(const m of Object.values(instances.uhills.monsters))remove_monster(m,{method:'disappear',nospawn:true});for(let i=monster_respawns.length-1;i>=0;i--)if(monster_respawns[i][0]?.map==='uhills')monster_respawns.splice(i,1);return true;})()`);
+  const setupOwnership:any[]=[];
+  try{
+    await expect.poll(async()=>{
+      const actors=await Promise.all([W,P].map(name=>live.clients[name].run(`(()=>{const r=globalThis,s=r.sharedRoutine,g=r.__partyGroupedCombat;return {name:character.name,focus:s?.getMonsterFocus?.(),target:g?.target?.id||null,independent:r.partyQueueClient?.independent?.report?.()||null};})()`)));
+      setupOwnership.push({at:Date.now(),actors});if(setupOwnership.length>32)setupOwnership.splice(4,1);
+      return actors.every(actor=>Array.isArray(actor.focus)&&actor.focus.length===0&&!actor.target&&!actor.independent);
+    },{timeout:15000,message:'Native CODE must retire ambient targeting before the declared Priest placement'}).toBe(true);
+  }finally{await info.attach('targetron-native-setup-ownership',{body:JSON.stringify(setupOwnership),contentType:'application/json'});}
   const geometry=await live.clients[W].run(`(()=>{
     const origin={x:character.real_x,y:character.real_y},points=[];
     for(const radius of [0,32,64,96,128])for(let i=0;i<(radius?16:1);i++){

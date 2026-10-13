@@ -17,7 +17,7 @@ for(const scene of [{monster:'sparkbot',wallRange:false},{monster:'goo',wallRang
  test(queue?'planned roaming Goo advances two queued targets with fresh native confirmation':scene.wallRange?'planned Goo ranged fighters confirm native range through a blocked terrain ray':monster==='sparkbot'?'planned Sparkbot approach independently routes each fighter into native attack range':'planned Goo approach holds every fighter until fresh native range confirmation',async({live},info)=>{
  test.setTimeout(240000);
  await live.post('/merchant/force-stand',{enabled:true});await live.post('/focus',{monsterFocus:[]});
- const samples:any[]=[],configured:any[]=[],events:Record<string,any[]>={};let seed:any,transport:Awaited<ReturnType<typeof observeNativeTransport>>|undefined;
+ const samples:any[]=[],configured:any[]=[],events:Record<string,any[]>={};let seed:any,releasedAt:number|undefined,transport:Awaited<ReturnType<typeof observeNativeTransport>>|undefined;
  await live.admin(`output=(()=>{
   globalThis.__e2eFollowRespawns=[];
   for(let i=monster_respawns.length-1;i>=0;i--)if(monster_respawns[i][0]?.map==='uhills')__e2eFollowRespawns.push(monster_respawns.splice(i,1)[0]);
@@ -54,11 +54,15 @@ for(const scene of [{monster:'sparkbot',wallRange:false},{monster:'goo',wallRang
    await info.attach('native-independent-wall-range-precondition',{body:JSON.stringify(geometry),contentType:'application/json'});
    expect(geometry.every(v=>v.inRange&&!v.sight),'Actual casters must be in native attack range while terrain blocks movement to the monster').toBe(true);
   }
-  await expect.poll(async()=>Promise.all(fighters.map(name=>live.clients[name].run(`globalThis.__partyGroupedCombat?.target?.id===${JSON.stringify(seed.id)}&&!!globalThis.__partyGroupedCombat?.selection`))),{timeout:15000}).toEqual([true,true,true]);
+  await expect.poll(async()=>{
+   const roles=await Promise.all(fighters.map(name=>live.clients[name].run(`(()=>{const g=globalThis.__partyGroupedCombat,n=globalThis.__partyNomination,e=parent.entities[${JSON.stringify(seed.id)}],h=globalThis.__partyConsoleMaintenance;return {name:character.name,selected:g?.target?.id===${JSON.stringify(seed.id)}&&!!g?.selection,group:{selection:g?.selection,target:g?.target,committed:g?.committed,independent:g?.independentApproach,reason:g?.reason,members:g?.members},nomination:n&&{focus:n.focus,blocked:n.blocked,eligible:n.eligible,rejected:n.rejected,revision:n.revision},entity:e&&{id:e.id,map:e.map,in:e.in,x:e.real_x??e.x,y:e.real_y??e.y,hp:e.hp,visible:e.visible,dead:e.dead,moving:e.moving,target:e.target},hold:h&&{id:h.id,mode:h.mode,phase:h.phase},socket:parent.socket?.connected};})()`)));
+   configured.push({at:Date.now(),phase:'held-selection',roles});if(configured.length>32)configured.splice(4,1);
+   return roles.map(r=>r.selected);
+  },{timeout:15000}).toEqual([true,true,true]);
   if(queue)seed.successors=await live.admin(`output=(()=>{const primary=instances.uhills.monsters[${JSON.stringify(seed.id)}];if(!primary)throw Error('Declared primary disappeared before successor seeding');const successors=[];for(const dx of [-24,-48]){const x=primary.x+dx,y=primary.y;if(!can_move({map:primary.map,x,y,going_x:x,going_y:y,base:primary.base}))throw Error('Queued native Goo spawn region is not clear');const next=new_monster('uhills',{type:'goo',count:1,position:[x,y],radius:40},{temp:1});next.hp=next.max_hp=10000000;next.u=true;next.abs=true;next.cid++;if(!can_move({...next,going_x:next.x,going_y:next.y}))throw Error('Actual roaming successor spawn is not native-clear');successors.push({id:String(next.id),x:next.x,y:next.y});}return successors;})()`);
   if(queue){expect(seed.aggro||0).toBe(0);expect(seed.speed).toBeGreaterThan(0);}
   if(monster==='sparkbot')transport=await observeNativeTransport(live.clients[W].page);
-  live.consoleDrainLease(null);
+  releasedAt=Date.now();live.consoleDrainLease(null);
   await expect.poll(async()=>{const state=await live.state();return fighters.every(name=>!state.characters[name]?.consoleMaintenance);},{timeout:15000,message:'The actual ordered host lease release must reach all fighters'}).toBe(true);
   await expect.poll(async()=>{
    const state=await live.state();samples.push({at:Date.now(),roles:fighters.map(name=>({name,x:state.characters[name]?.x,y:state.characters[name]?.y,position:state.characters[name]?.combat?.positioning,recovery:state.characters[name]?.groupedCombat?.formationRecovery}))});
@@ -107,7 +111,7 @@ for(const scene of [{monster:'sparkbot',wallRange:false},{monster:'goo',wallRang
  }finally{
   if(transport)await info.attach('native-sparkbot-http-transport',{body:JSON.stringify(await transport.finish()),contentType:'application/json'});
   live.consoleDrainLease(null);
-  await info.attach('native-sparkbot-follow-result',{body:JSON.stringify({seed,configured,samples,events}),contentType:'application/json'});
+  await info.attach('native-sparkbot-follow-result',{body:JSON.stringify({seed,releasedAt,configured,samples,events}),contentType:'application/json'});
   for(const name of fighters)await live.clients[name].frame.evaluate(()=>{(window as any).__e2eObserveMoves=false;}).catch(()=>{});
   await live.admin(`output=(()=>{if(globalThis.__e2eFollowOriginal)G.monsters[${JSON.stringify(monster)}]=__e2eFollowOriginal;monster_respawns.push(...(__e2eFollowRespawns||[]));return true;})()`);
  }

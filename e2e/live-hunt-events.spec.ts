@@ -142,28 +142,41 @@ for(const type of ['phoenix','goldenbat','cutebee','hen','rooster','tinyp']) tes
     await info.attach('native-rare-chest-opened',{body:JSON.stringify({spawn,loot}),contentType:'application/json'});
     const afterRare=await world(live);
     expect(afterRare.players[W].xp).toBeGreaterThan(before.players[W].xp);
-    const resumedDeadline=Date.now()+90_000;
+    const resumedAt=Date.now(),resumedDeadline=resumedAt+90_000;
+    let existingProgress:any=null;
     {
       await expect.poll(async()=>{
         const current=await world(live),state=await live.state(),mission=state.monsterHunt?.missions?.[state.monsterHunt.currentIndex],bounds=mission?.destination?.boundary,p=current.players[W];
-        return state.monsterHunt?.cycleId===hunt.cycleId&&state.monsterHunt.stage==='farming'&&Array.isArray(bounds)&&
-          p.map===mission.destination.map&&p.x>=bounds[0]&&p.x<=bounds[2]&&p.y>=bounds[1]&&p.y<=bounds[3];
-      },{timeout:Math.max(1,resumedDeadline-Date.now()),message:'The actual retained Hunt mission must be reached after rare loot before its next native encounter'}).toBe(true);
-      const missionState=await live.state(),destination=missionState.monsterHunt.missions[missionState.monsterHunt.currentIndex].destination;
-      const nextEncounter=await live.admin(`output=(()=>{const p=get_player(${JSON.stringify(W)}),destination=${JSON.stringify(destination)},bounds=destination.boundary;
-        if(!p||p.map!==destination.map||p.x<bounds[0]||p.x>bounds[2]||p.y<bounds[1]||p.y>bounds[3])throw Error('Native fighter left retained Goo mission');
-        const ambient=Object.values(instances[p.in].monsters||{}).filter(m=>m.type==='goo'&&m.hp>0&&m.x>=bounds[0]&&m.x<=bounds[2]&&m.y>=bounds[1]&&m.y<=bounds[3])
-          .map(m=>({id:String(m.id),map:m.map,in:m.in,x:m.x,y:m.y,hp:m.hp,distance:Math.hypot(m.x-p.x,m.y-p.y),reachable:can_move({map:p.map,x:p.x,y:p.y,going_x:m.x,going_y:m.y,base:p.base})}));
-        const existing=ambient.sort((a,b)=>a.distance-b.distance)[0];
-        if(existing)return {...existing,source:'existing-native',ambient,destination};
-        for(const [dx,dy] of [[35,0],[-35,0],[0,35],[0,-35]]){const x=p.x+dx,y=p.y+dy;
-          if(x<bounds[0]||x>bounds[2]||y<bounds[1]||y>bounds[3]||!can_move({map:p.map,x:p.x,y:p.y,going_x:x,going_y:y,base:p.base}))continue;
-          const m=new_monster(p.in,{type:'goo',position:[x,y],radius:0,count:1},{temp:1});m.e2eHunt=true;
-          return {id:String(m.id),map:m.map,x:m.x,y:m.y,hp:m.hp,source:'declared-native',ambient,destination};}
-        throw Error('No reachable native encounter point inside retained Goo mission');})()`);
-      await info.attach('native-rare-followup-mission-encounter',{body:JSON.stringify({type,nextEncounter}),contentType:'application/json'});
-      const missionKill=await killedByParty(live,nextEncounter.id,Math.max(1,Math.min(45_000,resumedDeadline-Date.now())));
-      await info.attach('native-rare-followup-mission-kill',{body:JSON.stringify(missionKill),contentType:'application/json'});
+        if(state.monsterHunt?.cycleId!==hunt.cycleId||state.monsterHunt.stage!=='farming')return false;
+        if(p.quest?.id==='goo'&&p.quest.c<afterRare.players[W].quest.c){
+          const events=(await Promise.all([W,P].map(name=>live.clients[name].events()))).flat();
+          const hit=events.find((event:any)=>event.at>=resumedAt&&event.event==='hit'&&event.data?.kill===true&&
+            event.data?.damage>0&&[W,P].includes(event.data?.hid)&&events.some((death:any)=>death.at>=event.at&&
+              death.event==='death'&&String(death.data?.id)===String(event.data.id)));
+          if(hit){existingProgress={source:'existing-native-progress',huntCycleId:hunt.cycleId,baseline:afterRare.players[W].quest,
+            quest:p.quest,hit,death:events.find((event:any)=>event.at>=hit.at&&event.event==='death'&&String(event.data?.id)===String(hit.data.id))};return true;}
+        }
+        return Array.isArray(bounds)&&p.map===mission.destination.map&&p.x>=bounds[0]&&p.x<=bounds[2]&&p.y>=bounds[1]&&p.y<=bounds[3];
+      },{timeout:Math.max(1,resumedDeadline-Date.now()),message:'The retained Hunt must produce real native progress or reach its next encounter habitat'}).toBe(true);
+      if(existingProgress){
+        await info.attach('native-rare-followup-existing-progress',{body:JSON.stringify({type,...existingProgress}),contentType:'application/json'});
+      } else {
+        const missionState=await live.state(),destination=missionState.monsterHunt.missions[missionState.monsterHunt.currentIndex].destination;
+        const nextEncounter=await live.admin(`output=(()=>{const p=get_player(${JSON.stringify(W)}),destination=${JSON.stringify(destination)},bounds=destination.boundary;
+          if(!p||p.map!==destination.map||p.x<bounds[0]||p.x>bounds[2]||p.y<bounds[1]||p.y>bounds[3])throw Error('Native fighter left retained Goo mission');
+          const ambient=Object.values(instances[p.in].monsters||{}).filter(m=>m.type==='goo'&&m.hp>0&&m.x>=bounds[0]&&m.x<=bounds[2]&&m.y>=bounds[1]&&m.y<=bounds[3])
+            .map(m=>({id:String(m.id),map:m.map,in:m.in,x:m.x,y:m.y,hp:m.hp,distance:Math.hypot(m.x-p.x,m.y-p.y),reachable:can_move({map:p.map,x:p.x,y:p.y,going_x:m.x,going_y:m.y,base:p.base})}));
+          const existing=ambient.sort((a,b)=>a.distance-b.distance)[0];
+          if(existing)return {...existing,source:'existing-native',ambient,destination};
+          for(const [dx,dy] of [[35,0],[-35,0],[0,35],[0,-35]]){const x=p.x+dx,y=p.y+dy;
+            if(x<bounds[0]||x>bounds[2]||y<bounds[1]||y>bounds[3]||!can_move({map:p.map,x:p.x,y:p.y,going_x:x,going_y:y,base:p.base}))continue;
+            const m=new_monster(p.in,{type:'goo',position:[x,y],radius:0,count:1},{temp:1});m.e2eHunt=true;
+            return {id:String(m.id),map:m.map,x:m.x,y:m.y,hp:m.hp,source:'declared-native',ambient,destination};}
+          throw Error('No reachable native encounter point inside retained Goo mission');})()`);
+        await info.attach('native-rare-followup-mission-encounter',{body:JSON.stringify({type,nextEncounter}),contentType:'application/json'});
+        const missionKill=await killedByParty(live,nextEncounter.id,Math.max(1,Math.min(45_000,resumedDeadline-Date.now())));
+        await info.attach('native-rare-followup-mission-kill',{body:JSON.stringify(missionKill),contentType:'application/json'});
+      }
     }
     await expect.poll(async()=>(await world(live)).players[W].quest?.c,{timeout:Math.max(1,resumedDeadline-Date.now())}).toBeLessThan(afterRare.players[W].quest.c);
     await info.attach('native-rare-hunt-resumed',{body:JSON.stringify({hunt,spawn,before,afterRare,final:await world(live),state:await live.state()}),contentType:'application/json'});
