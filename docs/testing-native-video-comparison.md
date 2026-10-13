@@ -1,0 +1,5 @@
+# Native video comparison failure inventory
+
+Before editing: ordinary focused run 38351877535 left Green without reaching the saved checkpoint inside the unchanged 150-second bound; Follow Pumpkin passed. Actual wire delivery was prompt while renderer notification lag reached 1.86/2.83 seconds. Weighted V8 samples spent 72/74 percent in `(program)`, which does not identify video, GPU, or another native workload.
+
+Risks: disabling recording could hide useful visual evidence, change unrelated test coverage, accidentally alter native physics, or be mistaken for proof of a performance fix. The experiment therefore disables only Playwright context video for the exact two ordinary handoff titles. Defaults remain recording; traces, screenshots, native events, CPU profiles, status observations, deadlines and game inputs remain unchanged. A recording-policy attachment makes the selected condition verifiable. Compare both outcomes and notification lag/profile distributions against the retained baseline before choosing any general policy.
