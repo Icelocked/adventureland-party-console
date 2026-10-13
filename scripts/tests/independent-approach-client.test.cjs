@@ -35,3 +35,17 @@ test('blocked sightline inside weapon range reports active approach for existing
 
 test('early native-ready actor holds position while another participant has not committed readiness',()=>{const f=fixture();f.ready=true;assert.equal(f.client.tick(),true);assert.equal(f.routes.length,0);assert.equal(f.client.report().phase,'ready');assert.equal(f.client.readiness().ready,true);f.ctx.committed=true;assert.equal(f.client.tick(),false);assert.equal(f.routes.length,0);});
 test('readiness rejects stale ownership and changed selected target',()=>{const f=fixture();f.client.tick();f.ready=true;f.ctx.selection='s2';f.ctx.key='new-selection';assert.equal(f.client.readiness().ready,false);f.ctx.allowed=false;assert.equal(f.client.readiness(),undefined);});
+
+function snapshotPorts(){
+ const source=fs.readFileSync('characters/shared.js','utf8'),start=source.indexOf('  function independentApproachOwnsJourney()'),end=source.indexOf('  function formationMove(',start);
+ let entity=null;const moves=[];
+ const c=vm.createContext({Date,character:{name:'M',ctype:'mage',x:0,y:0,real_x:0,real_y:0,range:200,map:'uhills',in:'uhills',rip:false,base:{h:8,v:7,vn:2}},navigationIntent:{cancelled:false,revision:1},coordinatorClockOffset:0,
+  groupedCombat:{independentApproach:true,key:'runtime',selection:'s1',committed:false,target:{id:'boss',x:400,y:0,map:'uhills',in:'uhills',server:'USII',state:'planned'}},partyConvoyActive:false,convoyTraveling:null,eventTraveling:false,joinedEvent:null,
+  groupedFarming:()=>true,groupedFresh:()=>true,dungeonOwned:()=>false,runtimeCurrent:()=>true,consoleMovementPaused:()=>false,reunionRealm:()=> 'USII',isAttackingPartyMember:()=>false,
+  parent:{socket:{connected:true},entities:{}},get_entity:()=>entity,is_in_range:e=>Math.hypot(e.x-c.character.real_x,e.y-c.character.real_y)<=c.character.range,can_move_to:()=>true,can_move:()=>true,
+  combatApproachPoint:(e,r)=>({x:e.x-r,y:e.y}),cancelGroupRoute:()=>{},cancelFightRoute:()=>{},cancelFarmApproach:()=>{},resetCombatMovement:()=>{},movement:{report:()=>null,move:(goal,callback,options)=>{moves.push({goal,options});return Promise.resolve();}},
+  root:{sharedRoutine:{isOccupied:()=>false},partyRoleRunner:{isKnownDead:()=>false}}});
+ vm.runInContext(source.slice(start,end),c);return {c,moves,ports:c.independentApproachPorts(),set entity(v){entity=v;}};
+}
+test('fresh owned invisible target snapshot routes natively but cannot advertise readiness',async()=>{const f=snapshotPorts(),ctx=f.ports.context();assert.equal(ctx.allowed,true);assert.equal(f.ports.ready(),false);const goal=f.ports.goal(ctx.point,ctx.radius);await f.ports.start(goal,'combat-approach:snapshot');assert.equal(f.moves.length,1);assert.equal(f.moves[0].options.native,true);assert.equal(f.moves[0].goal.map,'uhills');assert.equal(f.moves[0].goal.in,'uhills');assert.equal(f.ports.ready(),false);f.entity={id:'boss',x:400,y:0,visible:true,dead:false,hp:100};f.c.character.real_x=203;assert.equal(f.ports.ready(),true);});
+test('snapshot routing preserves stale realm instance death and manual fences',()=>{for(const change of [f=>f.c.groupedFresh=()=>false,f=>f.c.groupedCombat.target.server='EU',f=>f.c.groupedCombat.target.in='other',f=>f.c.root.partyRoleRunner.isKnownDead=()=>true,f=>f.c.navigationIntent.cancelled=true]){const f=snapshotPorts();change(f);assert.ok(!f.ports.context()?.allowed);assert.equal(f.ports.ready(),false);}});

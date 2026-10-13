@@ -16032,12 +16032,15 @@
     function context() {
       var coordinated=!!(groupedFarming() && groupedFresh() && groupedCombat.independentApproach);
       var local=independentApproachReference && Date.now()-independentApproachReference.at<=1500 ? independentApproachReference.target:null;
-      var t=coordinated?groupedCombat.target:local,e=t && get_entity(t.id);
-      if(!t || !e)return null;
+      var t=coordinated?groupedCombat.target:local,observed=t && get_entity(t.id);
+      if(!t || !coordinated && (!observed || !observed.visible))return null;
+      var e=observed && observed.visible?observed:t;
+      var knownDead=root.partyRoleRunner && typeof root.partyRoleRunner.isKnownDead==='function' && root.partyRoleRunner.isKnownDead(t.id);
       var route=movement.report(),foreignOwned=route && route.owner && !independentApproachOwnsJourney();
       var allowed=!!(!foreignOwned && !partyConvoyActive && !convoyTraveling && !root.sharedRoutine.isOccupied() && (coordinated || !groupedFarming()) && runtimeCurrent() && (!parent.socket || parent.socket.connected!==false) && !dungeonOwned() && !eventTraveling && character.ctype!=='merchant' &&
         !navigationIntent.cancelled && !character.rip && !consoleMovementPaused() && !root.__partyMovementPaused &&
-        e.visible && !e.dead && e.hp>0 && (!coordinated || t.map===character.map && t.in===character.in && t.server===reunionRealm()) &&
+        !knownDead && (!observed || !observed.dead && !(Number(observed.hp)<=0)) && Number.isFinite(e.x) && Number.isFinite(e.y) &&
+        (coordinated || e.visible && !e.dead && e.hp>0) && (!coordinated || t.map===character.map && t.in===character.in && t.server===reunionRealm()) &&
         !Object.values(parent.entities||{}).some(function(other){return other && other.type==='monster' && !other.dead &&
           (other.target===character.name || other.id!==e.id && isAttackingPartyMember(other));}));
       return {allowed:allowed,planned:coordinated?t.state==='planned':true,selection:coordinated?groupedCombat.selection:undefined,committed:coordinated?!!groupedCombat.committed:true,target:String(t.id),
@@ -16045,9 +16048,10 @@
     }
     return {
       context:context,now:function(){return Date.now()+coordinatorClockOffset;},
-      ready:function(){var c=context(),e=c && get_entity(c.target);return !!(e && is_in_range(e) && can_move_to(e.x,e.y));},
+      ready:function(){var c=context(),e=c && get_entity(c.target);return !!(c && c.allowed && e && e.visible && !e.dead && e.hp>0 && is_in_range(e) && can_move_to(e.x,e.y));},
       goal:function(point,radius){
-        var c=context(),e=c && get_entity(c.target);if(!e)return null;
+        var c=context(),observed=c && get_entity(c.target),e=observed && observed.visible?observed:groupedCombat && groupedCombat.target;
+        if(!c || !c.allowed || !e || String(e.id)!==c.target)return null;
         var first=combatApproachPoint(e,radius),angle=Math.atan2(first.y-e.y,first.x-e.x),reach=Math.hypot(first.x-e.x,first.y-e.y),goals=[];
         for(var i=0;i<16;i++){var a=angle+i*Math.PI/8,p={x:e.x+Math.cos(a)*reach,y:e.y+Math.sin(a)*reach};
           if(can_move({map:character.map,x:p.x,y:p.y,going_x:p.x,going_y:p.y,base:character.base}))goals.push(p);}
