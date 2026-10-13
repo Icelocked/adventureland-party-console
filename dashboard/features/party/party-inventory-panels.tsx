@@ -32,6 +32,7 @@ const BankSheet = lazy(() =>
   import("./bank-sheet").then((module) => ({ default: module.BankSheet })),
 );
 import { same } from "./same";
+import { copyText } from "./copy-text";
 import { bankSaleCopies } from "./bank-sale-copies";
 const StandSheet = lazy(() =>
   import("./stand-sheet").then((module) => ({ default: module.StandSheet })),
@@ -512,7 +513,11 @@ function PartyInventoryPanelsConnected({ base }: { base: PartyConsoleModel }) {
                 size="icon"
                 variant="outline"
                 disabled={!aldataKey}
-                onClick={() => void navigator.clipboard.writeText(aldataKey)}
+                onClick={() => void copyText(aldataKey).then(copied => {
+                  if (copied) return;
+                  setALDataKeyVisible(true);
+                  setActionError("Copy failed; the key is shown so you can copy it manually.");
+                })}
                 aria-label="Copy key"
                 className="border-slate-500 bg-black text-slate-100 hover:bg-slate-800 hover:text-white"
               >
