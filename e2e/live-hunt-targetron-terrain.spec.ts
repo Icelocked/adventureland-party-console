@@ -37,6 +37,7 @@ test('warrior recovers a blocked Targetron approach in the reported UHills layou
   await live.post('/focus',{monsterFocus:['targetron'],monsterPriorities:{targetron:999},monsterSearchRadius:600});
   await live.post('/farming-mode',{character:W,mode:'default'});
   await live.post('/checkpoint',{});
+  await live.clients[W].run('parent.__e2eObserveMoves=true;parent.__e2eObservedMoveCount=0');
   const seed=await live.admin(`output=(()=>{const original=G.monsters.targetron;try{
     globalThis.__e2eWarriorTargetronOriginal=original;
     if(!original)throw Error('Native Targetron catalog missing');
@@ -60,9 +61,17 @@ test('warrior recovers a blocked Targetron approach in the reported UHills layou
           can_move({map:character.map,x:character.real_x,y:character.real_y,going_x:d.x,going_y:d.y,base:character.base}):null;})()};})()`));
       return (await live.clients[W].events()).some((event:any)=>event.event==='hit'&&String(event.data?.id)===seed.id&&event.data?.hid===W&&event.data?.source!=='taunt'&&event.data?.damage>1);
     },{timeout:60000,intervals:[100,250],message:'The warrior must recover around native UHills terrain and damage Targetron'}).toBe(true);
-    const combatMoves=samples.filter(sample=>sample.positioning?.movementOwner==='combat'&&sample.positioning?.target===seed.id&&sample.positioning?.destination);
-    expect(combatMoves.length,'Recovery must issue combat-owned movement to the actual Targetron').toBeGreaterThan(0);
-    expect(combatMoves.every(sample=>sample.segmentClear),'Every observed combat segment must clear native terrain').toBe(true);
+    const nativeMoves=await live.clients[W].events();
+    const firstOwnedDamage=nativeMoves.find(event=>event.event==='hit'&&String(event.data?.id)===seed.id&&event.data?.hid===W&&event.data?.source!=='taunt'&&event.data?.damage>1);
+    expect(firstOwnedDamage,'Owned route evidence must precede actual native damage').toBeTruthy();
+    const combatMoves=nativeMoves.filter(event=>{const p=event.motion?.position,r=event.motion?.independentRoute,d=event.data;
+      return event.event==='move-issued'&&event.at<=firstOwnedDamage!.at&&p?.target===seed.id&&
+        (p.movementOwner==='combat'||p.mode==='independent-approach'&&p.movementOwner==='combat-approach'&&p.approachId&&r?.id===p.approachId&&r.target===seed.id)&&
+        Number.isFinite(d?.x)&&Number.isFinite(d?.y)&&Number.isFinite(d?.going_x)&&Number.isFinite(d?.going_y)&&Math.hypot(d.going_x-d.x,d.going_y-d.y)>1;
+    });
+    await info.attach('native-owned-combat-route',{body:JSON.stringify({target:seed.id,firstDamage:firstOwnedDamage,combatMoves}),contentType:'application/json'});
+    expect(combatMoves.length,'Actual native packets must show matching owned combat movement').toBeGreaterThan(0);
+    expect(combatMoves.every(event=>event.motion?.clear===true),'Every observed native combat segment must clear terrain').toBe(true);
     const dx=seed.x-geometry.origin.x,dy=seed.y-geometry.origin.y,length=Math.hypot(dx,dy);
     const nativeEvents=await live.clients[W].events(),firstDamage=nativeEvents.find(event=>event.event==='hit'&&String(event.data?.id)===seed.id&&event.data?.hid===W&&event.data?.source!=='taunt'&&event.data?.damage>1);
     expect(firstDamage,'The native bend window must end at the actual first attack damage receipt').toBeTruthy();
@@ -71,6 +80,7 @@ test('warrior recovers a blocked Targetron approach in the reported UHills layou
       'Actual native movement must bend around the originally blocked direct bearing').toBe(true);
     expect(await live.clients[W].run('character.rip')).toBeFalsy();
   }finally{
+    await live.clients[W].run('parent.__e2eObserveMoves=false');
     try{
       await evidence(live,info,'targetron-native-terrain-combat-recovery',{geometry,seed,samples,
         hits:(await live.clients[W].events()).filter((event:any)=>event.event==='hit'&&String(event.data?.id)===seed.id&&event.data?.hid===W)});

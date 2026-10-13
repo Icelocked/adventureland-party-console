@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Verify terrain recovery against actual native movement segments and independent approach ownership, preserving strict movement and attack timing checks.
+
 - Identify the exact native Cave farewell encounter in stairs regression tests, so a different encounter with the same title cannot start the continuation deadline early.
 
 - Make native queued-target regression scenarios introduce successors during a confirmed fight, preserving real movement and fresh-confirmation checks without assuming pre-fight target rankings stay fixed.

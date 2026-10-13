@@ -30,9 +30,12 @@ for(const primaryClass of ['warrior','mage'] as const){
             if(target.firstDisplacementAt===undefined&&displacement>1)target.firstDisplacementAt=at;
             if(target.firstIntentAt===undefined&&position?.destination)target.firstIntentAt=at;
             if(target.movedAt===undefined&&displacement>8)target.movedAt=at;
+            const journey=globalThis.__partyMovement?.report?.(),independent=position?.mode==='independent-approach'&&position?.movementOwner==='combat-approach'&&position?.approachId&&journey?.owner?.recoveryStage===position.approachId;
+            const segment=character.moving&&Number.isFinite(character.going_x)&&Number.isFinite(character.going_y)?{x:character.going_x,y:character.going_y}:null;
+            const clear=segment?can_move({map:character.map,x:character.real_x,y:character.real_y,going_x:segment.x,going_y:segment.y,base:character.base}):null;
             const status=globalThis.partyQueueClient?.formation?.approachStatus?.(),key=JSON.stringify([id,position?.mode,status,position?.intent,position?.movementOwner,position?.destination]);
             if(state.samples.length<100&&(key!==state.lastKey||gap>100||displacement>1&&target.firstDisplacementAt===at||target.movedAt===at))
-              state.samples.push({at,gap,target:id,x:character.real_x,y:character.real_y,displacement,status,position:{...position,destination:position?.destination?{...position.destination}:undefined}});
+              state.samples.push({at,gap,target:id,independent,segment,clear,x:character.real_x,y:character.real_y,displacement,status,position:{...position,destination:position?.destination?{...position.destination}:undefined}});
             state.lastKey=key;};
           state.timer=setInterval(observe,25);globalThis.__e2eCombatRecoveryTiming=state;observe();return true;
         })()`)));
@@ -46,9 +49,6 @@ for(const primaryClass of ['warrior','mage'] as const){
           for(const name of [W,P])samples.push(await live.clients[name].run(`(()=>{const p=globalThis.partyCombatPosition,d=p?.destination;return {name:character.name,at:Date.now(),x:character.real_x,y:character.real_y,routeState:globalThis.partyQueueClient?.formation?.approachStatus?.(),positioning:p,clear:d?can_move({map:character.map,x:character.real_x,y:character.real_y,going_x:d.x,going_y:d.y,base:character.base}):null};})()`));
           return Promise.all([W,P].map(async name=>(await live.clients[name].events()).some((e:any)=>e.event==='hit'&&String(e.data?.id)===seed.id&&e.data?.hid===name&&e.data?.damage>1)));
         },{timeout:45000,intervals:[100,250],message:'Both native fighters must round the corridor and attack'}).toEqual([true,true]);
-        const routed=samples.filter(s=>s.positioning?.movementOwner==='combat'&&s.positioning?.target===seed.id&&s.positioning?.destination);
-        expect(routed.length).toBeGreaterThan(0);
-        expect(routed.every(s=>s.clear),'Every observed combat segment must clear native terrain').toBe(true);
         for(const name of [W,P]){
           const timing=await live.clients[name].run(`(()=>{const s=globalThis.__e2eCombatRecoveryTiming;return {name:s.name,origin:s.origin,targets:s.targets,cadence:s.cadence,samples:s.samples};})()`);
           timings.push(timing);
@@ -61,6 +61,9 @@ for(const primaryClass of ['warrior','mage'] as const){
           expect(observed.movedAt-observed.acquiredAt,'Combat recovery must begin promptly after target acquisition').toBeLessThan(3500);
           expect(observed.movedAt-seed.at,'Target acquisition and recovery must stay bounded').toBeLessThan(6000);
         }
+        const routed=timings.flatMap(t=>t.samples).filter(s=>s.target===seed.id&&s.segment&&(s.independent===true||s.position?.movementOwner==='combat'));
+        expect(routed.length).toBeGreaterThan(0);
+        expect(routed.every(s=>s.clear===true),'Every observed owned native combat segment must clear terrain').toBe(true);
         expect(samples.some(s=>Math.abs(s.x-origin.x)>60),'Combat recovery must turn away from the blocked direct bearing').toBe(true);
         for(const name of [W,P])expect(await live.clients[name].run('character.rip')).toBeFalsy();
       }finally{
