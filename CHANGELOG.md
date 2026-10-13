@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Give native event-return tests a separate bounded recovery window after their deliberate CODE replacement, with retained reload and arrival timestamps.
+
 - Verify terrain recovery against actual native movement segments and independent approach ownership, preserving strict movement and attack timing checks.
 
 - Identify the exact native Cave farewell encounter in stairs regression tests, so a different encounter with the same title cannot start the continuation deadline early.

@@ -291,7 +291,10 @@ for (const original of [{ id: 'mrgreen' }, { id: 'mrpumpkin' }]) {
         return native.players[W] && !native.players[W].rip && native.players[W].map === encounter.map && state.characters[W]?.joinedEvent === encounter.id && reentryHit;
       }, { timeout: 180_000, message: 'Native death must preserve event reentry instead of losing the saved activity' }).toBe(true);
       await info.attach('native-halloween-death-and-reentry', { body: JSON.stringify({ death, native: await world(live, encounter.id), coordinator: await live.state() }), contentType: 'application/json' });
-      const returnDeadline = Date.now() + (encounter.id === 'mrgreen' ? 240_000 : 180_000);
+      const returnPhases:{deselectedAt:number;replacementRequestedAt?:number;replacementAcknowledgedAt?:number;recoveryStartedAt:number;recoveryDeadline:number;arrivalObservedAt?:number}={
+        deselectedAt:Date.now(),recoveryStartedAt:Date.now(),recoveryDeadline:0};
+      let returnDeadline = returnPhases.deselectedAt + (encounter.id === 'mrgreen' ? 240_000 : 180_000);
+      returnPhases.recoveryDeadline=returnDeadline;
       await live.post('/formation', { character: W, eventSelections: [] });
       if (encounter.id === 'mrgreen') {
         let before:any, after:any;
@@ -308,6 +311,7 @@ for (const original of [{ id: 'mrgreen' }, { id: 'mrpumpkin' }]) {
               warrior.lastCommandId<=parent.command.id||warrior?.movement?.progress?.phase!=='walking')return false;
             before=state;return true;
           },{timeout:90_000,message:'Turn over CODE only during the actual owned event-exit child walk'}).toBe(true);
+          returnPhases.replacementRequestedAt=Date.now();
           await live.clients[W].frame.evaluate(()=>{
             const game=window as any,runner=(document.getElementById('maincode') as HTMLIFrameElement).contentWindow as any;
             game.start_runner('maincode',`$.getScript(${JSON.stringify(runner.__partyServer+'/CODE/adventure_land/universal-loader.js')});`);
@@ -320,17 +324,27 @@ for (const original of [{ id: 'mrgreen' }, { id: 'mrpumpkin' }]) {
             const original=before.eventReturn;
             expect(state.eventReturn?.cycleId).toBe(original.cycleId);
             for(const name of fighters)expect(state.eventReturn?.waypoints[name].revision).toBe(original.waypoints[name].revision);
-            after=state;return true;
+            after=state;returnPhases.replacementAcknowledgedAt=Date.now();return true;
           },{timeout:30_000,message:'A fresh replacement CODE runtime must retain the original event-return owner'}).toBe(true);
+          returnPhases.recoveryStartedAt=returnPhases.replacementAcknowledgedAt!;
+          returnDeadline=returnPhases.recoveryDeadline=returnPhases.recoveryStartedAt+240_000;
         } finally {
-          await info.attach('native-green-exit-code-turnover',{body:JSON.stringify({before,after,observations,native:await world(live,encounter.id)}),contentType:'application/json'});
+          await info.attach('native-green-exit-code-turnover',{body:JSON.stringify({before,after,observations,phases:returnPhases,native:await world(live,encounter.id)}),contentType:'application/json'});
         }
       }
       await expect.poll(async () => {
         const native = await world(live, encounter.id);
         return fighters.every(name => native.players[name] && native.players[name].map === encounter.map && Math.hypot(native.players[name].x - (encounter.x + 160), native.players[name].y - encounter.y) < 100);
       }, { timeout: Math.max(1,returnDeadline-Date.now()), message: 'Deselection must return both actual clients to their saved pre-event checkpoint' }).toBe(true);
-      await info.attach('halloween-saved-checkpoint-return', { body: JSON.stringify({ native: await world(live, encounter.id), coordinator: await live.state() }), contentType: 'application/json' });
+      returnPhases.arrivalObservedAt=Date.now();
+      const nativeArrivalReceipts=await Promise.all(fighters.map(async name=>{
+        const events=await live.clients[name].events(),main=events.filter((event:any)=>event.event==='new_map'&&
+          event.at>=returnPhases.recoveryStartedAt&&event.data?.name==='main').at(-1);
+        const arrival=main&&events.find((event:any)=>event.event==='player'&&event.at>main.at&&event.data?.map===encounter.map&&
+          Math.hypot(event.data.x-(encounter.x+160),event.data.y-encounter.y)<100);
+        return {name,main,arrival};
+      }));
+      await info.attach('halloween-saved-checkpoint-return', { body: JSON.stringify({phases:returnPhases,nativeArrivalReceipts, native: await world(live, encounter.id), coordinator: await live.state() }), contentType: 'application/json' });
     });
   });
 }
