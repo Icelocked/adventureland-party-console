@@ -1,12 +1,12 @@
 # Realm-hop blacklist: failure inventory
 
 Written before the change. A saved party list of realm keys that automatic realm
-hopping (boss chase and daily-event chase) must never pick. PVP realms stay
+hopping (boss chase) must never pick. PVP realms stay
 excluded regardless of the list. Manual realm switching is unaffected.
 
-1. **One chase ignores the list.** Boss chase picks bosses and respawn trips
-   through `realmExists`; daily chase picks from `realms()`. Both must reject a
-   blacklisted realm, including a boss chase respawn trip planned earlier.
+1. **The chase ignores the list.** Boss chase picks bosses and respawn trips
+   through `realmExists`. It must reject a blacklisted realm, including a respawn
+   trip planned earlier.
 2. **A trip stays on a realm that is then blacklisted.** A chase's move is the
    realm switch itself, so there is no in-flight leg to cancel. A trip whose realm
    becomes blacklisted ends on the next check and the party returns home.

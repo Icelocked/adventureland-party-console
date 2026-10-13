@@ -70,7 +70,6 @@ export const publicStateFields = [
   "merchantForceStand",
   "merchantStandLocation",
   "bossChase",
-  "dailyChase",
   "realmHopBlacklist",
   "merchantWeapon",
   "luckyUpgradeSlots",

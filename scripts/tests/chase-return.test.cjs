@@ -1,11 +1,10 @@
-// Failure inventory: e2e/chase-return-failures.md (#46). Written before the change.
+// Failure inventory: e2e/chase-return-failures.md (#107). Written before the change.
 // Live incident: a refused return switch left the party off home with no retry.
 // Real realm switches and live ALData can't run in the disposable E2E server, so
-// these drive both chases with simulated payloads and a switch that can refuse.
+// these drive the boss chase with simulated payloads and a switch that can refuse.
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {createBossChase,initialBossChase}=require('../../runtime/coordinator/events/boss-chase.ts');
-const {createDailyChase,initialDailyChase,dailySlotIndex,dailySlotStart}=require('../../runtime/coordinator/events/daily-chase.ts');
 
 const MIN=60_000, HOME='SR_USII', AWAY='SR_USV';
 const refusal={ok:false,error:'every active character must be connected before switching'};
@@ -17,7 +16,7 @@ function bossFixture(saved) {
     now:()=>time,
     fetchLive:async()=>[{type:'crabxx',id:'83862',hp:crab,lastSeen:new Date(time).toISOString(),serverRegion:'US',serverIdentifier:'V'},
       ...(other?[{type:'crabxx',id:'90001',hp:other.hp,lastSeen:new Date(time).toISOString(),serverRegion:'US',serverIdentifier:'III'}]:[])],
-    currentRealm:()=>realm, homeRealm:()=>HOME, realmExists:()=>true, hopAllowed:to=>!to.endsWith('PVP'), realmSwitchBusy:()=>false, paused:()=>false,
+    currentRealm:()=>realm, homeRealm:()=>HOME, realmExists:()=>true, hopAllowed:to=>!to.endsWith('PVP'), realmSwitchBusy:()=>false,
     selected:event=>event==='crabxx',
     switchRealm:async to=>{attempts.push(to);if(refuse)return refusal;realm=to;return {ok:true};},
     log(){}, persist(){},
@@ -87,29 +86,4 @@ test('8: disabling the chase drops its pending return',async()=>{
   r.chase.update({body:{enabled:false}},{status(){return this;},json(value){body=value;return value;}});
   assert.equal(r.party.bossChase.returning,null);
   assert.equal(body.bossChase.returning,null);
-});
-
-test('1 (event prediction): a refused return home is retried',async()=>{
-  const next=dailySlotIndex('US',Date.UTC(2026,9,4,12),'nightly')+1, slotAt=dailySlotStart('US',next,'nightly');
-  let time=slotAt+100*MIN, realm='SR_USIII', refuse=true;
-  const attempts=[], party={dailyChase:initialDailyChase({enabled:true,leadMinutes:16,observations:{},
-    trip:{rotation:'nightly',realm:'SR_USIII',event:'icegolem',slot:next,slotAt,returnRealm:HOME,startedAt:slotAt-16*MIN,arrived:true,quietChecks:0}})};
-  const chase=createDailyChase(party,{
-    now:()=>time, gameVersion:()=>0, fetchBosses:async()=>[], reports:()=>[],
-    currentRealm:()=>realm, homeRealm:()=>HOME, realms:()=>['SR_USIII','SR_USV',HOME],
-    hopAllowed:()=>true, realmSwitchBusy:()=>false, paused:()=>false, selected:event=>event==='icegolem',
-    switchRealm:async to=>{attempts.push(to);if(refuse)return refusal;realm=to;return {ok:true};},
-    log(){}, persist(){},
-  });
-  await chase.tick(); // the event window has elapsed: the trip ends and asks to go home
-  assert.equal(party.dailyChase.trip,null);
-  assert.deepEqual(attempts,[HOME]);
-  assert.deepEqual(party.dailyChase.returning,{from:'SR_USIII',to:HOME});
-  refuse=false;
-  time+=MIN; await chase.tick();
-  assert.deepEqual(attempts,[HOME],'no retry inside the 5-minute delay');
-  time+=5*MIN; await chase.tick();
-  assert.deepEqual(attempts,[HOME,HOME]);
-  assert.equal(realm,HOME);
-  assert.equal(party.dailyChase.returning,null);
 });

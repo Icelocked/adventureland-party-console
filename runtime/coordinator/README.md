@@ -2068,6 +2068,7 @@ Cave encounter votes open an automatic dashboard dialog; resolved encounters rem
 
 ## Event boss realm chase
 
+Upstream issue #107. Rotation-predictive hopping (the other half of the closed #46) was removed.
 `events/boss-chase.ts` polls ALData `/monsters/<types>` once a minute, in a single request through
 the shared ALData client budget. It covers Franky, Ice Golem and Giga Crab, plus the seasonal world
 bosses: Mr. Pumpkin and Mr. Green (each selected by its own row, `mrpumpkin` / `mrgreen`), Dragold (`lunarnewyear`) and Grinch
@@ -2091,31 +2092,6 @@ A return home stays pending (`bossChase.returning`) until its switch succeeds: a
 retried after the 5-minute retry delay, no new trip starts meanwhile, and the return is dropped if
 the party is moved elsewhere by hand or the chase is disabled (`e2e/chase-return-failures.md`).
 Coordinator-only restart suffices.
-
-## Scheduled event realm prediction
-
-`events/daily-chase.ts` implements the predictive half of issue #46. Each game server shuffles its
-`dailies` (`crabxx`, `goobrawl`, `abtesting`; 13:00 and 20:00 local) and `nightlies` (`icegolem`,
-`franky`; 23:00 local) once at startup, then fires the next one at every slot of that rotation
-(US −5, EU +1, ASIA +7 hours, from `node/server.js`). A realm therefore repeats a fixed cycle per
-rotation until it restarts. One sighting at slot k predicts that event at k+3 for dailies or k+2 for
-nightlies, and sightings at the other residues fix the whole cycle. A sighting that contradicts a
-rotation's cycle is treated as a server restart and resets that realm's rotation. Sightings come
-from the party's own fresh status reports (any scheduled event on the realm it is on) and from ALData
-`/monsters/crabxx,rgoo,bgoo,icegolem,franky`, polled within 90 minutes after any region's slot.
-Sightings expire after two days. A game update restarts every realm, so all sightings are cleared
-when the installed game version changes. Restarts without an update are caught only by
-contradicting sightings.
-
-When enabled (Realm panel, `POST /party-api/realm/daily-chase`) and a scheduled event is selected,
-the party hops only when the current realm is known to miss every selected event of that rotation
-at its next slot, and another realm is predicted to have one. It moves `leadMinutes` (default 16,
-minimum 14) before the slot so Hop Sickness clears first. Other regions' slots are chased only with
-`otherRegions`. It returns home after two quiet checks once the event has ended (at least 5 minutes
-after the slot), or 90 minutes after the slot. The boss chase and this predictor pause each other
-while either has a trip or a pending return home. The move uses the dashboard realm-switch route
-without changing home. Like the boss chase, its return home stays pending (`dailyChase.returning`)
-and is retried until the switch succeeds. Coordinator-only restart suffices.
 
 ## Account-wide home realm changes
 

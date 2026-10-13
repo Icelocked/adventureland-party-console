@@ -12,7 +12,6 @@ export interface SavedEventState extends HuntEventTrips {
   deferredEventReturns?: Record<string, DeferredRecovery> | null;
   abtestingStrategy?: ABStrategy | null;
   bossChase?: unknown;
-  dailyChase?: unknown;
   realmHopBlacklist?: unknown;
 }
 

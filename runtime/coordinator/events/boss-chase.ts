@@ -66,8 +66,6 @@ export interface BossChasePorts {
   /** Not PVP and not on the party's realm-hop blacklist. */
   hopAllowed(realm: string): boolean;
   realmSwitchBusy(): boolean;
-  /** Another realm errand (e.g. the daily chase) currently owns the party's realm. */
-  paused(): boolean;
   /** Whether any active character has this event (a G.events key) selected. */
   selected(event: string): boolean;
   /** Starts the ordinary party realm switch (no home change); resolves with its HTTP outcome. */
@@ -320,7 +318,7 @@ export function createBossChase(party: BossChaseParty, ports: BossChasePorts) {
   async function startTrip(live: LiveBoss[], now: number): Promise<void> {
     const chase = party.bossChase;
     const current = ports.currentRealm();
-    if (now < chase.retryAt || !current || ports.paused()) return;
+    if (now < chase.retryAt || !current) return;
     const local = live.filter((boss) => boss.realm === current);
     if (holdsParty(local, current, now)) return;
     const target = pick(live, current);

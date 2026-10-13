@@ -12,16 +12,7 @@ import { PartyState } from "./party-state";
 
 export type EventSchedule = { id: string; name: string; live?: boolean; next?: number; expires?: number; stale?: boolean; slotAt?: number; slotKind?: string };
 export type EventSelectionState = Pick<PartyState, "leader" | "merchantCharacter" | "followers" |
-  "eventAttendance" | "eventLimitsByCharacter" | "eventPrioritiesByCharacter" | "eventsByCharacter" | "eventSelectionsByCharacter" | "eventSchedules"> &
-  Partial<Pick<PartyState, "dailyChase" | "realmControl">>;
-// Each server fires exactly one event of a rotation per slot (node/server.js dailies/nightlies).
-const rotations: Record<string, "daily" | "nightly"> = { crabxx: "daily", goobrawl: "daily", abtesting: "daily", icegolem: "nightly", franky: "nightly" };
-/** The event-prediction panel's guess for the party's current realm at the rotation's next slot. */
-function predictedEvent(state: EventSelectionState, rotation: string): string | null {
-  const realm = state.realmControl?.currentRealm, region = realm && /^SR_(US|EU|ASIA)/.exec(realm)?.[1];
-  const next = region ? state.dailyChase?.upcoming?.find(entry => entry.rotation === rotation && entry.region === region) : undefined;
-  return next?.predictions.find(entry => entry.realm === realm)?.event ?? null;
-}
+  "eventAttendance" | "eventLimitsByCharacter" | "eventPrioritiesByCharacter" | "eventsByCharacter" | "eventSelectionsByCharacter" | "eventSchedules">;
 export function eventTimeLabel(next: number | undefined, now: number) {
   if (!next || !Number.isFinite(next)) return "Time not announced";
   const ms = next < 1e12 ? next * 1000 : next;
@@ -116,9 +107,6 @@ export const EventSelectionControl = memo(function EventSelectionControl({ state
         onPointerCancel={cancelDrag}>
       {rows.map(event => {
         const supported = supportedEvents.includes(event.id), allowed = supported;
-        const rotation = rotations[event.id], predicted = rotation && !event.live ? predictedEvent(state, rotation) : undefined;
-        const prediction = predicted === undefined ? "" : predicted === null ? " · not predicted yet"
-          : predicted === event.id ? " · predicted here" : " · not here this slot";
         const ignored = [state.eventAttendance?.[name]?.[event.id], state.eventAttendance?.[policy.source]?.[event.id]]
           .find(entry => entry?.ignored && !entry.ended)?.ignored;
         return <div key={event.id} data-event={event.id} className={`flex items-center gap-2 rounded border bg-slate-950 px-2 py-2 text-emerald-50 ${dragged === event.id ? 'border-cyan-300 opacity-25' : 'border-emerald-900/70'}`}>
@@ -140,7 +128,7 @@ export const EventSelectionControl = memo(function EventSelectionControl({ state
           <span aria-label={`${event.name} priority`} className="w-8 shrink-0 text-center text-emerald-200">{supported ? order.length - order.indexOf(event.id) : 0}</span>
           <input type="checkbox" checked={allowed && selected.includes(event.id)} disabled={!allowed || policy.inherited}
             className="accent-emerald-500" onChange={e => onChange(e.target.checked ? [...selected, event.id] : selected.filter(id => id !== event.id))} />
-          <span>{event.name} — {!supported ? "Unsupported" : event.live ? "LIVE" : event.next ? eventTimeLabel(event.next, now) : event.slotAt ? `Next chance: ${eventTimeLabel(event.slotAt, now)}` : "Time not announced"}{prediction}{event.stale ? " · timing stale" : ""}{ignored && <span className="block text-amber-200">Skipped this instance: {ignored}</span>}</span>
+          <span>{event.name} — {!supported ? "Unsupported" : event.live ? "LIVE" : event.next ? eventTimeLabel(event.next, now) : event.slotAt ? `Next chance: ${eventTimeLabel(event.slotAt, now)}` : "Time not announced"}{event.stale ? " · timing stale" : ""}{ignored && <span className="block text-amber-200">Skipped this instance: {ignored}</span>}</span>
           <button type="button" aria-label={`${event.name} settings`} disabled={!supported} onClick={() => setSettings(event.id)} className="ml-auto rounded border border-slate-500 bg-slate-950 p-2 text-pink-200 hover:bg-slate-800"><Settings className="size-4" /></button>
         </div>;
       })}

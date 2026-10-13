@@ -4,7 +4,6 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {createBossChase,initialBossChase}=require('../../runtime/coordinator/events/boss-chase.ts');
-const {createDailyChase,initialDailyChase,dailySlotIndex,dailySlotStart}=require('../../runtime/coordinator/events/daily-chase.ts');
 const {initialRealmHopBlacklist,realmHopAllowed}=require('../../runtime/coordinator/navigation/realm-hop-blacklist.ts');
 
 const MIN=60_000, HOME='SR_USII';
@@ -17,7 +16,7 @@ function bossFixture(blacklist) {
     now:()=>time,
     fetchLive:async()=>Object.entries(hp).map(([at,value])=>({...crab(at,value),lastSeen:new Date(time).toISOString()})),
     currentRealm:()=>realm, homeRealm:()=>HOME, realmExists:()=>true, hopAllowed:to=>realmHopAllowed(blacklist,to),
-    realmSwitchBusy:()=>false, paused:()=>false, selected:event=>event==='crabxx',
+    realmSwitchBusy:()=>false, selected:event=>event==='crabxx',
     switchRealm:async to=>{switches.push(to);realm=to;return {ok:true};},
     log(){}, persist(){},
   });
@@ -49,43 +48,6 @@ test('boss chase still returns to a blacklisted home realm',async()=>{
   blacklist.push('SR_USIII');
   await r.minute({SR_USIII:15_000,SR_USV:20_000});
   assert.deepEqual(r.switches,['SR_USIII',HOME]);
-});
-
-function dailyFixture(blacklist,{trip}={}) {
-  // Fifteen minutes before the next US nightly slot. Both away realms are predicted
-  // to get Ice Golem there; home is predicted to get Franky instead.
-  const next=dailySlotIndex('US',Date.UTC(2026,9,4,12),'nightly')+1;
-  let time=dailySlotStart('US',next,'nightly')-15*MIN, realm=trip?trip.realm:HOME;
-  const seen=slot=>({icegolem:{slot,at:time-60*MIN}});
-  const switches=[], party={dailyChase:initialDailyChase({enabled:true,leadMinutes:16,
-    observations:{[HOME]:seen(next-1),SR_USIII:seen(next-2),SR_USV:seen(next-2)},
-    trip:trip?{rotation:'nightly',realm:trip.realm,event:'icegolem',slot:next,slotAt:dailySlotStart('US',next,'nightly'),
-      returnRealm:HOME,startedAt:time-MIN,arrived:true,quietChecks:0}:null})};
-  const chase=createDailyChase(party,{
-    now:()=>time, gameVersion:()=>0, fetchBosses:async()=>[], reports:()=>[],
-    currentRealm:()=>realm, homeRealm:()=>HOME, realms:()=>['SR_USIII','SR_USV',HOME],
-    hopAllowed:to=>realmHopAllowed(blacklist,to), realmSwitchBusy:()=>false, paused:()=>false,
-    selected:event=>event==='icegolem',
-    switchRealm:async to=>{switches.push(to);realm=to;return {ok:true};},
-    log(){}, persist(){},
-  });
-  return {party,switches,tick:()=>chase.tick()};
-}
-
-test('event prediction skips a blacklisted realm predicted to get the wanted event',async()=>{
-  const open=dailyFixture([]);
-  await open.tick();
-  assert.deepEqual(open.switches,['SR_USIII'],'without the list the first predicted realm is chosen');
-  const r=dailyFixture(['SR_USIII']);
-  await r.tick();
-  assert.deepEqual(r.switches,['SR_USV']);
-});
-
-test('an event prediction trip on a realm that becomes blacklisted returns home',async()=>{
-  const r=dailyFixture(['SR_USIII'],{trip:{realm:'SR_USIII'}});
-  await r.tick();
-  assert.equal(r.party.dailyChase.trip,null);
-  assert.deepEqual(r.switches,[HOME]);
 });
 
 test('a malformed saved list loads as an empty or deduplicated list',()=>{

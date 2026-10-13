@@ -1094,7 +1094,7 @@ export function startCoordinatorApplication(
       stamp: stampMerchantJob,
     });
     setInterval(() => merchantSettingsRoutes.bankSort.reconcile(), 1000);
-    // Realm chases share the dashboard's realm-switch route so every participant/bankboi/Steam guard applies.
+    // The boss chase uses the dashboard's realm-switch route so every participant/bankboi/Steam guard applies.
     const chasePorts = {
       now: () => Date.now(),
       currentRealm: () => realmControlPayload().currentRealm,
@@ -1129,30 +1129,8 @@ export function startCoordinatorApplication(
       ...chasePorts,
       fetchLive: (bosses) => aldataFetch("/monsters/" + bosses.join(",")),
       realmExists: (realm) => !!my_acc.resolve_realm(realm),
-      // Each chase waits while the other has a trip or still owes the party its return home.
-      paused: () => !!party.dailyChase.trip || !!party.dailyChase.returning,
-    });
-    const dailyChase = coordinatorPolicies.createDailyChase(party, {
-      ...chasePorts,
-      gameVersion: () => party.gameVersion,
-      fetchBosses: () => aldataFetch("/monsters/crabxx,rgoo,bgoo,icegolem,franky"),
-      reports: () =>
-        realmParticipants().flatMap((name) => {
-          const status = party.statuses[name];
-          if (!status?.server || Date.now() - (status.seenAt || 0) > 15_000) return [];
-          const schedules: unknown = status.eventSchedules;
-          const live = (Array.isArray(schedules) ? (schedules as { id?: unknown; live?: unknown }[]) : [])
-            .filter((entry) => entry.live === true)
-            .map((entry) => entry.id)
-            .filter((id): id is coordinatorPolicies.DailyEvent =>
-              (coordinatorPolicies.scheduledEvents as readonly unknown[]).includes(id));
-          return [{ realm: "SR_" + status.server.replace(/^SR_/, ""), live }];
-        }),
-      realms: () => realmControlPayload().realms.filter((realm) => !realm.pvp).map((realm) => realm.key),
-      paused: () => !!party.bossChase.trip || !!party.bossChase.returning,
     });
     bossChase.start((callback, milliseconds) => setInterval(callback, milliseconds));
-    dailyChase.start((callback, milliseconds) => setInterval(callback, milliseconds));
     const { maps: mapStreams, combat: combatLogRoutes, prepareVersion } =
       coordinatorPolicies.createCoordinatorTelemetry(__dirname, version, party.combatLogs, {
         owned: ownedCharacter,
@@ -2291,7 +2269,6 @@ export function startCoordinatorApplication(
               bankboiDeleteRoute,
               realmRoutes,
               bossChaseRoute: bossChase.update,
-              dailyChaseRoute: dailyChase.update,
               realmHopBlacklistRoute: createRealmHopBlacklistRoute(party, {
                 realmExists: (realm) => !!my_acc.resolve_realm(realm),
                 log: (message, level) => merchantLog(message, level as Parameters<typeof merchantLog>[1]),

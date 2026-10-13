@@ -2,7 +2,6 @@
 import type { LuckySlotHistory } from '../../../runtime/lucky-slot-tracking';
 import type { MerchantStandLocation } from '../../../runtime/coordinator/merchant/stand-location';
 import type { BossChaseState } from '../../../runtime/coordinator/events/boss-chase';
-import type { DailyChaseState } from '../../../runtime/coordinator/events/daily-chase';
 import type { DeconstructionMark, DeconstructionCatalog } from "./deconstruction";
 import { ActiveSlot } from "./active-slot";
 import { ALDataState } from "./aldata-state";
@@ -172,7 +171,6 @@ export type PartyState = {
   merchantForceStand?: boolean;
   merchantStandLocation?: MerchantStandLocation | null;
   bossChase?: BossChaseState | null;
-  dailyChase?: DailyChaseState | null;
   realmHopBlacklist?: string[];
   merchantWeapon?: { item: Item } | null;
   luckyUpgradeSlots?: Record<string, number | null>;

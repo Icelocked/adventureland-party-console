@@ -1,14 +1,13 @@
-# Chase return home: failure inventory (#46)
+# Chase return home: failure inventory (#107)
 
 Written before the change. Live incident (2026-10-07/08): the party ended up off its
 home realm with `activeRealm` on EU III. After the characters reconnected on their
 home (US II), the merchant looped "Returning FonzeMerch to EU III" for hours with
-its queue held (upstream #74). Boss chase and event prediction both clear their
+its queue held (upstream #74). Boss chase cleared its
 trip *before* travelling home, and a refused return switch is never retried.
 
 Live ALData data and real realm switches can't run in the disposable E2E server, so
-`scripts/tests/chase-return.test.cjs` drives `createBossChase` and
-`createDailyChase` with simulated payloads and a realm switch that can refuse
+`scripts/tests/chase-return.test.cjs` drives `createBossChase` with simulated payloads and a realm switch that can refuse
 (retained isolated exception, like `boss-chase-stall` and `realm-hop-blacklist`).
 
 1. **A refused return strands the party.** A switch refused because a character is
@@ -24,7 +23,7 @@ Live ALData data and real realm switches can't run in the disposable E2E server,
    neither the chase realm nor home, the pending return is dropped.
 6. **Hopping onward instead of home.** No new chase trip starts while a return is
    pending.
-7. **The other chase moving the party.** Boss chase and event prediction pause each
-   other while either has a trip or a pending return.
+7. Removed with event prediction (rotation-predictive hopping was dropped when
+   upstream closed #46); the boss chase is the only realm chase.
 8. **Disabling the chase.** Turning the chase off drops its pending return, as it
    already drops its trip; the operator has taken control.
