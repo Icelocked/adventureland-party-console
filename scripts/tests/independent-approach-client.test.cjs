@@ -43,7 +43,7 @@ function snapshotPorts(){
   groupedCombat:{independentApproach:true,key:'runtime',selection:'s1',committed:false,target:{id:'boss',x:400,y:0,map:'uhills',in:'uhills',server:'USII',state:'planned'}},partyConvoyActive:false,convoyTraveling:null,eventTraveling:false,joinedEvent:null,
   groupedFarming:()=>true,groupedFresh:()=>true,dungeonOwned:()=>false,runtimeCurrent:()=>true,consoleMovementPaused:()=>false,reunionRealm:()=> 'USII',isAttackingPartyMember:()=>false,
   parent:{socket:{connected:true},entities:{}},get_entity:()=>entity,is_in_range:e=>Math.hypot(e.x-c.character.real_x,e.y-c.character.real_y)<=c.character.range,can_move_to:()=>true,can_move:()=>true,
-  combatApproachPoint:(e,r)=>({x:e.x-r,y:e.y}),cancelGroupRoute:()=>{},cancelFightRoute:()=>{},cancelFarmApproach:()=>{},resetCombatMovement:()=>{},movement:{report:()=>null,move:(goal,callback,options)=>{moves.push({goal,options});return Promise.resolve();}},
+  combatApproachPoint:(e,r)=>({x:e.x-r,y:e.y}),cancelGroupRoute:()=>{},cancelFightRoute:()=>{},cancelFarmApproach:()=>{},resetCombatMovement:()=>{},movement:{report:()=>null,tick:()=>{},move:(goal,callback,options)=>{moves.push({goal,options});return Promise.resolve();}},
   root:{sharedRoutine:{isOccupied:()=>false},partyRoleRunner:{isKnownDead:()=>false}}});
  vm.runInContext(source.slice(start,end),c);return {c,moves,ports:c.independentApproachPorts(),set entity(v){entity=v;}};
 }
@@ -65,4 +65,23 @@ test('first independent pull rejects stale confirmation or changed actual range,
 test('lost native readiness after smart approach resumes at half radius, initial readiness keeps full radius',()=>{
  for(const previous of ['smart','direct','initial']){const f=fixture();f.clear=previous!=='smart';if(previous!=='initial')f.client.tick();f.ready=true;f.client.tick();f.ready=false;f.ctx.point={x:130,y:100};f.now=10250;f.client.tick();assert.equal(f.client.report().radius,previous==='smart'?100:200);assert.equal(f.client.report().level,previous==='smart'?1:0);}
  const f=fixture();f.clear=false;f.throwing=true;f.client.tick();for(let i=1;i<=12;i++){f.now=10000+i*250;f.client.tick();}f.ready=true;f.client.tick();f.ready=false;f.throwing=false;f.ctx.point={x:130,y:100};f.now=15000;f.client.tick();assert.equal(f.client.report().radius,1);assert.ok(f.client.report().level<=8);
+});
+
+test('owned native completion immediately rechecks range and advances an unsuccessful approach',async()=>{
+ for(const outcome of ['arrived','failed']){const f=fixture();f.clear=false;f.client.tick();f.now=10500;
+  if(outcome==='arrived')f.routes[0].resolve();else f.routes[0].reject(Error('no native route'));
+  await Promise.resolve();assert.equal(f.routes.length,2);assert.equal(f.client.report().radius,100);
+ }
+ const ready=fixture();ready.client.tick();ready.now=10500;ready.ready=true;ready.routes[0].resolve();await Promise.resolve();
+ assert.equal(ready.client.report().phase,'ready');assert.equal(ready.routes.length,1);
+ const paused=fixture();paused.client.tick();paused.ctx.allowed=false;paused.routes[0].reject(Error('hold'));await Promise.resolve();
+ assert.equal(paused.client.report(),null);assert.equal(paused.routes.length,1);
+});
+
+test('shared approach starts the owned direct or native executor immediately',async()=>{
+ for(const direct of [true,false]){const f=snapshotPorts();let started=false,ticks=0;
+  f.c.movement.move=()=>{started=true;return Promise.resolve();};
+  f.c.movement.install=()=>{};f.c.movement.tick=()=>{assert.equal(started,true);ticks++;};
+  await f.ports.start({x:100,y:0},'combat-approach:immediate',direct);assert.equal(ticks,1);
+ }
 });

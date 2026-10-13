@@ -151,7 +151,7 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
           }
         }
         const attackDue=Number(game.next_skill?.attack),group=runner?.__partyGroupedCombat;
-        const handoff=(runner?.__partyHandoffTrace||[]).filter((e:any)=>e.selection===group?.selection&&String(e.target)===String(group?.target?.id)&&['committed','attempt','blocked','range-commit-received'].includes(e.stage)).slice(-6).map((e:any)=>({at:e.at,stage:e.stage,target:e.target,selection:e.selection,reason:e.reason,confirmation:e.confirmation}));
+        const handoff=(runner?.__partyHandoffTrace||[]).filter((e:any)=>e.selection===group?.selection&&String(e.target)===String(group?.target?.id)&&['committed','attempt','blocked','range-commit-received'].includes(e.stage)).slice(-6).map((e:any)=>({at:e.at,stage:e.stage,target:e.target,selection:e.selection,reason:e.reason,confirmation:e.confirmation,cooldownReadyAt:e.cooldownReadyAt,frequency:e.frequency,timerLatenessMs:e.timerLatenessMs}));
         game.__e2eEvents.push({sequence:++game.__e2eEventSequence,at:Date.now(),event:hostileSkill?'offensive-skill-issued':'attack-issued',
           data:{id:payload.id==null?undefined:String(payload.id),actor:c.name,ids,skill:hostileSkill?String(payload.name):undefined},motion:{map:c.map,in:c.in??c.map,server:String(game.server_region||'')+String(game.server_identifier||''),
             x:c.real_x??c.x,y:c.real_y??c.y,moving:!!c.moving,owner:runner?.__partyCombatOwner,

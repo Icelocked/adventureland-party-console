@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Start individual combat routes immediately and recheck range as soon as an owned route finishes or fails, avoiding extra polling delays between smaller-radius approach attempts.
+
 - Keep independent combat approach and attack readiness consistent across full heartbeats and fast combat reports.
 
 - Fix fighters holding when a selected target is outside their local view; approach fresh party observations while requiring native visibility before attacking.
