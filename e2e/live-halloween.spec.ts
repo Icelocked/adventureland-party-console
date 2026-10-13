@@ -1,4 +1,5 @@
 import {observeNativeNavigationHttp} from './native-navigation-http-observer';
+import {installTerminalSettlementFault} from './native-terminal-settlement-fault';
 import {observeNativeStatus} from './native-status-observer';
 import { test, expect, type LiveGame } from './live-fixtures';
 import { killNativeCharacter } from './hunt-interruption-helpers';
@@ -256,10 +257,10 @@ for (const encounter of [{id:'mrgreen',add:'greenjr',drop:'ashleaf',map:'spookyt
   });
 }
 
-for (const original of [{ id: 'mrgreen' }, { id: 'mrpumpkin' }]) {
+for (const original of [{ id: 'mrgreen',terminalFault:false }, { id: 'mrpumpkin',terminalFault:false },{id:'mrpumpkin',terminalFault:true}]) {
   test.describe(original.id, () => {
     test.use({ initialEventSpawn: original.id });
-    test(`Halloween ${original.id} stages from native timer, fights, recovers death and returns after deselection`, async ({ live }, info) => {
+    test(`Halloween ${original.id} stages from native timer, fights, recovers death and returns after deselection${original.terminalFault?' with a lost final native completion response':''}`, async ({ live }, info) => {
       const encounter={id:original.id,...await nativeEventSpawn(live.admin,original.id)};
       test.setTimeout(600_000);
       const timer = await announceSpawn(live, encounter.id, 55000);
@@ -293,6 +294,7 @@ for (const original of [{ id: 'mrgreen' }, { id: 'mrpumpkin' }]) {
       }, { timeout: 180_000, message: 'Native death must preserve event reentry instead of losing the saved activity' }).toBe(true);
       await info.attach('native-halloween-death-and-reentry', { body: JSON.stringify({ death, native: await world(live, encounter.id), coordinator: await live.state() }), contentType: 'application/json' });
       const navigationHttp=encounter.id==='mrpumpkin'?observeNativeNavigationHttp(live.clients[W].page):null;
+      const terminalFault=original.terminalFault?await installTerminalSettlementFault(live,live.clients[W].page):null;
       try{
       const returnPhases:{deselectedAt:number;replacementRequestedAt?:number;replacementAcknowledgedAt?:number;recoveryStartedAt:number;recoveryDeadline:number;arrivalObservedAt?:number}={
         deselectedAt:Date.now(),recoveryStartedAt:Date.now(),recoveryDeadline:0};
@@ -335,6 +337,7 @@ for (const original of [{ id: 'mrgreen' }, { id: 'mrpumpkin' }]) {
           await info.attach('native-green-exit-code-turnover',{body:JSON.stringify({before,after,observations,phases:returnPhases,native:await world(live,encounter.id)}),contentType:'application/json'});
         }
       }
+      if(terminalFault)await info.attach('native-terminal-settlement-fault-proof',{body:JSON.stringify(await terminalFault.prove(returnDeadline)),contentType:'application/json'});
       await expect.poll(async () => {
         const native = await world(live, encounter.id);
         return fighters.every(name => native.players[name] && native.players[name].map === encounter.map && Math.hypot(native.players[name].x - (encounter.x + 160), native.players[name].y - encounter.y) < 100);
@@ -348,7 +351,10 @@ for (const original of [{ id: 'mrgreen' }, { id: 'mrpumpkin' }]) {
         return {name,main,arrival};
       }));
       await info.attach('halloween-saved-checkpoint-return', { body: JSON.stringify({phases:returnPhases,nativeArrivalReceipts, native: await world(live, encounter.id), coordinator: await live.state() }), contentType: 'application/json' });
-      }finally{if(navigationHttp)await info.attach('native-pumpkin-return-http',{body:JSON.stringify(await navigationHttp.finish()),contentType:'application/json'});}
+      }finally{
+        try{if(terminalFault)await info.attach('native-terminal-settlement-fault-final',{body:JSON.stringify(await terminalFault.finish()),contentType:'application/json'});}
+        finally{if(navigationHttp)await info.attach('native-pumpkin-return-http',{body:JSON.stringify(await navigationHttp.finish()),contentType:'application/json'});}
+      }
     });
   });
 }

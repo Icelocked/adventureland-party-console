@@ -48,7 +48,7 @@ test('diagnostics snapshot coordinates and deduplicate independently of mutable 
 function fixture(options={}) {
  let now=1000, revision=1, runtime='test', searches=0, request;
  const calls=[], logs=[], c={name:'Test',map:'main',in:'main',x:0,y:0,real_x:0,real_y:0,speed:60,base:{h:8,v:7,vn:2},items:[],moving:false};
- const G={version:16846,geometry:{},maps:{main:{spawns:[[0,0]],doors:[],npcs:[]},bank:{spawns:[[0,0]],doors:[],npcs:[]}},npcs:{transporter:{places:{}}}};
+ const G={version:16846,geometry:{},maps:{main:{spawns:[[0,0]],doors:[],npcs:[]},bank:{spawns:[[0,0]],doors:[],npcs:[]},...options.maps},npcs:{transporter:{places:{}}}};
  const host={character:c,G,smart:{moving:false,plot:[]},parent:{socket:{emit:(...a)=>calls.push(a)},push_deferred:()=>Promise.resolve()},
   smart_move:()=>{host.smart.moving=true;host.smart.found=false;host.smart.searching=false;return Promise.resolve();},
   stop:async()=>{host.smart.moving=false;},smart_move_logic(){},start_pathfinding:()=>{searches++;host.smart.found=true;host.smart.plot=options.nativePlot||[{map:'main',x:100,y:0}];},continue_pathfinding(){},
@@ -702,4 +702,73 @@ test('exhausted owned route preserves declared arrival tolerance and inferred sa
  const r=fixture();r.c.in='generated-owner';const p=r.service.move({map:'main',x:100,y:0},undefined,{arrivalTolerance:40});
  r.c.real_x=70;r.service.install([],r.service.identity);await r.ticks();await p;
  assert.equal(r.service.last().done,true);assert.equal(r.service.last().retries,0);r.dispose();
+});
+
+for(const mode of ['valid','stale','moving','dead','instance','position','command','revision','runtime','route','cancelled','missing','unreleased','walking-tail','missing-realm','empty-journey'])for(const continuous of [false,true])test('native acknowledged terminal settlement cannot strand a fresh peer completion barrier; mode='+mode+' continuous='+continuous,async()=>{
+ const {movementBarrier}=require('../../runtime/coordinator/navigation/movement-barrier.ts');
+ const {publishSharedRoute}=require('../../runtime/coordinator/navigation/shared-route-store.ts');
+ const {sharedCommand}=require('../../runtime/coordinator/navigation/shared-navigation.ts');
+ const {routeOwner}=require('../../runtime/coordinator/navigation/shared-route-store.ts');
+ const {createConvoyAcknowledgementRoutes}=require('../../runtime/coordinator/http/convoy-acknowledgements.ts');
+ const names=['W','P'],actors=Object.fromEntries(names.map(n=>[n,fixture({maps:{cyberland:{spawns:[[0,0]]}}})]));let now=1000;
+ const step={map:'main',in:'main',x:0,y:0,method:'leave'},plot=[step];
+ const c={id:'return',epoch:3,routeProtocol:4,routeVersion:1,phase:'shared-prepare',
+  purpose:'shared-walk-return',continuousReturn:continuous?1:undefined,returnLegs:continuous?undefined:[{type:'walk',location:step}],leader:'W',participants:names,completed:[],runtimes:{W:'test',P:'test'},
+  location:step,rally:{map:'cyberland',in:'cyberland',x:0,y:0}};
+ const state={activeConvoy:c,commands:{},statuses:{},navigationIntents:{W:{revision:1},P:{revision:1}},nextCommandId:7,eventReturn:null,combatLogs:{}},http=[];
+ function identity(n){return {character:n,convoyId:c.id,epoch:c.epoch,commandId:n==='W'?7:8,navigationRevision:1,runtimeId:'test',routeVersion:1};}
+ function sync(){for(const n of names){const r=actors[n];r.setNow(now);Object.assign(state.statuses[n],{seenAt:now,map:r.c.map,in:r.c.in,x:r.c.real_x,y:r.c.real_y,moving:r.c.moving,transporting:false});}}
+ for(const n of names){const r=actors[n];r.c.name=n;r.c.hp=100;r.c.map=r.c.in='cyberland';r.host.G.maps.cyberland={spawns:[[0,0]]};
+  const context=r.ports.context;r.ports.context=()=>({...context(),server:'USI'});
+  state.statuses[n]={seenAt:now,map:'cyberland',in:'cyberland',x:0,y:0,hp:100,moving:false,transporting:false,server:'USI',
+   convoyNavigation:{id:c.id,epoch:c.epoch,commandId:identity(n).commandId,navigationRevision:1,runtimeId:'test',routeVersion:1,phase:'walking'}};
+  r.host.parent.push_deferred=()=>{Object.assign(r.c,{map:'main',in:'main',real_x:0,real_y:0});sync();return Promise.resolve();};
+ }
+ for(const n of names){state.commands[n]=sharedCommand(state,c,'shared-prepare',n);assert.equal(state.commands[n].returnLeg,!continuous);}
+ assert.equal(publishSharedRoute(state,{...identity('W'),route:{version:1,geometry:actors.W.service.identity,origin:c.rally,destination:step,plot,source:'search'}},now),null);c.phase='travel';c.departAt=now;
+ function applyNegative(){if(!state.statuses.W.movement)return;
+  const w=state.statuses.W;
+  if(mode==='stale')w.seenAt=now-3001;
+  if(mode==='moving')w.moving=true;
+  if(mode==='dead')w.rip=true;
+  if(mode==='instance')w.in='foreign';
+  if(mode==='position')w.x=20;
+  if(mode==='command')state.commands.W.id=70;
+  if(mode==='revision')state.navigationIntents.W.revision=2;
+  if(mode==='runtime')w.convoyNavigation.runtimeId='new';
+  if(mode==='route')w.convoyNavigation.routeVersion=2;
+  if(mode==='cancelled')state.navigationIntents.W.cancelled=true;
+  if(mode==='missing')w.movement={done:true};
+  if(mode==='missing-realm'){delete w.server;delete w.movement.terminalSettlement.server;}
+  if(mode==='empty-journey'){w.movement.id='';w.movement.terminalSettlement.journeyId='';}
+  if(mode==='walking-tail'&&!state.replaced){state.replaced=true;
+    const r=require('../../runtime/coordinator/navigation/shared-route-store.ts').sharedRoute(c);
+    r.plot.push({map:'main',in:'main',x:20,y:0});r.destination={map:'main',in:'main',x:20,y:0};}
+
+  if(mode==='unreleased'&&!state.replaced){state.replaced=true;state.activeConvoy={...c,phase:'shared-prepare'};publishSharedRoute(state,{...identity('W'),route:{version:1,geometry:actors.W.service.identity,origin:c.rally,destination:step,plot,source:'search'}},now);state.activeConvoy.phase='travel';}
+ }
+ const promises={};
+ for(const n of names){const r=actors[n],owner={convoyId:c.id,epoch:c.epoch,commandId:identity(n).commandId,navigationRevision:1,routeVersion:1};
+  promises[n]=r.service.move(step,undefined,{shared:true,awaitSharedRoute:true,owner,barrier:async(destination,index,completed)=>{
+   sync();applyNegative();const body={...identity(n),step:index,destination,completed,ready:true},result=movementBarrier(state,body,now);http.push({actor:n,completed,result});return !!result.ready;}});
+  promises[n].catch(()=>{});r.service.install(plot,r.service.identity);
+ }
+ await actors.W.ticks(1);await actors.P.ticks(1);now+=500;sync();await actors.W.ticks(1);await actors.W.ticks(1);await actors.P.ticks(1);
+ assert.equal(actors.W.c.map,'main');assert.equal(actors.P.c.map,'main');
+ const owner={convoyId:c.id,epoch:c.epoch,commandId:7,navigationRevision:1,routeVersion:1};
+ assert.equal(actors.W.service.settleTerminal(actors.W.service.report().id,owner),true);await promises.W;
+ state.statuses.W.convoyNavigation.phase=continuous?'arrived':'leg-arrived';state.statuses.W.movement=actors.W.service.last();
+ if(continuous){let result;const res={status(){return this;},json(value){result=value;return value;}};
+  const ack=createConvoyAcknowledgementRoutes(state,{now:()=>now,owned:()=>true,valid:body=>routeOwner(state,body,now),nextCommand:()=>state.nextCommandId++,persist(){},history(){},hold(){},error(){}});
+  ack.complete({body:identity('W')},res);assert.deepEqual(result,{ok:false,waiting:true},'actual convoy completion waits for the stranded peer');
+ }
+ assert.equal(http.some(x=>x.actor==='W'&&x.completed),false,'owned final settlement did not emit a completion POST');
+ for(let i=0;i<8;i++){now+=500;sync();
+  await actors.P.ticks(2);
+ }
+ assert.equal(actors.W.service.last().done,true);assert.deepEqual(c.completed,[]);
+ assert.ok(http.some(x=>x.actor==='P'&&x.completed),'peer sent real completion requests');
+ for(const r of Object.values(actors))assert.equal(r.calls.filter(call=>call[0]==='leave').length,1,'no native transition is replayed');
+ const done=actors.P.service.last()?.done;for(const r of Object.values(actors))r.dispose();
+ assert.equal(done===true,mode==='valid','the acknowledged settled peer must not leave the other actor waiting forever; receipts='+JSON.stringify(http));
 });

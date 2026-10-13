@@ -177,14 +177,15 @@ export function createMovementExecutor(host: MovementHost, state: MoveState, val
     return !host.character.moving && !host.is_transporting(host.character) && p.map===step.map &&
       String(p.in??p.map)===String(step.in??step.map) && distance(p,step)<=1;
   }
-  function settleTerminal(options: MovementOptions): boolean {
+  function settleTerminal(options: MovementOptions) {
     const current=issued,p=position();
-    if(!current || !terminalIssued(current) || !settledPosition(p,current.step))return false;
+    if(!current || !terminalIssued(current) || !settledPosition(p,current.step))return undefined;
     // This is an acknowledgement of an already executed terminal transition.
     // Never align, dispatch, consult/release a barrier, or advance another step.
+    const receipt={step:index,destination:{...current.step},acknowledged:true as const};
     notifyTown(current,options,'complete');notifyTransition(current,options);
     state.plot.shift();issued=undefined;barrierReady=false;walkingEdge=undefined;index++;
-    return true;
+    return receipt;
   }
   function tick(options: MovementOptions): boolean {
     sample();

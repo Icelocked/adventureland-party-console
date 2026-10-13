@@ -54,7 +54,7 @@ export interface MovementOptions {
   // Repair only the local same-map connector, never the destination route.
   repairSharedDrift?: boolean;
   relocation?: 'town' | 'door';
-  owner?: {convoyId?: string; epoch?: number; commandId?: number; navigationRevision?: number; recoveryStage?: string};
+  owner?: {convoyId?: string; epoch?: number; commandId?: number; navigationRevision?: number; routeVersion?: number; recoveryStage?: string};
   transitionComplete?: (destination: Point) => void;
   townAttempt?: (state: 'casting' | 'interrupted' | 'complete' | 'unavailable', index: number, from: Point, destination: Point) => void;
   compareTown?: boolean;

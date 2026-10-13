@@ -14624,7 +14624,7 @@
       navigationRevision:Number(command.navigationRevision)||0,runtimeId:convoyRuntimeId,routeVersion:command.routeVersion};
   }
   function sharedMovementOptions(command) {
-    return { owner: {convoyId:command.convoyId,epoch:command.epoch,commandId:command.id,navigationRevision:command.navigationRevision,recoveryStage:command.routeRecovery && command.routeRecovery.stage},
+    return { owner: {convoyId:command.convoyId,epoch:command.epoch,commandId:command.id,navigationRevision:command.navigationRevision,routeVersion:command.routeVersion,recoveryStage:command.routeRecovery && command.routeRecovery.stage},
       relocation:command.routeRecovery && command.routeRecovery.relocation, shared: true, avoidLeave: !!command.avoidLeave, native: !!command.nativeFallback, speed: command.slowestSpeed,
       transitionComplete:function(destination) {
         if(convoyTraveling && convoyTraveling.commandId===command.id)convoyTraveling.transitionMap=destination.map;
