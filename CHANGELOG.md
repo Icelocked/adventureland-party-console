@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed merchant collection getting stuck approaching inaccessible transporter centers, including Desertland; use collision-clear points within the native interaction range.
+
 - Fix headless movement and event-return stalls caused by native pathfinding restoring a CODE-scoped visibility wrapper; preserve the original game visibility function across planning and CODE reloads.
 
 - Add bounded route-planning scheduler diagnostics to distinguish delayed native callbacks from movement-owner pauses during recovery investigations.

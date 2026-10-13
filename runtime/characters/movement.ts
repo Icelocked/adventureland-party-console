@@ -7,7 +7,7 @@ import { createNativePlanner } from './native-planner.ts';
 import { createMovementExecutor } from './movement-executor.ts';
 import { resolveDestination } from './movement-destination.ts';
 import { movementDiagnostics } from './movement-diagnostics.ts';
-import { repairDoorApproaches } from '../navigation/door-approach.ts';
+import { repairDoorApproaches, transporterApproach } from '../navigation/door-approach.ts';
 import { planReturnCandidates } from './return-planner.ts';
 import {createPlanningScheduleMetrics} from './planning-schedule-metrics.ts';
 import {repairWalkingEndpoint} from '../navigation/walking-endpoint.ts';
@@ -400,6 +400,7 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
     return install(plot, true);
   }
   const service = { state, move, stop,
+    transporterApproach(map: string, spawn: number) { const target=validation.game.maps[map]?.spawns[spawn];return target ? transporterApproach(validation,position(),{map,x:target[0],y:target[1],transport:true,s:spawn}) : undefined; },
     settleTerminal, cancel(reason: string, cause?: Record<string, unknown>) { finish(false, reason, cause); return native.stop('smart'); }, tick, planTick, gate, transition: executor.transition, get identity() { return {version, fingerprint}; }, install: importRoute, last: () => last,
     combatHandoff() { finish(false, 'Combat handoff'); },
     nativePlanning: planner.report,

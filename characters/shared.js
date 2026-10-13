@@ -4926,13 +4926,16 @@
         var transporter = (map.npcs || []).find(function(npc){return npc.id === "transporter";});
         if (transporter) {
           var places = G.npcs && G.npcs.transporter && G.npcs.transporter.places || {};
-          Object.keys(places).forEach(function(name){exits.push({map:name,spawn:places[name],point:transporter.position});});
+          Object.keys(places).forEach(function(name){exits.push({map:name,spawn:places[name],point:transporter.position,transporter:true});});
         }
         for (var i = 0; i < exits.length; i++) {
           var exit = exits[i], next = G.maps[exit.map], spawn = next && next.spawns && next.spawns[exit.spawn];
           if (!spawn || seen[exit.map] || next.instance || next.event) continue;
           seen[exit.map] = true;
-          var first = entry.first || { map: entry.map, x: exit.point[0], y: exit.point[1], to: exit.map, spawn: exit.spawn };
+          var approach = !entry.first && exit.transporter ? movement.transporterApproach(exit.map,exit.spawn) : null;
+          if (!entry.first && exit.transporter && !approach) continue;
+          var first = entry.first || { map: entry.map, x: approach ? approach.x : exit.point[0], y: approach ? approach.y : exit.point[1], to: exit.map, spawn: exit.spawn,
+            transporterPoint: exit.transporter ? exit.point : null };
           if (exit.map === destination.map) return first;
           queue.push({map:exit.map,first:first});
         }
@@ -4994,7 +4997,8 @@
           // cross-map leg because the recipient moved within that map.
           var crossMap = destination.map !== character.map;
           var nextRoute = crossMap ? travelLeg(destination) : { map: destination.map, x: destination.x, y: destination.y };
-          if (nextRoute.to && Math.hypot(character.x-nextRoute.x,character.y-nextRoute.y) <= 20) {
+          if (nextRoute.to && Math.hypot(character.x-nextRoute.x,character.y-nextRoute.y) <= 20 &&
+              (!nextRoute.transporterPoint || Math.hypot(character.x-nextRoute.transporterPoint[0],character.y-nextRoute.transporterPoint[1]) < 75)) {
             route=null; routePending=false;
             await stop("smart"); if (!current()) throw new Error("interrupted");
             await stop("move"); if (!current()) throw new Error("interrupted");

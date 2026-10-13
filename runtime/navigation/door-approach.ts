@@ -44,6 +44,11 @@ function transporterPoints(ports: ValidationPorts, from: Point, to: Step): Point
     })),
   );
 }
+/** Choose a native collision-clear point inside the existing transporter interaction radius. */
+export function transporterApproach(ports: ValidationPorts, from: Point, to: Step): Point | undefined {
+  return transporterPoints(ports,from,to).sort((a,b)=>distance(from,a)-distance(from,b))
+    .find(point=>ports.walk(point,point)&&!stepIssue(ports,point,to,true));
+}
 function connector(ports: ValidationPorts, from: Point, to: Step): Point | undefined {
   return approaches(ports, from, to)
     .sort((a, b) => distance(from, a) - distance(from, b))
