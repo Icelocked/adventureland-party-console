@@ -87,6 +87,11 @@ export function installSkillRuntime(root: CombatRoot) {
   const engine = createSkillEngine({
     world,
     cast:castSkill,
+    publishAfterCast: d => {
+      const skills: Partial<Record<SkillId, SkillDefinition>> = G.skills;
+      return !!skills[d.skill]?.hostile && d.targets.length > 0 &&
+        d.targets.every(t => shared.independentPullActive?.(t as Target));
+    },
     evidence: (t, state, action) => shared.queueEvidence?.(t as Target, state, action) || null,
     diagnostic: d => { if (root.partyCombatState) root.partyCombatState.skill = d; },
   });

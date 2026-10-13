@@ -94,6 +94,7 @@ export interface SharedCombat {
   returnAttacker?(target: Target): boolean;
   returnMovementTick?(): void;
   groupedMovement?(): boolean;
+  independentPullActive?(target: Target): boolean;
   groupedAttackAllowed?(target: Target): boolean;
   followLeaderIfFar(distance: number): Promise<unknown>;
   basicAttackReserved(): boolean;

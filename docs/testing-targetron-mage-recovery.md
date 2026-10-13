@@ -37,3 +37,6 @@ two-leg detour. Mage regroup goals must instead admit collision-safe native
 attack-range ring positions inside priest healing coverage. Keep other-enemy
 avoidance and segment safety, retain the selected open side, and invalidate it
 when the priest/target moves. Do not relax mage healing coverage to force a route.
+# Independent approach ownership compatibility
+
+Before changing the observation contract, native run 38410394262 shard 15 recorded four real Mage hit receipts and 23 samples owned by `combat-approach`, including collision-clear physical movement from (-830,-310) into range. Its assertion accepted only the previous `combat` owner. Accept the independent owner only with its matching target, independent-approach mode, and actual approach ID; retain native displacement, segment clearance, range, damage, map, and survival checks.

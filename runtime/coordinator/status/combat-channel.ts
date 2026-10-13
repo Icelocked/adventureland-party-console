@@ -1,3 +1,4 @@
+import type {IndependentConfirmation} from '../../combat/independent-approach.ts';
 const semanticGrant=(grant:{expiresAt:number}|undefined)=>grant ? {...grant,expiresAt:undefined} : undefined;
 import type { HttpResponse } from "../http/contracts.ts";
 /** Long polling is separate from full inventory/status ingestion. One waiter per character. */
@@ -33,6 +34,8 @@ export function createCombatChannel(response: (name: string, mode?: "combat") =>
     const revisionControl = {...control, consoleMaintenance: control.consoleMaintenance && {...control.consoleMaintenance,expires:undefined}, convoySignal: control.convoySignal && {...control.convoySignal, validUntil: undefined}};
     const group = full?.groupedCombat as {
       queueRevision?: string;
+      independentApproach?:boolean;
+      independentConfirmation?:Pick<IndependentConfirmation,'id'>;
       pairRevision?:string; successorGrant?:{expiresAt:number};
       selection?: string;
       committed?: boolean;
@@ -54,6 +57,7 @@ export function createCombatChannel(response: (name: string, mode?: "combat") =>
         group.queueRevision, group.pairRevision, semanticGrant(group.successorGrant),
         group.selection,
         group.committed,
+        group.independentApproach,group.independentConfirmation?.id,
         group.pursuit?.revoking,
         group.formationRecovery,
         position,
