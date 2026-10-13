@@ -7,10 +7,12 @@ test('native headless merchant approaches Desert transporter within range and co
  await live.post('/merchant/force-stand',{enabled:true});
  await live.post('/steam/action',{character:M,action:'logout'});
  await expect.poll(async()=>{const s=await live.state();return !s.activeSlots.some((slot:any)=>slot.character===M)&&(!s.steamSwitch||s.steamSwitch.phase==='complete');},{timeout:60000}).toBe(true);
- await expect.poll(()=>live.admin(`output=!!get_player('${M}')`),{timeout:30000}).toBe(false);
+ await expect.poll(()=>live.admin(`output=!!get_player('${M}')||Object.values(dc_players).some(p=>p.name==='${M}')`),{timeout:30000}).toBe(false);
+ const initial=await live.admin(`output=(async()=>{if(get_player('${M}')||Object.values(dc_players).some(p=>p.name==='${M}'))throw Error('Initial Merchant placement requires disconnected native player');const point={map:'desertland',x:0,y:0},body={type:'character',...point};set_base(body);if(!can_move({...body,going_x:0,going_y:0}))throw Error('Native geometry rejects Merchant initial point');const result=await db.collection('character').updateOne({name:'${M.toLowerCase()}'},{$set:{'info.map':point.map,'info.in':point.map,'info.x':0,'info.y':0}});if(result.matchedCount!==1)throw Error('Initial Merchant fixture character missing');return {point,base:body.base,disconnected:true,matchedCount:result.matchedCount};})()`);
+ await info.attach('native-disconnected-headless-merchant-initial-position',{body:JSON.stringify(initial),contentType:'application/json'});
  const slots=(await live.state()).activeSlots,slot=slots.find((slot:any)=>!slot.character&&slot.kind!=='steam');
  await live.post('/slots/'+(slot?.slot??slot?.index??1)+'/spawn',{character:M});
- await expect.poll(async()=>{const c=(await live.state()).characters[M];return c?.runtime==='headless'&&c.map==='desertland'&&Math.hypot(c.x,c.y)<15;},{timeout:90000}).toBe(true);
+ await expect.poll(async()=>{const c=(await live.state()).characters[M],actual=await live.admin(`output=(()=>{const p=get_player('${M}');return p&&{map:p.map,x:p.x,y:p.y,hp:p.hp,rip:p.rip,clear:can_move({...p,going_x:p.x,going_y:p.y})};})()`);return c?.runtime==='headless'&&Date.now()-c.seenAt<3000&&c.map==='desertland'&&Math.hypot(c.x,c.y)<15&&actual?.map==='desertland'&&Math.hypot(actual.x,actual.y)<15&&actual.hp>0&&!actual.rip&&actual.clear;},{timeout:90000}).toBe(true);
  try{
   await live.post('/config',{itemCollectionThreshold:1});await seedCargo(live,W);expect(await totalLeather(live)).toBe(7);
   await live.post('/merchant/routine-priorities',{priorities:{},enabled:{'party collection':true}});
