@@ -22,13 +22,13 @@ test('the realm-hop blacklist is edited in the dashboard, validated and kept acr
     const target = realms.find(realm => !realm.pvp)!;
     expect(target, 'The server must offer a non-PVP realm').toBeTruthy();
     let settings = await openSettings();
-    const row = settings.getByRole('checkbox', { name: `Never hop to ${label(target.key)}` });
+    const row = settings.getByRole('checkbox', { name: `Never hop to ${label(target.key)}`, exact: true });
     await expect(row).not.toBeChecked();
     await row.click();
     await expect(row).toBeChecked({ timeout: 15_000 });
     await expect.poll(async () => (await live.state()).realmHopBlacklist).toEqual([target.key]);
     for (const pvp of realms.filter(realm => realm.pvp)) {
-      const locked = settings.getByRole('checkbox', { name: `Never hop to ${label(pvp.key)}` });
+      const locked = settings.getByRole('checkbox', { name: `Never hop to ${label(pvp.key)}`, exact: true });
       await expect(locked).toBeChecked();
       await expect(locked).toBeDisabled();
     }
@@ -41,14 +41,14 @@ test('the realm-hop blacklist is edited in the dashboard, validated and kept acr
     await live.restartCoordinator();
     await expect.poll(async () => (await live.state()).realmHopBlacklist, { timeout: 30_000 }).toEqual([target.key]);
     settings = await openSettings();
-    const restored = settings.getByRole('checkbox', { name: `Never hop to ${label(target.key)}` });
+    const restored = settings.getByRole('checkbox', { name: `Never hop to ${label(target.key)}`, exact: true });
     await expect(restored).toBeChecked();
     await info.attach('realm-hop-blacklist-after-restart', { body: await page.screenshot(), contentType: 'image/png' });
     // The dashboard may reload once after a coordinator restart and close the dialog.
     await expect(async () => {
       if ((await live.state()).realmHopBlacklist?.length) {
         settings = await openSettings();
-        await settings.getByRole('checkbox', { name: `Never hop to ${label(target.key)}` }).click({ timeout: 5_000 });
+        await settings.getByRole('checkbox', { name: `Never hop to ${label(target.key)}`, exact: true }).click({ timeout: 5_000 });
       }
       expect((await live.state()).realmHopBlacklist).toEqual([]);
     }).toPass({ timeout: 60_000 });
