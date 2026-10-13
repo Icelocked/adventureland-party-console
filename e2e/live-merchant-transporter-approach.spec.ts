@@ -4,7 +4,6 @@ test.use({liveHeadless:true,initialPositions:{E2EWarrior:{map:'main',x:0,y:0},E2
 test('native headless merchant approaches Desert transporter within range and collects real cargo',async({live},info)=>{
  test.setTimeout(240000);const samples:any[]=[];
  await live.post('/focus',{monsterFocus:[],monsterPriorities:{}});
- await live.post('/merchant/stand-location',{map:'desertland',x:0,y:0});
  await live.post('/merchant/force-stand',{enabled:true});
  await live.post('/steam/action',{character:M,action:'logout'});
  await expect.poll(async()=>{const s=await live.state();return !s.activeSlots.some((slot:any)=>slot.character===M)&&(!s.steamSwitch||s.steamSwitch.phase==='complete');},{timeout:60000}).toBe(true);
