@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep independent combat approach and attack readiness consistent across full heartbeats and fast combat reports.
+
 - Fix fighters holding when a selected target is outside their local view; approach fresh party observations while requiring native visibility before attacking.
 
 - Replace shared next-target movement with independent native routes for each fighter; halve blocked approach distances and hold fire until every fighter confirms attack range and line of sight to the selected target.
