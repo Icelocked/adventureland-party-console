@@ -61,8 +61,31 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
     if(!owner || !res.url().endsWith('/party-api/movement-barrier'))return;
     const value=res.request().postDataJSON();
     if(value?.character!==P || value.completed!==true || value.convoyId!==owner.convoyId || value.epoch!==owner.epoch || value.routeVersion!==owner.routeVersion || value.step!==owner.step || JSON.stringify(value.destination)!==JSON.stringify(owner.destination))return;
-    void res.json().then(result=>{if(result.ready===true){peerReleased={at:Date.now(),request:value,response:result};ledger.push({action:'actual-peer-completion-released',...peerReleased});}},()=>{});
+    void res.json().then(result=>{if(result.ready===true){peerReleased={at:Date.now(),proofPath:'coordinator-barrier-reconciliation',request:value,response:result};ledger.push({action:'actual-peer-completion-released',...peerReleased});}},()=>{});
   };
+  async function independentlySettledPeer(){
+    if(!receipt)return false;
+    const actual=await live.clients[P].frame.evaluate(()=>{const g=window as any,r=g.document.getElementById('maincode')?.contentWindow,m=r?.__partyMovement,c=g.character;
+      return {active:m?.report?.(),last:m?.last?.(),native:c?{map:c.map,in:c.in,x:c.real_x,y:c.real_y,moving:c.moving,rip:c.rip,hp:c.hp}:null};});
+    // Observe coordinator ownership after the native read, so an intervening retirement cannot certify an old peer.
+    const state=await live.state(),convoy=state.activeConvoy,member=state.characters[P],expected=convoy?.expected?.[P];
+    if(!convoy || convoy.id!==owner.convoyId || convoy.epoch!==owner.epoch || convoy.routeVersion!==owner.routeVersion ||
+      convoy.routeServer!==receipt.terminalSettlement.server || !convoy.completed?.includes(P) || !expected ||
+      !['map','x','y'].every(key=>convoy.location?.[key]===owner.destination[key]) ||
+      member?.combatSelection?.runtimeId!==expected.runtimeId || member?.lastCommandId!==expected.commandId)return false;
+    const movement=actual.last,proof=movement?.terminalSettlement,native=actual.native,geometry=receipt.terminalSettlement.geometry;
+    if(actual.active || movement?.done!==true || !proof || proof.acknowledged!==true || !proof.journeyId || movement.id!==proof.journeyId ||
+      proof.convoyId!==owner.convoyId || proof.epoch!==owner.epoch || proof.routeVersion!==owner.routeVersion ||
+      proof.commandId!==expected.commandId || proof.navigationRevision!==expected.revision || proof.runtimeId!==expected.runtimeId ||
+      proof.step!==owner.step || !['map','in','x','y','method'].every(key=>proof.destination?.[key]===owner.destination[key]) ||
+      !['version','fingerprint'].every(key=>proof.geometry?.[key]===geometry?.[key]) || proof.server!==receipt.terminalSettlement.server ||
+      !native || native.rip || !Number.isFinite(native.hp) || !(native.hp>0) || native.moving || native.map!==owner.destination.map ||
+      !Number.isFinite(native.x) || !Number.isFinite(native.y) ||
+      String(native.in??native.map)!==String(owner.destination.in??owner.destination.map) ||
+      Math.hypot(native.x-owner.destination.x,native.y-owner.destination.y)>1)return false;
+    peerReleased={at:Date.now(),proofPath:'peer-independently-settled',coordinator:{convoyId:convoy.id,epoch:convoy.epoch,routeVersion:convoy.routeVersion,routeServer:convoy.routeServer,location:convoy.location,expected,completed:convoy.completed},actual};
+    ledger.push({action:'actual-peer-independently-settled',...peerReleased});return true;
+  }
   await context.route('**/party-api/status',status);await context.route('**/party-api/movement-barrier',barrier);
   await context.route('**/party-api/convoy-complete',complete);page.on('response',response);
   return {
@@ -92,7 +115,7 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
           receipt=value;return true;
         },{timeout:Math.min(10_000,Math.max(1,deadline-Date.now())),message:'A genuine acknowledged terminal settlement must replace the undelivered completion POST'}).toBe(true);
       }finally{dropping=false;release?.();}
-      await expect.poll(()=>!!peerReleased,{timeout:Math.min(20_000,Math.max(1,deadline-Date.now())),message:'Fresh native terminal receipt must release the actual peer barrier before Warrior convoy completion'}).toBe(true);
+      await expect.poll(async()=>!!peerReleased || await independentlySettledPeer(),{timeout:Math.min(20_000,Math.max(1,deadline-Date.now())),message:'The peer must genuinely finish through its matching barrier or independently acknowledged terminal settlement before Warrior completion'}).toBe(true);
       expect(acceptedObservations,'The coordinator must accept genuine full or combatOnly native observations while their actual control responses are lost').toBeGreaterThan(0);
       expect(forwardingErrors,'The declared fault must not become a missing-observation transport failure').toEqual([]);
       const nativeEvents=await live.clients[W].events();
