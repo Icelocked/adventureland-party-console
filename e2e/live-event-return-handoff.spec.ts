@@ -1,8 +1,22 @@
+import {observeNativeStatus} from './native-status-observer';
 import {test,expect} from './live-fixtures';
 
 const W='E2EWarrior',P='E2EPriest',fighters=[W,P];
 const checkpoint={map:'halloween',x:-550,y:-290};
 test.use({initialPosition:checkpoint});
+
+const statusObservers=new Map<string,Awaited<ReturnType<typeof observeNativeStatus>>>();
+test.beforeEach(async({live},info)=>{
+  if(info.title.includes('held Green return')||info.title.includes('checkpoint return')){
+    try{statusObservers.set(info.testId,await observeNativeStatus(live.clients,fighters));}
+    catch(error){await info.attach('native-status-observer-install-error',{body:String(error),contentType:'text/plain'});throw error;}
+  }
+});
+test.afterEach(async({},info)=>{
+  const observer=statusObservers.get(info.testId);if(!observer)return;
+  try{await info.attach('native-event-status-metadata',{body:JSON.stringify(await observer.finish()),contentType:'application/json'});}
+  finally{statusObservers.delete(info.testId);}
+});
 
 for(const variant of ['leaving Green','following a Pumpkin leader','restoring a held Green return','interrupting a checkpoint return'] as const){
   test(`active event return hands off when ${variant}`,async({live},info)=>{

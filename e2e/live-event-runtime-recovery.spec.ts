@@ -1,9 +1,23 @@
+import {observeNativeStatus} from './native-status-observer';
 import { killNativeCharacter } from "./hunt-interruption-helpers";
 import {test,expect} from './live-fixtures';
 import type {Route} from '@playwright/test';
 
 const W='E2EWarrior',P='E2EPriest',fighters=[W,P];
 test.use({initialPosition:{map:'halloween',x:-550,y:-290}});
+
+const statusObservers=new Map<string,Awaited<ReturnType<typeof observeNativeStatus>>>();
+test.beforeEach(async({live},info)=>{
+  if(info.title.includes('fixed-end event timer')||info.title.includes('old deferred return is superseded')||info.title.includes('event limits exhaust')){
+    try{statusObservers.set(info.testId,await observeNativeStatus(live.clients,fighters));}
+    catch(error){await info.attach('native-status-observer-install-error',{body:String(error),contentType:'text/plain'});throw error;}
+  }
+});
+test.afterEach(async({},info)=>{
+  const observer=statusObservers.get(info.testId);if(!observer)return;
+  try{await info.attach('native-event-status-metadata',{body:JSON.stringify(await observer.finish()),contentType:'application/json'});}
+  finally{statusObservers.delete(info.testId);}
+});
 
 test('native fixed-end event timer survives clock resync and a limit added during attendance',async({live},info)=>{
   test.setTimeout(300000);
@@ -30,6 +44,7 @@ test('native fixed-end event timer survives clock resync and a limit added durin
     await live.clients[W].frame.evaluate(()=>{const game=window as any,runner=(document.getElementById('maincode') as HTMLIFrameElement).contentWindow as any;
       game.start_runner('maincode',`$.getScript(${JSON.stringify(runner.__partyServer+'/CODE/adventure_land/universal-loader.js')});`);});
     await expect.poll(async()=>{const s=await live.state();return s.characters[W]?.dashboardRuntime!==runtime&&s.characters[W]?.eventClockStale===false;},{timeout:45000}).toBe(true);
+    await statusObservers.get(info.testId)?.refresh(W);
     const resumed=await live.state();
     expect(resumed.eventAttendance[W].mrpumpkin.id).toBe(String(seed.end));
     expect(resumed.eventAttendance[W].mrpumpkin.elapsedMs).toBeGreaterThanOrEqual(before.eventAttendance[W].mrpumpkin.elapsedMs);

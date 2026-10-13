@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add bounded route-planning scheduler diagnostics to distinguish delayed native callbacks from movement-owner pauses during recovery investigations.
+
 - Preserve command-owned native Cave waypoint arrival evidence when subsequent combat movement occurs between E2E samples, without relaxing arrival or ownership checks.
 
 - Reduce native E2E browser request overhead by keeping loopback traffic outside request interception, with an owned denial proxy preserving external network isolation.
