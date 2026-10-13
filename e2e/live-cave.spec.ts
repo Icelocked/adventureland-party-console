@@ -1034,6 +1034,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   const stairSamples:any[]=[];
   let lastStairKey='';
   let blockedStairAt=0,blockedStairId='';
+  let stairMoveFlags:{name:string;enabled:boolean;count:number}[]=[];
   const stairNativeReads:Promise<unknown>[]=[];
   const stairPlanningReads:Promise<unknown>[]=[];
   const stairPlanningStarted=Date.now();
@@ -1054,7 +1055,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     if(!id){blockedStairAt=0;blockedStairId='';return;}
     if(id!==blockedStairId){blockedStairId=id;blockedStairAt=Date.now();}
     if(stairNativeReads.length>=3||Date.now()-blockedStairAt<(stairNativeReads.length+1)*20000)return;
-    stairNativeReads.push(Promise.allSettled(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].run(`(()=>{
+    stairNativeReads.push(Promise.allSettled([...['E2EWarrior','E2EPriest'].map(name=>live.clients[name].run(`(()=>{
       const c=character,p=parent.character,now=Date.now();
       const body=o=>o?{name:o.name,map:o.map,in:o.in,x:o.x,y:o.y,real_x:o.real_x,real_y:o.real_y,
         hp:o.hp,rip:o.rip,moving:o.moving,base:o.base,width:o.width,height:o.height,
@@ -1067,7 +1068,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
           id:o.id,mtype:o.mtype,type:o.type,target:o.target,dead:o.dead,visible:o.visible,side:o.cave?.side})),
         chests:Object.entries(parent.chests||{}).filter(([id,o])=>near(o)).slice(0,20).map(([id,o])=>({
           id,map:o.map,in:o.in,x:o.x,y:o.y,deleted:o.to_delete,owner:o.owner,opened:o.opened,skin:o.skin}))};
-    })()`))));
+    })()`)),live.admin(`output=(()=>{const people=['E2EWarrior','E2EPriest'].map(name=>get_player(name));return {at:Date.now(),version:G.version,players:people.map(p=>{if(!p)return null;const g=G.geometry[p.map];return {name:p.name,map:p.map,in:p.in,x:p.x,y:p.y,hp:p.hp,rip:p.rip,moving:p.moving,base:p.base,selfClear:can_move({map:p.map,x:p.x,y:p.y,going_x:p.x,going_y:p.y,base:p.base}),geometry:g?{x_lines:(g.x_lines||[]).filter(line=>Math.abs(line[0]-p.x)<=32&&line[1]-32<=p.y&&line[2]+32>=p.y).slice(0,12),y_lines:(g.y_lines||[]).filter(line=>Math.abs(line[0]-p.y)<=32&&line[1]-32<=p.x&&line[2]+32>=p.x).slice(0,12)}:null};})};})()`)]));
   };
   const recordStairs=(v:any)=>{
     const at=Date.now(),state=v.state;
@@ -1096,6 +1097,13 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
       stairNativeChoices.push({at:Date.now(),advertised:c.choice.id,...identity});if(stairNativeChoices.length>100)stairNativeChoices.splice(5,1);
       if(identity.run!==c.run||identity.id!==c.choice.id||identity.resolved)return false;
       const reply=c.choice.options.find((o:any)=>!o.unavailable&&!o.cost&&!o.amber);
+      if(!stairMoveFlags.length&&identity.run===farewellDeclaration.run&&identity.room===farewellDeclaration.room){
+        stairMoveFlags=await Promise.all(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].frame.evaluate(name=>{
+          const g=window as Window&{__e2eObserveMoves?:boolean;__e2eObservedMoveCount?:number};
+          const previous={name,enabled:g.__e2eObserveMoves===true,count:g.__e2eObservedMoveCount||0};
+          g.__e2eObservedMoveCount=0;g.__e2eObserveMoves=true;return previous;
+        },name)));
+      }
       try{
         await choice.getByRole('button',{name:reply.label,exact:true}).click();
       }catch(error){
@@ -1126,8 +1134,15 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
       if(latest)captureBlockedStairs({state:{phase:latest.phase,run:latest.run,travel:latest.travel}});return completed;},
       {timeout:300_000,message:'Manual stairs must continue after the farewell vote and transport both members'}).toBe(true);
   }finally{
-    await info.attach('native-cave-stairs-readiness',{body:JSON.stringify({farewellDeclaration,nativeChoices:stairNativeChoices,samples:stairSamples,planning:await Promise.allSettled(stairPlanningReads),native:await Promise.allSettled(stairNativeReads),
-      unavailable:['Coordinator status position/seenAt and CODE loading/socket ownership are not exposed by this dungeon response.']}),contentType:'application/json'});
+    try{
+      await info.attach('native-cave-stairs-readiness',{body:JSON.stringify({farewellDeclaration,nativeChoices:stairNativeChoices,samples:stairSamples,planning:await Promise.allSettled(stairPlanningReads),native:await Promise.allSettled(stairNativeReads),
+        unavailable:['Coordinator status position/seenAt and CODE loading/socket ownership are not exposed by this dungeon response.']}),contentType:'application/json'});
+    }finally{
+      await Promise.all(stairMoveFlags.map(previous=>live.clients[previous.name].frame.evaluate(previous=>{
+        const g=window as Window&{__e2eObserveMoves?:boolean;__e2eObservedMoveCount?:number};
+        g.__e2eObserveMoves=previous.enabled;g.__e2eObservedMoveCount=previous.count;
+      },previous)));
+    }
   }
   expect(answeredFarewell).toBe(true);
   console.log('[Cave verified] Both characters reached the next native floor');
