@@ -50,13 +50,17 @@ for(const protection of ['none','new-revision','protected','unrelated'])test('re
   statuses:{A:{seenAt:1000,serverLiveEvents:[{name:'mrpumpkin',id:'new'}]}},commands:{A:{id:1,type:'party-monster-travel',convoyId:'walk'}},nextCommandId:2};
  const saved=[];let cancelled=0;
  const service=createCoordinatorEventObservations(state,{now:()=>1000,activeNames:()=>['A'],enabled:()=>true,checkpoint:()=>checkpoint,
-  persist:()=>saved.push({activeConvoy:state.activeConvoy}),log(){},goobrawlStillFighting:()=>false,begin(){},finishIfReady(){},
+  persist:()=>saved.push({activeConvoy:state.activeConvoy,phase:state.deferredEventReturns.A.phase}),log(){},goobrawlStillFighting:()=>false,begin(){},finishIfReady(){},
   cancelConvoy(){cancelled++;state.activeConvoy=null;delete state.commands.A;},
   navigation:{capture:()=>({}),location:()=>checkpoint,intent:()=>({revision:1})}});
  service.observe({name:'A',serverLiveEvents:[{name:'mrpumpkin',id:'new'}]});
- assert.equal(cancelled,protection==='none'?1:0);assert.equal(saved.length,protection==='none'?1:0);
+ assert.equal(cancelled,protection==='none'?1:0);assert.equal(saved.length,protection==='none'?2:1);
  if(protection==='none')assert.equal(saved[0].activeConvoy,null);
+ assert.equal(saved.at(-1).phase,'awaiting-event-admission');
+ assert.equal(saved.at(-1).activeConvoy,protection==='none'?null:convoy);
+ assert.equal(state.commands.A?.id,protection==='none'?undefined:1);
+ assert.deepEqual(state.deferredEventReturns.A.checkpoint,checkpoint);
  assert.equal(state.deferredEventReturns.A,deferred);assert.deepEqual(state.eventSessions.A.participants,[]);
  service.observe({name:'A',serverLiveEvents:[{name:'mrpumpkin',id:'new'}]});
- assert.equal(saved.length,protection==='none'?1:0);
+ assert.equal(saved.length,protection==='none'?2:1);
 });
