@@ -1,6 +1,7 @@
 import type { BrowserContext, Page, Frame } from '@playwright/test';
 import {randomUUID} from 'node:crypto';
-import {installCompanionGraphicsDiagnostic} from './native-graphics-diagnostic.js';
+// The debug instance loads this module with Node's own TypeScript support, which does not map .js to .ts.
+import {installCompanionGraphicsDiagnostic} from './native-graphics-diagnostic.ts';
 
 export interface LiveClientOptions {
   webUrl: string;
