@@ -16609,6 +16609,9 @@
     if(!character.cave && root.partyQueueClient && root.partyQueueClient.independent && root.partyQueueClient.independent.movement())return true;
     if ((typeof bossCombatActive === "function" ? bossCombatActive() : typeof frankyCombatActive === "function" && frankyCombatActive())) return false;
     if(!character.cave && root.partyQueueClient && root.partyQueueClient.formation && root.partyQueueClient.formation.movement())return true;
+    // The priest formation orbits melee classes around their target, which pulls
+    // the designated tank off it. tankMovementTick owns the tank's movement.
+    if (designatedTankSelf()) return false;
     var context = [character.map, character.in, character.rip, joinedEvent, eventTraveling].join(":");
     if (formationState.mapContext !== context) {
       formationState.mapContext = context; formationState.approachProgress = null; formationState.recovery = null;
@@ -17046,6 +17049,8 @@
         return enemy && enemy.type === "monster" && enemy.visible && !enemy.dead && enemy.target === character.name;
       }).sort(function (a, b) { return combatDistance(a) - combatDistance(b); })[0];
     if (!attacker || attacker.dead) { kiteState.targetId = null; return false; }
+    // The tank stands in its own target's attack range on purpose. Other attackers still kite it.
+    if (designatedTankSelf() && target && attacker.id === target.id) { kiteState.targetId = null; return false; }
     if (eventBossMovement(target) && !is_in_range(target) && await approachCombatTarget(target)) return true;
     if (kiteState.targetId !== attacker.id) { kiteState.targetId = attacker.id; kiteState.direction = 1; }
     var dx = character.x - attacker.x, dy = character.y - attacker.y;
@@ -17376,6 +17381,7 @@
   // Generalizes Franky's off-tank "stack tight" clamp (see the stackRange branch in
   // frankyMovementTick) to normal grouped combat: the designated tank holds near-melee
   // range regardless of its own weapon range, so a ranged class can be assigned to tank.
+  function designatedTankSelf() { return typeof tank !== "undefined" && !!tank && tank === character.name; }
   function tankMovementTick(target) {
     if (!target || target.dead) return false;
     var stackRange = Math.min(desiredCombatRange(), 30);
@@ -17402,7 +17408,7 @@
 
   async function approachCombatTarget(target) {
     if ((typeof bossCombatActive === "function" ? bossCombatActive() : typeof frankyCombatActive === "function" && frankyCombatActive())) return typeof bossMovementTick === "function" ? bossMovementTick(target) : frankyMovementTick(target);
-    if (tank && tank === character.name) return tankMovementTick(target);
+    if (designatedTankSelf()) return tankMovementTick(target);
     return engageMovementTick(target);
   }
 
@@ -17707,7 +17713,8 @@
     queueEvidence: function(target,state,action){return root.partyQueueClient && root.partyQueueClient.evidence(target,state,action);},
     usesGroupedCombat: groupedFarming,
     defensiveFormationMove: function () {
-      if (!groupedFarming()) return false;
+      // The tank takes hits instead of evading; groupedDefensiveTarget makes the attacker its target.
+      if (!groupedFarming() || designatedTankSelf()) return false;
       var threat = Object.keys(parent.entities || {}).map(function (id) { return parent.entities[id]; })
         .filter(function (enemy) { return enemy && enemy.visible && !enemy.dead && enemy.type === "monster" &&
           (!enemy.map || enemy.map === character.map) && (enemy.in == null || character.in == null || enemy.in === character.in) &&
