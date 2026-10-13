@@ -450,6 +450,10 @@ export function createEventObservations(
     return !!report?.serverLiveEvents?.some(entry=>entry.name===recovery.event &&
       !(entry.name==='slenderman' && report.slendermanSearchExhausted));
   }
+  function awaitEventAdmission(recovery: DeferredRecovery): void {
+    if(recovery.phase==="awaiting-event-admission")return;
+    recovery.phase="awaiting-event-admission";ports.persist();
+  }
   function retireOldDeferredContinuation(name: string, cycleId: string): void {
     // Actual authorization adopts the checkpoint and records participation.
     // These hooks reject unrelated commands, walks and renewed navigation.
@@ -461,6 +465,7 @@ export function createEventObservations(
     if (!recovery) return;
     if(awaitingRetiredSameEvent(body.name,recovery)){
       retireOldDeferredContinuation(body.name,recovery.cycleId);
+      awaitEventAdmission(recovery);
       return;
     }
     if (ports.hasCommand(body.name) || nextLiveEvent(body.name, recovery.event)) return;

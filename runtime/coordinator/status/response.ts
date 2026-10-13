@@ -138,7 +138,7 @@ export function createHeartbeatResponse(state: HeartbeatState, ports: HeartbeatR
 
   function returnResponse(name: string) {
     const deferred = requestObject(state.deferredEventReturns?.[name]);
-    const cycleId = state.eventReturn?.participants.includes(name) ? state.eventReturn.cycleId : deferred.cycleId;
+    const cycleId = state.eventReturn?.participants.includes(name) ? state.eventReturn.cycleId : deferred.phase === "awaiting-event-admission" ? null : deferred.cycleId;
     return {partyTownCycleId: state.townCycle?.id || null, returnProgress: state.returnProgress?.[name] || null,
       eventReturnCycleId: typeof cycleId === 'string' ? cycleId : null};
   }

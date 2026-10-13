@@ -145,3 +145,11 @@ test('retired same-event entry does not bypass stale clocks, manual intents or a
   assert.equal(f.commands.W?.type,'event-return-town',variant);assert.ok(f.state.deferred.W,variant);
  }
 });
+
+test('eligible same-event admission retires exit phase while preserving checkpoint and stale peer ownership',()=>{
+ const f=retiredSameEvent();f.observe({name:'W',serverLiveEvents:[{name:'mrpumpkin'}]});
+ assert.equal(f.state.deferred.W.phase,'awaiting-event-admission');assert.equal(f.state.deferred.P.phase,'returning-to-checkpoint');
+ assert.deepEqual(f.state.deferred.W.checkpoint,{map:'uhills',x:-550,y:-160});
+ f.statuses.W.serverLiveEvents=[];f.observe({name:'W',map:'main',x:0,y:0,serverLiveEvents:[]});
+ assert.equal(f.state.deferred.W.phase,'returning-to-checkpoint');assert.equal(f.commands.W.type,'event-resume-travel');
+});

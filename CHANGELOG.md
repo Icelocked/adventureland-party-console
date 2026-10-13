@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Retire obsolete event-exit instructions in heartbeats while preserving deferred checkpoints, so characters can enter a new event without waiting on an old return.
+
 - Let eligible live events retire obsolete deferred return commands before admission, preserving saved checkpoints and attendance limits.
 
 - Require an exhausted owned walking route to settle at its destination before reporting arrival, preventing false Cave regroup completion after combat displacement.
