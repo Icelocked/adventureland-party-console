@@ -1312,7 +1312,9 @@ test('Cave assembly regroups displaced completed participants before departure',
       entryChoice=v.members[0]?.observation?.cave?.choice;
       return native.run===shop.run&&!!entryChoice&&!!native.room?.vote&&native.room.vote.id===entryChoice.id&&!entryChoice.resolved;},{timeout:Math.max(1,30_000-(Date.now()-shopSetupStarted)),message:'Real entry shop must present its own native choice'}).toBe(true);
     shopSetupEvidence.push({stage:'choice',choice:entryChoice});
-    const option=entryChoice.options.find((o:any)=>o.label==='Keep our gold and move on.'&&!o.unavailable&&!o.cost&&!o.amber);
+    const nativeReplies=await live.admin(`output=G.events.dreams.encounters.find(encounter=>encounter.id==='e31').options.map(option=>({id:option.id,effect:option.effect}));`);
+    shopSetupEvidence.push({stage:'native-reply-effects',replies:nativeReplies});
+    const option=entryChoice.options.find((o:any)=>nativeReplies.some((reply:any)=>reply.id===o.id&&reply.effect==='leave')&&!o.unavailable&&!o.cost&&!o.amber);
     expect(option,'Only the free noncombat entry-shop reply may be used for setup').toBeTruthy();
     shopSetupEvidence.push({stage:'selected-reply',choice:entryChoice.id,option});
     await act({action:'vote',run:shop.run,choice:entryChoice.id,option:option.id});
