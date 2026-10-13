@@ -6,6 +6,7 @@ test.use({loadout:'combat-range',initialPosition:{map:'main',x:349,y:1532}});
 test('blocked melee Phoenix recovery computes native hitbox-clear goals and reaches combat',async({live},info)=>{
   test.setTimeout(180000);
   // Failure inventory precedes implementation in testing-combat-recovery-goals.md.
+  await live.clients[W].frame.evaluate(()=>{const p=window as any;p.__e2eObserveMoves=true;p.__e2eObservedMoveCount=0;});
   await live.post('/merchant/force-stand',{enabled:true});
   await live.post('/formation',{leader:W});
   await live.post('/formation',{character:P,follow:true});
@@ -82,6 +83,7 @@ test('blocked melee Phoenix recovery computes native hitbox-clear goals and reac
     await info.attach('planned-phoenix-native-terrain-view',{body:await live.clients[W].page.screenshot(),contentType:'image/png'});
   }finally{
     try{
+      await live.clients[W].frame.evaluate(()=>{(window as any).__e2eObserveMoves=false;}).catch(()=>{});
       await context.unroute('**/party-api/status',intercept);
       await info.attach('planned-phoenix-recovery-proposals',{body:JSON.stringify({seed,geometry,proposals,positions}),contentType:'application/json'});
     }finally{

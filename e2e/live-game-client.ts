@@ -71,6 +71,25 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
       if(observed.has(socket))return;
       observed.add(socket);
       const observeOutgoing=(event:string,...args:any[])=>{
+        if(event==='move'){
+          if(!game.__e2eObserveMoves||game.socket!==socket||!game.character?.name||!args[0]||typeof args[0]!=='object')return;
+          if((game.__e2eObservedMoveCount||0)>=200)return;
+          game.__e2eObservedMoveCount=(game.__e2eObservedMoveCount||0)+1;
+          const c=game.character,runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+          const p=args[0],code=runner?.character;
+          const body=(o:any)=>o?{name:o.name,map:o.map,in:o.in,x:o.x,y:o.y,real_x:o.real_x,real_y:o.real_y,
+            moving:o.moving,going_x:o.going_x,going_y:o.going_y,base:o.base&&{h:o.base.h,v:o.base.v,vn:o.base.vn}}:null;
+          let clear:any;
+          try{clear=runner?.can_move?.({map:c.map,x:p.x,y:p.y,going_x:p.going_x,going_y:p.going_y,base:c.base});}catch(error){clear={error:String(error)};}
+          game.__e2eEvents.push({sequence:++game.__e2eEventSequence,at:Date.now(),event:'move-issued',
+            data:{x:p.x,y:p.y,going_x:p.going_x,going_y:p.going_y,m:p.m},
+            motion:{parent:body(c),code:body(code),clear,owner:runner?.__partyCombatOwner,
+              position:runner?.partyCombatPosition&&{mode:runner.partyCombatPosition.mode,reason:runner.partyCombatPosition.reason,
+                target:runner.partyCombatPosition.target,issuedAt:runner.partyCombatPosition.issuedAt},runtimeGeneration:runner?.__partyRuntimeGeneration,
+              codeHash:runner?.__partyCodeHash,observerGeneration:game.__e2eObserverGeneration}});
+          if(game.__e2eEvents.length>2000)game.__e2eEvents.shift();
+          return;
+        }
         if(event!=='attack')return;
         const c=game.character,runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
         if(!c?.name || game.socket!==socket || args[0]?.id==null)return;

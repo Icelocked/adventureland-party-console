@@ -5,12 +5,37 @@ test('native Hunt fallback arrival releases farming instead of repeatedly restar
   test.setTimeout(240_000);
   await party(live);
   await quests(live,info,{[W]:{count:100},[P]:{count:100}});
-  await start(live);
-  await expect.poll(async()=> (await live.state()).activeConvoy?.phase==='travel' &&
-    await live.clients[W].run('!!character.moving && !character.c?.town'),
-    {timeout:90_000,intervals:[50,100],message:'Interrupt a genuine native Hunt walking route'}).toBe(true);
-  const interrupted=await live.clients[W].run('(()=>{const before={at:Date.now(),map:character.map,x:character.x,y:character.y,smartMoving:smart.moving};stop("smart");return before})()');
-  await info.attach('native-route-stop',{body:JSON.stringify(interrupted),contentType:'application/json'});
+  await live.clients[W].run(`(()=>{
+    const generation=globalThis.__partyRuntimeGeneration;
+    const excludedConvoy=sharedRoutine.combatTraceSnapshot().convoy;
+    const fault=globalThis.__e2eFallbackStop={generation,issued:0,receipt:null};
+    fault.timer=setInterval(()=>{
+      if(fault.issued || globalThis.__partyRuntimeGeneration!==generation)return;
+      const service=globalThis.__partyMovement,journey=service?.report(),owner=journey?.owner;
+      const convoy=sharedRoutine.combatTraceSnapshot();
+      const revision=globalThis.__partyNavigationIntent?.revision;
+      if(convoy.convoy===excludedConvoy || !journey || !owner || !Number.isFinite(owner.commandId) || !Number.isFinite(owner.navigationRevision) || !service.state.moving || !character.moving || character.c?.town || parent.transporting ||
+          convoy.convoyPhase!=='travelling' || owner.convoyId!==convoy.convoy || owner.epoch!==convoy.convoyEpoch ||
+          owner.navigationRevision!==revision || convoy.cancelled)return;
+      const runtime=sharedRoutine.queueReport().combatSelection.runtimeId;
+      if(!journey.id.startsWith(character.name+':'+runtime+':'))return;
+      fault.issued=1;clearInterval(fault.timer);
+      fault.receipt={at:Date.now(),map:character.map,x:character.x,y:character.y,
+        smartMoving:service.state.moving,moving:character.moving,transporting:!!parent.transporting,
+        generation,runtime,journeyId:journey.id,owner:{...owner},phase:convoy.convoyPhase,excludedConvoy};
+      try{Promise.resolve(stop('smart')).then(()=>{fault.receipt.stopCompletedAt=Date.now();},error=>{fault.receipt.stopError=String(error);});}
+      catch(error){fault.receipt.stopError=String(error);}
+    },50);
+  })()`);
+  try{
+    await start(live);
+    await expect.poll(async()=>await live.clients[W].run('globalThis.__e2eFallbackStop?.issued===1'),
+      {timeout:90_000,intervals:[50,100],message:'Interrupt a genuine native Hunt walking route'}).toBe(true);
+    const interrupted=await live.clients[W].run('globalThis.__e2eFallbackStop.receipt');
+    expect(interrupted.smartMoving).toBe(true);expect(interrupted.moving).toBe(true);
+    expect(interrupted.transporting).toBe(false);expect(interrupted.phase).toBe('travelling');
+    expect(interrupted.stopError).toBeUndefined();
+    await info.attach('native-route-stop',{body:JSON.stringify(interrupted),contentType:'application/json'});
   await expect.poll(async()=>Object.values(profile(await live.state()).monsterHunt?.routeRecovery||{}).some((entry:any)=>entry.phase==='native'),
     {timeout:30_000,message:'The real route interruption must activate the bounded native fallback'}).toBe(true);
   const recovering=profile(await live.state()).monsterHunt;
@@ -23,6 +48,10 @@ test('native Hunt fallback arrival releases farming instead of repeatedly restar
   expect(finalHunt.cycleId).toBe(recovering.cycleId);
   expect(finalHunt.routeRecovery,'Successful arrival must retain the spent retry budget').toEqual(recovering.routeRecovery);
   await artifact(live,info,'native-fallback-arrival-and-continuing-kills',{interrupted,recovering,firstKills});
+  }finally{
+    const fault=await live.clients[W].run(`(()=>{const fault=globalThis.__e2eFallbackStop;if(fault)clearInterval(fault.timer);return fault?{generation:fault.generation,issued:fault.issued,receipt:fault.receipt}:null;})()`);
+    await info.attach('native-fallback-stop-ledger',{body:JSON.stringify(fault),contentType:'application/json'});
+  }
 });
 
 // Faults exercise the actual browser transport; no status, route or acknowledgement is fabricated.
