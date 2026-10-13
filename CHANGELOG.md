@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Make native queued-target regression scenarios introduce successors during a confirmed fight, preserving real movement and fresh-confirmation checks without assuming pre-fight target rankings stay fixed.
+
 - Preserve independent combat route ownership in movement diagnostics from the very first step; keep declared native Halloween encounter charge consistent throughout E2E scenarios.
 
 - Start individual combat routes immediately and recheck range as soon as an owned route finishes or fails, avoiding extra polling delays between smaller-radius approach attempts.
