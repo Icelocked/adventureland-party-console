@@ -22,8 +22,6 @@ export class RunnerScope {
   private readonly timers = new Map<unknown, Callable>();
   private readonly facades = new WeakMap<object, object>();
   private readonly receivers = new WeakMap<object, object>();
-  /** Guard wrappers and facades map back to the host values they were read from. */
-  private readonly originals = new WeakMap<object, unknown>();
   private retired = false;
   private readonly requests = new Set<{ abort(): void }>();
 
@@ -71,11 +69,6 @@ export class RunnerScope {
         receiver == null ? host : this.unwrapReceiver(receiver), args);
     };
     return function (this: unknown, ...args: unknown[]) { return invoke(this, args); };
-  }
-
-  private unwrapValue(value: unknown): unknown {
-    if (typeof value === "function" && this.originals.has(value)) return this.originals.get(value);
-    return this.unwrapReceiver(value);
   }
 
   private unwrapReceiver(receiver: unknown): unknown {
@@ -159,11 +152,7 @@ export class RunnerScope {
       get: (_target, key) => {
         const value = Reflect.get(host, key, host);
         if (value === target) return facade;
-        if (typeof value === "function") {
-          const method = this.method(host, key);
-          this.originals.set(method, value);
-          return method;
-        }
+        if (typeof value === "function") return this.method(host, key);
         if (
           value &&
           typeof value === "object" &&
@@ -174,8 +163,7 @@ export class RunnerScope {
       },
       set: (_target, key, value) => {
         this.assertActive();
-        // Saving and restoring a host value must not install a guard on the shared game context.
-        return Reflect.set(host, key, this.unwrapValue(value), host);
+        return Reflect.set(host, key, value, host);
       },
       has: (_target, key) => key in host,
       ownKeys: () => Reflect.ownKeys(host),

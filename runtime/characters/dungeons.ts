@@ -344,6 +344,10 @@ export function installDungeonRuntime(ports: Ports) {
       ports.now() - controlAt < 3000 && ports.ready() && !ports.cave()?.paused);
   return {
     report,
+    commandIdentity(): Pick<CaveCommand,'id'|'action'|'run'> | undefined {
+      if(!ports.current() || !command)return;
+      return {id:command.id,action:command.action,run:command.run};
+    },
     receive,
     canMove,
     owns: () => owned || !!ports.cave(),

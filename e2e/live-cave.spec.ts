@@ -1,5 +1,8 @@
+import {observeNativeCaveCombat} from './native-cave-combat-observer';
+import {nativePlannerCpuProfile} from './native-planner-cpu-profile';
 import { test, expect } from './live-fixtures';
 import { createRequire } from 'node:module';
+import {createNativeProgressBudget} from './native-progress-budget.js';
 const sharp: typeof import('../dashboard/node_modules/sharp') = createRequire(import.meta.url)('../dashboard/node_modules/sharp');
 test.use({ initialPosition: { map: 'main', x: 816, y: 1180 } });
 
@@ -17,7 +20,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     await route.fulfill({ response, headers: { ...response.headers(), 'access-control-allow-origin': '*' } });
   });
   await page.goto(live.url);
-  const dungeon = async () => (await page.request.get(live.url + '/party-api/daily-dungeons')).json();
+  const dungeon = async () => (await page.request.get(live.url + '/party-api/daily-dungeons',{maxRetries:1})).json();
   await expect.poll(async () => {
     const view = await dungeon();
     return view.members.length === 2 && view.members.every((m: any) => m.fresh && m.observation?.ready && m.observation?.visit?.available &&
@@ -229,6 +232,13 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     const parts=expectedMap.split("_");
     const expectedRun=parts[1],expectedFloor=Number(parts[2]);
     const attempts:unknown[]=[];
+    const activationDeadline=Date.now()+60_000;
+    let inputDispatched=false;
+    const remaining=(cap:number)=>{
+      const timeout=Math.min(cap,activationDeadline-Date.now());
+      if(timeout<=0)throw Error('Waypoint activation exhausted its original 60-second window');
+      return timeout;
+    };
     const snapshot=()=>fullMap.evaluate(element=>({
       adding:element.textContent?.includes('Click the map to place your waypoint.'),
       disabled:Array.from(element.querySelectorAll('button')).find(button=>button.textContent?.trim()==='Add waypoint')?.disabled,
@@ -239,20 +249,22 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
       await expect.poll(async()=>{
         const resolvedEncounter=page.getByRole('dialog').filter({has:page.getByText('Encounter result',{exact:true})});
         if(await resolvedEncounter.isVisible()){
-          await resolvedEncounter.getByRole('button',{name:'Close',exact:true}).click();
-          await expect(resolvedEncounter).not.toBeVisible();
+          await resolvedEncounter.getByRole('button',{name:'Close',exact:true}).click({timeout:remaining(20_000)});
+          await expect(resolvedEncounter).not.toBeVisible({timeout:remaining(15_000)});
+          inputDispatched=false;
         }
         const before=await snapshot();
         if(before.adding)return true;
-        if(!before.disabled){
+        if(!before.disabled&&!inputDispatched){
           expect(before.error,'Add activation may not retry an unrelated rendered error').toBe(false);
           try {
             const addWaypoint=fullMap.getByRole('button',{name:'Add waypoint',exact:true});
             // The native freshness gate can close between the snapshot and
             // input. Give readiness its own bounded wait, then dispatch input.
-            await expect(addWaypoint).toBeEnabled({timeout:10_000});
+            await expect(addWaypoint).toBeEnabled({timeout:remaining(10_000)});
             expect((await snapshot()).error,'Freshness readiness must not hide a rendered error').toBe(false);
-            await addWaypoint.click({timeout:10_000});
+            await addWaypoint.click({timeout:remaining(30_000)});
+            inputDispatched=true;
           } catch (error) {
             // A fresh native shop update may reopen its completed result
             // after Close. Only that observed modal obstruction is retryable.
@@ -263,8 +275,8 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
         let observed=before;
         await expect.poll(async()=>{
           observed=await snapshot();
-          return observed.adding || observed.disabled&&observed.waiting || !observed.disabled&&!observed.error;
-        },{timeout:10_000,message:'Add waypoint must activate placement or show its freshness hold'}).toBe(true);
+          return observed.adding || observed.disabled&&observed.waiting || !inputDispatched&&!observed.disabled&&!observed.error;
+        },{timeout:remaining(10_000),message:'Add waypoint must activate placement or show its freshness hold'}).toBe(true);
         attempts.push(observed);
         if(observed.adding)return true;
         if(observed.disabled)expect(observed.waiting).toBe(true);
@@ -539,11 +551,13 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     return deferred?undefined:acceptedState;
   };
   const answerNativeChoice=async(encounter:any,expectedFloor=cave.floor)=>{
+    const deadline=Date.now()+30_000;
+    const remaining=()=>{const ms=deadline-Date.now();if(ms<=0)throw Error('Native choice acknowledgement exceeded its 30-second deadline');return ms;};
     const reply=encounter.options.find((o:any)=>!o.unavailable&&!o.cost&&!o.amber);
     expect(reply,'Native interruption must offer a free UI reply').toBeTruthy();
     const resolved=(view:any)=>view.state.run===cave.run&&['E2EWarrior','E2EPriest'].every(name=>{
-      const observed=view.members.find((m:any)=>m.name===name)?.observation?.cave;
-      return observed?.run===cave.run&&observed.floor===expectedFloor&&
+      const member=view.members.find((m:any)=>m.name===name),observed=member?.observation?.cave;
+      return member?.fresh&&member.observation.alive&&observed?.run===cave.run&&observed.floor===expectedFloor&&
         observed.choice?.id===encounter.id&&observed.choice.resolved&&observed.choice.votes[name]===reply.id;
     });
     const ledger:any={choice:encounter.id,option:reply.id,run:cave.run,floor:expectedFloor,clicked:false};
@@ -551,8 +565,21 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     try{
       observed=await dungeon();
       if(!resolved(observed)){
-        try{
-          await choice.getByRole('button',{name:reply.label,exact:true}).click();
+        await expect.poll(async()=>{
+          observed=await dungeon();
+          if(resolved(observed))return true;
+          return observed.state.run===cave.run&&['E2EWarrior','E2EPriest'].every(name=>{
+            const member=observed.members.find((m:any)=>m.name===name),native=member?.observation,
+              c=native?.cave,command=observed.state.commands[name],receipt=native?.action;
+            if(!member?.fresh||!native?.alive||c?.run!==cave.run||c.floor!==expectedFloor||c.choice?.id!==encounter.id)return false;
+            if(!command||['move','gather'].includes(command.action))return true;
+            if(command.action==='vote'&&c.choice.id===command.choice&&c.choice.resolved)return true;
+            return receipt?.id===command.id&&receipt.status==='complete';
+          });
+        },{timeout:remaining(),message:'The current native choice must wait for both preceding action receipts before its first vote'}).toBe(true);
+        ledger.beforeClick={state:observed.state,members:observed.members.map((m:any)=>({name:m.name,fresh:m.fresh,receipt:m.observation?.action}))};
+        if(!resolved(observed))try{
+          await choice.getByRole('button',{name:reply.label,exact:true}).click({timeout:Math.min(20_000,remaining())});
           ledger.clicked=true;
         }catch(error){
           observed=await dungeon();
@@ -564,14 +591,15 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
         }
       }else ledger.alreadyResolved=true;
       await expect.poll(async()=>{observed=await dungeon();return resolved(observed);},
-        {timeout:30_000,message:'The same native choice must acknowledge both actual votes for the chosen option'}).toBe(true);
+        {timeout:remaining(),message:'The same native choice must acknowledge both actual votes for the chosen option'}).toBe(true);
     }finally{
       ledger.native=observed?.members.map((m:any)=>({name:m.name,choice:m.observation?.cave?.choice}));
       await info.attach('native-cave-choice-resolution',{body:JSON.stringify(ledger),contentType:'application/json'});
     }
   };
+  let roomChoiceObserved:any;
   const continueRoomChoice=async(point:{id:string;label:string;map:string})=>{
-    let view=await dungeon();
+    let view=await dungeon();roomChoiceObserved=view;
     const observation=view.members[0]?.observation,c=observation?.cave,encounter=c?.choice,tracked=roomChoices.get(point.id);
     if(!encounter||!tracked||encounter.id===tracked.initial||tracked.resumed.has(encounter.id))return;
     expect(view.state.run).toBe(cave.run);expect(c.run).toBe(cave.run);expect(c.floor).toBe(cave.floor);
@@ -581,7 +609,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
         await answerNativeChoice(encounter,c.floor);
         ledger.reply=encounter.options.find((o:any)=>!o.unavailable&&!o.cost&&!o.amber).id;
       }
-      view=await dungeon();
+      view=await dungeon();roomChoiceObserved=view;
       if(!view.members.every((m:any)=>m.fresh&&m.observation?.cave?.run===cave.run&&m.observation.cave.floor===cave.floor)||
           view.members[0].observation.cave.paused)return;
       const settledVotes=Object.entries(view.state.commands).every(([name,command]:[string,any])=>{
@@ -599,50 +627,146 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
       await info.attach('native-cave-choice-continuation',{body:JSON.stringify(ledger),contentType:'application/json'});
     }
   };
-  await acceptRoom(farm);
+  const sameTravelTarget=(a:any,b:any)=>!!a&&!!b&&['id','map','x','y','down','to','exit','room','kind','required'].every(key=>a[key]===b[key]);
+  const repairedOwnedTravel=(view:any,prior:any)=>{
+    const old=prior?.travel,t=view?.state?.travel;
+    if(!old||!view?.state||view.state.phase!=='active'||view.state.run!==prior.run||!sameTravelTarget(t?.target,old.target))return;
+    const delta=t.serial-old.serial,previous=old.repairs||0,count=t.repairs;
+    if(!Number.isSafeInteger(t.serial)||!Number.isSafeInteger(count)||delta<=0||count>3||count-previous!==delta)return;
+    const owned=['E2EWarrior','E2EPriest'].every(name=>{
+      const member=view.members.find((m:any)=>m.name===name),command=view.state.commands[name],expected=`cave-travel:${prior.run}:${t.serial}:${name}`;
+      return member?.fresh&&member.observation?.alive&&member.observation.cave?.run===prior.run&&
+        member.observation.cave.floor===cave.floor&&command?.action==='move'&&command.run===prior.run&&
+        command.id===expected&&sameTravelTarget(command.target,old.target)&&member.observation.travel?.id===expected;
+    });
+    if(owned)return view.state;
+  };
+  let farmTravel=await acceptRoom(farm);
+  expect(farmTravel?.travel?.target.id).toBe(farm.id);
+  const farmGenerations:any[]=[{cause:'accepted',serial:farmTravel.travel.serial,repairs:farmTravel.travel.repairs||0}];
+  const farmArrivals=new Map<string,unknown>();
+  const farmPacketCandidates=new Map<string,any>();
+  let farmAcceptedAt=Date.now();
+  const recordFarmArrival=(native:any,status:any,observedAt:number)=>{
+    const expected='cave-travel:'+cave.run+':'+farmTravel.travel.serial+':'+native.name;
+    const receipt=native.runtime?.action;
+    for(const packet of native.arrivalPackets||[]){
+      const o=packet.caveOwner,p=packet.data;
+      if(packet.at<farmAcceptedAt||packet.at>native.at+500||o?.command?.id!==expected||
+        o.command.action!=='move'||o.command.run!==cave.run||o.runtimeGeneration!==native.runtimeGeneration||
+        !o.codeHash||o.codeHash!==native.codeHash||o.name!==native.name||
+        o.run!==cave.run||o.floor!==cave.floor||o.map!==farm.map||String(o.in??o.map)!==farm.map||
+        o.rip||!(o.hp>0)||p?.id!==native.name||p?.rip||!(p?.hp>0)||p.map!==farm.map||String(p.in??p.map)!==farm.map||
+        Math.hypot(p.x-farm.x,p.y-farm.y)>=70)continue;
+      farmPacketCandidates.set(native.name,{at:packet.at,id:expected,map:p.map,in:p.in,x:p.x,y:p.y,
+        runtimeGeneration:o.runtimeGeneration,codeHash:o.codeHash,source:'authoritative player packet'});
+    }
+    const candidate=farmPacketCandidates.get(native.name);
+    if(candidate&&receipt?.id===expected&&receipt.status==='complete'&&native.commandIdentity?.id===expected&&
+      native.commandIdentity.action==='move'&&native.commandIdentity.run===cave.run&&
+      Date.now()-native.at<=3000&&native.at<=Date.now()+500&&
+      candidate.runtimeGeneration===native.runtimeGeneration&&candidate.codeHash===native.codeHash&&
+      native.runtime?.travel?.id===expected&&native.cave?.run===cave.run&&native.cave.floor===cave.floor&&
+      native.map===farm.map&&String(native.in??native.map)===farm.map&&!native.rip&&native.hp>0&&
+      status&&observedAt-status.seenAt<=3000&&status.seenAt<=observedAt+500&&!status.rip&&status.hp>0&&
+      status.dungeon?.cave?.run===cave.run&&status.dungeon.cave.floor===cave.floor){
+      farmArrivals.set(native.name,candidate);return;
+    }
+    if(farmArrivals.has(native.name)||!status||observedAt-status.seenAt>3000||status.seenAt>observedAt+500||
+      Date.now()-native.at>3000||native.at>Date.now()+500||status.rip||!(status.hp>0)||
+      status.dungeon?.cave?.run!==cave.run||status.dungeon.cave.floor!==cave.floor||
+      native.rip||!(native.hp>0)||native.cave?.run!==cave.run||native.cave.floor!==cave.floor||
+      native.map!==farm.map||String(native.in??native.map)!==farm.map||
+      native.runtime?.travel?.id!==expected||Math.hypot(native.x-farm.x,native.y-farm.y)>=70)return;
+    farmArrivals.set(native.name,{at:native.at,id:expected,map:native.map,in:native.in,x:native.x,y:native.y});
+  };
   const farmCombatSamples:unknown[]=[];
   let farmSampledAt=0;
   try {
   await expect.poll(async()=>{
     const s=await live.state();
-    if(Math.max(...['E2EWarrior','E2EPriest'].map(name=>Math.hypot(s.characters[name].x-farm.x,s.characters[name].y-farm.y)))>=70)
-      await continueRoomChoice(farm);
+    if(farmArrivals.size<2){
+      const continued=await continueRoomChoice(farm);
+      if(continued?.travel?.serial!==undefined&&continued.travel.serial!==farmTravel.travel.serial){
+        farmTravel=continued;farmArrivals.clear();farmPacketCandidates.clear();farmAcceptedAt=Date.now();
+        farmGenerations.push({at:Date.now(),cause:'accepted native choice continuation',serial:farmTravel.travel.serial,repairs:farmTravel.travel.repairs||0});
+      }
+      const repaired=repairedOwnedTravel(roomChoiceObserved,farmTravel);
+      if(repaired){
+        farmGenerations.push({at:Date.now(),cause:'automatic repair',previous:farmTravel.travel.serial,
+          serial:repaired.travel.serial,previousRepairs:farmTravel.travel.repairs||0,repairs:repaired.travel.repairs,
+          target:repaired.travel.target,commands:repaired.commands,
+          members:roomChoiceObserved.members.map((m:any)=>({name:m.name,fresh:m.fresh,alive:m.observation?.alive,
+            receipt:m.observation?.action,travel:m.observation?.travel}))});
+        farmTravel=repaired;farmArrivals.clear();farmPacketCandidates.clear();
+      }
+    }
     if(Date.now()-farmSampledAt>=5_000&&farmCombatSamples.length<125){
       farmSampledAt=Date.now();
-      const native=await Promise.all(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].frame.evaluate(()=>{
+      const native=await Promise.all(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].frame.evaluate(({goal,acceptedAt})=>{
         const p=window as any,w=(document.getElementById('maincode') as HTMLIFrameElement).contentWindow as any;
         const c=w.character,control=w.__partyGroupedCombat,entity=control?.target?.id?w.get_entity(control.target.id):null;
         const clock=w.__partyTravelTransport?.clock,now=Date.now(),selected=w.sharedRoutine?.getDungeonTarget?.();
         const raw=entity?Object.fromEntries(['id','type','visible','dead','hp','map','in','x','y','real_x','real_y','range','target','cave'].map(key=>[key,entity[key]])):null;
-        return {at:now,name:c.name,map:c.map,in:c.in,x:c.real_x,y:c.real_y,cave:c.cave,
+        return {at:now,name:c.name,map:c.map,in:c.in,x:c.real_x,y:c.real_y,rip:c.rip,hp:c.hp,cave:c.cave,
+          runtimeGeneration:w.__partyRuntimeGeneration,codeHash:w.__partyCodeHash,commandIdentity:w.__partyDungeonRuntime?.commandIdentity?.(),
+          arrivalPackets:(p.__e2eEvents||[]).filter((e:any)=>e.event==='player'&&e.at>=acceptedAt&&
+            e.caveOwner?.name===c.name&&Math.hypot(e.data?.x-goal.x,e.data?.y-goal.y)<70).slice(-20),
           clock,adjustedAge:control?now+(clock?.offset||0)-control.seenAt:null,
           control:control?Object.fromEntries(['key','seenAt','target','committed','selection','members','caveScope'].map(key=>[key,control[key]])):null,
           entity:raw,selected:selected?.id||null,knownDead:entity?!!w.partyRoleRunner?.isKnownDead(entity.id):null,
           nativeWalk:entity?w.can_move_to(entity.x,entity.y):null,
           attackAllowed:entity?!!w.sharedRoutine?.groupedAttackAllowed?.(entity):null,
           runtime:w.__partyDungeonRuntime?.report(),occupied:w.sharedRoutine?.isOccupied?.()};
-      })));
+      },{goal:{x:farm.x,y:farm.y},acceptedAt:farmAcceptedAt})));
+      for(const member of native)recordFarmArrival(member,s.characters[member.name],farmSampledAt);
       farmCombatSamples.push({at:farmSampledAt,native,characters:Object.fromEntries(['E2EWarrior','E2EPriest'].map(name=>[name,{dungeon:s.characters[name].dungeon,movement:s.characters[name].movement}]))});
     }
-    return Math.max(...['E2EWarrior','E2EPriest'].map(name=>Math.hypot(s.characters[name].x-farm.x,s.characters[name].y-farm.y)));
-  },{timeout:600_000,message:'Both characters must reach the original native farm after manual waypoint travel'}).toBeLessThan(70);
+    return ['E2EWarrior','E2EPriest'].every(name=>farmArrivals.has(name));
+  },{timeout:600_000,message:'Both characters must reach the original native farm after manual waypoint travel'}).toBe(true);
   console.log('[Cave verified] Both characters arrived at the original native farm');
-  }finally{await info.attach('native-cave-farm-combat-samples',{body:JSON.stringify(farmCombatSamples),contentType:'application/json'});}
+  }finally{
+    await info.attach('native-cave-farm-combat-samples',{body:JSON.stringify(farmCombatSamples),contentType:'application/json'});
+    await info.attach('native-cave-farm-arrivals',{body:JSON.stringify({arrivals:Object.fromEntries(farmArrivals),packetCandidates:Object.fromEntries(farmPacketCandidates),acceptedAt:farmAcceptedAt,generations:farmGenerations,travel:farmTravel}),contentType:'application/json'});
+  }
   await controls.getByRole('button',{name:'Stop travel',exact:true}).click();
   await waitForStoppedTravel();
   await info.attach('native-cave-manual-travel', { body: JSON.stringify({ dungeon: await dungeon(), state: await live.state() }), contentType: 'application/json' });
   const second = (await dungeon()).members[0].observation.cave.points.find((p: any) => p.kind === 'boss' && !p.done);
   if (second) {
     const accepted=await acceptRoom(second);
-    let serial=accepted.travel?.serial;
+    let serial=accepted.travel?.serial,repairCount=accepted.travel?.repairs||0,bossTracked=accepted;
+    const bossGenerations:any[]=[{cause:'accepted',serial,repairCount}],bossReceipts:any[]=[];
     expect(Number.isSafeInteger(serial),'Accepted boss move must identify its owned travel generation').toBe(true);
-    const ownedBoss=(view:any)=>view.state.run===cave.run && view.state.travel?.serial===serial &&
-      view.state.travel.target?.id===second.id && ['E2EWarrior','E2EPriest'].every(name=>{
-        const member=view.members.find((m:any)=>m.name===name),command=view.state.commands[name];
-        return member?.fresh && member.observation?.cave?.run===cave.run && member.observation.cave.floor===cave.floor &&
-          command?.action==='move' && command.run===cave.run && command.target?.id===second.id && command.target.map===second.map;
-      });
-    const continueBoss=async()=>{const next=await continueRoomChoice(second);if(next){expect(Number.isSafeInteger(next.travel?.serial)).toBe(true);serial=next.travel.serial;}};
+    const sameBossTarget=(target:any)=>sameTravelTarget(target,second);
+    const bossOwnedMembers=(view:any,current:number)=>['E2EWarrior','E2EPriest'].every(name=>{
+      const member=view.members.find((m:any)=>m.name===name),command=view.state.commands[name],
+        expected=`cave-travel:${cave.run}:${current}:${name}`;
+      return member?.fresh&&member.observation?.alive&&member.observation.cave?.run===cave.run&&
+        member.observation.cave.floor===cave.floor&&command?.action==='move'&&command.run===cave.run&&
+        command.id===expected&&sameBossTarget(command.target)&&member.observation.travel?.id===expected;
+    });
+    const ownedBoss=(view:any)=>{
+      const t=view.state.travel;
+      for(const member of view.members){const receipt=member.observation?.action;
+        if(receipt?.status==='failed'&&!bossReceipts.some(r=>r.name===member.name&&r.receipt.id===receipt.id))
+          bossReceipts.push({at:Date.now(),name:member.name,receipt});}
+      if(view.state.phase!=='active'||view.state.run!==cave.run||!sameBossTarget(t?.target))return false;
+      if(t.serial!==serial){
+        const successor=repairedOwnedTravel(view,bossTracked),count=t.repairs;
+        if(!successor)return false;
+        bossGenerations.push({at:Date.now(),cause:'automatic repair',previous:serial,serial:t.serial,
+          previousRepairs:repairCount,repairs:count,commands:view.state.commands,
+          members:view.members.map((m:any)=>({name:m.name,fresh:m.fresh,alive:m.observation?.alive,
+            receipt:m.observation?.action,travel:m.observation?.travel}))});
+        serial=t.serial;repairCount=count;bossTracked=view.state;
+      }
+      return bossOwnedMembers(view,serial);
+    };
+    const continueBoss=async()=>{const next=await continueRoomChoice(second);if(next){
+      expect(Number.isSafeInteger(next.travel?.serial)).toBe(true);serial=next.travel.serial;repairCount=next.travel.repairs||0;bossTracked=next;
+      bossGenerations.push({at:Date.now(),cause:'accepted native choice continuation',serial,repairCount});
+    }};
     try {
       await expect.poll(async()=>{await continueBoss();return ownedBoss(await dungeon());},{timeout:300_000,message:'Accepted boss generation must dispatch owned moves after native assembly'}).toBe(true);
     } finally {
@@ -654,7 +778,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
             map:target.map,in:target.in,x:target.real_x??target.x,y:target.real_y??target.y,
             targeting:target.target,side:target.cave?.side,direct:can_move_to(target.x,target.y)}:null};
       })()`)));
-      await info.attach('native-cave-boss-assembly-targets',{body:JSON.stringify({view:await dungeon(),native}),contentType:'application/json'});
+      await info.attach('native-cave-boss-assembly-targets',{body:JSON.stringify({view:await dungeon(),native,generations:bossGenerations,observedFailedReceipts:bossReceipts}),contentType:'application/json'});
     }
     await expect.poll(async()=>{
       await continueBoss();
@@ -683,6 +807,13 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
           return {at:Date.now(),name:c.name,map:c.map,in:c.in,x:c.real_x,y:c.real_y,
             paused:!!w.__partyMovementPaused || !w.__partyDungeonRuntime?.canMove(),
             movementPaused:!!w.__partyMovementPaused,dungeonCanMove:w.__partyDungeonRuntime?.canMove(),
+            nativePlanning:w.__partyMovement?.nativePlanning?.(),planningSchedule:w.__partyMovement?.report?.()?.planningSchedule,schedulerGate:!!w.__partyMovement?.gate?.owner,
+            nativeMoving:!!c.moving,transporting:!!p.transporting,cavePaused:!!c.cave?.paused,
+            nativeGraphics:{noGraphics:!!p.no_graphics,noHtml:p.no_html},
+            nativeBodies:{self:{id:c.id||c.name,awidth:c.awidth,aheight:c.aheight,base:c.base,dimensions:p.G.dimensions[c.type]},
+              monsters:Object.keys(p.entities||{}).map(id=>p.entities[id]).filter(e=>e.type==='monster'&&!e.dead)
+                .sort((a,b)=>Math.hypot(a.real_x-c.real_x,a.real_y-c.real_y)-Math.hypot(b.real_x-c.real_x,b.real_y-c.real_y)).slice(0,5)
+                .map(e=>({id:e.id,mtype:e.mtype,awidth:e.awidth,aheight:e.aheight,base:e.base,dimensions:p.G.dimensions[e.mtype]}))},
             ready:w.__partyDungeonRuntime?.report().ready,
             smart:{searching:s.searching,found:s.found,moving:s.moving,x:s.x,y:s.y,map:s.map,start_x:s.start_x,start_y:s.start_y},
             bfs:{length:q.length,index,best:w.best,current:q[index],last:q[q.length-1]},
@@ -704,6 +835,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     // Arrival is not native encounter completion. A new artificial vote must
     // not replace encounter ownership while its real boss is still fighting.
     let completedBoss:any;
+    const bossCombatObservation=await observeNativeCaveCombat(live.clients,['E2EWarrior','E2EPriest'],second);
     try{
       await expect.poll(async()=>{
         completedBoss=await live.admin(`output=(()=>{
@@ -715,21 +847,41 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
         })()`);
         return completedBoss.done&&completedBoss.enemies.every((actor:any)=>actor.dead||actor.hp<=0);
       },{timeout:120_000,message:'The native Lockbreaker must actually finish before creating the next encounter'}).toBe(true);
-    }finally{await info.attach('native-cave-lockbreaker-completion',{body:JSON.stringify(completedBoss??null),contentType:'application/json'});}
+    }finally{await info.attach('native-cave-lockbreaker-completion',{body:JSON.stringify(completedBoss??null),contentType:'application/json'});await info.attach('native-cave-lockbreaker-combat-observations',{body:JSON.stringify(await bossCombatObservation.finish()),contentType:'application/json'});}
 
   }
   // Native encounter factory, bounded initial difficulty. Neither attacks,
   // deaths, receipts nor room completion are fabricated by this fixture.
-  const duel = await live.admin(`output=(()=>{
+  const duelDeclaration = await live.admin(`output=(()=>{
     const p=get_player('E2EWarrior'),run=generated_entry(p).record;
     const source=G.events.dreams.encounters.find(e=>e.id==='e11');
-    const room={id:'e2e-duel',floor:0,map:p.map,x:p.x,y:p.y,kind:'encounter',required:false,revealed:true,started:false,done:false,actors:[],enemies:[],encounter:{...source,options:source.options.filter(o=>['left','right'].includes(o.id))}};
-    run.cave.rooms.push(room);cave_activate(run,room);
-    for(const a of room.actors){a.hp=a.max_hp=100000;a.zone_stats.attack=1;calculate_monster_stats(a);a.u=true;}
-    cave_begin_vote(run,room);
+    const origin=safe_xy_nearby(p.map,p.x,p.y+48);
+    if(!origin)throw Error('No native safe placement for declared duel');
+    const room={id:'e2e-duel',floor:0,map:p.map,x:origin.x,y:origin.y-48,kind:'encounter',required:true,revealed:true,started:false,done:false,actors:[],enemies:[],encounter:{...source,options:source.options.filter(o=>['left','right'].includes(o.id))}};
+    run.cave.rooms.push(room);
     globalThis.__e2eCaveDuel=room;
-    return {room:room.id,actors:room.actors.map(a=>({id:a.id,name:a.name,hp:a.hp}))};
+    globalThis.__e2eCaveDuelRun=run.key;
+    return {run:run.key,room:room.id,required:room.required,issued:run.cave.issued,liveActors:run.cave.actors.size,origin};
   })()`);
+  const duelAdmission:any[]=[];let duel:any;
+  try{
+    await expect.poll(async()=>{
+      duel=await live.admin(`output=(()=>{
+        const p=get_player('E2EWarrior'),run=generated_entry(p).record,room=globalThis.__e2eCaveDuel;
+        if(run.key!==globalThis.__e2eCaveDuelRun||p.map!==room.map)throw Error('Declared duel native run or floor changed before admission');
+        if(!room.started&&run.cave.actors.size<=52)cave_activate(run,room);
+        const admitted=room.actors.length===2&&!!room.npc&&!!room.rival;
+        if(admitted&&!room.e2eDifficultyDeclared){
+          for(const a of room.actors){a.hp=a.max_hp=100000;a.zone_stats.attack=1;calculate_monster_stats(a);a.u=true;}
+          room.e2eDifficultyDeclared=true;cave_begin_vote(run,room);
+        }
+        return {at:Date.now(),room:room.id,required:room.required,issued:run.cave.issued,liveActors:run.cave.actors.size,
+          admitted,started:room.started,actors:room.actors.map(a=>({id:a.id,name:a.name,hp:a.hp}))};
+      })()`);
+      if(duelAdmission.length<100)duelAdmission.push(duel);
+      return duel.admitted;
+    },{timeout:60_000,message:'Native factory must admit both declared duel NPCs before voting'}).toBe(true);
+  }finally{await info.attach('native-cave-duel-admission',{body:JSON.stringify({declaration:duelDeclaration,observations:duelAdmission}),contentType:'application/json'});}
   await expect(choice).toBeVisible();
   const duelChoice=(await dungeon()).members[0].observation.cave.choice;
   await choice.getByRole('button',{name:duelChoice.options.find((o:any)=>o.id==='left').label,exact:true}).click();
@@ -770,9 +922,33 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   // Capture the same polled observations: a final expired visit cannot show
   // whether native BFS, route publication, or a follower gate stalled first.
   const requiredPlanning:any[]=[];
+  const cpuProfile=nativePlannerCpuProfile(live.clients.E2EWarrior.frame);
+  const requiredBudget=createNativeProgressBudget(Date.now,300_000,600_000);
+  let requiredCompleted=false;
+  let requiredProbeStarted=0,requiredProbeId="",requiredProbes=0;
   try{
   await expect.poll(async()=>{
+    requiredBudget.check();
     const v=await dungeon();
+    const probeCommand=v.state.commands.E2EWarrior,probeTravel=v.members.find((m:any)=>m.name==='E2EWarrior')?.observation?.travel;
+    const pendingOwned=v.state.travel?.stage==='travelling'&&probeCommand?.action==='move'&&
+      probeTravel?.id===probeCommand.id&&probeTravel.prepared===false;
+    if(pendingOwned&&requiredProbeId!==probeCommand.id){requiredProbeId=probeCommand.id;requiredProbeStarted=Date.now();}
+    if(pendingOwned&&requiredProbes<3&&Date.now()-requiredProbeStarted>=[5000,15000,30000][requiredProbes]){
+      requiredProbes++;
+      const sample=await live.clients.E2EWarrior.frame.evaluate(({id,run})=>{
+        const p=window as any,w=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+        const m=w?.__partyMovement,c=w?.character,command=w?.__partyDungeonRuntime?.commandIdentity?.();
+        return {at:Date.now(),name:c?.name,map:c?.map,in:c?.in,
+          active:!!(m?.state?.moving&&m.state.searching&&!m.state.found&&m.gate.owner&&command?.id===id&&command.run===run&&c?.cave?.run===run&&!c.cave.paused&&!w.__partyMovementPaused),
+          command,movement:m?.report?.(),runtimeGeneration:w?.__partyRuntimeGeneration,codeHash:w?.__partyCodeHash,
+          nativeMoving:!!w?.character?.moving,transporting:!!p.transporting,
+          nativePlanning:w?.__partyMovement?.nativePlanning?.(),schedule:w?.__partyMovement?.report?.()?.planningSchedule,
+          setInterval:String(w?.setInterval),isHidden:p.is_hidden?.(),noGraphics:!!p.no_graphics,noHtml:p.no_html};
+      },{id:v.state.commands.E2EWarrior?.id,run:v.state.run}).catch(error=>({error:String(error)}));
+      cpuProfile.observe(sample);
+    }
+    await cpuProfile.settle();cpuProfile.poll();
     if(requiredPlanning.length<600)requiredPlanning.push({at:Date.now(),phase:v.state.phase,
       travel:v.state.travel&&{stage:v.state.travel.stage,target:v.state.travel.target?.id,serial:v.state.travel.serial},
       members:v.members.map((m:any)=>({name:m.name,fresh:m.fresh,at:m.observation?.at,
@@ -785,9 +961,15 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
           distance:m.observation.travel.distance,routeLength:m.observation.travel.route?.plot?.length,
           geometry:m.observation.travel.route?.identity}}))});
     if(v.state.run!==cave.run || v.members.length!==2 ||
-        !v.members.every((m:any)=>m.fresh && m.observation?.cave?.run===cave.run &&
+        !v.members.every((m:any)=>m.fresh && m.observation?.alive && m.observation?.cave?.run===cave.run &&
           m.observation.cave.floor===cave.floor && Array.isArray(m.observation.cave.points)))return false;
     const c=v.members[0].observation.cave;
+    const markers=c.points.filter((p:any)=>p.required&&p.done&&v.members.every((m:any)=>
+      m.observation.cave.points.some((other:any)=>other.id===p.id&&other.required&&other.done))).map((p:any)=>'room:'+p.id);
+    if(c.choice?.resolved&&v.members.every((m:any)=>{
+      const choice=m.observation.cave.choice;return choice?.id===c.choice.id&&choice.resolved&&choice.votes?.[m.name]!=null;
+    }))markers.push('choice:'+c.choice.id);
+    requiredBudget.observe(markers);
     if(c.choice&&!c.choice.resolved){
       await answerNativeChoice(c.choice,c.floor);
       return false;
@@ -798,11 +980,44 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     const current=v.state.travel?.target?.id || (Object.values(v.state.commands).find((c:any)=>c.action==='move') as any)?.target?.id;
     if(current!==required.id)await acceptRoom(required,true);
     return false;
-  // Random floors can require several long trips with native combat along the
-  // corridors. Allow the final vote's acknowledged result to reach telemetry.
-  },{timeout:300_000,message:'Required rooms must finish through native combat and votes'}).toBe(true);
+  // Long native routes may progress across the old total five-minute boundary.
+  // Only new authoritative completions renew quiet time; the total is bounded.
+  },{timeout:600_000,message:'Required rooms must finish through native combat and votes'}).toBe(true);
+  requiredCompleted=true;
   }finally{
+    await info.attach('native-cave-cpu-profile',{body:JSON.stringify(await cpuProfile.finish()),contentType:'application/json'});
     await info.attach('native-cave-required-planning',{body:JSON.stringify(requiredPlanning),contentType:'application/json'});
+    await info.attach('native-cave-required-progress-budget',{body:JSON.stringify(requiredBudget.snapshot()),contentType:'application/json'});
+    if(!requiredCompleted){
+      const geometry=await Promise.allSettled(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].run(`(()=>{
+        const m=globalThis.__partyMovement,p=parent,c=character;
+        return {name:c.name,map:c.map,in:c.in,base:c.base,position:{x:c.real_x,y:c.real_y},
+          identity:m?.identity,planning:m?.nativePlanning?.(),movement:m?.last?.(),
+          nativeGraphics:{noGraphics:!!p.no_graphics,noHtml:p.no_html},
+          nativeBodies:{self:{id:c.id||c.name,awidth:c.awidth,aheight:c.aheight,base:c.base,dimensions:p.G.dimensions[c.type]},
+            monsters:Object.keys(p.entities||{}).map(id=>p.entities[id]).filter(e=>e.type==='monster'&&!e.dead)
+              .sort((a,b)=>Math.hypot(a.real_x-c.real_x,a.real_y-c.real_y)-Math.hypot(b.real_x-c.real_x,b.real_y-c.real_y)).slice(0,5)
+              .map(e=>({id:e.id,mtype:e.mtype,map:e.map,in:e.in,x:e.real_x,y:e.real_y,hp:e.hp,dead:e.dead,target:e.target,range:e.range,cave:e.cave,
+                distance:Math.hypot(e.real_x-c.real_x,e.real_y-c.real_y),clear:can_move_to(e.real_x,e.real_y),
+                awidth:e.awidth,aheight:e.aheight,base:e.base,dimensions:p.G.dimensions[e.mtype]}))},
+          command:globalThis.__partyDungeonRuntime?.commandIdentity?.(),entitiesObservedAt:globalThis.__partyEntitiesObservedAt,
+          selected:sharedRoutine.getDungeonTarget()?.id,
+          cave:c.cave?{run:c.cave.run,floor:c.cave.floor,paused:c.cave.paused,choice:c.cave.choice}:null,
+          geometry:p.G.geometry[c.map],mapData:p.G.maps[c.map]};
+      })()`)));
+      await info.attach('native-cave-required-geometry',{body:JSON.stringify(geometry),contentType:'application/json'});
+      const remaining=await live.admin(`output=(()=>{
+        const p=get_player('E2EWarrior'),entry=p&&generated_entry(p),run=entry?.record;
+        if(!run?.cave)return {at:Date.now(),available:false};
+        return {at:Date.now(),run:run.key,players:['E2EWarrior','E2EPriest'].map(name=>{
+          const actor=get_player(name);return actor&&{name,map:actor.map,in:actor.in,x:actor.x,y:actor.y,hp:actor.hp,rip:actor.rip};}),
+          roomsAvailable:Array.isArray(run.cave.rooms),
+          rooms:(Array.isArray(run.cave.rooms)?run.cave.rooms:[]).filter(room=>room.required&&!room.done).slice(0,5).map(room=>({
+            id:room.id,map:room.map,x:room.x,y:room.y,started:room.started,done:room.done,kind:room.kind,
+            actorsAvailable:Array.isArray(room.actors),actors:Array.isArray(room.actors)?room.actors.slice(0,12).map(a=>({id:a.id,mtype:a.mtype,map:a.map,in:a.in,x:a.x,y:a.y,hp:a.hp,dead:a.dead,target:a.target,zone_actor:a.zone_actor})):null}))};
+      })()` ).catch(error=>({error:String(error)}));
+      await info.attach('native-cave-required-remaining-actors',{body:JSON.stringify(remaining),contentType:'application/json'});
+    }
   }
   console.log('[Cave verified] Required native rooms completed');
   const stairs=(await dungeon()).members[0].observation.cave.points.find((p:any)=>p.down);
@@ -815,8 +1030,65 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   await acceptRoom(stairs);
   let answeredFarewell=false;
   const stairReplies:{id:string;title:string;option:string}[]=[];
+  const stairSamples:any[]=[];
+  let lastStairKey='';
+  let blockedStairAt=0,blockedStairId='';
+  const stairNativeReads:Promise<unknown>[]=[];
+  const stairPlanningReads:Promise<unknown>[]=[];
+  const stairPlanningStarted=Date.now();
+  const captureStairPlanning=()=>{
+    const thresholds=[15000,60000,120000];
+    if(answeredFarewell||stairPlanningReads.length>=thresholds.length||Date.now()-stairPlanningStarted<thresholds[stairPlanningReads.length])return;
+    stairPlanningReads.push(Promise.allSettled(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].frame.evaluate(()=>{
+      const p=window as any,w=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+      const c=w?.character,m=w?.__partyMovement;
+      return {at:Date.now(),name:c?.name,map:c?.map,in:c?.in,x:c?.real_x,y:c?.real_y,hp:c?.hp,rip:c?.rip,
+        cavePaused:c?.cave?.paused,moving:c?.moving,transporting:p.transporting,
+        schedulerGate:!!m?.gate?.owner,nativePlanning:m?.nativePlanning?.(),movement:m?.report?.()};
+    }))));
+  };
+
+  const captureBlockedStairs=(v:any)=>{
+    const t=v.state.travel,id=t?`${v.state.run}:${t.serial}:${t.target.id}`:'';
+    if(!id){blockedStairAt=0;blockedStairId='';return;}
+    if(id!==blockedStairId){blockedStairId=id;blockedStairAt=Date.now();}
+    if(stairNativeReads.length>=3||Date.now()-blockedStairAt<(stairNativeReads.length+1)*20000)return;
+    stairNativeReads.push(Promise.allSettled(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].run(`(()=>{
+      const c=character,p=parent.character,now=Date.now();
+      const body=o=>o?{name:o.name,map:o.map,in:o.in,x:o.x,y:o.y,real_x:o.real_x,real_y:o.real_y,
+        hp:o.hp,rip:o.rip,moving:o.moving,base:o.base,width:o.width,height:o.height,
+        cave:o.cave?{run:o.cave.run,floor:o.cave.floor,paused:o.cave.paused}:null}:null;
+      const near=o=>Math.hypot((o.real_x??o.x)-c.x,(o.real_y??o.y)-c.y)<=500;
+      return {at:now,code:body(c),parent:body(p),connected:parent.socket?.connected,
+        codeActive:parent.code_active,runtimeGeneration:globalThis.__partyRuntimeGeneration,
+        statusAt:globalThis.__partyStatusSuccessAt,planningSchedule:globalThis.__partyMovement?.report?.()?.planningSchedule,
+        entities:Object.values(parent.entities||{}).filter(near).slice(0,30).map(o=>({...body(o),
+          id:o.id,mtype:o.mtype,type:o.type,target:o.target,dead:o.dead,visible:o.visible,side:o.cave?.side})),
+        chests:Object.entries(parent.chests||{}).filter(([id,o])=>near(o)).slice(0,20).map(([id,o])=>({
+          id,map:o.map,in:o.in,x:o.x,y:o.y,deleted:o.to_delete,owner:o.owner,opened:o.opened,skin:o.skin}))};
+    })()`))));
+  };
+  const recordStairs=(v:any)=>{
+    const at=Date.now(),state=v.state;
+    const sample={at,phase:state.phase,run:state.run,error:state.error,travel:state.travel,
+      members:v.members.map((m:any)=>({name:m.name,fresh:m.fresh,expected:state.commands[m.name],
+        observationAt:m.observation?.at,alive:m.observation?.alive,ready:m.observation?.ready,
+        travel:m.observation?.travel,receipt:m.observation?.action,
+        cave:m.observation?.cave?{run:m.observation.cave.run,floor:m.observation.cave.floor,
+          paused:m.observation.cave.paused,remainingMs:m.observation.cave.remainingMs,
+          choice:m.observation.cave.choice?{id:m.observation.cave.choice.id,
+            resolved:m.observation.cave.choice.resolved,votes:m.observation.cave.choice.votes}:null}:null}))};
+    const key=JSON.stringify({...sample,at:undefined,members:sample.members.map((m:any)=>({...m,
+      observationAt:undefined,cave:m.cave?{...m.cave,remainingMs:undefined}:null}))});
+    const transition=key!==lastStairKey;lastStairKey=key;
+    if(transition||stairSamples.length<5)stairSamples.push({...sample,transition});
+    else if(stairSamples.at(-1)?.transition)stairSamples.push({...sample,transition:false});
+    else stairSamples[stairSamples.length-1]={...sample,transition:false};
+    if(stairSamples.length>100)stairSamples.splice(5,1);
+  };
   const advanceStairs=async()=>{
     const v=await dungeon(),c=v.members[0].observation.cave;
+    recordStairs(v);captureStairPlanning();
     if(v.members.every((m:any)=>m.observation?.cave?.floor===1))return true;
     if(c?.choice&&!c.choice.resolved&&!stairReplies.some(r=>r.id===c.choice.id)){
       const reply=c.choice.options.find((o:any)=>!o.unavailable&&!o.cost&&!o.amber);
@@ -833,6 +1105,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   };
   // A long native approach can consume this entire window before its vote.
   // Give the acknowledged continuation its own bounded planning/travel window.
+  try{
   await expect.poll(async()=>{await advanceStairs();return answeredFarewell;},
     {timeout:600_000,message:'Manual stairs must reach and answer the native farewell'}).toBe(true);
   const farewell=stairReplies.find(r=>r.title==='Before You Leave')!;
@@ -841,8 +1114,13 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
       m.observation.cave.choice.id!==farewell.id||m.observation.cave.choice.resolved)),
     {timeout:30_000,message:'Both native farewell votes must acknowledge before continuation'}).toBe(true);
   await info.attach('native-cave-farewell-acknowledgement',{body:JSON.stringify({farewell,dungeon:await dungeon()}),contentType:'application/json'});
-  await expect.poll(advanceStairs,
-    {timeout:300_000,message:'Manual stairs must continue after the farewell vote and transport both members'}).toBe(true);
+    await expect.poll(async()=>{const completed=await advanceStairs();const latest=stairSamples.at(-1);
+      if(latest)captureBlockedStairs({state:{phase:latest.phase,run:latest.run,travel:latest.travel}});return completed;},
+      {timeout:300_000,message:'Manual stairs must continue after the farewell vote and transport both members'}).toBe(true);
+  }finally{
+    await info.attach('native-cave-stairs-readiness',{body:JSON.stringify({samples:stairSamples,planning:await Promise.allSettled(stairPlanningReads),native:await Promise.allSettled(stairNativeReads),
+      unavailable:['Coordinator status position/seenAt and CODE loading/socket ownership are not exposed by this dungeon response.']}),contentType:'application/json'});
+  }
   expect(answeredFarewell).toBe(true);
   console.log('[Cave verified] Both characters reached the next native floor');
   await info.attach('native-cave-floor-transition',{body:JSON.stringify({stairReplies,dungeon:await dungeon(),state:await live.state()}),contentType:'application/json'});
@@ -872,7 +1150,7 @@ test('Cave shared-route pacing keeps the party together and stops the selected r
   await live.admin("Dev=true;Prod=false;G.events.dreams.disabled=false;G.events.dreams.encounters=G.events.dreams.encounters.filter(e=>['e11','e20','e31','e50'].includes(e.id));output=true");
   await live.post('/formation',{leader:'E2EWarrior'});
   await live.post('/formation',{character:'E2EPriest',follow:true});
-  const view=async()=>await (await page.request.get(live.url+'/party-api/daily-dungeons')).json();
+  const view=async()=>await (await page.request.get(live.url+'/party-api/daily-dungeons',{maxRetries:1})).json();
   const act=(body:Record<string,unknown>)=>live.post('/daily-dungeons',{operationId:crypto.randomUUID(),...body});
   await expect.poll(async()=>{
     const v=await view();
@@ -885,7 +1163,14 @@ test('Cave shared-route pacing keeps the party together and stops the selected r
     if(!c.choice||c.choice.resolved)return false;
     const option=c.choice.options.find((o:any)=>!o.unavailable&&!o.cost&&!o.amber);
     await act({action:'vote',run:c.run,choice:c.choice.id,option:option.id});
-    await expect.poll(async()=>(await view()).members[0].observation.cave.choice.resolved,{timeout:20_000}).toBe(true);
+    await expect.poll(async()=>{
+      const current=await view();
+      return current.state.run===c.run&&current.members.length===2&&current.members.every((m:any)=>{
+        const observed=m.observation?.cave,choice=observed?.choice;
+        return m.fresh&&m.observation?.alive&&observed?.run===c.run&&observed.floor===c.floor&&
+          choice?.id===c.choice.id&&choice.resolved&&choice.votes?.[m.name]===option.id;
+      });
+    },{timeout:20_000,message:'Both native participant votes must settle before pacing travel'}).toBe(true);
     return true;
   }
   await reply(await view());
@@ -946,7 +1231,7 @@ test('Cave assembly regroups displaced completed participants before departure',
   await live.admin("Dev=true;Prod=false;G.events.dreams.disabled=false;G.events.dreams.encounters=G.events.dreams.encounters.filter(e=>['e11','e20','e31','e50'].includes(e.id));output=true");
   await live.post('/formation',{leader:'E2EWarrior'});
   await live.post('/formation',{character:'E2EPriest',follow:true});
-  const view=async()=>await (await page.request.get(live.url+'/party-api/daily-dungeons')).json();
+  const view=async()=>await (await page.request.get(live.url+'/party-api/daily-dungeons',{maxRetries:1})).json();
   const act=(body:Record<string,unknown>)=>live.post('/daily-dungeons',{operationId:crypto.randomUUID(),...body});
   const positions=()=>live.admin("output=Object.fromEntries(['E2EWarrior','E2EPriest'].map(name=>{const p=get_player(name);return [name,{map:p.map,x:p.x,y:p.y,moving:!!p.moving,cruise:p.cruise}]}))");
   const point=(name:string,distance:number)=>live.admin(`output=(()=>{
@@ -974,7 +1259,14 @@ test('Cave assembly regroups displaced completed participants before departure',
     const option=cave.choice.options.find((o:any)=>!o.unavailable&&!o.cost&&!o.amber);
     expect(option).toBeTruthy();
     await act({action:'vote',run:cave.run,choice:cave.choice.id,option:option.id});
-    await expect.poll(async()=>(await view()).members[0].observation.cave.choice.resolved,{timeout:30_000}).toBe(true);
+    await expect.poll(async()=>{
+      const current=await view();
+      return current.state.run===cave.run&&current.members.length===2&&current.members.every((m:any)=>{
+        const observed=m.observation?.cave,choice=observed?.choice;
+        return m.fresh&&m.observation?.alive&&observed?.run===cave.run&&observed.floor===cave.floor&&
+          choice?.id===cave.choice.id&&choice.resolved&&choice.votes?.[m.name]===option.id;
+      });
+    },{timeout:30_000,message:'Both native participant votes must settle before assembly staging'}).toBe(true);
   }
   const staging=await live.admin(`output=(()=>{
     const people=['E2EWarrior','E2EPriest'].map(name=>get_player(name)),p=people[0],run=generated_entry(p).record;
@@ -1027,10 +1319,16 @@ test('Cave assembly regroups displaced completed participants before departure',
   })()`);
   await info.attach('declared-native-cave-safe-staging',{body:JSON.stringify(staging),contentType:'application/json'});
   expect(staging.found,'The actual connected native floor must provide both required safe displacements').toBe(true);
-  await live.admin(`output=['E2EWarrior','E2EPriest'].map(name=>{const p=get_player(name);
+  const stagingDelivery=await live.admin(`output=['E2EWarrior','E2EPriest'].map(name=>{const p=get_player(name);
     if(p.map!==${JSON.stringify(staging.map)})throw Error('Native staging floor changed');
-    p.x=${staging.x};p.y=${staging.y};p.going_x=p.x;p.going_y=p.y;p.moving=false;resend(p,'u+cid+reopen');
-    return {name,map:p.map,x:p.x,y:p.y};})`);
+    const context=()=>({map:p.map,in:p.in,generated:G.maps[p.map].generated,info:instances[p.in].info,duel:p.duel,team:p.team,action:p.c});
+    const before=JSON.parse(JSON.stringify(context()));
+    const instance=p.in;transport_player_to(p,instance,[${staging.x},${staging.y}]);
+    if(p.in!==instance||p.map!==${JSON.stringify(staging.map)})throw Error('Initial native staging changed instance or floor');
+    const after=JSON.parse(JSON.stringify(context()));
+    if(JSON.stringify(before)!==JSON.stringify(after))throw Error('Initial native staging changed cave action context');
+    return {name,map:p.map,x:p.x,y:p.y,before,after};})`);
+  await info.attach('native-cave-staging-delivery-context',{body:JSON.stringify(stagingDelivery),contentType:'application/json'});
   await expect.poll(async()=>Promise.all(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].run(
     `character.map===${JSON.stringify(staging.map)}&&Math.hypot(character.real_x-(${staging.x}),character.real_y-(${staging.y}))<5`))),
     {timeout:20_000,message:'Both actual native clients must observe the declared initial staging seed'}).toEqual([true,true]);

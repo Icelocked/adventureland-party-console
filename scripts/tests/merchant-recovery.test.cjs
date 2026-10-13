@@ -117,3 +117,39 @@ test('activity log keeps the visible entry anchored when newer entries arrive', 
   box.scrollTop = 0;
   assert.equal(component.getSnapshotBeforeUpdate(), null);
 });
+
+function homeReportGap(runtime='headless') {
+ let now=10000;const restarts=[];
+ const block={realm:'SR_USI',connected:true,instance:{exitCode:null,killed:false}};
+ const state={merchantCharacter:'M',activeRealm:'SR_USI',steamMembers:runtime==='native'?['M']:[],
+  statuses:{M:{server:'USI',seenAt:6000,hp:100,rip:false,runtime,travelSample:{connected:true}}},commands:{M:{id:1,type:'merchant-gather'}}};
+ const recovery=createMerchantHomeRecovery(state,{now:()=>now,block:()=>block,realmLabel:x=>x,log(){},persist(){},restart:()=>restarts.push(now)});
+ return {state,block,restarts,recovery,setNow:value=>{now=value;}};
+}
+for(const runtime of ['headless','native'])test('same-home live '+runtime+' heartbeat gap holds work without reconnect and resumes on a fresh report',()=>{
+ const f=homeReportGap(runtime),command=f.state.commands.M;
+ assert.equal(f.recovery.ensureHome('gathering'),false);
+ assert.deepEqual(f.restarts,[]);assert.equal(f.state.merchantRealmRequests,undefined);assert.equal(f.state.commands.M,command);
+ f.state.statuses.M.seenAt=10001;f.setNow(10001);
+ assert.equal(f.recovery.ensureHome('gathering'),true);assert.deepEqual(f.restarts,[]);
+});
+for(const runtime of ['headless','native'])test('same-home '+runtime+' missing reports recover at fifteen seconds then retain the existing sixty second arrival budget',()=>{
+ const f=homeReportGap(runtime);f.setNow(20999);
+ assert.equal(f.recovery.ensureHome('idle'),false);assert.deepEqual(f.restarts,[]);
+ f.setNow(21000);assert.equal(f.recovery.ensureHome('idle'),false);assert.deepEqual(f.restarts,[21000]);
+ assert.equal(f.state.merchantRealmRequests.M.attempts,1);
+ f.setNow(80999);assert.equal(f.recovery.ensureHome('idle'),false);assert.deepEqual(f.restarts,[21000]);
+ f.setNow(81000);assert.equal(f.recovery.ensureHome('idle'),false);assert.deepEqual(f.restarts,[21000,81000]);
+});
+for(const fault of ['wrong realm','offline worker','exited worker','offline native','dead','missing health','missing report','future report'])test('home recovery does not infer a healthy same-home connection from '+fault,()=>{
+ const f=homeReportGap(fault==='offline native'?'native':'headless');
+ if(fault==='wrong realm')f.state.statuses.M.server='USII';
+ if(fault==='offline worker')f.block.connected=false;
+ if(fault==='exited worker')f.block.instance.exitCode=1;
+ if(fault==='offline native')f.state.statuses.M.travelSample.connected=false;
+ if(fault==='dead')f.state.statuses.M.rip=true;
+ if(fault==='missing health')delete f.state.statuses.M.hp;
+ if(fault==='missing report')delete f.state.statuses.M.seenAt;
+ if(fault==='future report')f.state.statuses.M.seenAt=20000;
+ assert.equal(f.recovery.ensureHome('idle'),false);assert.deepEqual(f.restarts,[10000]);
+});

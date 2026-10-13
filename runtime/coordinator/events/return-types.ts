@@ -36,6 +36,7 @@ export interface EventRecovery extends ReturnOwner {
   exited?: string[];
   exitSuspended?: boolean;
   exitConvoyId?: string;
+  exitTownFallback?: { cycleId: string; participants: string[] };
   anniversaryRound?: string;
 }
 export type AnniversaryReturnCycle = AnniversaryCycle;
@@ -64,6 +65,9 @@ export interface ReturnStatus {
   eventRecovery?: { cycleId: string; phase: string };
 }
 export interface ReturnConvoy {
+  failureCode?: string;
+  townFirst?: boolean;
+  disableTown?: boolean;
   merchantInterruption?: unknown;
   id: string;
   phase: string;

@@ -554,9 +554,14 @@ prerequisites are recorded in every `live-seed` artifact.
 Administrative calls establish encounters and inspect authoritative outcomes.
 They must not acknowledge coordinator commands, fabricate heartbeats or perform
 the action being asserted. Real-game evidence includes native socket events,
-server snapshots, coordinator journals, browser action traces, native video and
-final screenshots. Live traces omit repeated DOM/canvas snapshots; the native
-video records gameplay without creating hundreds of megabytes of repeated JPEGs.
+server snapshots, coordinator journals, browser action traces and final screenshots.
+Native video is off by default: the controlled ordinary event comparison reduced
+renderer notification lag by 74–77 percent while preserving both unchanged arrival
+checks. This does not prove all native performance failures resolved. Enable
+diagnostic recording with `E2E_NATIVE_VIDEO=1` or `test.use({recordNativeVideo:true})`.
+Live traces omit repeated DOM/canvas snapshots; screenshots, native events and
+checksummed proof remain required regardless of recording. See
+[the comparison inventory](testing-native-video-comparison.md).
 These tests cover a locally running game server; public realms, Steam itself and
 future upstream versions remain outside that boundary.
 

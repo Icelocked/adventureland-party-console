@@ -54,7 +54,7 @@ export function createSuccessorClient(ports:Ports) {
     if(!snapshot.target || targetIdentity(snapshot.target as SuccessorGrant['predecessor'])!==targetIdentity(grant.predecessor))return null;
     consumed=grant.id;
     const successor={...grant.successor};
-    promoted={...snapshot,target:successor,selection:grant.selection,committed:true,pursuit:undefined,formationRecovery:undefined,
+    promoted={...snapshot,target:successor,selection:grant.selection,committed:!snapshot.independentApproach,pursuit:undefined,formationRecovery:undefined,
       queue:[successor,...snapshot.queue.filter(t=>t.id!==id && t.id!==successor.id)],
       handoffTiming:undefined,successorGrant:undefined};
     ports.trace('local-promotion',{grant:grant.id,target:successor.id,predecessor:id});

@@ -1,0 +1,3 @@
+# Native Cave farm arrival observation
+
+Run 38322061919: Priest native player packets prove exact farm arrival (888,392) at1791848281900, but the next five-second sample is81units away after combat movement. The70radius/600s arrival assertion missed a real owned arrival. Failure modes: old travel, superseding command, retired socket/runtime, different code/run/floor/map/instance, dead actor, missing exact completed receipt, or unrelated historical packet. Capture readonly primitive command identity on existing native player socket observations; correlate exact accepted ID and later completed receipt. No extra timers/high-frequency polls, native mutations, radius/deadline changes, or report-triggered info calls.

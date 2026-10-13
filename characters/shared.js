@@ -17,7 +17,7 @@
   function runtimeCurrent() { return Number(root.__partyRuntimeGeneration) === runtimeGeneration && !!parent; }
   var movement = root.installPartyMovement(root, {
     now: Date.now,
-    context: function() { return { runtime: convoyRuntimeId || String(runtimeGeneration), revision: Number(navigationIntent && navigationIntent.revision) || 0,
+    context: function() { return { server: parent.server_region && parent.server_identifier ? String(parent.server_region)+String(parent.server_identifier) : undefined, runtime: convoyRuntimeId || String(runtimeGeneration), revision: Number(navigationIntent && navigationIntent.revision) || 0,
       current: runtimeCurrent() && (!parent.socket || parent.socket.connected !== false), paused: consoleMovementPaused() || !!root.__partyMovementPaused || !!(dungeonClient && !dungeonClient.canMove()) }; },
     request: request,
     townReady: function() { return !departureCombatPending() && eligibleDepartureChests().length === 0; },
@@ -2829,7 +2829,7 @@
       combatSelection: { id: combatSelection.id, revision: combatSelection.revision,
         map: combatSelection.map, runtimeId: convoyRuntimeId, target: groupedNomination() },
       queueTiming: root.__partyQueueTiming || null,
-      groupedCombat: { approach:groupedApproachReport(),pursuitAck:groupedCombat && groupedCombat.pursuit && groupedCombat.pursuit.revoking || null, lootPending:!!(root.partyLootClient && root.partyLootClient.huntPending()), reportedAt: Date.now()+coordinatorClockOffset, protocol: 4, observationAt:root.__partyEntitiesObservedAt||0,passingEncounters:passingEncounterReport(),passingAcknowledgement:root.partyQueueClient && root.partyQueueClient.passingAcknowledgement && root.partyQueueClient.passingAcknowledgement(),huntDefense:huntTravelDefense(),returnDefense:typeof returnCombatActive==='function' && returnCombatActive() || returnDepartureDefense(),currentAttackers:currentTravelAttackers(),travelCandidates:typeof returnCombatActive==='function' && returnCombatActive()?[]:travelStopCandidates(),currentAttackersAt:travelObservationAt(),travelCommand:localTravelCommand(), epoch: root.__partyCombatResetAt||0, claims: queueClaims(), candidates: queueCandidates(), retentions:queueRetentions(), evidence: root.partyQueueClient ? root.partyQueueClient.reportEvidence(fightDeaths) : [], handoff:root.partyQueueClient && root.partyQueueClient.handoff && root.partyQueueClient.handoff.report(), queueAck: groupedCombat && groupedCombat.queueRevision, deaths: fightDeaths, packets: fightPackets, threats: groupedThreatReports(), sightings: groupedSightings(), ack: groupedAcknowledgement(), anchorVisible: groupedAnchorVisible(), state: groupedCombat },
+      groupedCombat: { independentReady:root.partyQueueClient && root.partyQueueClient.independent ? root.partyQueueClient.independent.readiness():undefined,independentApproach:root.partyQueueClient && root.partyQueueClient.independent && !dungeonOwned() ? true:undefined,approach:groupedApproachReport(),pursuitAck:groupedCombat && groupedCombat.pursuit && groupedCombat.pursuit.revoking || null, lootPending:!!(root.partyLootClient && root.partyLootClient.huntPending()), reportedAt: Date.now()+coordinatorClockOffset, protocol: 4, observationAt:root.__partyEntitiesObservedAt||0,passingEncounters:passingEncounterReport(),passingAcknowledgement:root.partyQueueClient && root.partyQueueClient.passingAcknowledgement && root.partyQueueClient.passingAcknowledgement(),huntDefense:huntTravelDefense(),returnDefense:typeof returnCombatActive==='function' && returnCombatActive() || returnDepartureDefense(),currentAttackers:currentTravelAttackers(),travelCandidates:typeof returnCombatActive==='function' && returnCombatActive()?[]:travelStopCandidates(),currentAttackersAt:travelObservationAt(),travelCommand:localTravelCommand(), epoch: root.__partyCombatResetAt||0, claims: queueClaims(), candidates: queueCandidates(), retentions:queueRetentions(), evidence: root.partyQueueClient ? root.partyQueueClient.reportEvidence(fightDeaths) : [], handoff:root.partyQueueClient && root.partyQueueClient.handoff && root.partyQueueClient.handoff.report(), queueAck: groupedCombat && groupedCombat.queueRevision, deaths: fightDeaths, packets: fightPackets, threats: groupedThreatReports(), sightings: groupedSightings(), ack: groupedAcknowledgement(), anchorVisible: groupedAnchorVisible(), state: groupedCombat },
       dungeon: character.cave && root.installCaveRecovery ? Object.assign(dungeonRuntime().report(), { recovery: caveRecovery().report() }) : dungeonRuntime().report(),
       convoyProtocol: 4,
       movementGeometry: movement.identity,
@@ -5243,13 +5243,16 @@
         var transporter = (map.npcs || []).find(function(npc){return npc.id === "transporter";});
         if (transporter) {
           var places = G.npcs && G.npcs.transporter && G.npcs.transporter.places || {};
-          Object.keys(places).forEach(function(name){exits.push({map:name,spawn:places[name],point:transporter.position});});
+          Object.keys(places).forEach(function(name){exits.push({map:name,spawn:places[name],point:transporter.position,transporter:true});});
         }
         for (var i = 0; i < exits.length; i++) {
           var exit = exits[i], next = G.maps[exit.map], spawn = next && next.spawns && next.spawns[exit.spawn];
           if (!spawn || seen[exit.map] || next.instance || next.event) continue;
           seen[exit.map] = true;
-          var first = entry.first || { map: entry.map, x: exit.point[0], y: exit.point[1], to: exit.map, spawn: exit.spawn };
+          var approach = !entry.first && exit.transporter ? movement.transporterApproach(exit.map,exit.spawn) : null;
+          if (!entry.first && exit.transporter && !approach) continue;
+          var first = entry.first || { map: entry.map, x: approach ? approach.x : exit.point[0], y: approach ? approach.y : exit.point[1], to: exit.map, spawn: exit.spawn,
+            transporterPoint: exit.transporter ? exit.point : null };
           if (exit.map === destination.map) return first;
           queue.push({map:exit.map,first:first});
         }
@@ -5311,7 +5314,8 @@
           // cross-map leg because the recipient moved within that map.
           var crossMap = destination.map !== character.map;
           var nextRoute = crossMap ? travelLeg(destination) : { map: destination.map, x: destination.x, y: destination.y };
-          if (nextRoute.to && Math.hypot(character.x-nextRoute.x,character.y-nextRoute.y) <= 20) {
+          if (nextRoute.to && Math.hypot(character.x-nextRoute.x,character.y-nextRoute.y) <= 20 &&
+              (!nextRoute.transporterPoint || Math.hypot(character.x-nextRoute.transporterPoint[0],character.y-nextRoute.transporterPoint[1]) < 75)) {
             route=null; routePending=false;
             await stop("smart"); if (!current()) throw new Error("interrupted");
             await stop("move"); if (!current()) throw new Error("interrupted");
@@ -13378,6 +13382,9 @@
     if (character.ctype === "merchant") return;
     if (typeof lastDeathInfo !== "undefined" && lastDeathInfo) root.__partyRecoveredDeathAt = parent.__partyRecoveredDeathAt = lastDeathInfo.at;
     if (combatRecoveryActive()) return;
+    // A delayed respawn fallback must not retire a journey admitted meanwhile.
+    // Explicit reunion commands retain their existing ownership handoff.
+    if (!command && (partyConvoyActive || convoyTraveling || root.__partySharedWalking)) return;
     if (farmingTravelToken) farmingTravelToken.cancelled = true;
     reunion = root.__partyReunion = { id: character.name + "-" + Date.now(),
       revision: navigationIntent.revision, phase: "waiting", retryAt: 0,
@@ -14211,7 +14218,7 @@
   function queueReport() {
     return {name:character.name,monsterHunt:monsterHuntStatus(),rareObservation:rareObservationReport(),map:character.map,in:character.in,server:reunionRealm(),x:character.x,y:character.y,hp:character.hp,max_hp:character.max_hp,lastDeath:lastDeathInfo,rip:!!character.rip,
       combatSelection:Object.assign({},combatSelection,{runtimeId:convoyRuntimeId,target:groupedNomination()}),
-      groupedCombat:{formationRecovery:root.partyQueueClient && root.partyQueueClient.formation ? root.partyQueueClient.formation.report() : undefined,approach:groupedApproachReport(),pursuitAck:groupedCombat && groupedCombat.pursuit && groupedCombat.pursuit.revoking || null,lootPending:!!(root.partyLootClient && root.partyLootClient.huntPending()),reportedAt:Date.now()+coordinatorClockOffset,protocol:4,observationAt:root.__partyEntitiesObservedAt||0,passingEncounters:passingEncounterReport(),passingAcknowledgement:root.partyQueueClient && root.partyQueueClient.passingAcknowledgement && root.partyQueueClient.passingAcknowledgement(),huntDefense:huntTravelDefense(),returnDefense:typeof returnCombatActive==='function' && returnCombatActive() || returnDepartureDefense(),currentAttackers:currentTravelAttackers(),travelCandidates:typeof returnCombatActive==='function' && returnCombatActive()?[]:travelStopCandidates(),currentAttackersAt:travelObservationAt(),travelCommand:localTravelCommand(),epoch:root.__partyCombatResetAt||0,claims:typeof returnCombatActive==='function' && returnCombatActive()?[]:queueClaims(),candidates:typeof returnCombatActive==='function' && returnCombatActive()?[]:queueCandidates(),retentions:typeof returnCombatActive==='function' && returnCombatActive()?[]:queueRetentions(),evidence:root.partyQueueClient ? root.partyQueueClient.reportEvidence(fightDeaths) : [],deaths:fightDeaths,
+      groupedCombat:{independentReady:root.partyQueueClient && root.partyQueueClient.independent ? root.partyQueueClient.independent.readiness():undefined,independentApproach:root.partyQueueClient && root.partyQueueClient.independent && !dungeonOwned() ? true:undefined,formationRecovery:root.partyQueueClient && root.partyQueueClient.formation ? root.partyQueueClient.formation.report() : undefined,approach:groupedApproachReport(),pursuitAck:groupedCombat && groupedCombat.pursuit && groupedCombat.pursuit.revoking || null,lootPending:!!(root.partyLootClient && root.partyLootClient.huntPending()),reportedAt:Date.now()+coordinatorClockOffset,protocol:4,observationAt:root.__partyEntitiesObservedAt||0,passingEncounters:passingEncounterReport(),passingAcknowledgement:root.partyQueueClient && root.partyQueueClient.passingAcknowledgement && root.partyQueueClient.passingAcknowledgement(),huntDefense:huntTravelDefense(),returnDefense:typeof returnCombatActive==='function' && returnCombatActive() || returnDepartureDefense(),currentAttackers:currentTravelAttackers(),travelCandidates:typeof returnCombatActive==='function' && returnCombatActive()?[]:travelStopCandidates(),currentAttackersAt:travelObservationAt(),travelCommand:localTravelCommand(),epoch:root.__partyCombatResetAt||0,claims:typeof returnCombatActive==='function' && returnCombatActive()?[]:queueClaims(),candidates:typeof returnCombatActive==='function' && returnCombatActive()?[]:queueCandidates(),retentions:typeof returnCombatActive==='function' && returnCombatActive()?[]:queueRetentions(),evidence:root.partyQueueClient ? root.partyQueueClient.reportEvidence(fightDeaths) : [],deaths:fightDeaths,
         threats:groupedThreatReports(),sightings:groupedSightings(),ack:groupedAcknowledgement(),handoff:root.partyQueueClient && root.partyQueueClient.handoff && root.partyQueueClient.handoff.report(),queueAck:groupedCombat && groupedCombat.queueRevision,
         anchorVisible:groupedAnchorVisible(),state:groupedCombat}};
   }
@@ -14292,14 +14299,17 @@
     var prior=approachObservation, displacement=prior && prior.identity===identity ? Math.hypot(character.x-prior.x,character.y-prior.y) : 0;
     approachObservation={identity:identity,x:character.x,y:character.y};
     var entity=get_entity(t.id), recovery=formationState.recovery, point=recovery && recovery.point;
+    var individual=root.partyQueueClient && root.partyQueueClient.independent && root.partyQueueClient.independent.report();
+    if(individual && individual.target===String(t.id))point=individual.goal;
     var active=groupedFresh() && !navigationIntent.cancelled && (!(partyConvoyActive || convoyTraveling) || huntTravelDefense()) &&
       !character.rip && !eventTraveling && !joinedEvent && !root.sharedRoutine.isOccupied() &&
       !(groupedCombat.recovering || []).length && p.target===t.id;
+    if(individual && individual.target===String(t.id))active=groupedFresh() && !navigationIntent.cancelled && !character.rip && !eventTraveling;
     return {target:identity,at:now,active:!!active,visible:!!(entity && entity.visible && !entity.dead),
-      intent:combatDistance(t)>Number(character.range || 0) || !(entity && entity.visible && !entity.dead) || Number(p.coverageDeficit)>0 ? 'approach':'hold',moving:!!character.moving,displacement:displacement,
+      intent:individual && individual.target===String(t.id) || combatDistance(t)>Number(character.range || 0) || !(entity && entity.visible && !entity.dead) || Number(p.coverageDeficit)>0 ? 'approach':'hold',moving:!!character.moving,displacement:displacement,
       deficit:Math.max(0,combatDistance(t)-Number(character.range || 0)),coverage:Number(p.coverageDeficit)||0,
-      blocked:p.constraint || (String(p.reason || "").indexOf("movement rejected")===0 ? p.reason : null),destination:kiteState.destination || null,issuedAt:kiteState.lastMoveAt,
-      waypoint:point ? {key:JSON.stringify([identity,point.x,point.y]),remaining:Math.hypot(character.x-point.x,character.y-point.y)} : undefined};
+      blocked:p.constraint || (String(p.reason || "").indexOf("movement rejected")===0 ? p.reason : null),destination:individual?individual.goal:kiteState.destination || null,issuedAt:individual?p.at:kiteState.lastMoveAt,
+      waypoint:point ? {key:individual?individual.id:JSON.stringify([identity,point.x,point.y]),remaining:Math.hypot(character.x-point.x,character.y-point.y)} : undefined};
   }
   function groupedNomination() {
     var target = combatSelection.id && get_entity(combatSelection.id);
@@ -14433,8 +14443,11 @@
   function groupedMovement() {
     if(encounterCatchup())return true;
     if(convoyTraveling && !convoyTraveling.defensePaused)return true;
-    if(root.partyQueueClient && root.partyQueueClient.formation && root.partyQueueClient.formation.movement())return true;
-    if (groupedDefensiveTarget() && !navigationIntent.cancelled && !character.rip && !root.sharedRoutine.isOccupied()) {
+    if(!(groupedCombat && groupedCombat.independentApproach) && root.partyQueueClient && root.partyQueueClient.formation && root.partyQueueClient.formation.movement())return true;
+    var ownedApproach=root.partyQueueClient && root.partyQueueClient.independent && root.partyQueueClient.independent.report();
+    var continuingApproach=ownedApproach && groupedCombat && groupedCombat.target && ownedApproach.target===String(groupedCombat.target.id) &&
+      !Object.values(parent.entities||{}).some(function(e){return e && e.type==='monster' && !e.dead && (e.target===character.name || String(e.id)!==ownedApproach.target && isAttackingPartyMember(e));});
+    if (!continuingApproach && groupedDefensiveTarget() && !navigationIntent.cancelled && !character.rip && !root.sharedRoutine.isOccupied()) {
       cancelGroupRoute(); cancelFightRoute(); cancelFarmApproach("defending visible party attackers");
       return false;
     }
@@ -14444,6 +14457,12 @@
     if (!groupedFarming() || navigationIntent.cancelled || character.rip || root.sharedRoutine.isOccupied() ||
         typeof rareActive === "function" && rareActive() && rareControlState.kind !== "encounter") { cancelGroupRoute(); cancelFightRoute(); return false; }
     if (!groupedCombat) {cancelFightRoute();return false;}
+    var individualTarget=groupedCombat.target;
+    if(groupedCombat.independentApproach && groupedFresh() && individualTarget && individualTarget.server===reunionRealm() &&
+        individualTarget.map===character.map && individualTarget.in===character.in && root.partyQueueClient && root.partyQueueClient.independent) {
+      cancelGroupRoute();cancelFightRoute();
+      return root.partyQueueClient.independent.movement();
+    }
     if (groupedCombat.fights && groupedCombat.fights.length || groupedCombat.target &&
         passiveRareCandidate(groupedCombat.target)) return groupedFightMovement();
     cancelFightRoute();
@@ -15173,12 +15192,16 @@
       throw new Error("Follower cannot connect to leader origin");
   }
   function sharedConvoyReusable(command,origin) {
+    /** @type {import('../runtime/characters/shared-route-cache.ts').SharedRouteRemainder | undefined} */
     var saved=root.__partySharedRouteRemainder;
     if(!saved || saved.id!==command.convoyId || saved.revision!==Number(command.navigationRevision||0) ||
         saved.destinationKey!==JSON.stringify(command.location) || saved.runtimeId!==convoyRuntimeId)return null;
     if(!saved.origin || saved.origin.map!==origin.map || saved.origin.in!==origin.in || saved.server!==reunionRealm() ||
         !saved.geometry || saved.geometry.version!==movement.identity.version || saved.geometry.fingerprint!==movement.identity.fingerprint)return null;
     if(!saved.plot.length || saved.transporting)return null;
+    // Fresh Town eligibility must compare candidates instead of freezing the
+    // walking-only route selected while Town was explicitly forbidden.
+    if(command.continuousReturn===1 && !command.disableTown && saved.townAllowed===false)return null;
     if(command.disableTown && saved.plot.some(function(p){return p.town;}))return null;
     if(command.avoidLeave && saved.plot.some(function(p){return p.method === "leave";}))return null;
     var first=saved.plot[0];
@@ -15250,7 +15273,8 @@
       root.__partySharedRouteRemainder={id:command.convoyId,revision:Number(command.navigationRevision)||0,
         runtimeId:convoyRuntimeId,destinationKey:JSON.stringify(command.location),destination:destination,
         origin:sharedConvoyPoint(),server:reunionRealm(),geometry:Object.assign({},movement.identity),
-        transporting:!!is_transporting(character),plot:remaining};
+        transporting:!!is_transporting(character),plot:remaining,
+        townAllowed:command.continuousReturn===1 ? !command.disableTown : undefined};
     }
     convoy.freezeRoute=freeze;
     // Failure retains command ownership while waiting for the coordinator's hold.
@@ -15336,6 +15360,10 @@
         var matches=signal && signal.id===convoy.id && Number(signal.epoch)===convoy.epoch &&
           Number(signal.commandId)===convoy.commandId && signal.runtimeId===convoyRuntimeId && signal.routeVersion===command.routeVersion;
         if(!matches || convoySignalExpired(signal)) {
+          // A stale lease cannot authorize movement, but a completed owned final
+          // transition can retire its receipt without issuing another action.
+          if(matches && released && smart.on_done===onDone && smart.plot===plot &&
+            movement.settleTerminal && movement.settleTerminal(movement.report()?.id, sharedMovementOptions(command).owner))return;
           if(Date.now()-started<3000 && !released)return;
           if(command.routeProtocol===4 && (!signal || matches))
             convoyCommunication(convoy, '/status', !signal ? 'missing-signal' : 'expired-signal');
@@ -15993,6 +16021,10 @@
     var gap=destination.map===character.map ? Math.hypot(character.x-destination.x,character.y-destination.y) : Infinity;
     if (!local || local.key!==localKey) local=farmApproach.local={key:localKey,at:now,gap:gap,point:null};
     if (gap<local.gap-8) {local.gap=gap;local.at=now;}
+    var formationApproach=root.partyQueueClient && root.partyQueueClient.formation;
+    var certifiedApproach=target && formationApproach && formationApproach.approachStatus &&
+      /^(planning|routing)$/.test(formationApproach.approachStatus());
+    if (certifiedApproach && now-local.at>=3000) return false;
     if (destination.map===character.map && now-local.at<3000) {
       if (!target) farmApproach.searchIndex=Math.max(0,farmApproach.searchIndex-1);
       if (local.point && Math.hypot(character.x-local.point.x,character.y-local.point.y)<8) local.point=null;
@@ -16004,6 +16036,7 @@
           if (can_move_to(point.x,point.y) && safeCombatPoint(point,target)) {local.point=point;break;}
         }
       }
+      if (!local.point && certifiedApproach) return false;
       if (local.point && can_move_to(local.point.x,local.point.y) && safeCombatPoint(local.point,target))
         Promise.resolve(move(local.point.x,local.point.y)).catch(function(){});
       root.partyCombatPosition={at:now,mode:"farm-local-detour",movementOwner:"farm-recovery",reason:"trying local obstacle recovery"};
@@ -16357,16 +16390,54 @@
     var goal=combatApproachPoint(reference,desired);
     return can_move_to(goal.x,goal.y) && formationRecoverySafePoint(goal);
   }
+  function terrainRecoveryFollowerTerminal(point,goal) {
+    var members=formationMembers(),g=groupedCombat,r=g && g.formationRecovery;
+    var mover=r && members.find(function(m){return m.name===r.mover;});
+    if(!mover)return false;
+    var priest=members.find(function(m){return m.ctype==='priest';});
+    if(!priest)return !g.priest && Math.hypot(point.x-goal.x,point.y-goal.y)<=40;
+    var reach=Number(priest.range)-Math.min(20,Math.max(8,Number(priest.range)*0.1));
+    if(!Number.isFinite(reach)||reach<=0)return false;
+    var centerReach=Math.max(10,(Number.isFinite(Number(g.range))?Number(g.range):reach)-10);
+    var healer=formationBody(priest,priest.name===character.name?point:priest.name===mover.name?goal:undefined);
+    return members.every(function(m){
+      var body=formationBody(m,m.name===character.name?point:m.name===mover.name?goal:undefined);
+      return formationDistance(body,healer)<=reach+0.01 && Math.hypot(body.x-healer.x,body.y-healer.y)<=centerReach+0.01;
+    });
+  }
+  function terrainRecoveryFollowerGoals(goal) {
+    var members=formationMembers(),g=groupedCombat,r=g && g.formationRecovery;
+    var mover=r && members.find(function(m){return m.name===r.mover;});
+    if(!mover||!g.target)return [];
+    var priest=members.find(function(m){return m.ctype==='priest';});
+    if(!priest && g.priest)return [];
+    var reach=priest?Number(priest.range)-Math.min(20,Math.max(8,Number(priest.range)*0.1)):40;
+    if(!Number.isFinite(reach)||reach<=0)return [];
+    var centerReach=priest?Math.max(10,(Number.isFinite(Number(g.range))?Number(g.range):reach)-10):40;
+    var goals=terrainRecoveryGoals(g.target,desiredCombatRange());
+    [Math.min(39,centerReach-1),centerReach-1].forEach(function(radius){
+      for(var i=0;i<16;i++){
+        goals.push({x:goal.x+Math.cos(i*Math.PI/8)*radius,y:goal.y+Math.sin(i*Math.PI/8)*radius});
+      }
+    });
+    goals.push({x:character.x,y:character.y});
+    return goals.filter(function(point){return terrainRecoveryFollowerTerminal(point,goal)&&terrainRecoverySafe(point,true);})
+      .sort(function(a,b){return Math.hypot(a.x-character.x,a.y-character.y)-Math.hypot(b.x-character.x,b.y-character.y);});
+  }
   function followTerrainRecovery() {
     var g=groupedCombat,r=g && g.formationRecovery;
     var mover=r && formationMembers().find(function(m){return m.name===r.mover;});
     if(!mover || !g.target)return;
     var distance=Math.hypot(mover.x-character.x,mover.y-character.y);
-    if(distance<=40){holdFormation(g.target,'waiting for recovery leader to advance');return;}
+    if(distance<=40 && terrainRecoveryFollowerTerminal({x:character.x,y:character.y},{x:mover.x,y:mover.y}) && terrainRecoverySafe({x:character.x,y:character.y},true)){holdFormation(g.target,'waiting for recovery leader to advance');return;}
     var client=root.partyQueueClient && root.partyQueueClient.formation;
     var waypoint=client && client.followPoint ? client.followPoint({x:mover.x,y:mover.y}) : mover;
-    if(!waypoint){holdFormation(g.target,'finding safe recovery follower route');return;}
-    var heading=Math.atan2(waypoint.y-character.y,waypoint.x-character.x),length=Math.min(Number(character.speed||40)*0.25,distance-40,Math.hypot(waypoint.x-character.x,waypoint.y-character.y));
+    if(!waypoint){
+      var followState=client && typeof client.report==='function' && client.report()?.followerRoute;
+      holdFormation(g.target,followState==='arrived'?'waiting at a safe healing position for recovery leader':
+        followState==='unreachable'?'no certified safe recovery follower route':'finding safe recovery follower route');return;
+    }
+    var heading=Math.atan2(waypoint.y-character.y,waypoint.x-character.x),length=Math.min(Number(character.speed||40)*0.25,Math.hypot(waypoint.x-character.x,waypoint.y-character.y));
     var offsets=[0,Math.PI/6,-Math.PI/6,Math.PI/3,-Math.PI/3,Math.PI/2,-Math.PI/2];
     for(var i=0;i<offsets.length;i++){
       var point={x:character.x+Math.cos(heading+offsets[i])*length,y:character.y+Math.sin(heading+offsets[i])*length};
@@ -16386,6 +16457,8 @@
     return {
       now:function(){return Date.now()+coordinatorClockOffset;},self:function(){return character;},context:terrainRecoveryContext,
       gate:sharedConvoyGate,smart:function(){return smart;},safe:terrainRecoverySafe,
+      endpointSafe:function(point){return terrainRecoverySafe(point,true);},
+      followGoals:terrainRecoveryFollowerGoals,followTerminalValid:terrainRecoveryFollowerTerminal,
       segmentClear:function(from,to){return terrainRecoverySafe(to,false,from);},
       approachReady:terrainApproachReady,coveredStep:terrainCoverageStep,follow:followTerrainRecovery,stepSize:Math.max(1,Number(character.speed||40)*0.25),
       release:function(){resetCombatMovement();if(root.partyQueueClient)root.partyQueueClient.sight.reset();if(root.partyRoleRunner)root.partyRoleRunner.wake();},
@@ -16445,6 +16518,7 @@
     return priestSecondaryClearance(point,obstacles).risk<=priestSecondaryClearance(character,obstacles).risk+0.01;
   }
   function holdFormation(reference, reason) {
+    if(independentApproachOwnsJourney())return true;
     var destination=kiteState.destination;
     if(destination && character.moving && Math.hypot(character.going_x-destination.x,character.going_y-destination.y)<2) {
       try {Promise.resolve(stop("move")).catch(function(){});}catch(_){}
@@ -16456,7 +16530,50 @@
   }
 
   var formationPerformance = { ticks: 0, totalMs: 0, maxMs: 0, candidates: 0, collisionChecks: 0 };
+  function independentApproachOwnsJourney() {
+    var r=movement.report();return !!(r && r.owner && typeof r.owner.recoveryStage==='string' && r.owner.recoveryStage.indexOf('combat-approach:')===0);
+  }
+  var independentApproachReference=null;
+  function independentApproachPorts() {
+    function context() {
+      var coordinated=!!(groupedFarming() && groupedFresh() && groupedCombat.independentApproach);
+      var local=independentApproachReference && Date.now()-independentApproachReference.at<=1500 ? independentApproachReference.target:null;
+      var t=coordinated?groupedCombat.target:local,observed=t && get_entity(t.id);
+      if(!t || !coordinated && (!observed || !observed.visible))return null;
+      var e=observed && observed.visible?observed:t;
+      var knownDead=root.partyRoleRunner && typeof root.partyRoleRunner.isKnownDead==='function' && root.partyRoleRunner.isKnownDead(t.id);
+      var route=movement.report(),foreignOwned=route && route.owner && !independentApproachOwnsJourney();
+      var allowed=!!(!foreignOwned && !partyConvoyActive && !convoyTraveling && !root.sharedRoutine.isOccupied() && (coordinated || !groupedFarming()) && runtimeCurrent() && (!parent.socket || parent.socket.connected!==false) && !dungeonOwned() && !eventTraveling && character.ctype!=='merchant' &&
+        !navigationIntent.cancelled && !character.rip && !consoleMovementPaused() && !root.__partyMovementPaused &&
+        !knownDead && (!observed || !observed.dead && !(Number(observed.hp)<=0)) && Number.isFinite(e.x) && Number.isFinite(e.y) &&
+        (coordinated || e.visible && !e.dead && e.hp>0) && (!coordinated || t.map===character.map && t.in===character.in && t.server===reunionRealm()) &&
+        !Object.values(parent.entities||{}).some(function(other){return other && other.type==='monster' && !other.dead &&
+          (other.target===character.name || other.id!==e.id && isAttackingPartyMember(other));}));
+      return {allowed:allowed,planned:coordinated?t.state==='planned':true,selection:coordinated?groupedCombat.selection:undefined,committed:coordinated?!!groupedCombat.committed:true,target:String(t.id),
+        key:JSON.stringify([t.id,character.map,character.in,reunionRealm(),navigationIntent.revision,coordinated?[groupedCombat.key,groupedCombat.selection,groupedCombat.resetAt]:joinedEvent]),point:{x:e.x,y:e.y},radius:Math.max(1,Number(character.range)-3)};
+    }
+    return {
+      context:context,now:function(){return Date.now()+coordinatorClockOffset;},
+      ready:function(){var c=context(),e=c && get_entity(c.target);return !!(c && c.allowed && e && e.visible && !e.dead && e.hp>0 && is_in_range(e) && can_move_to(e.x,e.y));},
+      goal:function(point,radius){
+        var c=context(),observed=c && get_entity(c.target),e=observed && observed.visible?observed:groupedCombat && groupedCombat.target;
+        if(!c || !c.allowed || !e || String(e.id)!==c.target)return null;
+        var first=combatApproachPoint(e,radius),angle=Math.atan2(first.y-e.y,first.x-e.x),reach=Math.hypot(first.x-e.x,first.y-e.y),goals=[];
+        for(var i=0;i<16;i++){var a=angle+i*Math.PI/8,p={x:e.x+Math.cos(a)*reach,y:e.y+Math.sin(a)*reach};
+          if(can_move({map:character.map,x:p.x,y:p.y,going_x:p.x,going_y:p.y,base:character.base}))goals.push(p);}
+        goals.sort(function(a,b){return Math.hypot(a.x-character.real_x,a.y-character.real_y)-Math.hypot(b.x-character.real_x,b.y-character.real_y);});return goals[0]||null;
+      },
+      start:function(goal,id){cancelGroupRoute();cancelFightRoute();cancelFarmApproach('individual combat approach');resetCombatMovement();
+        return movement.move({map:character.map,in:character.in,x:goal.x,y:goal.y},undefined,{native:true,town:false,arrivalTolerance:3,owner:{recoveryStage:id}});},
+      owned:function(id){var report=movement.report();return !!(report && report.owner && report.owner.recoveryStage===id);},
+      cancel:function(id){var report=movement.report();if(report && report.owner && report.owner.recoveryStage===id)movement.cancel('Individual combat approach ended');},
+      position:function(id,target,radius,goal,phase){root.partyCombatPosition={at:Date.now(),mode:'independent-approach',movementOwner:'combat-approach',
+        approachId:id,target:target,radius:radius,phase:phase,destination:goal,reason:phase==='ready'?'In native attack range with sightline; waiting for every fighter':'Independently approaching native attack range'};}
+    };
+  }
   function formationMove(target) {
+    independentApproachReference=target?{target:target,at:Date.now()}:null;
+    if(!character.cave && root.partyQueueClient && root.partyQueueClient.independent && root.partyQueueClient.independent.movement())return true;
     if ((typeof bossCombatActive === "function" ? bossCombatActive() : typeof frankyCombatActive === "function" && frankyCombatActive())) return false;
     if(!character.cave && root.partyQueueClient && root.partyQueueClient.formation && root.partyQueueClient.formation.movement())return true;
     var context = [character.map, character.in, character.rip, joinedEvent, eventTraveling].join(":");
@@ -16810,6 +16927,7 @@
     return { x: target.x + dx / length * radius, y: target.y + dy / length * radius };
   }
   function resetCombatMovement() {
+    if(independentApproachOwnsJourney())return;
     eventCombatDetour = null;
     // Only cancel the exact direct segment still owned by combat. Navigation
     // may already have installed another destination since the last tick.
@@ -16827,6 +16945,7 @@
     kiteState.targetId = null; kiteState.destination = null; kiteState.mode = "idle";
   }
   function sendCombatMove(target, destination, mode) {
+    if(independentApproachOwnsJourney())return true;
     if(typeof returnCombatActive==='function' && returnCombatActive())return false;
     var now = Date.now(), old = kiteState.destination;
     var timing=root.__partyQueueTiming;
@@ -17509,6 +17628,7 @@
       if(root.partyQueueClient && root.partyQueueClient.timing)root.partyQueueClient.timing.attack(stage,id,details);
     },
     terrainRecoveryPorts: terrainRecoveryPorts,
+    independentApproachPorts: independentApproachPorts,
     successorAllowed: function(grant) {
       if(consoleDraining())return false;
       if(!groupedFarming() || !groupedFresh() || navigationIntent.cancelled || character.rip || partyConvoyActive || convoyTraveling ||
@@ -17539,14 +17659,15 @@
       departure:!!(root.partyLootClient&&root.partyLootClient.huntPending()),cancelled:navigationIntent.cancelled,
       approach:groupedApproachReport(),pursuit:groupedCombat && groupedCombat.pursuit,
       nominations:root.__partyNomination||null,
-      convoy:convoyTraveling&&convoyTraveling.id,rare:rareControlState&&rareControlState.id};},
+      convoy:convoyTraveling&&convoyTraveling.id,convoyPhase:convoyTraveling&&convoyTraveling.phase,
+      convoyEpoch:convoyTraveling&&convoyTraveling.epoch,rare:rareControlState&&rareControlState.id};},
     acceptCombatControl: acceptCombatControl,
     queueClockOffset: function(){return coordinatorClockOffset;},
     queueMembers: function(){return currentPartyList();},
     queueRequest: function(body){body.name=character.name;return request('/status',{method:'POST',body:body});},
     acceptQueue: acceptQueue,
     queueAcknowledgement: function() {
-      return {groupedCombat:{ack:groupedAcknowledgement(),queueAck:groupedCombat && groupedCombat.queueRevision,handoff:root.partyQueueClient && root.partyQueueClient.handoff && root.partyQueueClient.handoff.report()}};
+      return {groupedCombat:{independentReady:root.partyQueueClient && root.partyQueueClient.independent ? root.partyQueueClient.independent.readiness():undefined,independentApproach:root.partyQueueClient && root.partyQueueClient.independent && !dungeonOwned() ? true:undefined,ack:groupedAcknowledgement(),queueAck:groupedCombat && groupedCombat.queueRevision,handoff:root.partyQueueClient && root.partyQueueClient.handoff && root.partyQueueClient.handoff.report()}};
     },
     sharedTargetId: function(){return groupedFarming() && groupedCombat && groupedCombat.target && groupedCombat.target.id || null;},
     queueEvidence: function(target,state,action){return root.partyQueueClient && root.partyQueueClient.evidence(target,state,action);},

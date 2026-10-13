@@ -2,6 +2,53 @@
 
 ## Unreleased
 
+- Keep independent combat approach and attack readiness consistent across full heartbeats and fast combat reports.
+
+- Fix fighters holding when a selected target is outside their local view; approach fresh party observations while requiring native visibility before attacking.
+
+- Replace shared next-target movement with independent native routes for each fighter; halve blocked approach distances and hold fire until every fighter confirms attack range and line of sight to the selected target.
+
+- Reduce native E2E recording overhead while retaining screenshots, traces and game-event evidence; enable diagnostic video explicitly with E2E_NATIVE_VIDEO=1.
+
+- Improve combat formation recovery with safe follower positions inside the party healing envelope, correct retreat movement, and prompt retries when stopped followers cannot find a safe route.
+
+- Fixed merchant collection getting stuck approaching inaccessible transporter centers, including Desertland; use collision-clear points within the native interaction range.
+
+- Fix headless movement and event-return stalls caused by native pathfinding restoring a CODE-scoped visibility wrapper; preserve the original game visibility function across planning and CODE reloads.
+
+- Add bounded route-planning scheduler diagnostics to distinguish delayed native callbacks from movement-owner pauses during recovery investigations.
+
+- Preserve command-owned native Cave waypoint arrival evidence when subsequent combat movement occurs between E2E samples, without relaxing arrival or ownership checks.
+
+- Reduce native E2E browser request overhead by keeping loopback traffic outside request interception, with an owned denial proxy preserving external network isolation.
+
+- Avoid unnecessary merchant realm restarts during brief heartbeat gaps when its live connection is already on the configured home realm; keep work held until fresh status returns.
+- Acknowledge an already completed final native travel transition without restarting a zero-distance route after its shared signal expires, while retaining ownership and pause safeguards.
+
+- After a confirmed failed Town shortcut during Franky evacuation, retry walking within that return cycle instead of repeatedly attempting Town.
+
+- Repair short terrain-blocked walking segments on future maps with native-certified local connectors, avoiding full cross-map replanning during event returns.
+
+- Reconsider Town during owned event and Hunt returns when it becomes safe again, instead of reusing a long walking route selected while Town was unavailable.
+
+- Retry transient Windows sharing failures when releasing a console build lock, while preserving ownership and bounded failure handling.
+
+- Preserve newly admitted Hunt and shared walking journeys when delayed respawn recovery falls back to farming.
+
+- Repair native walking routes whose final goal connection crosses terrain, retaining the exact owned destination and validating every repaired segment against native collision geometry.
+
+- Give native Cave completion tests a bounded allowance for distinct room/choice progress, while retaining quiet-time failure, an absolute cap and all native completion assertions.
+
+- Preserve cross-map event travel when the same boss moves within its destination map, then pursue its latest verified position after arrival instead of repeatedly restarting transit.
+
+- Add an opt-in native Cave rendering diagnostic and retain failed room-assembly geometry for repeatable movement investigations; normal gameplay CI remains unchanged.
+
+- Let combat formation routes proceed immediately when local obstacle recovery has no safe candidate, and release real local attempts after their existing bounded window.
+
+- Keep Escape recovery held until every fighter has a settled movement arrival in Main town, preventing early farming resumes while teammates are still returning.
+
+- Retain bounded native route-search timing diagnostics to distinguish search CPU cost from scheduler delays in movement reports.
+
 - Record actual Halloween boss participation for assisting followers so event recovery returns every fighter to its saved farming checkpoint.
 - Make console-build lock cleanup tolerate transient Windows filesystem failures without deleting a successor build lock.
 - Wait for genuine native player presence when observing Hunt interruption recovery, without replaying gameplay mutations.

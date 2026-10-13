@@ -7,6 +7,10 @@ export interface FormationRecoveryReport {
   attempt?:number; outcome?:'arrived'|'failed'; reason?:string;
   remaining?:number;
   approachReady?:boolean;
+  /** Exact stopped healing-coverage gate, not generic route planning. */
+  coverageBlocked?:boolean;
+  /** Actual bounded follower search outcome for this acknowledged attempt. */
+  followerRoute?:'planning'|'routing'|'arrived'|'unreachable';
 }
 export interface FormationRecovery {
   id:string; key:string; target:string; mover:string; goals:RecoveryPoint[];
@@ -56,10 +60,21 @@ function begin(members:Member[],target:Fight,key:string,now:number):FormationRec
   return {id:JSON.stringify([key,targetIdentity(target),now]),key,target:targetIdentity(target),mover:mover.name,
     goals:proposal(mover,target,now)!,goal:proposal(mover,target,now)![0],phase:'pausing',attempt:1,startedAt:now,phaseAt:now};
 }
+function unreachableCoverage(r:FormationRecovery,members:Member[],now:number):boolean {
+  const reports=members.map(m=>report(m,r,now));
+  if(!members.every((m,i)=>m.status?.moving===false && reports[i]?.attempt===r.attempt &&
+    reports[i]!.at>=r.phaseAt && reports[i]!.approachReady!==true &&
+    !['planning','routing'].includes(reports[i]!.followerRoute||'')))return false;
+  const mover=members.findIndex(m=>m.name===r.mover);
+  return mover>=0 && reports[mover]?.coverageBlocked===true &&
+    reports.every((p,i)=>i===mover || p?.followerRoute==='arrived' || p?.followerRoute==='unreachable') &&
+    reports.some((p,i)=>i!==mover && p?.followerRoute==='unreachable');
+}
 function routing(r:FormationRecovery,members:Member[],now:number):FormationRecovery {
   const p=report(members.find(m=>m.name===r.mover)!,r,now);
   if(p?.attempt===r.attempt && p.outcome==='arrived')return {...r,phase:'regrouping',phaseAt:now};
   if(p?.attempt===r.attempt && p.outcome==='failed')return retry(r,now,p.reason||'route failed');
+  if(unreachableCoverage(r,members,now))return retry(r,now,'coverage follower route unreachable');
   return now-r.phaseAt>=30000 ? retry(r,now,'route timeout'):r;
 }
 function regroup(r:FormationRecovery,members:Member[],now:number,range:number):FormationRecovery|undefined {

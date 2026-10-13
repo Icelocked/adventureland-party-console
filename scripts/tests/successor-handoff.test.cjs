@@ -114,3 +114,13 @@ test('removed grant recipient cannot be acknowledged by a replacement runtime',(
  assert.equal(f.tick().successorGrant.revoking,true);
  f.advance(3100);assert.equal(f.tick().successorGrant,undefined);
 });
+
+test('independent successor promotion exposes its target but waits for authoritative all-ready attack permission',()=>{
+ const f=fixture(2);f.group.independentApproach=true;const {c}=clientFixture(f);
+ const promoted=c.death('A');assert.equal(promoted.target.id,'B');assert.equal(promoted.selection,fightSelection(f.group.key,f.group.queue[1]));
+ assert.equal(promoted.committed,false);assert.equal(c.effective().committed,false);assert.equal(c.death('A'),null);
+ const waiting={...promoted,seenAt:f.now+100,committed:false};
+ assert.equal(c.accept(waiting).committed,false);
+ const ready={...waiting,seenAt:f.now+200,committed:true};
+ assert.equal(c.accept(ready).committed,true);assert.equal(c.effective().target.id,'B');
+});

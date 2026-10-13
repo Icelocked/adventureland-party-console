@@ -7,6 +7,7 @@ export interface MoveState extends Point {
 // The movement host accepts a minimal payload, with normalized geometry and death state.
 export interface Character extends Point, Pick<GameCharacter, 'name' | 'real_x' | 'real_y' | 'speed' | 'moving'> {
   base: Geometry;
+  hp?: GameCharacter['hp'];
   rip?: Extract<GameCharacter['rip'], boolean>;
   // Inventory observations need only a name and may include newly introduced item IDs.
   items: ({ name: string } | null)[];
@@ -44,7 +45,7 @@ export interface NativeFunctions {
 }
 export interface MovementContext {
   runtime: string; revision: number; current: boolean; paused: boolean;
-  map?: string; instance?: string | number;
+  map?: string; instance?: string | number; server?: string;
 }
 export interface MovementOptions {
   // Cave combat may stop direct movement without retiring the dungeon journey.

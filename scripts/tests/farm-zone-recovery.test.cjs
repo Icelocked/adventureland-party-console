@@ -20,6 +20,31 @@ test('blocked unengaged target starts only one route and times out with a target
  assert.equal(r.c.recoverFarmApproach(r.target),true);r.now(14600);r.c.recoverFarmApproach(r.target);assert.equal(r.calls(),1);
  r.now(44601);r.c.recoverFarmApproach(r.target);assert.equal(r.stops(),1);assert.ok(r.c.farmApproach.failed.bee>44601);
 });
+
+test('exhausted local candidates relinquish to the certified formation approach without moving',()=>{
+ const r=movement();const moves=[];
+ r.c.partyQueueClient={formation:{approachStatus:()=> 'planning'}};
+ r.c.move=(x,y)=>{moves.push({x,y});return Promise.resolve();};
+ assert.equal(r.c.recoverFarmApproach(r.target),false,'legitimate initial approach remains available');
+ r.now(11600);
+ assert.equal(r.c.recoverFarmApproach(r.target),false,'no safe candidate must not hold formation for three seconds');
+ assert.deepEqual(moves,[]);assert.equal(r.calls(),0,'no independent route replaces certified formation');
+ assert.equal(r.c.farmApproach.local.point,null);
+});
+
+test('a certified local candidate keeps its existing attempt window',()=>{
+ const r=movement();const moves=[];
+ r.c.partyQueueClient={formation:{approachStatus:()=> 'planning'}};
+ r.c.move=(x,y)=>{moves.push({x,y});return Promise.resolve();};
+ r.c.can_move_to=(x,y)=>x>1;
+ assert.equal(r.c.recoverFarmApproach(r.target),false);
+ r.now(11600);assert.equal(r.c.recoverFarmApproach(r.target),true);
+ assert.equal(moves.length,1);assert.ok(moves[0].x>1);assert.equal(r.calls(),0);
+ r.now(12000);assert.equal(r.c.recoverFarmApproach(r.target),true);
+ assert.equal(moves.length,2);assert.equal(r.calls(),0);
+ r.now(14601);assert.equal(r.c.recoverFarmApproach(r.target),false,'a real local attempt remains bounded to three seconds');
+ assert.equal(moves.length,2);assert.equal(r.calls(),0,'certified formation retains routing ownership');
+});
 test('aggro suppresses path search; a replacement navigation owner is never stopped',()=>{
  const r=movement();r.c.recoverFarmApproach(r.target);r.now(11600);
  r.c.parent.entities.a={type:'monster',visible:true,target:'W'};r.c.recoverFarmApproach(r.target);assert.equal(r.calls(),0);

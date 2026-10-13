@@ -82,7 +82,8 @@ module.exports = function createCombatDisengagement(party, hooks) {
   }
   function safe(r) {
     return r.names.every(n=> {
-      const s=party.statuses[n];return fresh(s)&&!dead(s)&&s.max_hp>0&&s.hp/s.max_hp>=0.5&&
+      const s=party.statuses[n];return fresh(s)&&!dead(s)&&!s.moving&&
+        (!s.movement||typeof s.movement.done==='boolean')&&s.max_hp>0&&s.hp/s.max_hp>=0.5&&
         s.map==='main'&&Math.hypot(s.x,s.y)<=65&&!(s.groupedCombat?.threats||[]).length;
     });
   }

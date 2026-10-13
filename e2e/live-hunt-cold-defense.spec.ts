@@ -78,7 +78,9 @@ test('a lost native Hunt preparation response recovers cold defense, loot and th
       body: JSON.stringify({ encounter, exchanges, kill, loot, passingPolicy, cycle, before, final: await world(live), state: await live.state() }), contentType: 'application/json',
     });
   } finally {
-    await context.unroute('**/party-api/status', intercept);
+    // This fresh native context has only this fault route. Drain its genuine
+    // response callbacks before fixture teardown retires their browser requests.
+    await context.unrouteAll({behavior:'wait'});
     await info.attach('cold-defense-real-response-fault-ledger', { body: JSON.stringify({ dropped, convoyId, exchanges }), contentType: 'application/json' });
     await cleanupEvents(live);
   }

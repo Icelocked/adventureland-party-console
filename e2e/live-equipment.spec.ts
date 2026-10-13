@@ -5,8 +5,25 @@ import { test, expect } from './live-fixtures';
 test('merchant gathering waits at capacity without resetting cooldowns',async({live,page},info)=>{
   const name='E2EMerchant';
   for(const mode of ['fishing','mining'])await live.post('/merchant/gather',{mode,enabled:false});
+  const standDeadline=Date.now()+90_000;
+  async function standReady(){await expect.poll(async()=>{
+    const [state,response]=await Promise.all([live.state(),fetch(live.url+'/party-api/state?section=fast',{signal:AbortSignal.timeout(15_000)})]);
+    expect(response.ok).toBe(true);
+    const fast=await response.json();expect(fast.pendingCommands).toEqual(expect.any(Object));
+    return state.characters[name]?.standOpen && fast.pendingCommands[name]?.type!=='merchant-idle';
+  },{timeout:Math.max(1,standDeadline-Date.now()),message:'Native stand return and reconciliation must finish before the capacity-only fixture'}).toBe(true);}
+  const standTool=await live.admin(`output=(()=>{const p=get_player('${name}');
+    if(!G.items.stand0.stand)throw new Error('Native stand0 definition missing');
+    p.items[12]={name:'stand0'};cache_player_items(p);resend(p,'reopen+cid');return p.items[12];})()`);
+  expect(standTool).toEqual({name:'stand0'});
+  await info.attach('declared-native-stand-tool',{body:JSON.stringify(standTool),contentType:'application/json'});
+  await expect.poll(async()=>(await live.state()).characters[name]?.items?.some((entry:any)=>entry?.item?.name==='stand0')).toBe(true);
+  await live.post('/merchant/force-stand',{enabled:true});
+  await standReady();
   const seed=await live.admin(`output=(()=>{const p=get_player('${name}');
+    const stand=p.items.find(item=>item?.name==='stand0');if(!stand)throw new Error('Native merchant stand tool missing before capacity seed');
     for(let i=0;i<42;i++)p.items[i]=i<39?{name:'helmet',level:0}:null;
+    p.items[12]=stand;
     p.items[10]={name:'rod',level:0};p.items[11]={name:'pickaxe',level:0};
     cache_player_items(p);resend(p,'reopen+cid');return {items:p.items,last:{fishing:p.last.fishing,mining:p.last.mining}};})()`);
   await expect.poll(async()=> (await live.state()).characters[name]?.items?.filter(Boolean).length).toBe(39);
@@ -18,14 +35,44 @@ test('merchant gathering waits at capacity without resetting cooldowns',async({l
     });
     return {gatheringCooldowns:{fishing:0,mining:0}};
   });
+  // Historical cooldown seeding restarts the master; reconcile its new idle
+  // lifecycle under the same original preparation deadline.
+  await standReady();
   const before=(await live.state()).gatheringCooldowns;
+  await live.post('/merchant/force-stand',{enabled:false});
   for(const mode of ['fishing','mining'])await live.post('/merchant/gather',{mode,enabled:true});
   await page.goto(live.url);await page.getByText(/Merchant logistics ·/).click();
   await expect(page.locator('details').filter({has:page.locator('summary').getByText(/Merchant logistics/)}).getByText('BLOCKED',{exact:true})).toHaveCount(2);
-  await expect.poll(()=>live.clients[name].frame.evaluate(()=>{
-    const root=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
-    return root?.__merchantGatheringBlockedReason;
-  })).toBe('inventory capacity');
+  // Capture real reason transitions in the native document, rather than
+  // repeatedly sampling the same heartbeat phase over CDP.
+  const reasonFrame=live.clients[name].frame;
+  await reasonFrame.evaluate(()=>{
+    const game=window as any,until=Date.now()+15000;
+    const probe={samples:[] as {at:number;reason:string|null}[],timer:null as any};
+    game.__e2eGatheringReasonProbe=probe;
+    probe.timer=setInterval(()=>{
+      const root=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+      if(probe.samples.length===160)probe.samples.shift();
+      probe.samples.push({at:Date.now(),reason:root?.__merchantGatheringBlockedReason??null});
+      if(Date.now()>=until)clearInterval(probe.timer);
+    },100);
+  });
+  let reasonSamples:{at:number;reason:string|null}[]=[];
+  try{await expect.poll(async()=>{
+    try{reasonSamples=await live.clients[name].frame.evaluate(()=>(window as any).__e2eGatheringReasonProbe?.samples||[]);
+      return reasonSamples.some(sample=>sample.reason==='inventory capacity');
+    }catch(error){
+      if(/Execution context was destroyed|Cannot find context|Frame was detached|Native game frame is not present/.test(String(error)))return false;
+      throw error;
+    }
+  },{timeout:15000}).toBe(true);}
+  finally{
+    if(!reasonFrame.isDetached())try{await reasonFrame.evaluate(()=>{
+      const game=window as any,probe=game.__e2eGatheringReasonProbe;
+      if(probe){clearInterval(probe.timer);delete game.__e2eGatheringReasonProbe;}
+    });}catch(error){if(!/Execution context was destroyed|Cannot find context|Frame was detached/.test(String(error)))throw error;}
+    await info.attach('native-gathering-reason-samples',{body:JSON.stringify(reasonSamples),contentType:'application/json'});
+  }
   const after=await live.state();expect(after.gatheringCooldowns).toEqual(before);
   const native=await live.admin(`output=(()=>{const p=get_player('${name}');return {items:p.items,last:{fishing:p.last.fishing,mining:p.last.mining}};})()`);
   expect(Object.values(native.last).map(value=>new Date(value as string).getTime())).toEqual([0,0]);

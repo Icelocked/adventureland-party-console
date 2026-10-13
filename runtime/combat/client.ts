@@ -1,3 +1,4 @@
+import {createIndependentApproachClient} from './independent-approach-client.ts';
 import type {HandoffReport} from './successor-grant.ts';
 import {createSuccessorClient} from './successor-client.ts';
 import {createFormationRecoveryClient} from './formation-recovery-client.ts';
@@ -18,6 +19,7 @@ export function installQueueClient(root:any, shared:any) {
   const handoff=createSuccessorClient({now:()=>Date.now(),monotonic:()=>performance.now(),serverNow:()=>Date.now()+shared.queueClockOffset(),
     allowed:g=>!!shared.successorAllowed?.(g),live:g=>!!shared.successorVisible?.(g),trace:(stage,details)=>timing.event(stage,details)});
   const enabled=()=>!!(shared.convoyActive?.() || shared.usesGroupedCombat?.() || shared.passingEncounterReport?.().length || shared.getPassingTarget?.() || shared.queueMembers?.().length);
+  const independent=shared.independentApproachPorts ? createIndependentApproachClient(shared.independentApproachPorts()) : null;
   const formation=shared.terrainRecoveryPorts ? createFormationRecoveryClient(shared.terrainRecoveryPorts()) : null;
   const host=parent as any;
   const passing=createPassingAdmission({now:()=>Date.now(),reserve:(target,admission)=>shared.beginPassingAttack(target,admission,true)});
@@ -98,7 +100,8 @@ export function installQueueClient(root:any, shared:any) {
   function tick(){
     if(!active||Date.now()<retryAt)return;
     if(!enabled())return;
-    formation?.tick();
+    independent?.tick();
+    if(independent?.report())formation?.stop();else formation?.tick();
     // Admission needs round trips through every participant. Start that exchange
     // while an eligible passing monster is still ahead; this never attacks it.
     const passingTarget=shared.getWalkingPassiveTarget?.(true);
@@ -134,7 +137,7 @@ export function installQueueClient(root:any, shared:any) {
     if(!reserveOnly)shared.beginPassingAttack(target);
     return true;
   }
-  const api={tick,flush,hit,evidence,events,reportEvidence,sight,formation,timing,handoff,
-    death(id:string){const next=handoff.death(id);if(next){shared.acceptQueue(next);timing.selection(next);root.partyRoleRunner?.wake();}flush();},preparePassing,passingAcknowledgement:passing.report,reset(){handoff.reset();events.length=0;sight.reset();signature='';sentAt=0;},stop(){formation?.stop();active=false;clearInterval(timer);}};
+  const api={tick,flush,hit,evidence,events,reportEvidence,sight,formation,independent,timing,handoff,
+    death(id:string){const next=handoff.death(id);if(next){shared.acceptQueue(next);timing.selection(next);root.partyRoleRunner?.wake();}flush();},preparePassing,passingAcknowledgement:passing.report,reset(){handoff.reset();events.length=0;sight.reset();signature='';sentAt=0;},stop(){independent?.stop();formation?.stop();active=false;clearInterval(timer);}};
   root.partyQueueClient=api;return api;
 }

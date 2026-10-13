@@ -7,10 +7,12 @@ import { createNativePlanner } from './native-planner.ts';
 import { createMovementExecutor } from './movement-executor.ts';
 import { resolveDestination } from './movement-destination.ts';
 import { movementDiagnostics } from './movement-diagnostics.ts';
-import { repairDoorApproaches } from '../navigation/door-approach.ts';
+import { repairDoorApproaches, transporterApproach } from '../navigation/door-approach.ts';
 import { planReturnCandidates } from './return-planner.ts';
+import {createPlanningScheduleMetrics} from './planning-schedule-metrics.ts';
+import {repairWalkingEndpoint} from '../navigation/walking-endpoint.ts';
 interface SegmentRepair { plot: Step[]; index: number; target: Point; started: boolean; instance?: string | number; retainEndpoint?: boolean }
-interface Journey { settlingAt?: number; repair?: SegmentRepair; repaired?: boolean; repairEndpoints?: string[]; firstIssue?: Issue; failureContext?: Record<string, unknown>; id: string; context: MovementContext; options: MovementOptions; native: boolean; pending: boolean; searches: number; retries: number; started: number; planningAt: number; fallback: boolean; plannerMs?: number; requestMs?: number; distance?: number; transitions?: number; importedEngine?: string }
+interface Journey { scheduling?: ReturnType<typeof createPlanningScheduleMetrics>; settlingAt?: number; repair?: SegmentRepair; repaired?: boolean; repairEndpoints?: string[]; firstIssue?: Issue; failureContext?: Record<string, unknown>; id: string; context: MovementContext; options: MovementOptions; native: boolean; pending: boolean; searches: number; retries: number; started: number; planningAt: number; fallback: boolean; plannerMs?: number; requestMs?: number; distance?: number; transitions?: number; importedEngine?: string }
 const failurePhases = new Map([
   ['superseded', 'Movement cancelled'],
   ['convoy-communication-hold', 'Movement paused: coordinator communication unavailable'],
@@ -76,7 +78,7 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
     if (done) executor.reset(); else executor.cancel();
     last = {id:j.id,engine:engine(j),version,fingerprint,done,reason,elapsedMs:ports.now()-j.started,
       failureContext:{code: done ? 'arrived' : 'route-failed', character:host.character.name, journeyId:j.id, planner:engine(j), base:{...host.character.base}, ...j.options.owner,...j.failureContext,...cause,origin:position(),destination:point(state),firstIssue:j.firstIssue, relocation:movementRelocation(host.G,position(),state.use_town)},
-      searches:j.searches,retries:j.retries,plannerMs:j.plannerMs,requestMs:j.requestMs,walkingDistance:j.distance,transitions:j.transitions,progress};
+      searches:j.searches,retries:j.retries,plannerMs:j.plannerMs,requestMs:j.requestMs,walkingDistance:j.distance,transitions:j.transitions,nativePlanning:planner.report(),planningSchedule:j.scheduling?.report(),progress};
     ports.metrics?.(last);
     if (j.fallback || !done) report(j.id, state, outcome(done, reason, cause), j.firstIssue, reason, last.failureContext as Record<string, unknown>);
     state.on_done(done, reason, failure);
@@ -101,6 +103,7 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
   function install(plot: Step[], nativeRoute: boolean) {
     if (!nativeRoute) plot = repairDoorApproaches(validation, position(), plot);
     plot = trimUncheckedFinal(finalApproach(plot, position(), state, journey?.options));
+    if(journey&&sameJourneyInstance(journey,position()))plot=repairWalkingEndpoint(validation,position(),state,plot);
     const issue = validateRoute(validation, position(), state, plot, state.use_town, state.edge);
     if (issue) {
       if (nativeRoute) throw Error(`Native route rejected: ${issue.reason} between ${JSON.stringify(issue.from)} and ${JSON.stringify(issue.to)}`);
@@ -216,11 +219,17 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
     j.pending = false; state.searching = false;
     if (++j.retries > 2) finish(false, 'Character moved while planning');
   }
+  function planningBlocked(metrics: ReturnType<typeof createPlanningScheduleMetrics>): boolean {
+    if(host.character.moving){metrics.blockedMoving();return true;}
+    if(host.is_transporting(host.character)){metrics.blockedTransporting();return true;}
+    return false;
+  }
   function planTick() {
     const j = journey;
     if (!j || state.found) return;
     if (!current(j)) { finish(false, 'Navigation revision or runtime superseded this journey', {code:'superseded'}); return; }
-    if (host.character.moving || host.is_transporting(host.character)) {
+    const scheduling=j.scheduling ??= createPlanningScheduleMetrics();scheduling.plan();
+    if (planningBlocked(scheduling)) {
       j.settlingAt ??= ports.now();
       if (ports.now() - j.settlingAt > 5000) finish(false, 'Character did not settle before route planning');
       return;
@@ -311,11 +320,30 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
   function sameJourneyInstance(j: Journey, from: Point): boolean {
     return from.map === j.context.map && String(from.in ?? from.map) === String(j.context.instance ?? j.context.map);
   }
+  function terminalOwner(j: Journey, owner: NonNullable<MovementOptions['owner']>): boolean {
+    const stored=j.options.owner;
+    return !!stored && Object.keys(owner).length===Object.keys(stored).length &&
+      Object.entries(owner).every(([key,value])=>stored[key as keyof typeof owner]===value);
+  }
+  function terminalContext(j: Journey): boolean {
+    const c=host.character,context=ports.context();
+    return current(j) && !context.paused && !c.rip && Number(c.hp)>0 && !!context.server && context.server===j.context.server;
+  }
+  function terminalGoal(): boolean {
+    const c=host.character;
+    return c.map===state.map && String(c.in??c.map)===String(state.in??state.map) && distance(position(),state)<=1;
+  }
+  function settleTerminal(id: string, owner: NonNullable<MovementOptions['owner']>): boolean {
+    const j=journey;
+    if(!j || j.id!==id || !state.moving || !state.found || !terminalContext(j) ||
+      !terminalOwner(j,owner) || !terminalGoal() || !executor.settleTerminal(j.options))return false;
+    finish(true);return true;
+  }
   function tick() {
     const j = journey;
     if (!j || !state.moving) return;
     if (!current(j)) { finish(false, 'Navigation revision or runtime superseded this journey', {code:'superseded'}); return; }
-    if (ports.context().paused) { j.settlingAt = undefined; executor.pause(); return; }
+    if (ports.context().paused) { if(!state.found)(j.scheduling ??= createPlanningScheduleMetrics()).paused();j.settlingAt = undefined; executor.pause(); return; }
     if (!state.found) { planTick(); return; }
     try { if (executor.tick(j.options)) finish(true); }
     catch (error) { recover(j, error); }
@@ -352,7 +380,11 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
     if (!action || action === 'move' || action === 'smart') finish(!!success, success ? undefined : 'Unattributed movement stop', {code:'unattributed-stop',action:action || 'all', stopStack: new Error('Movement stop caller').stack});
     return native.stop(action, success);
   }
-  function scheduler() { if (!disposed) { if (gate.owner) gate.owner.tick(); else tick(); } }
+  function scheduler() {
+    if(disposed)return;
+    if(journey&&state.moving&&!state.found)(journey.scheduling ??= createPlanningScheduleMetrics()).scheduler(!!gate.owner);
+    if(gate.owner)gate.owner.tick();else tick();
+  }
   host.smart_move = move; host.stop = stop; host.smart_move_logic = scheduler;
   function importRoute(plot: Step[], identity?: {version: number; fingerprint: string}, plannerEngine = 'shared') {
     refreshGeometry();
@@ -368,9 +400,11 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
     return install(plot, true);
   }
   const service = { state, move, stop,
-    cancel(reason: string, cause?: Record<string, unknown>) { finish(false, reason, cause); return native.stop('smart'); }, tick, planTick, gate, transition: executor.transition, get identity() { return {version, fingerprint}; }, install: importRoute, last: () => last,
+    transporterApproach(map: string, spawn: number) { const target=validation.game.maps[map]?.spawns[spawn];return target ? transporterApproach(validation,position(),{map,x:target[0],y:target[1],transport:true,s:spawn}) : undefined; },
+    settleTerminal, cancel(reason: string, cause?: Record<string, unknown>) { finish(false, reason, cause); return native.stop('smart'); }, tick, planTick, gate, transition: executor.transition, get identity() { return {version, fingerprint}; }, install: importRoute, last: () => last,
     combatHandoff() { finish(false, 'Combat handoff'); },
-    report: () => journey ? { id: journey.id, owner:journey.options.owner, engine: engine(journey), retries: journey.retries, fingerprint, version, remaining: state.plot.length,
+    nativePlanning: planner.report,
+    report: () => journey ? { id: journey.id, owner:journey.options.owner, engine: engine(journey), retries: journey.retries, fingerprint, version, remaining: state.plot.length, nativePlanning: planner.report(),planningSchedule:journey.scheduling?.report(),
       elapsedMs:ports.now()-journey.started,plannerMs:journey.plannerMs,requestMs:journey.requestMs,progress:executor.progress() } : null,
     dispose() { finish(false, 'Runtime replaced'); disposed = true; gate.owner = null; if (host.smart_move_logic === scheduler) host.smart_move_logic = native.tick; host.smart_move = native.move; host.stop = native.stop; },
   };

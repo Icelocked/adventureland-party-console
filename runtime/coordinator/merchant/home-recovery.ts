@@ -1,8 +1,6 @@
 import { realmRequestArrived, type RealmRequest } from '../characters/realm-request.ts';
-interface Worker {
-  realm?: string;
-  pendingRealm?: RealmRequest;
-}
+import type { CharacterBlock } from '../characters/types.ts';
+interface Worker extends Pick<CharacterBlock, 'realm' | 'pendingRealm' | 'connected' | 'instance'> {}
 interface Sale {
   reason?: string;
   startedAt?: unknown;
@@ -13,7 +11,8 @@ interface HomeState {
   activeRealm: string;
   merchantHomeReturnAt?: number;
   merchantRealmRequests?: Record<string, RealmRequest | undefined>;
-  statuses: Record<string, { server?: string; seenAt?: number; runtime?: string } | undefined>;
+  steamMembers?: readonly string[];
+  statuses: Record<string, { server?: string; seenAt?: number; runtime?: string; hp?: number; rip?: boolean; travelSample?: {connected?: boolean} } | undefined>;
   commands: Record<string, unknown>;
   merchantCurrent?: Sale | null;
 }
@@ -45,8 +44,35 @@ export function createMerchantHomeRecovery<T extends Worker>(
     const status = state.statuses[merchant];
     if (block.realm !== state.activeRealm) return false;
     if (request) return realmRequestArrived(status, {...request, realm:state.activeRealm}, ports.now());
-    return Number(status?.seenAt) >= ports.now() - 3000 &&
-      'SR_' + String(status?.server || '').replace(/^SR_/, '') === state.activeRealm;
+    return freshHomeReport(status) &&
+      reportedAtHome(status);
+  }
+  function freshHomeReport(status: HomeState['statuses'][string]): boolean {
+    const seenAt = Number(status?.seenAt), now = ports.now();
+    return seenAt > 0 && seenAt <= now && seenAt >= now - 3000;
+  }
+  function reportedAtHome(status: HomeState['statuses'][string]): boolean {
+    return 'SR_' + String(status?.server || '').replace(/^SR_/, '') === state.activeRealm;
+  }
+  function living(status: NonNullable<HomeState['statuses'][string]>): boolean {
+    return !status.rip && Number.isFinite(status.hp) && Number(status.hp) > 0;
+  }
+  function workerConnected(block: T): boolean {
+    return block.connected === true && !!block.instance && block.instance.exitCode === null && !block.instance.killed;
+  }
+  function connectedAtHome(merchant: string, block: T): boolean {
+    const status = state.statuses[merchant];
+    if (!status || !living(status) || block.realm !== state.activeRealm ||
+        !reportedAtHome(status)) return false;
+    if (status.runtime === 'native')
+      return state.steamMembers?.includes(merchant) === true && status.travelSample?.connected === true;
+    return status.runtime === 'headless' && workerConnected(block);
+  }
+  function awaitingFreshHomeReport(merchant: string, block: T): boolean {
+    const seenAt = Number(state.statuses[merchant]?.seenAt), age = ports.now() - seenAt;
+    // A healthy assigned connection may have a delayed heartbeat. Hold work,
+    // without creating a realm/login operation, until the existing 15s bound.
+    return Number.isFinite(seenAt) && seenAt > 0 && age >= 0 && age < 15_000 && connectedAtHome(merchant, block);
   }
   function clearReturn(merchant: string, block: T, request: RealmRequest | undefined): void {
     state.merchantHomeReturnAt = 0;
@@ -92,6 +118,7 @@ export function createMerchantHomeRecovery<T extends Worker>(
       clearReturn(merchant, block, request);
       return true;
     }
+    if (!request && awaitingFreshHomeReport(merchant, block)) return false;
     if (request?.owner === 'job' && state.merchantCurrent && ports.now() - request.requestedAt < 60_000) return false;
     attemptReturn(merchant, block, returnRequest(merchant, request), reason);
     return false;

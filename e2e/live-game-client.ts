@@ -1,5 +1,6 @@
 import type { BrowserContext, Page, Frame } from '@playwright/test';
 import {randomUUID} from 'node:crypto';
+import {installCompanionGraphicsDiagnostic} from './native-graphics-diagnostic.js';
 
 export interface LiveClientOptions {
   webUrl: string;
@@ -16,6 +17,7 @@ export interface LiveClient {
   errors: string[];
   snapshot(): Promise<any>;
   events(): Promise<any[]>;
+  disconnects(): ReadonlyArray<Record<string, unknown>>;
   run(expression: string): Promise<any>;
 }
 
@@ -25,7 +27,15 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
     if (!['127.0.0.1', 'localhost'].includes(new URL(address).hostname)) throw new Error('Live E2E requires loopback services');
   }
   const page = options.primary?.page || await context.newPage();
+  if(!options.primary)await installCompanionGraphicsDiagnostic(context,options,process.env.E2E_COMPANION_NO_GRAPHICS==='1');
   const errors: string[] = options.primary?.errors || [];
+  const disconnectJournal:Array<Record<string,unknown>>=[];
+  const disconnectBinding='nativeDisconnect_'+randomUUID().replaceAll('-','');
+  await page.exposeBinding(disconnectBinding, (_source, entry:Record<string,unknown>)=>{
+    if(entry?.name!==options.name)return;
+    disconnectJournal.push(entry);
+    if(disconnectJournal.length>32)disconnectJournal.shift();
+  });
   let native: Frame;
   if (options.primary) {
     // /steam/action login asks the production bridge to use native start_character_runner.
@@ -59,7 +69,7 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
   const seenEvents=new Set<string>();
   let lastEventGeneration='',lastEventSequence=0;
   async function installNativeObservers(frame:Frame):Promise<void> {
-    await frame.evaluate(generation=>{
+    await frame.evaluate(({generation,disconnectBinding,name})=>{
       const game=window as any,socket=game.socket;
       if(!game.character || !socket)throw Error('Native game not initialized');
       game.__e2eEvents ||= [];
@@ -68,25 +78,105 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
       const observed:WeakSet<object>=game.__e2eObservedSockets ||= new WeakSet();
       if(observed.has(socket))return;
       observed.add(socket);
-      // Passive Socket.IO outgoing observation; preserve every native method and packet.
-      socket.onAnyOutgoing?.((event:string,...args:any[])=>{
-        if(event!=='attack')return;
+      const socketGeneration=game.__e2eSocketObservationGeneration=(game.__e2eSocketObservationGeneration||0)+1;
+      socket.on('disconnect',(reason:unknown)=>{
+        // Node retains this real event after native auto-reload retires the frame.
+        // Diagnostics must never change or interrupt Socket.IO/reload dispatch.
+        try{
+          const runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+          let manuallyStopped=false;
+          try{manuallyStopped=localStorage.getItem('party-code-stopped:'+name)==='1';}catch{}
+          const scalar=(value:unknown)=>typeof value==='string'||typeof value==='number'||typeof value==='boolean'?value:null;
+          const entry={at:Date.now(),name,reason:typeof reason==='string'?reason:null,
+            observerGeneration:game.__e2eObserverGeneration,socketGeneration,connected:!!socket.connected,
+            autoReload:scalar(game.auto_reload),reloadState:scalar(game.reload_state),reloadTimer:scalar(game.reload_timer),
+            characterToLoad:typeof game.character_to_load==='string'?game.character_to_load:null,
+            manuallyStopped,path:location.pathname,runtimeGeneration:scalar(runner?.__partyRuntimeGeneration),
+            eventReturnCycleId:scalar(runner?.__partyEventRecoveryCycleId)};
+          Promise.resolve(game[disconnectBinding](entry)).catch(()=>{});
+        }catch{}
+      });
+      const observeOutgoing=(event:string,...args:any[])=>{
+        if(event==='move'){
+          if(!game.__e2eObserveMoves||game.socket!==socket||!game.character?.name||!args[0]||typeof args[0]!=='object')return;
+          if((game.__e2eObservedMoveCount||0)>=200)return;
+          game.__e2eObservedMoveCount=(game.__e2eObservedMoveCount||0)+1;
+          const c=game.character,runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+          const p=args[0],code=runner?.character;
+          const body=(o:any)=>o?{name:o.name,map:o.map,in:o.in,x:o.x,y:o.y,real_x:o.real_x,real_y:o.real_y,
+            moving:o.moving,going_x:o.going_x,going_y:o.going_y,base:o.base&&{h:o.base.h,v:o.base.v,vn:o.base.vn}}:null;
+          let clear:any;
+          try{clear=runner?.can_move?.({map:c.map,x:p.x,y:p.y,going_x:p.going_x,going_y:p.going_y,base:c.base});}catch(error){clear={error:String(error)};}
+          let approachGoal:any;
+          const approachPosition=runner?.partyCombatPosition,destination=approachPosition?.destination,enemy=game.entities?.[approachPosition?.target];
+          if(approachPosition?.mode==='independent-approach'&&destination&&enemy){
+            try{approachGoal={sight:runner.can_move({map:c.map,x:destination.x,y:destination.y,going_x:enemy.real_x??enemy.x,going_y:enemy.real_y??enemy.y,base:c.base})};}catch(error){approachGoal={error:String(error)};}
+          }
+          game.__e2eEvents.push({sequence:++game.__e2eEventSequence,at:Date.now(),event:'move-issued',
+            data:{x:p.x,y:p.y,going_x:p.going_x,going_y:p.going_y,m:p.m},
+            motion:{parent:body(c),code:body(code),clear,approachGoal,owner:runner?.__partyCombatOwner,
+              recovery:runner?.__partyGroupedCombat?.formationRecovery&&{id:runner.__partyGroupedCombat.formationRecovery.id,
+                target:runner.__partyGroupedCombat.formationRecovery.target,mover:runner.__partyGroupedCombat.formationRecovery.mover,
+                phase:runner.__partyGroupedCombat.formationRecovery.phase,attempt:runner.__partyGroupedCombat.formationRecovery.attempt},
+              position:runner?.partyCombatPosition&&{mode:runner.partyCombatPosition.mode,reason:runner.partyCombatPosition.reason,
+                target:runner.partyCombatPosition.target,issuedAt:runner.partyCombatPosition.issuedAt,movementOwner:runner.partyCombatPosition.movementOwner,
+                destination:runner.partyCombatPosition.destination&&{x:runner.partyCombatPosition.destination.x,y:runner.partyCombatPosition.destination.y},
+                approachId:runner.partyCombatPosition.approachId,radius:runner.partyCombatPosition.radius,phase:runner.partyCombatPosition.phase},runtimeGeneration:runner?.__partyRuntimeGeneration,
+              codeHash:runner?.__partyCodeHash,observerGeneration:game.__e2eObserverGeneration}});
+          if(game.__e2eEvents.length>2000)game.__e2eEvents.shift();
+          return;
+        }
+        const hostileSkill=event==='skill'&&game.__e2eObserveMoves&&game.G?.skills?.[args[0]?.name]?.hostile===true;
+        if(event!=='attack'&&!hostileSkill)return;
         const c=game.character,runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
-        if(!c?.name || game.socket!==socket || args[0]?.id==null)return;
-        let candidate:any;
-        try { candidate=runner?.sharedRoutine?.getWalkingPassiveTarget?.(true); } catch { return; }
-        game.__e2eEvents.push({sequence:++game.__e2eEventSequence,at:Date.now(),event:'attack-issued',
-          data:{id:String(args[0]?.id),actor:c.name},motion:{map:c.map,in:c.in??c.map,server:String(game.server_region||'')+String(game.server_identifier||''),
+        if(!c?.name || game.socket!==socket || !hostileSkill&&args[0]?.id==null)return;
+        const payload=args[0]||{},ids=hostileSkill?[...(payload.id==null?[]:[payload.id]),...(Array.isArray(payload.ids)?payload.ids:[]),...(Array.isArray(payload.targets)?payload.targets.map((value:any)=>Array.isArray(value)?value[0]:value):[])].map(String):undefined;
+        let candidate:any,convoy:any;
+        try { candidate=runner?.sharedRoutine?.getWalkingPassiveTarget?.(true);convoy=runner?.sharedRoutine?.combatTraceSnapshot?.(); } catch { return; }
+        let independent:any;
+        if(game.__e2eObserveMoves&&(game.__e2eIndependentObservedAttackCount||0)<3){
+          const group=runner?.__partyGroupedCombat;
+          if(group?.independentApproach){
+            game.__e2eIndependentObservedAttackCount=(game.__e2eIndependentObservedAttackCount||0)+1;
+            independent={selection:group.selection,target:String(group.target?.id),committed:group.committed,
+              serverAt:Date.now()+Number(runner?.sharedRoutine?.queueClockOffset?.()||0),
+              ready:group.independentReadiness&&Object.fromEntries(Object.entries(group.independentReadiness).map(([name,value]:[string,any])=>[name,
+                value&&{selection:value.selection,target:value.target,at:value.at,ready:value.ready}]))};
+          }
+        }
+        game.__e2eEvents.push({sequence:++game.__e2eEventSequence,at:Date.now(),event:hostileSkill?'offensive-skill-issued':'attack-issued',
+          data:{id:payload.id==null?undefined:String(payload.id),actor:c.name,ids,skill:hostileSkill?String(payload.name):undefined},motion:{map:c.map,in:c.in??c.map,server:String(game.server_region||'')+String(game.server_identifier||''),
             x:c.real_x??c.x,y:c.real_y??c.y,moving:!!c.moving,owner:runner?.__partyCombatOwner,
+            independent,convoyId:convoy?.convoy,convoyPhase:convoy?.convoyPhase,convoyEpoch:convoy?.convoyEpoch,
             candidate:candidate&&{id:String(candidate.id),mtype:candidate.mtype}}});
         if(game.__e2eEvents.length>2000)game.__e2eEvents.shift();
-      });
-      // Passive observations only; no native method replacement or synthetic packet.
+      };
+      if(typeof socket.onAnyOutgoing==='function'){
+        game.__e2eOutgoingObservation='onAnyOutgoing';
+        socket.onAnyOutgoing((event:string,...args:any[])=>{try{observeOutgoing(event,...args);}catch{}});
+      }else{
+        // Older native clients lack outgoing listeners. Preserve one original
+        // call, its receiver/arguments/result/errors, and never replay packets.
+        game.__e2eOutgoingObservation='native emit';
+        const emit=socket.emit;
+        socket.emit=function(...args:any[]){
+          try{observeOutgoing(args[0],...args.slice(1));}catch{}
+          return emit.apply(this,args);
+        };
+      }
+      // Incoming observations only; no synthetic packets.
       for(const event of ['hit','death','game_response','game_log','chest_opened','disappear','new_map','party_update','player'])socket.on(event,(data:unknown)=>{
-        game.__e2eEvents.push({sequence:++game.__e2eEventSequence,at:Date.now(),event,data:JSON.parse(JSON.stringify(data ?? null))});
+        const runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+        const c=runner?.character,command=event==='player'&&game.socket===socket?
+          runner?.__partyDungeonRuntime?.commandIdentity?.():undefined;
+        const caveOwner=command&&c?{command,runtimeGeneration:runner.__partyRuntimeGeneration,
+          codeHash:runner.__partyCodeHash,name:c.name,map:c.map,in:c.in,
+          run:c.cave?.run,floor:c.cave?.floor,hp:c.hp,rip:c.rip}:undefined;
+        game.__e2eEvents.push({sequence:++game.__e2eEventSequence,at:Date.now(),event,
+          data:JSON.parse(JSON.stringify(data ?? null)),caveOwner});
         if(game.__e2eEvents.length>2000)game.__e2eEvents.shift();
       });
-    },randomUUID());
+    },{generation:randomUUID(),disconnectBinding,name:options.name});
   }
   async function retainEvents(frame:Frame):Promise<void> {
     const observed=await frame.evaluate(({generation,sequence})=>{
@@ -157,15 +247,17 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
           runtimeGeneration: runner?.__partyRuntimeGeneration, commandObservation }));
       }));
     },
+    disconnects() { return disconnectJournal.map(entry=>({...entry})); },
     async events() { return observe(async frame=>{await retainEvents(frame);return [...eventLedger];}); },
     async run(expression) {
       // Reacquire before evaluation; never replay a potentially mutating expression.
       const frame=await observe(async game=>{
-        const code=game.childFrames().find(candidate=>{
-          if(candidate.name()==='maincode')return true;
-          try{return new URL(candidate.url()).pathname==='/runner';}catch{return false;}
-        });
-        if(!code || !await code.evaluate(()=>!!(globalThis as any).sharedRoutine && !!(globalThis as any).partyRoleRunner))
+        // The current native DOM owns CODE. A retired named /runner frame may
+        // remain discoverable during replacement, so resolve this exact iframe.
+        const element=await game.$('#maincode');
+        let code:Frame|null=null;
+        try{code=await element?.contentFrame()??null;}finally{await element?.dispose();}
+        if(!code || code.isDetached() || !await code.evaluate(()=>!!(globalThis as any).sharedRoutine && !!(globalThis as any).partyRoleRunner))
           throw Error(`Native CODE runner missing for ${options.name}`);
         return code;
       });

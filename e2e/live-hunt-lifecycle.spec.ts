@@ -68,8 +68,14 @@ test.describe('native Hunt lifecycle', () => {
       await info.attach('native-booboo-return-preparation',{body:JSON.stringify({before,destination,preparation,native:await world(live)}),contentType:'application/json'});
     }
     const cycle=profile(await live.state()).monsterHunt.cycleId;
+    // Declared initial client cooldown, using the same native setter as PvP
+    // Town delays. This models client unavailability, not a server rejection;
+    // it is never refreshed during walking, the fault, recovery or reward.
+    const townCooldown=await Promise.all(fighters.map(name=>live.clients[name].run("(()=>{parent.skill_timeout_singular('use_town',600000);return {until:+parent.next_skill.use_town,now:Date.now()};})()")));
+    expect(townCooldown.every(value=>Number.isFinite(value.until)&&value.until-value.now>=590000)).toBe(true);
+    await info.attach('declared-native-town-cooldown',{body:JSON.stringify(townCooldown),contentType:'application/json'});
     const townReadiness=await Promise.all(fighters.map(name=>live.clients[name].run("can_use('use_town')&&!is_on_cooldown('use_town')")));
-    expect(townReadiness.every(Boolean),'The declared walking recovery starts with verified native Town readiness').toBe(true);
+    expect(townReadiness.every(ready=>ready===false),'The declared walking recovery starts with verified native Town cooldown').toBe(true);
     await live.restoreHistoricalSettings(settings=>{
       const owner=settings.farmingProfiles[W],hunt=owner.monsterHunt,convoy=owner.activeConvoy||settings.activeConvoy;
       expect(hunt.cycleId).toBe(cycle);expect(convoy.returnRouting).toBe(true);

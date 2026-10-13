@@ -1,5 +1,7 @@
 import {test,expect} from './live-fixtures';
 import {W,P,M,evidence} from './hunt-interruption-helpers';
+import {readFileSync} from 'node:fs';
+import path from 'node:path';
 
 test.use({loadout:'combat-range',initialPosition:{map:'main',x:1260,y:-70}});
 test('safe console reload finishes the native fight without acquiring the next target',async({live},info)=>{
@@ -22,6 +24,21 @@ test('safe console reload finishes the native fight without acquiring the next t
   const samples:any[]=[];
   let holdFull=true,delayedFull=0;
   const releases:Array<()=>void>=[];
+  await live.clients[W].run(`(()=>{
+    globalThis.__safeDrainControls=[];
+    $(document).on('ajaxComplete.safeDrainObservation',function(_event,xhr,settings){
+      if(!String(settings.url).endsWith('/status'))return;
+      const value=xhr.responseJSON;
+      globalThis.__safeDrainControls.push({at:Date.now(),status:xhr.status,serverNow:value?.serverNow,
+        maintenance:value?.consoleMaintenance,kind:typeof settings.data==='string'&&settings.data.includes('"combatWait":true')?'wait':
+          typeof settings.data==='string'&&settings.data.includes('"combatOnly":true')?'report':'full'});
+      if(globalThis.__safeDrainControls.length>32)globalThis.__safeDrainControls.shift();
+    });
+    return true;
+  })()`);
+  const observerElement=await live.clients[W].frame.$('#maincode');
+  const observerFrame=await observerElement?.contentFrame();
+  await observerElement?.dispose();
   const delayedStatus=async(route:any)=>{
     const body=route.request().postDataJSON();
     if(!holdFull || body?.combatOnly || body?.combatWait)return route.continue();
@@ -42,7 +59,14 @@ test('safe console reload finishes the native fight without acquiring the next t
     await live.clients[W].page.route('**/status',delayedStatus);
     await expect.poll(()=>delayedFull,{timeout:15000}).toBeGreaterThan(0);
     live.consoleDrainLease('native-safe-reload');
-    await expect.poll(()=>live.clients[W].run('globalThis.__partyConsoleMaintenance?.id'),{timeout:5000,
+    samples.push({phase:'lease-written',at:Date.now(),lease:JSON.parse(readFileSync(path.join(live.deploymentPaths.directory,'updates/pause.json'),'utf8'))});
+    await expect.poll(async()=>{
+      const native=await live.clients[W].run(`({maintenance:globalThis.__partyConsoleMaintenance,at:globalThis.__partyConsoleMaintenanceAt,
+        parentMaintenance:parent.__partyConsoleMaintenance,parentAt:parent.__partyConsoleMaintenanceAt,
+        generation:globalThis.__partyRuntimeGeneration,transport:globalThis.__partyTravelTransport,controls:globalThis.__safeDrainControls})`);
+      samples.push({phase:'acknowledgement',at:Date.now(),native});
+      return native.maintenance?.id;
+    },{timeout:5000,
       message:'Fast combat responses must apply the hold while full status is delayed'}).toBe('native-safe-reload');
     holdFull=false;releases.splice(0).forEach(release=>release());
     await live.clients[W].page.waitForTimeout(500);
@@ -67,7 +91,7 @@ test('safe console reload finishes the native fight without acquiring the next t
     live.consoleDrainLease('native-safe-reload',Date.now()-1);
     await expect.poll(async()=>hit(await live.clients[W].events(),seeded.next).length,{timeout:30000,
       message:'An expired host hold must restore normal acquisition'}).toBeGreaterThan(0);
-  }finally{holdFull=false;releases.splice(0).forEach(release=>release());await live.clients[W].page.unrouteAll({behavior:'wait'});await evidence(live,info,'safe-reload-final-state',{seeded,samples});live.consoleDrainLease(null);await live.admin(`output=(()=>{for(const id of ${JSON.stringify([seeded.first,seeded.next])}){const m=instances.main.monsters[id];if(m)remove_monster(m,{method:'disappear',nospawn:true});}return true;})()`);}
+  }finally{holdFull=false;releases.splice(0).forEach(release=>release());await live.clients[W].page.unrouteAll({behavior:'wait'});await evidence(live,info,'safe-reload-final-state',{seeded,samples});if(observerFrame&&!observerFrame.isDetached())await observerFrame.evaluate(()=>{const host=window as any;host.$(document).off('.safeDrainObservation');});live.consoleDrainLease(null);await live.admin(`output=(()=>{for(const id of ${JSON.stringify([seeded.first,seeded.next])}){const m=instances.main.monsters[id];if(m)remove_monster(m,{method:'disappear',nospawn:true});}return true;})()`);}
 });
 
 for(const mode of ['safe','now'] as const)test(`console reload resumes native farming and roaming defense in ${mode} mode`,async({live},info)=>{
@@ -89,18 +113,26 @@ for(const mode of ['safe','now'] as const)test(`console reload resumes native fa
   await live.post('/travel',destination);
   const seeded:string[]=[];
   try{
-    await expect.poll(()=>live.admin(`output=!!get_player('${W}').moving`),{timeout:30000}).toBe(true);
     if(mode==='safe'){
-      const journey=await live.clients[W].run('globalThis.__partyMovement.report().id');
+      let admission:any;
+      await expect.poll(async()=>{
+        admission=await live.clients[W].run(`(()=>{
+          const service=globalThis.__partyMovement,report=service.report(),goal=${JSON.stringify(destination)},state=service.state;
+          return {id:report?.id,owner:report?.owner,name:character.name,map:character.map,moving:!!character.moving,
+            goalMatch:state.map===goal.map&&state.x===goal.x&&state.y===goal.y};
+        })()`);
+        return !!admission.id&&admission.name===W&&admission.map===destination.map&&admission.moving&&admission.goalMatch;
+      },{timeout:30000,message:'The native character and active owned journey must be walking toward the requested probe together'}).toBe(true);
+      const journey=admission.id;
       live.consoleDrainLease('reload-walk');
       await expect.poll(()=>live.clients[W].run('globalThis.__partyConsoleMaintenance?.id'),{timeout:10000}).toBe('reload-walk');
       await expect.poll(()=>live.admin(`output=!!get_player('${W}').moving`),{timeout:10000}).toBe(false);
       await live.clients[W].page.waitForTimeout(3500);
-      expect(await live.clients[W].run('globalThis.__partyMovement.report().id')).toBe(journey);
+      expect(await live.clients[W].run('globalThis.__partyMovement.report()?.id')).toBe(journey);
       expect(await live.clients[W].run('sharedRoutine.canReload()')).toBe(true);
-      samples.push({phase:'parked',journey,position:await live.clients[W].snapshot()});
+      samples.push({phase:'parked',journey,admission,position:await live.clients[W].snapshot()});
       live.consoleDrainLease(null);
-    }
+    }else await expect.poll(()=>live.admin(`output=!!get_player('${W}').moving`),{timeout:30000}).toBe(true);
     await expect.poll(async()=>{const p=await live.clients[W].snapshot();return Math.hypot(p.x-destination.x,p.y-destination.y)<10;},{timeout:30000}).toBe(true);
     const arrived=await live.clients[W].snapshot();
     expect(Math.hypot(arrived.x-destination.x,arrived.y-destination.y)).toBeLessThan(10);

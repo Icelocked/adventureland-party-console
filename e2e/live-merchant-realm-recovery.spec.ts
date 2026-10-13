@@ -53,13 +53,15 @@ async function logoutMerchant(live:import('./live-fixtures').LiveGame, merchant:
 async function prepareCrossRealmCollection(live:import('./live-fixtures').LiveGame) {
   const merchant='E2EMerchant',fighter='E2EWarrior';
   await logoutMerchant(live,merchant);
-  await live.post('/realm/switch',{realm:'SR_USII',setHome:false});
+  const requested=await live.post('/realm/switch',{realm:'SR_USII',setHome:false});
   await expect.poll(async()=>{
     const state=await live.state();
     if(state.steamSwitch?.phase==='awaiting-realm-choice')
       await live.post('/steam/realm-choice',{operationId:state.steamSwitch.id,choice:'stay'});
-    return state.realmControl.operation.phase;
-  },{timeout:120_000,intervals:[250]}).toBe('complete');
+    return state.realmControl.operation.id===requested.operation.id
+      && state.realmControl.operation.phase==='complete'
+      && (!state.steamSwitch || state.steamSwitch.phase==='complete');
+  },{timeout:120_000,intervals:[250],message:'The requested realm arrivals and native Steam handoff must both finish before admitting merchant spawn'}).toBe(true);
   await expect.poll(async()=>await live.adminRealm('USII',`output=!!get_player('${fighter}')`),{timeout:30_000}).toBe(true);
   await live.adminRealm('USII',`output=(()=>{const p=get_player('${fighter}');p.items[10]={name:'leather',q:7};cache_player_items(p);resend(p,'reopen+cid');return true})()`);
   await expect.poll(async()=>(await live.state()).characters[fighter].items.some((entry:any)=>entry?.item?.name==='leather')).toBe(true);

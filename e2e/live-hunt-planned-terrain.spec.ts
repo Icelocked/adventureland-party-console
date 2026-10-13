@@ -6,12 +6,31 @@ test.use({loadout:'combat-range',initialPosition:{map:'main',x:349,y:1532}});
 test('blocked melee Phoenix recovery computes native hitbox-clear goals and reaches combat',async({live},info)=>{
   test.setTimeout(180000);
   // Failure inventory precedes implementation in testing-combat-recovery-goals.md.
+  await live.clients[W].frame.evaluate(()=>{const p=window as any;p.__e2eObserveMoves=true;p.__e2eObservedMoveCount=0;});
   await live.post('/merchant/force-stand',{enabled:true});
   await live.post('/formation',{leader:W});
   await live.post('/formation',{character:P,follow:true});
   await live.post('/focus',{monsterFocus:['phoenix'],monsterPriorities:{phoenix:999},monsterSearchRadius:600});
   await live.post('/farming-mode',{character:W,mode:'default'});
   await live.post('/checkpoint',{});
+  // The configured formation must reach both actual CODE runtimes before a
+  // newly visible encounter can initiate a solo approach.
+  const formation:any[]=[];
+  await expect.poll(async()=>{
+    const current=await Promise.all([W,P].map(name=>live.clients[name].run(`(()=>{
+      const peer=get_player(${JSON.stringify(name===W?P:W)}),routine=globalThis.sharedRoutine;
+      return {name:character.name,grouped:!!routine?.usesGroupedCombat?.(),members:routine?.queueMembers?.(),
+        alive:character.hp>0&&!character.rip,map:character.map,in:character.in,
+        peer:peer&&{name:peer.name,map:peer.map,in:peer.in,hp:peer.hp,rip:peer.rip,visible:peer.visible}};
+    })()`)));
+    formation.splice(0,formation.length,...current);
+    return current.every(v=>v.grouped&&v.alive&&[W,P].every(name=>v.members?.includes(name))&&
+      v.peer?.hp>0&&!v.peer.rip&&v.peer.visible&&v.peer.map===v.map&&v.peer.in===v.in);
+  },{timeout:30000,message:'Both native runtimes must own the configured formation before Phoenix appears'}).toBe(true);
+  const originalGeometry=await live.clients[W].run(`(()=>({at:Date.now(),map:character.map,in:character.in,
+    blocked:!can_move_to(738,1702),range:character.range,base:character.base,
+    origin:{x:character.real_x,y:character.real_y}}))()`);
+  expect(originalGeometry.blocked,'The original reported Phoenix approach crosses native Main terrain').toBe(true);
   const seed=await live.admin(`output=(()=>{const original=G.monsters.phoenix;try{
     globalThis.__e2ePlannedPhoenixOriginal=original;
     // Declared stationary encounter fixture; collision, targeting and damage remain native.
@@ -41,7 +60,7 @@ test('blocked melee Phoenix recovery computes native hitbox-clear goals and reac
       return geometry.nativeTarget?.max_hp===10000000&&!geometry.nativeTarget.moving&&
         Math.hypot(geometry.nativeTarget.x-seed.x,geometry.nativeTarget.y-seed.y)<1;
     },{timeout:30000,message:'The real client must observe the declared stationary native Phoenix fixture'}).toBe(true);
-    expect(geometry.blocked,'The original reported Phoenix approach crosses native Main terrain').toBe(true);
+    geometry={...geometry,currentBlocked:geometry.blocked,original:originalGeometry,formation};
     await expect.poll(async()=>{
       const sample=await live.clients[W].run(`(()=>{const t=parent.entities[${JSON.stringify(seed.id)}],ports=globalThis.sharedRoutine?.terrainRecoveryPorts?.();
         const context=ports?.context(),goals=t&&context?.target?.includes(${JSON.stringify(seed.id)})?ports.goals():[];return {
@@ -82,6 +101,7 @@ test('blocked melee Phoenix recovery computes native hitbox-clear goals and reac
     await info.attach('planned-phoenix-native-terrain-view',{body:await live.clients[W].page.screenshot(),contentType:'image/png'});
   }finally{
     try{
+      await live.clients[W].frame.evaluate(()=>{(window as any).__e2eObserveMoves=false;}).catch(()=>{});
       await context.unroute('**/party-api/status',intercept);
       await info.attach('planned-phoenix-recovery-proposals',{body:JSON.stringify({seed,geometry,proposals,positions}),contentType:'application/json'});
     }finally{
