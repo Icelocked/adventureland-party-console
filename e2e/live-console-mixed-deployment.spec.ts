@@ -9,7 +9,7 @@ import {createDeploymentDriver} from '../tools/console-build/driver';
 import {safeReload} from '../tools/console-build/safe-reload';
 import {atomicJson} from '../tools/build-store';
 import type {GameManifest,CharacterClass} from '../tools/game/manifest';
-test.use({liveHeadless:true,loadout:'god',initialPosition:{map:'main',x:0,y:0}});
+test.use({liveHeadless:true,loadout:'god',initialPosition:{map:'main',x:349,y:1532}});
 test('one deployment barrier covers the native browser and real headless workers through coordinator restart',async({live},info)=>{
   test.setTimeout(360000);
   const names=[W,P,M],samples:any[]=[],hash=(text:string)=>createHash('sha256').update(text).digest('hex');
@@ -23,6 +23,24 @@ test('one deployment barrier covers the native browser and real headless workers
     await live.post('/slots/'+index+'/spawn',{character:name});
     await expect.poll(async()=>(await live.state()).characters[name]?.runtime,{timeout:90000}).toBe('headless');
   }
+  const movementSamples:any[]=[];
+  const origin={map:'main',x:349,y:1532},destination={map:'main',x:738,y:1702};
+  async function nativeWalking(goal:{map:string;x:number;y:number},label:string){
+    try{
+    const before=await live.admin(`output=(()=>{const p=get_player('${P}');if(!p)throw Error('Headless Priest missing');return {name:p.name,map:p.map,in:p.in,x:p.x,y:p.y,hp:p.hp,rip:p.rip,blocked:!can_move({...p,going_x:${goal.x},going_y:${goal.y}}),goalClear:can_move({...p,x:${goal.x},y:${goal.y},going_x:${goal.x},going_y:${goal.y}})};})()`);
+    expect(before.blocked,'Declared Main approach must require a native terrain route').toBe(true);expect(before.goalClear).toBe(true);
+    await live.post('/command',{character:P,type:'character-travel',location:goal});
+    let nativePlanning=false;
+    await expect.poll(async()=>{
+      const state=await live.state(),character=state.characters[P],movement=character?.movement;
+      const actual=await live.admin(`output=(()=>{const p=get_player('${P}');return p&&{map:p.map,in:p.in,x:p.x,y:p.y,hp:p.hp,rip:p.rip,moving:p.moving};})()`);
+      nativePlanning ||= movement?.engine==='native'&&movement?.nativePlanning?.calls>0;
+      if(movementSamples.length<160)movementSamples.push({label,at:Date.now(),runtime:character?.runtime,codeHash:character?.codeHash,movement,actual});
+      return nativePlanning&&character?.runtime==='headless'&&actual?.hp>0&&!actual.rip&&actual.map===goal.map&&Math.hypot(actual.x-goal.x,actual.y-goal.y)<35;
+    },{timeout:60000,intervals:[500],message:'Actual headless native planning and physical arrival '+label}).toBe(true);
+    }finally{await info.attach('native-headless-walking-'+label.replaceAll(' ','-'),{body:JSON.stringify({goal,movementSamples,final:await live.state()}),contentType:'application/json'});}
+  }
+  await nativeWalking(destination,'before CODE retirement');
   const original:GameManifest=JSON.parse(await readFile('.build/game/manifest.json','utf8'));
   const root=info.outputPath('mixed-store'),store=new ConsoleBuildStore(root),manifests=new Map<string,GameManifest>();
   async function stage(label:string,changed:boolean){
@@ -57,6 +75,7 @@ test('one deployment barrier covers the native browser and real headless workers
     const final=await live.state();expect(final.characters[W].runtime).toBe('native');expect(final.characters[P].runtime).toBe('headless');expect(final.characters[M].runtime).toBe('headless');
     expect((await store.references()).active).toBe(next.manifest.id);expect(samples.some(sample=>names.every(name=>sample.reports[name].hold?.ready===true))).toBe(true);
     expect(final.characters[W].rip).toBe(false);
+    await nativeWalking(origin,'after CODE retirement');
     await info.attach('native-mixed-deployment-barrier',{body:JSON.stringify({operation,journal:await store.journal(),samples}),contentType:'application/json'});
-  }finally{await drain.releaseSafeWait((await store.journal())?.id||'');}
+  }finally{await info.attach('native-headless-planner-code-retirement',{body:JSON.stringify({origin,destination,movementSamples,final:await live.state()}),contentType:'application/json'});await drain.releaseSafeWait((await store.journal())?.id||'');}
 });
