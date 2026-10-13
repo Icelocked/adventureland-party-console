@@ -9,9 +9,9 @@ const starts={
  [M]:{map:'uhills',x:-344.13,y:-437.24},E2EMerchant:{map:'main',x:-63,y:100},
 };
 test.use({loadout:'combat-follow-range',extraFighter:'mage',initialPositions:starts,initialConsoleHold:true});
-const halvingStarts={[W]:{map:'uhills',x:-830,y:-290},[P]:{map:'uhills',x:-830,y:-330},[M]:{map:'uhills',x:-830,y:-310},E2EMerchant:{map:'main',x:-63,y:100}};
+const halvingStarts=starts;
 for(const scene of [{monster:'sparkbot',halving:false},{monster:'goo',halving:false},{monster:'goo',halving:true}])test.describe(scene.halving?'native arrival sightline repair':scene.monster,()=>{
- const monster=scene.monster,positions=scene.halving?halvingStarts:starts,targetPosition=scene.halving?[-750,-460]:[-597,-184];
+ const monster=scene.monster,positions=scene.halving?halvingStarts:starts,targetPosition=scene.halving?[-167,-596]:[-597,-184];
  test.use({initialPositions:positions});
  test(scene.halving?'planned Goo approach halves its radius after a blocked native arrival':monster==='sparkbot'?'planned Sparkbot approach independently routes each fighter into native attack range':'planned Goo approach holds every fighter until native range and sight are ready',async({live},info)=>{
  test.setTimeout(240000);
@@ -44,16 +44,18 @@ for(const scene of [{monster:'sparkbot',halving:false},{monster:'goo',halving:fa
     const atRadius=r=>{const candidates=Array.from({length:16},(_,i)=>({x:e.x+Math.cos(angle+i*Math.PI/8)*(r+padding),y:e.y+Math.sin(angle+i*Math.PI/8)*(r+padding)}))
      .filter(p=>can_move({map:c.map,x:p.x,y:p.y,going_x:p.x,going_y:p.y,base:c.base}))
      .sort((a,b)=>Math.hypot(a.x-c.real_x,a.y-c.real_y)-Math.hypot(b.x-c.real_x,b.y-c.real_y));
-     const goal=candidates[0];return {radius:r,goal,sight:goal&&can_move({map:c.map,x:goal.x,y:goal.y,going_x:e.x,going_y:e.y,base:c.base})};};
+     const goal=candidates[0];return {radius:r,goal,connected:goal&&can_move({map:c.map,x:c.real_x,y:c.real_y,going_x:goal.x,going_y:goal.y,base:c.base}),sight:goal&&can_move({map:c.map,x:goal.x,y:goal.y,going_x:e.x,going_y:e.y,base:c.base})};};
     return {version:parent.G.version,origin:{x:c.real_x,y:c.real_y},range:c.range,padding,inRange:is_in_range(e),sight:can_move_to(e.x,e.y),first:atRadius(desired),half:atRadius(desired/2)};})()`);
    await info.attach('native-independent-halving-geometry-precondition',{body:JSON.stringify(geometry),contentType:'application/json'});
    expect(geometry.inRange).toBe(true);expect(geometry.sight).toBe(false);expect(geometry.first.goal).toBeTruthy();
+   expect(geometry.first.connected,'The initial owned goal must have a native-clear connector from the admitted start').toBe(true);
    expect(geometry.first.sight).toBe(false);expect(geometry.half.sight).toBe(true);
   }
   await live.post('/formation',{leader:W});for(const name of [P,M])await live.post('/formation',{character:name,follow:true});
   await live.post('/focus',{monsterFocus:[monster],monsterPriorities:{[monster]:999},monsterSearchRadius:600});
   await live.post('/farming-mode',{character:W,mode:'default'});
   await info.attach('native-independent-held-configured-state',{body:JSON.stringify(await live.state()),contentType:'application/json'});
+  await expect.poll(async()=>Promise.all(fighters.map(name=>live.clients[name].run(`(()=>{const r=globalThis,shared=r.sharedRoutine,g=r.__partyGroupedCombat,c=character;return !!(shared?.usesGroupedCombat()&&shared.isLeader()===${name===W}&&g?.leader===${JSON.stringify(W)}&&${JSON.stringify(fighters)}.every(n=>g.members?.includes(n))&&g.independentApproach===true&&g.target?.id===${JSON.stringify(seed.id)}&&!!g.selection&&Math.hypot(c.real_x-${positions[name as typeof P|typeof M].x},c.real_y-${positions[name as typeof P|typeof M].y})<1);})()`))),{timeout:15000,message:'Actual CODE runtimes must acknowledge the configured independent group while still at their admitted held positions'}).toEqual([true,true,true]);
   live.consoleDrainLease(null);
   await expect.poll(async()=>{const state=await live.state();return fighters.every(name=>!state.characters[name]?.consoleMaintenance);},{timeout:15000,message:'The actual ordered host lease release must reach all fighters'}).toBe(true);
   await expect.poll(async()=>{
@@ -75,7 +77,7 @@ for(const scene of [{monster:'sparkbot',halving:false},{monster:'goo',halving:fa
    const firstHit=events[name].find(e=>e.event==='hit'&&e.data?.hid===name&&String(e.data?.id)===seed.id&&e.data?.damage>1&&e.data?.source!=='taunt');
    const ownedMove=events[name].find(e=>e.event==='move-issued'&&e.at<=firstHit.at&&e.motion?.position?.target===seed.id&&
     e.motion.position.mode==='independent-approach'&&e.motion.position.movementOwner==='combat-approach'&&
-    e.motion.position.approachId&&e.motion.position.target===seed.id);
+    e.motion.position.approachId&&e.motion.position.target===seed.id&&Math.hypot(e.data.going_x-e.data.x,e.data.going_y-e.data.y)>1);
    expect(ownedMove,'Caster must independently move under the matching owned approach before its first native damage').toBeTruthy();
    expect(events[name].some(e=>e.event==='player'&&e.data?.id===name&&e.sequence>ownedMove.sequence&&e.at<=firstHit.at&&
     Math.hypot(e.data.x-ownedMove.data.x,e.data.y-ownedMove.data.y)>1),'Actual socket displacement must follow the owned recovery move').toBe(true);
