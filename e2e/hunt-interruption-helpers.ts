@@ -130,7 +130,8 @@ export async function killedByParty(live:LiveGame,id:string,timeout=45000,observ
         });
         const killedId=hit?String(hit.data.id):id;
         return {
-          hit,attackIssued,issued:passingGoo?events.filter((e:any)=>e.event==='attack-issued'&&e.data?.actor===observer&&e.at>=startedAt):[],death:events.find((e:any)=>e.event==='death'&&String(e.data?.id)===killedId),
+          hit,attackIssued,issued:passingGoo?events.filter((e:any)=>e.event==='attack-issued'&&e.data?.actor===observer&&e.at>=startedAt):[],
+          partyHits:passingGoo?events.filter((e:any)=>e.event==='hit'&&e.at>=startedAt&&fighters.includes(String(e.data?.hid))&&e.data?.damage>0):[],death:events.find((e:any)=>e.event==='death'&&String(e.data?.id)===killedId),
           ...(sample?{diagnostic:{at:Date.now(),id,position:{map:c.map,x:c.real_x,y:c.real_y,going_x:c.going_x,going_y:c.going_y,moving:c.moving,range:c.range},
             target:target&&{id:target.id,x:target.real_x??target.x,y:target.real_y??target.y,hp:target.hp,visible:target.visible,dead:target.dead,inRange:runner?.is_in_range?.(target)},
             candidate:candidate&&{id:candidate.id,mtype:candidate.mtype},combatOwner:runner?.__partyCombatOwner,
@@ -150,12 +151,23 @@ export async function killedByParty(live:LiveGame,id:string,timeout=45000,observ
     if(options.passingGoo){
       const killer=hitReceipt!.attackIssued,context=killer.motion;
       if(options.convoyId&&context.convoyId!==options.convoyId)return false;
-      movingIssued=receipts.map(receipt=>[...receipt.issued].reverse().find((entry:any)=>entry.at<=hit.at)).find((entry:any)=>
-        entry&&hit.at-entry.at<=2000&&String(entry.data.id)===monsterId&&entry.motion?.moving&&
-        entry.motion.convoyPhase==='travelling'&&entry.motion.convoyId===context.convoyId&&entry.motion.convoyEpoch===context.convoyEpoch&&
-        entry.motion.map===context.map&&entry.motion.in===context.in&&entry.motion.server===context.server&&
-        entry.motion.candidate?.mtype==='goo'&&String(entry.motion.candidate.id)===monsterId);
-      if(!movingIssued)return false;
+      // Match the same actual hit in each peer's own receive stream. Another
+      // client's earlier delivery timestamp cannot order this peer's attack.
+      const movingReceipt=receipts.map(receipt=>{
+        const received=receipt.partyHits.find((event:any)=>String(event.data.id)===monsterId&&
+          String(event.data.hid)===String(hit.data.hid)&&event.data.source===hit.data.source&&
+          event.data.damage===hit.data.damage&&event.data.kill===hit.data.kill&&event.data.projectile===hit.data.projectile&&
+          (hit.data.pid==null||event.data.pid===hit.data.pid));
+        if(!received)return;
+        const issued=[...receipt.issued].reverse().find((entry:any)=>entry.sequence<received.sequence&&entry.at<=received.at);
+        if(!issued||received.at-issued.at>2000||String(issued.data.id)!==monsterId||!issued.motion?.moving||
+          issued.motion.convoyPhase!=='travelling'||issued.motion.convoyId!==context.convoyId||issued.motion.convoyEpoch!==context.convoyEpoch||
+          issued.motion.map!==context.map||issued.motion.in!==context.in||issued.motion.server!==context.server||
+          issued.motion.candidate?.mtype!=='goo'||String(issued.motion.candidate.id)!==monsterId)return;
+        return {observer:receipt.observer,issued,received};
+      }).find(Boolean);
+      if(!movingReceipt)return false;
+      movingIssued={...movingReceipt.issued,nativeHitObservation:{observer:movingReceipt.observer,...movingReceipt.received}};
     }
     matched={monsterId,attackIssued:hitReceipt?.attackIssued,movingIssued,hit,death};return true;
   },{timeout,intervals:[200,500],message:`Native party attacks must kill encounter ${id}`}).toBe(true);
