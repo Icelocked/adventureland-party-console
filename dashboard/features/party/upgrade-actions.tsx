@@ -84,6 +84,8 @@ export function UpgradeActions({
                 <ContextMenuItem key={id} disabled={!offerings?.stock[id] || !offeringSource}
                   onClick={() => offerings?.select({item,meta,source:offeringSource,offering:id})}>Upgrade with {label}</ContextMenuItem>
               ))}
+              <ContextMenuItem disabled={!offerings?.stock.offeringp || !offeringSource || offeringSource.equipped || offerings.character !== offerings.executor}
+                onClick={() => offerings?.stackGrace({item,meta,source:offeringSource})}>Prim stack…</ContextMenuItem>
             </div>
             </div>
             {previewOpen && offeringSource && <UpgradePreviewPanel key={JSON.stringify([item,offeringSource,offerings?.executor])} item={item} source={offeringSource} />}

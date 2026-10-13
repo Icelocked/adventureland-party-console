@@ -4,6 +4,7 @@ import { dungeonOwns } from '../dungeons/contracts.ts';
 import type { HttpHandler, HttpRouter } from "./http/contracts.ts";
 import { consoleMaintenance } from './lifecycle/console-maintenance.ts';
 import { createUpgradePreviews } from './merchant/upgrade-preview.ts';
+import { createPrimStacks } from './merchant/prim-stack.ts';
 import { merchantVisibility } from './merchant/visibility.ts';
 import { loadCoordinatorDependencies } from "./infrastructure/dependencies.ts";
 import {marketIgnoredItemsRoute} from "./http/market-ignored-items.ts";
@@ -499,6 +500,7 @@ export function startCoordinatorApplication(
       now: () => Date.now(),
     });
     const upgradePreviews = createUpgradePreviews(party, {persist:persistSettings, dispatch:dispatchMerchant, stamp:stampMerchantJob});
+    const primStacks = createPrimStacks(party, {persist:persistSettings, dispatch:dispatchMerchant, stamp:stampMerchantJob});
     const heartbeatResponse = coordinatorPolicies.createCoordinatorHeartbeatResponse(party, {
       now: () => Date.now(),
       persist: persistSettings,
@@ -2326,6 +2328,7 @@ export function startCoordinatorApplication(
               maps: (router) => {
                 dungeons.install(router);
                 upgradePreviews.install(router);
+                primStacks.install(router);
                 router.get('/party-api/console-maintenance', (_req, res) => res.json(consoleUpdate.status(party.statuses,
                   [...party.headlessSlots, ...party.steamMembers], !!party.steamSwitch && party.steamSwitch.phase !== 'complete')));
                 router.get('/party-api/console-deployment',(_req,res)=>res.json({serverNow:Date.now(),consoleMaintenance:consoleUpdate.current()}));

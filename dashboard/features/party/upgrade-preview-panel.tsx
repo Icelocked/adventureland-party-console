@@ -44,12 +44,15 @@ export function UpgradePreviewPanel({ item, source }: { item: Item; source?: Off
     return () => { clearInterval(timer); controller.abort(); };
   }, [body, key, unavailable]);
   const current = state?.key === key ? state : undefined;
+  // Inventories never carry grace (the server strips it); every calculate response reports it.
+  const grace = previewOptions.map(option => current?.result?.options[option]).find(value => value && 'preview' in value);
   return <section aria-label="Upgrade chances" className="w-64 max-w-full border-t border-slate-300 !bg-white p-3 text-sm !text-black sm:border-l sm:border-t-0">
     <p className="font-semibold">Next attempt: +{item.level || 0} → +{(item.level || 0)+1}</p>
     <p className="mt-1 text-xs text-black">Server preview{controls?.executor ? ` · ${controls.executor}` : ''}</p>
     <p role="status" className="mt-2 text-xs text-black">{unavailable || current?.error ||
       (current?.status === 'queued' ? 'Queued — waiting for merchant priority' : current?.status === 'running' ? 'Refreshing chances…' :
        current?.status === 'unavailable' ? 'No chances calculated - resolve the missing supplies and refresh' : current?.status === 'partial' ? 'Some chances saved - see unavailable options below' : current?.status === 'complete' ? 'Stored preview — valid until the next upgrade' : current?.status === 'invalidated' ? 'Upgrade performed — refresh chances again' : 'Choose Refresh chances to queue a preview')}</p>
+    {grace && 'preview' in grace && <p className="mt-2 font-mono text-xs tabular-nums text-black" title="Item grace from the server preview; raise it with Prim stack">Grace {grace.preview.grace}</p>}
     <dl aria-live="polite" className="mt-3 space-y-3">
       {previewOptions.map(option => {
         const value = current?.result?.options[option];
