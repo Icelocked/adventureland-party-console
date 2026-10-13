@@ -16614,8 +16614,9 @@
     if ((typeof bossCombatActive === "function" ? bossCombatActive() : typeof frankyCombatActive === "function" && frankyCombatActive())) return false;
     if(!character.cave && root.partyQueueClient && root.partyQueueClient.formation && root.partyQueueClient.formation.movement())return true;
     // The priest formation orbits melee classes around their target, which pulls
-    // the designated tank off it. tankMovementTick owns the tank's movement.
-    if (designatedTankHolds()) return false;
+    // the designated tank off it. tankMovementTick owns the tank's movement while it has a
+    // straight step; a target behind terrain is left to the formation's terrain recovery.
+    if (designatedTankHolds() && (!target || target.dead || tankStep(target))) return false;
     var context = [character.map, character.in, character.rip, joinedEvent, eventTraveling].join(":");
     if (formationState.mapContext !== context) {
       formationState.mapContext = context; formationState.approachProgress = null; formationState.recovery = null;
@@ -17402,15 +17403,11 @@
         formationDistance(character, member) <= (Number(member.range) || 0);
     });
   }
-  function tankMovementTick(target) {
-    if (!target || target.dead) return false;
+  // The tank's own move toward its target: hold when already in melee range, otherwise one
+  // straight step at up to five angles. Null when terrain blocks every angle.
+  function tankStep(target) {
     var stackRange = Math.min(desiredCombatRange(), 30);
-    if (combatDistance(target) <= stackRange + 5) {
-      resetCombatMovement();
-      root.partyCombatPosition = { at: Date.now(), mode: "tank-holding", movementOwner: "combat",
-        target: target.id, reason: "Holding melee range as the designated tank" };
-      return true;
-    }
+    if (combatDistance(target) <= stackRange + 5) return { hold: true };
     var destination = combatApproachPoint(target, stackRange);
     var dx = destination.x - character.x, dy = destination.y - character.y;
     var step = Math.min(Math.hypot(dx, dy), Math.max(1, Number(character.speed || 40) * 0.6));
@@ -17418,8 +17415,20 @@
     for (var offsets = [0, 0.4, -0.4, 0.8, -0.8], i = 0; i < offsets.length; i++) {
       var point = { x: character.x + Math.cos(angle + offsets[i]) * step,
         y: character.y + Math.sin(angle + offsets[i]) * step };
-      if (safeCombatPoint(point, target)) return sendCombatMove(target, point, "tank-approaching");
+      if (safeCombatPoint(point, target)) return { point: point };
     }
+    return null;
+  }
+  function tankMovementTick(target) {
+    if (!target || target.dead) return false;
+    var step = tankStep(target);
+    if (step && step.hold) {
+      resetCombatMovement();
+      root.partyCombatPosition = { at: Date.now(), mode: "tank-holding", movementOwner: "combat",
+        target: target.id, reason: "Holding melee range as the designated tank" };
+      return true;
+    }
+    if (step) return sendCombatMove(target, step.point, "tank-approaching");
     resetCombatMovement();
     root.partyCombatPosition = { at: Date.now(), mode: "blocked", movementOwner: "combat",
       target: target.id, reason: "No terrain-clear approach for the designated tank" };
