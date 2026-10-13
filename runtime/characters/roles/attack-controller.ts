@@ -155,10 +155,12 @@ export function createAttackController(ports: AttackPorts) {
       if (attempt.passing && ports.preparePassing?.(target) === false) {
         attempt.pending--; cancelSlots(); return;
       }
-      const action=attempt.passing ? null : (sharedRoutine as any).queueEvidence?.(target,'pending');
+      const publishAfterSend = !attempt.passing && sharedRoutine.independentPullActive?.(target);
+      let action=attempt.passing || publishAfterSend ? null : (sharedRoutine as any).queueEvidence?.(target,'pending');
       try {
         sharedRoutine.noteCombatHandoff?.('attempt', target.id, {cooldownReadyAt:clock(), frequency:Number(character.frequency),timerLatenessMs:lastTimerLatenessMs});
-        Promise.resolve(attack(target)).then(() => {
+        const response = attack(target);
+        Promise.resolve(response).then(() => {
           if (flight !== attempt || attempt.epoch !== ports.epoch() || !ports.active() || attempt.success) return;
           attempt.success = true;
           cancelSlots();
@@ -184,6 +186,10 @@ export function createAttackController(ports: AttackPorts) {
           attempt.pending--;
           if (flight === attempt && attempt.slotsDone && !attempt.pending) finish();
         });
+        if (publishAfterSend) {
+          try { action=(sharedRoutine as any).queueEvidence?.(target,'pending'); }
+          catch (error) { ports.report(error); }
+        }
       } catch (error) {
         if(action)(sharedRoutine as any).queueEvidence?.(target,'rejected',action);
         attempt.pending--; cancelSlots(); rejected(attempt, error);

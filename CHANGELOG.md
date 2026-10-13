@@ -8,7 +8,7 @@
 
 - Replace shared next-target movement with independent routes for each fighter: move directly when terrain permits, otherwise use native smart movement and progressively smaller approach radii. Use the game's actual attack range, including ranged attacks through walls.
 
-- Recheck every fighter's range immediately before starting a queued fight, with an event-driven confirmation round and no added waiting period. Preserve smart-route progress as monsters move and resume approaching when a ready target moves out of range.
+- Recheck every fighter's range immediately before starting a queued fight, with an event-driven confirmation round and no added waiting period. Reject confirmations that expire before the attack is sent and refresh them immediately. Preserve smart-route progress as monsters move and resume approaching at a smaller radius when a ready target moves out of range.
 
 - Reduce native E2E recording overhead while retaining screenshots, traces and game-event evidence; enable diagnostic video explicitly with E2E_NATIVE_VIDEO=1.
 

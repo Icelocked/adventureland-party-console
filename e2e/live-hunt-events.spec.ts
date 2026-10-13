@@ -143,7 +143,7 @@ for(const type of ['phoenix','goldenbat','cutebee','hen','rooster','tinyp']) tes
     const afterRare=await world(live);
     expect(afterRare.players[W].xp).toBeGreaterThan(before.players[W].xp);
     const resumedDeadline=Date.now()+90_000;
-    if(type==='phoenix'||type==='goldenbat'){
+    {
       await expect.poll(async()=>{
         const current=await world(live),state=await live.state(),mission=state.monsterHunt?.missions?.[state.monsterHunt.currentIndex],bounds=mission?.destination?.boundary,p=current.players[W];
         return state.monsterHunt?.cycleId===hunt.cycleId&&state.monsterHunt.stage==='farming'&&Array.isArray(bounds)&&
@@ -165,7 +165,7 @@ for(const type of ['phoenix','goldenbat','cutebee','hen','rooster','tinyp']) tes
       const missionKill=await killedByParty(live,nextEncounter.id,Math.max(1,Math.min(45_000,resumedDeadline-Date.now())));
       await info.attach('native-rare-followup-mission-kill',{body:JSON.stringify(missionKill),contentType:'application/json'});
     }
-    await expect.poll(async()=>(await world(live)).players[W].quest?.c,{timeout:type==='phoenix'||type==='goldenbat'?Math.max(1,resumedDeadline-Date.now()):90_000}).toBeLessThan(afterRare.players[W].quest.c);
+    await expect.poll(async()=>(await world(live)).players[W].quest?.c,{timeout:Math.max(1,resumedDeadline-Date.now())}).toBeLessThan(afterRare.players[W].quest.c);
     await info.attach('native-rare-hunt-resumed',{body:JSON.stringify({hunt,spawn,before,afterRare,final:await world(live),state:await live.state()}),contentType:'application/json'});
   } finally {await cleanupEvents(live);}
 });

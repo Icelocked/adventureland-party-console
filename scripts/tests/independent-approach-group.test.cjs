@@ -93,3 +93,20 @@ test('a fresh challenge echo in the issue millisecond commits immediately withou
  for(const m of f.members){m.status.seenAt=round.startedAt;m.status.groupedCombat.independentReady={selection:f.g.selection,target:'A',at:round.startedAt,ready:true,confirmation:round.id};}
  const g=evaluateGroup(f.g,f.members,'W',round.startedAt);assert.equal(g.committed,true);assert.equal(g.independentConfirmation.id,round.id);
 });
+
+test('a current challenge echo becoming stale refreshes the round immediately without weakening1000ms',()=>{
+ const f=firstReadyRound(),round=f.g.independentConfirmation;confirmRound(f);f.tick();assert.equal(f.g.committed,true);
+ const at=f.members[2].status.groupedCombat.independentReady.at,now=at+1000.5;
+ for(const m of f.members){m.status.seenAt=now;m.status.groupedCombat.currentAttackersAt=now;if(m.name!=='M')m.status.groupedCombat.independentReady.at=now;}
+ const g=evaluateGroup(f.g,f.members,'W',now);assert.equal(g.committed,false);assert.notEqual(g.independentConfirmation.id,round.id);assert.equal(g.independentConfirmation.startedAt,now);
+});
+test('waiting first-round samples do not rotate merely because no challenge echo has arrived',()=>{
+ const f=firstReadyRound(),round=f.g.independentConfirmation,now=round.startedAt+1000.5;
+ for(const m of f.members){m.status.seenAt=now;m.status.groupedCombat.currentAttackersAt=now;}
+ const g=evaluateGroup(f.g,f.members,'W',now);assert.equal(g.committed,false);assert.equal(g.independentConfirmation.id,round.id);
+});
+test('exactly1000ms old matching confirmations remain valid without a needless round change',()=>{
+ const f=firstReadyRound(),round=f.g.independentConfirmation;confirmRound(f);f.tick();
+ const now=f.members[2].status.groupedCombat.independentReady.at+1000;for(const m of f.members)m.status.seenAt=now;
+ const g=evaluateGroup(f.g,f.members,'W',now);assert.equal(g.committed,true);assert.equal(g.independentConfirmation.id,round.id);
+});

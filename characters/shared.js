@@ -13855,10 +13855,19 @@
   function independentPullReady(target) {
     if(!groupedCombat.independentApproach || groupedCombat.target.state!=='planned')return true;
     var confirmation=groupedCombat.independentConfirmation,client=root.partyQueueClient,proof=client && client.independent && client.independent.readiness();
-    var valid=!!(confirmation && confirmation.selection===groupedCombat.selection && confirmation.target===String(target.id) &&
-      Date.now()+coordinatorClockOffset<confirmation.expiresAt && proof && proof.ready && proof.target===String(target.id) &&
-      proof.selection===groupedCombat.selection && proof.confirmation===confirmation.id);
-    if(!valid && client && client.flush)client.flush();return valid;
+    var now=Date.now()+coordinatorClockOffset,valid=!!(confirmation && confirmation.selection===groupedCombat.selection && confirmation.target===String(target.id) &&
+      now<confirmation.expiresAt && proof && proof.ready===true && proof.target===String(target.id) &&
+      proof.selection===groupedCombat.selection && proof.confirmation===confirmation.id && independentPeersReady(confirmation,now));
+    if(valid){root.__partyIndependentPullRefreshKey=null;return true;}
+    var refresh=JSON.stringify([groupedCombat.selection,confirmation && confirmation.id]);
+    if(root.__partyIndependentPullRefreshKey!==refresh && client && client.flush){root.__partyIndependentPullRefreshKey=refresh;client.flush();}
+    return false;
+  }
+  function independentPeersReady(confirmation,now) {
+    var members=groupedCombat.members,records=groupedCombat.independentReadiness || {};
+    return !!(Array.isArray(members) && members.length && members.every(function(name){var record=records[name];return record && record.ready===true &&
+      record.selection===confirmation.selection && record.target===confirmation.target && record.confirmation===confirmation.id &&
+      record.at>=confirmation.startedAt && now-record.at<=1000 && record.at<=now+500;}));
   }
   function groupedAttackAllowed(target) {
     if (!consoleDrainAllows(target)) return false;
@@ -16941,6 +16950,7 @@
       return {groupedCombat:{independentReady:root.partyQueueClient && root.partyQueueClient.independent ? root.partyQueueClient.independent.readiness():undefined,independentApproach:root.partyQueueClient && root.partyQueueClient.independent && !dungeonOwned() ? true:undefined,ack:groupedAcknowledgement(),queueAck:groupedCombat && groupedCombat.queueRevision,handoff:root.partyQueueClient && root.partyQueueClient.handoff && root.partyQueueClient.handoff.report()}};
     },
     sharedTargetId: function(){return groupedFarming() && groupedCombat && groupedCombat.target && groupedCombat.target.id || null;},
+    independentPullActive: function(target){return !!(groupedCombat && groupedCombat.independentApproach && groupedCombat.target && groupedCombat.target.state==='planned' && groupedCombat.target.id===target.id);},
     queueEvidence: function(target,state,action){return root.partyQueueClient && root.partyQueueClient.evidence(target,state,action);},
     usesGroupedCombat: groupedFarming,
     defensiveFormationMove: function () {

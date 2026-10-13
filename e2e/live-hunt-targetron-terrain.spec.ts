@@ -55,8 +55,11 @@ test('warrior recovers a blocked Targetron approach in the reported UHills layou
     expect(combatMoves.length,'Recovery must issue combat-owned movement to the actual Targetron').toBeGreaterThan(0);
     expect(combatMoves.every(sample=>sample.segmentClear),'Every observed combat segment must clear native terrain').toBe(true);
     const dx=seed.x-geometry.origin.x,dy=seed.y-geometry.origin.y,length=Math.hypot(dx,dy);
-    expect(combatMoves.some(sample=>Math.abs(dx*(sample.y-geometry.origin.y)-dy*(sample.x-geometry.origin.x))/length>20),
-      'Combat movement must bend around the originally blocked direct bearing').toBe(true);
+    const nativeEvents=await live.clients[W].events(),firstDamage=nativeEvents.find(event=>event.event==='hit'&&String(event.data?.id)===seed.id&&event.data?.hid===W&&event.data?.source!=='taunt'&&event.data?.damage>1);
+    expect(firstDamage,'The native bend window must end at the actual first attack damage receipt').toBeTruthy();
+    const nativePath=nativeEvents.filter(event=>event.event==='player'&&event.data?.id===W&&event.data?.map===geometry.map&&event.at>=samples[0].at&&event.at<=firstDamage!.at&&Number.isFinite(event.data?.x)&&Number.isFinite(event.data?.y));
+    expect(nativePath.some(event=>Math.abs(dx*(event.data.y-geometry.origin.y)-dy*(event.data.x-geometry.origin.x))/length>20),
+      'Actual native movement must bend around the originally blocked direct bearing').toBe(true);
     expect(await live.clients[W].run('character.rip')).toBeFalsy();
   }finally{
     try{

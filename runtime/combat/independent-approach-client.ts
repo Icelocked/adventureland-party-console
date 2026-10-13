@@ -41,9 +41,13 @@ export function createIndependentApproachClient(p:Ports){
   const matching=!current||current.key===ctx.key&&current.target===ctx.target,ready=matching&&p.ready();
   return {selection:ctx.selection,target:ctx.target,at:p.now(),ready,confirmation:ready?ctx.confirmation:undefined};
  }
+ function resumeReady(c:NonNullable<typeof current>,ctx:Context){
+  if(c.goal&&!c.direct){c.radius=Math.max(1,c.radius/2);c.level=Math.min(8,c.level+1);}
+  issue(c,ctx);
+ }
  function route(c:NonNullable<typeof current>,ctx:Context){
   if(c.pending&&!p.owned(c.id)){stop();return false;}
-  if(c.ready){if(mayIssue(c))issue(c,ctx);else return true;}
+  if(c.ready){if(mayIssue(c))resumeReady(c,ctx);else return true;}
   if(!followTarget(c,ctx)&&!advance(c,ctx))return true;
   p.position(c.id,c.target,c.radius,c.goal,c.pending?'routing':'planning');return true;
  }

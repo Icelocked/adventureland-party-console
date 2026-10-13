@@ -1,0 +1,5 @@
+# Native Targetron bend sampling inventory
+
+Before assertion amendment: full1e8 run38417111093 shard15/job115367540560 artifact11825818731 case2963208f7002bd694bc5 failed20px bearing-deviation proof despite actual native damage and safe combat-owned moves. Native seed origin(-573,-80), target(-773,-224), range23 and blocked direct ray. Four CDP snapshots had offsets0,0,7.86,3.57px. Twelve already-retained native Warrior player packets within the same observed encounter window (1791903925215 through first real attack hit1791903928951) prove maximum deviation75.96px, including(-568,-170) at3926145. The route bent; slow read-only CDP sampling missed it.
+
+Keep original20px threshold, ownership, native-clear segments, actual non-taunt damage and alive assertions. Read the existing actual native socket player path from first encounter sample through first real damage receipt; do not infer movement from plans, change deadlines, weaken geometry, or include unrelated earlier setup travel. Patch only the assertion hunk against committed HEAD because another session owns other working changes in this file/document.

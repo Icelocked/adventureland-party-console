@@ -162,6 +162,7 @@ for (const encounter of [{id:'mrgreen',add:'greenjr',drop:'ashleaf',map:'spookyt
       const ledgers:any[]=[];
       const observedHits=new Map<string,any>();
       const attacks:any[]=[];
+      const issuedPackets=new Map<string,{at:number;actor:string;id:string;sequence:number}>();
       let scenarioError:unknown;
       // Canonical observers retain actual outgoing native packets across frame
       // retirement; a second wrapper must not tie proof to a cached document.
@@ -187,10 +188,15 @@ for (const encounter of [{id:'mrgreen',add:'greenjr',drop:'ashleaf',map:'spookyt
           ledgers[ledgers.length-1].selections=fighters.map(name=>({name,target:selection.characters[name]?.combatSelection?.target}));
           const actorEvents=await Promise.all(fighters.map(name=>live.clients[name].events()));
           const events=actorEvents[0];
-          attacks.length=0;
-          for(let index=0;index<fighters.length;index++)for(const event of actorEvents[index])
-            if(event.event==='attack-issued'&&event.data?.actor===fighters[index]&&event.at>=attackStartedAt)
-              attacks.push({at:event.at,actor:event.data.actor,id:String(event.data.id)});
+          for(let index=0;index<fighters.length;index++)for(const event of actorEvents[index]){
+            const id=String(event.data?.id);
+            if(event.event!=='attack-issued'||event.data?.actor!==fighters[index]||event.at<attackStartedAt||!Number.isFinite(event.sequence)||
+              id!==String(seed.id)&&!sample.adds.some((add:any)=>add.id===id))continue;
+            const key=JSON.stringify([fighters[index],event.sequence,event.at,id]);
+            if(!issuedPackets.has(key)&&issuedPackets.size>=2048)throw Error('Native threshold issued-packet evidence exceeded2048 records');
+            issuedPackets.set(key,{at:event.at,actor:event.data.actor,id,sequence:event.sequence});
+          }
+          attacks.length=0;attacks.push(...issuedPackets.values());
           for(const event of events) {
             if(event.event==='hit'&&fighters.includes(event.data?.hid)&&event.data?.damage>0&&
               (String(event.data.id)===String(seed.id)||sample.adds.some((add:any)=>String(event.data.id)===add.id)))

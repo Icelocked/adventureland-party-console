@@ -33,6 +33,10 @@ function currentRound(previous:ConfirmationState|undefined,selection:string,targ
   const round=previous?.independentConfirmation;
   return round && round.selection===selection && round.target===target && now>=round.startedAt && now<round.expiresAt?round:undefined;
 }
+function staleEcho(members:Member[],round:IndependentConfirmation,now:number):boolean {
+  return members.some(member=>{const r=member.status?.groupedCombat?.independentReady;
+    return r?.confirmation===round.id && now-r.at>1000;});
+}
 function confirmed(member:Member,round:IndependentConfirmation,now:number):boolean {
   const r=member.status?.groupedCombat?.independentReady;
   return !!r && r.ready===true && r.selection===round.selection && r.target===round.target &&
@@ -43,6 +47,7 @@ export function confirmIndependentApproach(previous:ConfirmationState|undefined,
   let revision=previous?.independentConfirmationRevision||0;
   if(!selection || !allIndependentReady(members,selection,target,now))return {revision,ready:false};
   let confirmation=currentRound(previous,selection,target,now);
+  if(confirmation && staleEcho(members,confirmation,now))confirmation=undefined;
   if(!confirmation){revision++;confirmation={id:JSON.stringify([selection,revision,now]),selection,target,startedAt:now,expiresAt:now+3000};
     return {revision,confirmation,ready:false};}
   return {revision,confirmation,ready:members.every(member=>confirmed(member,confirmation!,now))};

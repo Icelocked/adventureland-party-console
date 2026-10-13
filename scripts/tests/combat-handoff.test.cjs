@@ -75,3 +75,9 @@ test('native position events immediately send changed range readiness without ti
  f.readiness({target:'A',selection:'s',at:1001,ready:false});f.listeners.get('entities')?.({});await settle();assert.equal(f.reports().length,3);
  f.client.stop();assert.equal(f.listeners.size,0);
 }));
+
+test('range confirmation commit receipt is traced once per actual challenge',()=>fixture(async f=>{
+ f.client.tick();const first={selection:'s',target:{id:'A',state:'planned'},committed:true,independentConfirmation:{id:'c1'}};f.reports()[0].resolve(f.response(first));await settle();
+ const next={...first,independentConfirmation:{id:'c2'}};f.waits()[0].resolve(f.response(next));await settle();
+ assert.deepEqual(f.root.__partyHandoffTrace.filter(e=>e.stage==='range-commit-received').map(e=>e.confirmation),['c1','c2']);
+}));

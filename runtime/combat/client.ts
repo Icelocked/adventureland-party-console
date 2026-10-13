@@ -5,7 +5,7 @@ import {createFormationRecoveryClient} from './formation-recovery-client.ts';
 import type {Evidence} from './queue.ts';
 import {createSightRecovery} from './sight-recovery.ts';
 import {retireDeadEvidence, sameEvidenceTarget} from './evidence.ts';
-import type {Death} from './grouped.ts';
+import type {Death,Group} from './grouped.ts';
 import type {Target} from '../characters/roles/types.ts';
 import {createPassingAdmission} from './passing-admission.ts';
 import {createHandoffTiming} from './handoff-timing.ts';
@@ -77,6 +77,14 @@ export function installQueueClient(root:any, shared:any) {
     if(!pending.length && claims.some(c=>c.id===target.id&&c.map===character.map&&c.in===character.in&&c.releasedAt!==undefined))return;
     if(pending.length)pending.forEach(e=>evidence(target,'engaged',e.action));else evidence(target,'engaged');
   }
+  let receivedRangeCommit='';
+  function traceRangeCommit(group:Pick<Group,'selection'|'target'|'committed'|'independentConfirmation'>|null|undefined){
+    const confirmation=group?.independentConfirmation;
+    if(!group?.committed||!confirmation){receivedRangeCommit='';return;}
+    const key=JSON.stringify([group.selection,confirmation.id]);if(key===receivedRangeCommit)return;
+    receivedRangeCommit=key;timing.event('range-commit-received',{target:group.target?.id,selection:group.selection,confirmation:confirmation.id,
+      serverAt:Date.now()+shared.queueClockOffset(),monotonic:performance.now()});
+  }
   function apply(data:any){
     if(!active)return;
     shared.acceptCombatControl?.(data);
@@ -88,7 +96,7 @@ export function installQueueClient(root:any, shared:any) {
         (c.external||c.releasedAt>=(events[i].startedAt??events[i].at))))events.splice(i,1);
     if(shared.sharedTargetId()!==group?.target?.id)sight.reset();
     revision=data.combatRevision||revision;shared.acceptQueue(group);
-    timing.selection(root.__partyGroupedCombat ?? group);root.partyRoleRunner?.wake();
+    timing.selection(root.__partyGroupedCombat ?? group);traceRangeCommit(root.__partyGroupedCombat ?? group);root.partyRoleRunner?.wake();
     // A received selection/queue must not wait for the next reporting interval.
     if(acknowledgement(shared.queueAcknowledgement ? shared.queueAcknowledgement() : shared.queueReport())!==sentAcknowledgement)flush();
   }
