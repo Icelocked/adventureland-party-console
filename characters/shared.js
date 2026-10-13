@@ -16075,7 +16075,9 @@
           if(can_move({map:character.map,x:p.x,y:p.y,going_x:p.x,going_y:p.y,base:character.base}))goals.push(p);}
         goals.sort(function(a,b){return Math.hypot(a.x-character.real_x,a.y-character.real_y)-Math.hypot(b.x-character.real_x,b.y-character.real_y);});return goals[0]||null;
       },
-      start:function(goal,id,direct){cancelGroupRoute();cancelFightRoute();cancelFarmApproach('individual combat approach');resetCombatMovement();
+      start:function(goal,id,direct){var approach=root.partyCombatPosition;
+        cancelGroupRoute();cancelFightRoute();cancelFarmApproach('individual combat approach');resetCombatMovement();
+        if(approach && approach.mode==='independent-approach' && approach.movementOwner==='combat-approach' && approach.approachId===id)root.partyCombatPosition=approach;
         var walking=movement.move({map:character.map,in:character.in,x:goal.x,y:goal.y},undefined,{native:true,town:false,arrivalTolerance:3,owner:{recoveryStage:id}});
         if(direct){try{movement.install([{map:character.map,in:character.in,x:goal.x,y:goal.y}],movement.identity,'direct');}
           catch(error){var report=movement.report();if(report && report.owner && report.owner.recoveryStage===id){try{movement.cancel('Direct combat approach rejected: '+String(error));}catch(_cancelError){}}}}

@@ -79,9 +79,14 @@ test('owned native completion immediately rechecks range and advances an unsucce
 });
 
 test('shared approach starts the owned direct or native executor immediately',async()=>{
- for(const direct of [true,false]){const f=snapshotPorts();let started=false,ticks=0;
-  f.c.movement.move=()=>{started=true;return Promise.resolve();};
-  f.c.movement.install=()=>{};f.c.movement.tick=()=>{assert.equal(started,true);ticks++;};
-  await f.ports.start({x:100,y:0},'combat-approach:immediate',direct);assert.equal(ticks,1);
+ for(const direct of [true,false])for(const matching of [true,false]){const f=snapshotPorts();let started=false,ticks=0;
+  const id='combat-approach:immediate';f.ports.position(matching?id:'foreign-route','boss',200,{x:100,y:0},'routing');
+  f.c.resetCombatMovement=()=>{f.c.root.partyCombatPosition={mode:'idle',target:null,movementOwner:null};};
+  const observeNativeEdge=()=>{const position=f.c.root.partyCombatPosition;
+   assert.equal(position.mode,matching?'independent-approach':'idle');
+   if(matching){assert.equal(position.approachId,id);assert.equal(position.target,'boss');assert.equal(position.movementOwner,'combat-approach');}};
+  f.c.movement.move=()=>{observeNativeEdge();started=true;return Promise.resolve();};
+  f.c.movement.install=()=>{};f.c.movement.tick=()=>{assert.equal(started,true);observeNativeEdge();ticks++;};
+  await f.ports.start({x:100,y:0},id,direct);assert.equal(ticks,1);
  }
 });

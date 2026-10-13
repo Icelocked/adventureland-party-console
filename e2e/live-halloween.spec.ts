@@ -22,6 +22,11 @@ test.beforeEach(async ({live},info) => {
   // Reset only declarations from previous Halloween cases, before this case
   // creates any encounter. Never manufacture a kill or absence during a fight.
   const cleanup=await live.admin(`output=(()=>{
+    for(const [type,entry] of Object.entries(globalThis.__e2eHalloweenCatalogs||{})){
+      if(G.monsters[type]!==entry.configured)throw Error('Declared native catalog changed before cleanup: '+type);
+      G.monsters[type]=entry.original;
+    }
+    globalThis.__e2eHalloweenCatalogs={};
     const declared=globalThis.__e2eHalloweenDeclared||{},owned=new Set(Object.keys(declared));
     const monsters=Object.values(instances).flatMap(instance=>Object.values(instance.monsters||{}));
     // Native irregular reconstitution drops ad-hoc fields. Keep fixture identity
@@ -53,6 +58,7 @@ test.beforeEach(async ({live},info) => {
 });
 
 test.afterEach(async({live},info)=>{
+  try{
   if(info.status!==info.expectedStatus){
     const geometry=await Promise.allSettled(fighters.map(name=>live.clients[name].run(`(()=>{
       const movement=globalThis.__partyMovement;return {name:character.name,version:G.version,
@@ -62,7 +68,15 @@ test.afterEach(async({live},info)=>{
     })()`)));
     await info.attach('native-halloween-return-geometry',{body:JSON.stringify(geometry),contentType:'application/json'});
   }
-  await live.admin(`if(globalThis.__e2eHalloweenSpawnOriginal){new_monster=globalThis.__e2eHalloweenSpawnOriginal;delete globalThis.__e2eHalloweenSpawnOriginal;}output=true`);
+  }finally{
+  const restored=await live.admin(`output=(()=>{const restored=[];for(const [type,entry] of Object.entries(globalThis.__e2eHalloweenCatalogs||{})){
+    if(G.monsters[type]!==entry.configured)throw Error('Declared native catalog changed during encounter: '+type);
+    G.monsters[type]=entry.original;
+    restored.push({type,declaredCharge:entry.configured.charge,originalCharge:entry.original.charge,restoredOriginal:G.monsters[type]===entry.original});
+  }globalThis.__e2eHalloweenCatalogs={};
+  if(globalThis.__e2eHalloweenSpawnOriginal){new_monster=globalThis.__e2eHalloweenSpawnOriginal;delete globalThis.__e2eHalloweenSpawnOriginal;}return restored;})()`);
+  await info.attach('native-halloween-catalog-restoration',{body:JSON.stringify(restored),contentType:'application/json'});
+  }
 });
 
 // Failure inventory, written before runtime implementation: unsupported native
@@ -127,7 +141,8 @@ async function announceSpawn(live: LiveGame, event: string, leadMs: number) {
 async function spawn(live: LiveGame, event: string, map: string, x: number, y: number, nativeAdds = false) {
   return live.admin(`output=(()=>{
     const type=${JSON.stringify(event)}, original=G.monsters[type];
-    if(get_monster(type))throw Error('Expected clean native encounter');
+    if(Object.values(instances).some(instance=>Object.values(instance.monsters||{}).some(monster=>monster.type===type)))throw Error('Expected clean native encounter');
+    const configured={...original,charge:0};let constructed=false;
     const eligible=${JSON.stringify(fighters)}.map(name=>get_player(name)).filter(p=>{
       const damage=p.damage_type||G.items[p.slots?.mainhand?.name]?.damage_type||G.classes[p.ctype]?.damage_type;
       return type!=='slenderman'||['physical','pure'].includes(damage);
@@ -140,13 +155,14 @@ async function spawn(live: LiveGame, event: string, map: string, x: number, y: n
       const m=new_monster(${JSON.stringify(map)},{type,count:1,boundary:[${x},${y},${x},${y}]},{temp:1});
       m.e2eHalloween=true;
       m.zone_stats={...G.monsters[type]};
+      (globalThis.__e2eHalloweenCatalogs||={})[type]={original,configured};constructed=true;
       (globalThis.__e2eHalloweenDeclared||={})[String(m.id)]={type,map:m.map,definition:{...G.monsters[type]}};
       E[type]={live:true,map:m.map,hp:m.hp,max_hp:m.max_hp,target:m.target};
       // Native Slender status deliberately omits coordinates.
       if(type!=='slenderman'){E[type].x=m.x;E[type].y=m.y;}
       broadcast_e();return {id:m.id,type,map:m.map,x:m.x,y:m.y,hp:m.hp,eligibleFighters:eligible.map(p=>p.name),difficultyDps:dps,
-        difficulty:{nominalSeconds,observedNativeCadence:93/240,nominalCadence:1.2,scope:'initial encounter HP only'},initialDefinition:G.monsters[type],nativeStatus:E[type]};
-    } finally {G.monsters[type]=original;}
+        difficulty:{nominalSeconds,observedNativeCadence:93/240,nominalCadence:1.2,scope:'initial encounter HP only'},initialDefinition:G.monsters[type],catalogLifetime:{type,declaredCharge:configured.charge,originalCharge:original.charge,onlyChangedProperty:'charge'},nativeStatus:E[type]};
+    } finally {G.monsters[type]=constructed?configured:original;}
   })()`);
 }
 
