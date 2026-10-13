@@ -339,13 +339,26 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
       !terminalOwner(j,owner) || !terminalGoal() || !executor.settleTerminal(j.options))return false;
     finish(true);return true;
   }
+  function completeOwnedRoute(j: Journey): void {
+    const p=position(),expectedInstance=state.in ?? (state.map===j.context.map ? j.context.instance : undefined);
+    if(p.map!==state.map || expectedInstance!==undefined && String(p.in??p.map)!==String(expectedInstance)) {
+      finish(false,'Owned route completion map or instance changed');return;
+    }
+    // Exhausting a plot is not arrival: combat may move the actor between
+    // consuming its last walking point and the following scheduler callback.
+    if(host.character.moving || host.is_transporting(host.character))return;
+    if(distance(p,state)>state.edge) {
+      recover(j,Error('Owned route exhausted before destination arrival'));return;
+    }
+    finish(true);
+  }
   function tick() {
     const j = journey;
     if (!j || !state.moving) return;
     if (!current(j)) { finish(false, 'Navigation revision or runtime superseded this journey', {code:'superseded'}); return; }
     if (ports.context().paused) { if(!state.found)(j.scheduling ??= createPlanningScheduleMetrics()).paused();j.settlingAt = undefined; executor.pause(); return; }
     if (!state.found) { planTick(); return; }
-    try { if (executor.tick(j.options)) finish(true); }
+    try { if (executor.tick(j.options)) completeOwnedRoute(j); }
     catch (error) { recover(j, error); }
   }
   function move(destination: unknown, callback?: (done: boolean) => void, options: MovementOptions = {}): Promise<unknown> {

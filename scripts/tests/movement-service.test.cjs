@@ -679,3 +679,27 @@ test('terminal acknowledgement refuses unacknowledged, intermediate, displaced, 
   assert.equal(r.service.state.moving,true,mode);r.dispose();
  }
 });
+
+for(const native of [false,true])test('exhausted owned route recovers actual displaced destination '+native,async()=>{
+ const r=fixture(),p=r.service.move({map:'main',x:100,y:0},undefined,{native,arrivalTolerance:1});
+ p.catch(()=>{});r.service.install([{map:'main',x:100,y:0}],r.service.identity);
+ r.c.x=r.c.real_x=30;r.service.state.plot.length=0;
+ await r.ticks(10);await p;assert.equal(r.c.real_x,100);assert.equal(r.service.last().done,true);assert.equal(r.service.last().retries,1);r.dispose();
+});
+test('exhausted owned route waits for physical settlement without spending recovery retries',async()=>{
+ const r=fixture(),p=r.service.move({map:'main',x:100,y:0},undefined,{arrivalTolerance:1});let completed=false;p.then(()=>completed=true);p.catch(()=>{});
+ r.service.install([{map:'main',x:100,y:0}],r.service.identity);r.service.state.plot.length=0;r.c.moving=true;r.c.real_x=30;
+ await r.ticks(20);assert.equal(completed,false);assert.equal(r.service.report().retries,0);
+ r.c.real_x=100;r.c.moving=false;await r.ticks();await p;assert.equal(r.service.last().done,true);r.dispose();
+});
+for(const context of ['map','instance'])test('exhausted owned route rejects foreign '+context+' without issuing recovery movement',async()=>{
+ const r=fixture(),p=r.service.move({map:'main',x:100,y:0},undefined,{arrivalTolerance:1});const rejected=assert.rejects(p,/completion.*(map|instance)/i);
+ r.service.install([{map:'main',x:100,y:0}],r.service.identity);r.service.state.plot.length=0;r.c.real_x=100;
+ if(context==='map')r.c.map='bank';else r.c.in='foreign';
+ await r.ticks();await rejected;assert.equal(r.calls.filter(x=>x[0]==='move').length,0);r.dispose();
+});
+test('exhausted owned route preserves declared arrival tolerance and inferred same-map instance',async()=>{
+ const r=fixture();r.c.in='generated-owner';const p=r.service.move({map:'main',x:100,y:0},undefined,{arrivalTolerance:40});
+ r.c.real_x=70;r.service.install([],r.service.identity);await r.ticks();await p;
+ assert.equal(r.service.last().done,true);assert.equal(r.service.last().retries,0);r.dispose();
+});

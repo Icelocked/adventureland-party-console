@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Require an exhausted owned walking route to settle at its destination before reporting arrival, preventing false Cave regroup completion after combat displacement.
+
 - Verify brief manual merchant weapon swaps using ordered native item receipts, retaining gathering restoration and restart checks.
 
 - Verify headless movement after a console reload from the character's actual settled position, avoiding contradictory endpoint assumptions in native deployment tests.
