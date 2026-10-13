@@ -1158,15 +1158,35 @@ test('native Tracktrix stays in the final inventory slot through full-bag cleano
   expect(totalFeathers(after)).toBe(totalFeathers(before));
   await record(live,info,'tracktrix-full-bag-cleanout-retained',before,{initial,seeded});
   await info.attach('tracktrix-final-native-inventory',{body:await live.clients.E2EWarrior.page.screenshot(),contentType:'image/png'});
-  await page.goto(live.url);
-  const card=page.locator('article').filter({has:page.getByRole('heading',{name:'E2EWarrior',exact:true})});
-  const inventory=card.getByRole('button',{name:/^Inventory/});
-  await expect(inventory).toBeVisible();
-  if(await inventory.getAttribute('aria-expanded')==='false') await inventory.click();
-  const tracker=card.getByLabel(/^(Tracktrix|tracker)$/);
-  await expect(tracker).toBeVisible();
-  await tracker.scrollIntoViewIfNeeded();
-  await info.attach('tracktrix-final-console-inventory',{body:await page.screenshot(),contentType:'image/png'});
+  const navigationStartedAt=Date.now(),navigation:any[]=[];
+  const observe=(kind:string,value:any)=>{
+    const request=kind==='response'?value.request():value,url=new URL(request.url());
+    if(!['http:','https:'].includes(url.protocol))return;
+    navigation.push({at:Date.now(),kind,path:url.pathname.slice(0,256),section:url.searchParams.get('section'),resource:request.resourceType(),
+      ...(kind==='response'?{status:value.status()}:{})});
+    if(navigation.length>32)navigation.splice(8,1);
+  };
+  const requested=(request:any)=>observe('request',request),responded=(response:any)=>observe('response',response),finished=(request:any)=>observe('finished',request);
+  page.on('request',requested);page.on('response',responded);page.on('requestfinished',finished);
+  let headingReadyAt:number|undefined,inventoryReadyAt:number|undefined;
+  try{
+    await page.goto(live.url);
+    const card=page.locator('article').filter({has:page.getByRole('heading',{name:'E2EWarrior',exact:true})});
+    await expect(card.getByRole('heading',{name:'E2EWarrior',exact:true})).toBeVisible();
+    headingReadyAt=Date.now();
+    const inventory=card.getByRole('button',{name:/^Inventory/});
+    await expect(inventory).toBeVisible();
+    inventoryReadyAt=Date.now();
+    if(await inventory.getAttribute('aria-expanded')==='false') await inventory.click();
+    const tracker=card.getByLabel(/^(Tracktrix|tracker)$/);
+    await expect(tracker).toBeVisible();
+    await tracker.scrollIntoViewIfNeeded();
+    await info.attach('tracktrix-final-console-inventory',{body:await page.screenshot(),contentType:'image/png'});
+  }finally{
+    page.off('request',requested);page.off('response',responded);page.off('requestfinished',finished);
+    await info.attach('tracktrix-console-first-document-readiness',{body:JSON.stringify({navigationStartedAt,headingReadyAt,inventoryReadyAt,navigation}),contentType:'application/json'});
+    await info.attach('tracktrix-console-readiness-final',{body:await page.screenshot(),contentType:'image/png'});
+  }
 });
 
 for (const kind of ['upgrade', 'compound']) test(`auto merchant collects twelve native copies alongside a finite ${kind} rule`, async ({live},info) => {

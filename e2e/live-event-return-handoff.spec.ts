@@ -7,7 +7,7 @@ test.use({initialPosition:checkpoint});
 
 const statusObservers=new Map<string,Awaited<ReturnType<typeof observeNativeStatus>>>();
 test.beforeEach(async({live},info)=>{
-  if(info.title.includes('held Green return')||info.title.includes('checkpoint return')){
+  if(info.title.startsWith('active event return hands off when ')){
     try{statusObservers.set(info.testId,await observeNativeStatus(live.clients,fighters));}
     catch(error){await info.attach('native-status-observer-install-error',{body:String(error),contentType:'text/plain'});throw error;}
   }

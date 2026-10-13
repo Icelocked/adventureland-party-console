@@ -1,3 +1,4 @@
+import {nativePlannerCpuProfile} from './native-planner-cpu-profile';
 import { test, expect } from './live-fixtures';
 import { createRequire } from 'node:module';
 import {createNativeProgressBudget} from './native-progress-budget.js';
@@ -919,12 +920,29 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   // Capture the same polled observations: a final expired visit cannot show
   // whether native BFS, route publication, or a follower gate stalled first.
   const requiredPlanning:any[]=[];
+  const cpuProfile=nativePlannerCpuProfile(live.clients.E2EWarrior.frame);
   const requiredBudget=createNativeProgressBudget(Date.now,300_000,600_000);
   let requiredCompleted=false;
+  let requiredProbeAt=0,requiredProbes=0;
   try{
   await expect.poll(async()=>{
     requiredBudget.check();
     const v=await dungeon();
+    if(v.state.travel?.stage==='preparing'&&requiredProbes<3&&Date.now()-requiredProbeAt>=5000){
+      requiredProbeAt=Date.now();requiredProbes++;
+      const sample=await live.clients.E2EWarrior.frame.evaluate(({id,run})=>{
+        const p=window as any,w=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+        const m=w?.__partyMovement,c=w?.character,command=w?.__partyDungeonRuntime?.commandIdentity?.();
+        return {at:Date.now(),name:c?.name,map:c?.map,in:c?.in,
+          active:!!(m?.state?.moving&&m.state.searching&&!m.state.found&&m.gate.owner&&command?.id===id&&command.run===run&&c?.cave?.run===run),
+          command,movement:m?.report?.(),runtimeGeneration:w?.__partyRuntimeGeneration,codeHash:w?.__partyCodeHash,
+          nativeMoving:!!w?.character?.moving,transporting:!!p.transporting,
+          nativePlanning:w?.__partyMovement?.nativePlanning?.(),schedule:w?.__partyMovement?.report?.()?.planningSchedule,
+          setInterval:String(w?.setInterval),isHidden:p.is_hidden?.(),noGraphics:!!p.no_graphics,noHtml:p.no_html};
+      },{id:v.state.commands.E2EWarrior?.id,run:v.state.run}).catch(error=>({error:String(error)}));
+      cpuProfile.observe(sample);
+    }
+    await cpuProfile.settle();cpuProfile.poll();
     if(requiredPlanning.length<600)requiredPlanning.push({at:Date.now(),phase:v.state.phase,
       travel:v.state.travel&&{stage:v.state.travel.stage,target:v.state.travel.target?.id,serial:v.state.travel.serial},
       members:v.members.map((m:any)=>({name:m.name,fresh:m.fresh,at:m.observation?.at,
@@ -961,6 +979,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   },{timeout:600_000,message:'Required rooms must finish through native combat and votes'}).toBe(true);
   requiredCompleted=true;
   }finally{
+    await info.attach('native-cave-cpu-profile',{body:JSON.stringify(await cpuProfile.finish()),contentType:'application/json'});
     await info.attach('native-cave-required-planning',{body:JSON.stringify(requiredPlanning),contentType:'application/json'});
     await info.attach('native-cave-required-progress-budget',{body:JSON.stringify(requiredBudget.snapshot()),contentType:'application/json'});
     if(!requiredCompleted){

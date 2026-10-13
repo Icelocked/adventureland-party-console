@@ -73,13 +73,14 @@ for (const {restart, lateTransport} of [{restart:false,lateTransport:false},{res
     // actually arrives. Preserve every packet and bound this transport fault.
     await live.clients[P].run(`(() => {
       const socket = parent.socket, emit = socket.emit;
-      const fault = globalThis.__e2eTownFault = { delayed: false, released: false, events: [] };
+      const fault = globalThis.__e2eTownFault = { delayed: false, released: false, events: [], generation:globalThis.__partyRuntimeGeneration };
+      const origin={map:character.map,x:character.real_x,y:character.real_y};
       const pending = [];
       let timer;
       fault.release = reason => {
         if (fault.released) return;
         fault.armed = reason === 'authoritative-leader-town-arrival';
-        fault.released = true; clearTimeout(timer);
+        fault.released = true; clearTimeout(timer);clearInterval(fault.overlapTimer);
         for (const packet of pending.splice(0)) {
           fault.events.push({ event: 'town-request-forwarded', reason, at: Date.now() });
           emit.apply(socket, packet);
@@ -105,7 +106,34 @@ for (const {restart, lateTransport} of [{restart:false,lateTransport:false},{res
         fault.events.push({event:'native-stop-town',...fault.interruption});
       };
       socket.on('player', onPlayer);
-      fault.restore = () => { fault.release('fixture-cleanup'); socket.off('player', onPlayer); socket.emit = emit; };
+      if(${JSON.stringify(lateTransport)})fault.overlapTimer=setInterval(()=>{
+        if(fault.released || !fault.delayed || pending.length!==1 || globalThis.__partyRuntimeGeneration!==fault.generation || !socket.connected)return;
+        const primary=parent.parent;
+        if(primary.character?.name!==${JSON.stringify(W)})return;
+        const leaderCode=primary.document.getElementById('maincode')?.contentWindow;
+        const leaderInterruption=leaderCode?.__e2eLeaderTownFault?.interruption;
+        if(!leaderInterruption)return;
+        const service=globalThis.__partyMovement,journey=service?.report(),owner=journey?.owner;
+        const convoy=sharedRoutine.combatTraceSnapshot(),revision=globalThis.__partyNavigationIntent?.revision;
+        if(!journey || !owner || !service.state.moving || service.state.use_town!==false ||
+            service.state.map!=='main' || Math.hypot(service.state.x,service.state.y)>1 ||
+            !character.moving || character.c?.town || parent.transporting || convoy.cancelled ||
+            !['assembling','travelling'].includes(convoy.convoyPhase) || owner.convoyId!==convoy.convoy ||
+            owner.epoch!==convoy.convoyEpoch || owner.navigationRevision!==revision || !Number.isFinite(owner.commandId))return;
+        const runtime=sharedRoutine.queueReport().combatSelection.runtimeId;
+        if(!journey.id.startsWith(character.name+':'+runtime+':'))return;
+        const packets=parent.__e2eEvents||[];let packet;
+        for(let index=packets.length-1;index>=0;index--){const candidate=packets[index],data=candidate.data;
+          if(candidate.event==='player' && Number.isFinite(data?.x) && Number.isFinite(data?.y) && data.map===origin.map){packet=candidate;break;}}
+        const position=packet?.data;
+        if(!position?.moving || Date.now()-packet.at>2000 || Math.hypot(position.x-origin.x,position.y-origin.y)<=80)return;
+        fault.walkingOverlap={at:Date.now(),generation:fault.generation,runtime,origin,
+          position:{map:position.map,x:position.x,y:position.y,moving:position.moving},playerAt:packet.at,
+          owner:{...owner},journeyId:journey.id,phase:convoy.convoyPhase,leaderInterruption:{...leaderInterruption},queued:pending.length};
+        fault.events.push({event:'native-walking-overlap',...fault.walkingOverlap});
+        fault.release('late-walking-transport');
+      },50);
+      fault.restore = () => { clearInterval(fault.overlapTimer);fault.release('fixture-cleanup'); socket.off('player', onPlayer); socket.emit = emit; };
       return true;
     })()`);
     const plans: unknown[] = [];
@@ -158,15 +186,15 @@ for (const {restart, lateTransport} of [{restart:false,lateTransport:false},{res
       if (lateTransport) {
         // Both initially remain outside Town. Release the original follower
         // packet only once interrupted-cast recovery has genuinely begun walking.
-        await expect.poll(async()=>{
-          const current=await world(live), s=await live.state();
-          return !!s.activeConvoy?.returnTown?.walking &&
-            Math.hypot(current[P].x-before[P].x,current[P].y-before[P].y)>80 &&
-            await live.clients[W].run('!!globalThis.__e2eLeaderTownFault.interruption') &&
-            await live.clients[P].run('!!character.moving && globalThis.__e2eTownFault.delayed && !globalThis.__e2eTownFault.released');
-        },{timeout:60_000,intervals:[100,250],message:'The delayed packet must outlive the interrupted Town round and overlap actual recovery walking'}).toBe(true);
-        const walking=await world(live), recovery= (await live.state()).activeConvoy, releaseAt=Date.now();
-        await live.clients[P].run("globalThis.__e2eTownFault.release('late-walking-transport')");
+        await expect.poll(()=>live.clients[P].run('!!globalThis.__e2eTownFault.walkingOverlap'),
+          {timeout:60_000,intervals:[100,250],message:'The delayed packet must outlive the interrupted Town round and overlap actual recovery walking'}).toBe(true);
+        const overlap=await live.clients[P].run('globalThis.__e2eTownFault.walkingOverlap');
+        expect(overlap.position.moving).toBe(true);expect(overlap.queued).toBe(1);
+        expect(Math.hypot(overlap.position.x-overlap.origin.x,overlap.position.y-overlap.origin.y)).toBeGreaterThan(80);
+        expect(overlap.leaderInterruption).toBeTruthy();
+        const walking=await world(live), recovery=(await live.state()).activeConvoy,releaseAt=overlap.at;
+        expect(recovery?.returnTown?.walking).toBe(true);
+        expect(recovery?.id).toBe(overlap.owner.convoyId);
         await expect.poll(async()=>{
           const current=await world(live);
           return Math.hypot(current[P].x,current[P].y)<90 && Math.hypot(current[W].x,current[W].y)>250;
@@ -180,7 +208,7 @@ for (const {restart, lateTransport} of [{restart:false,lateTransport:false},{res
         const staleOrigins=(finalState.combatLogs?.[W]||[]).filter((entry:any)=>
           entry.at>=releaseAt && /Leader moved from planning origin/.test(entry.details?.reason||entry.message));
         expect(staleOrigins,'Recovery must not repeatedly prepare from an unreached Town rally').toEqual([]);
-        await artifact(live,info,'late-native-town-walking-recovery',{before,walking,recovery,transported,plans,planResponses});
+        await artifact(live,info,'late-native-town-walking-recovery',{before,overlap,walking,recovery,transported,plans,planResponses});
         return;
       }
       await expect.poll(async () => {
