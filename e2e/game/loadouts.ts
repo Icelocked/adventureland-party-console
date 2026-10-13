@@ -1,11 +1,11 @@
 import type { ItemInfo } from 'typed-adventureland';
 
-export type NativeLoadout = 'fragile' | 'god' | 'combat-range';
+export type NativeLoadout = 'fragile' | 'god' | 'combat-range' | 'combat-follow-range';
 type Equipment = Pick<ItemInfo, 'name' | 'level'>;
 const item = (name: Equipment['name'], level: number): Equipment => ({name, level});
 
 /** Native initial gear only. Neither profile overrides damage, movement, or death. */
-export const loadouts = {
+const baseLoadouts = {
   fragile: {
     description: 'Level 80, starter weapon and level-zero helmet/shoes; no defensive armor or jewelry.',
     armor: {helmet:item('helmet',0),shoes:item('shoes',0)},
@@ -26,6 +26,7 @@ export const loadouts = {
     weaponLevel: 0,
   },
 } as const;
+export const loadouts={...baseLoadouts,'combat-follow-range':{...baseLoadouts['combat-range'],description:'Durable native armor with upgraded staff weapons for caster follow-clearance recovery.'}} as const;
 
 /** Runs after reset, before native login: no connected character is modified. */
 export async function seedLoadout(admin: (code: string) => Promise<unknown>, profile: NativeLoadout, primaryClass: 'warrior' | 'ranger' | 'mage' = 'warrior', extraFighter: 'mage' | null = null) {
@@ -46,10 +47,11 @@ export async function seedLoadout(admin: (code: string) => Promise<unknown>, pro
       const weaponLevel=definition.weaponLevel;
       for(const value of Object.values(slots))if(value&&value.name)value.level=weaponLevel;
       Object.assign(slots,structuredClone(definition.armor));
-      if(profile==='god'||profile==='combat-range') {
+      if(profile==='god'||profile==='combat-range'||profile==='combat-follow-range') {
         const stat=c.type==='warrior'?'str':c.type==='ranger'?'dex':'int';
         slots.amulet={name:stat+'amulet',level:20};slots.belt={name:stat+'belt',level:20};
       }
+      if(profile==='combat-follow-range'&&(c.type==='priest'||c.type==='mage'))slots.mainhand={name:'staff',level:c.type==='priest'?12:15};
       for(const [slot,value] of Object.entries(slots))if(value&&value.name&&!G.items[value.name])throw Error('Unknown native gear '+slot+': '+value.name);
       c.info.slots=slots;
       // Native login computes maximum health/mana and clamps these starting pools.

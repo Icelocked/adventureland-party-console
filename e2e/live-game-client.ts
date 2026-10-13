@@ -110,6 +110,9 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
           game.__e2eEvents.push({sequence:++game.__e2eEventSequence,at:Date.now(),event:'move-issued',
             data:{x:p.x,y:p.y,going_x:p.going_x,going_y:p.going_y,m:p.m},
             motion:{parent:body(c),code:body(code),clear,owner:runner?.__partyCombatOwner,
+              recovery:runner?.__partyGroupedCombat?.formationRecovery&&{id:runner.__partyGroupedCombat.formationRecovery.id,
+                target:runner.__partyGroupedCombat.formationRecovery.target,mover:runner.__partyGroupedCombat.formationRecovery.mover,
+                phase:runner.__partyGroupedCombat.formationRecovery.phase,attempt:runner.__partyGroupedCombat.formationRecovery.attempt},
               position:runner?.partyCombatPosition&&{mode:runner.partyCombatPosition.mode,reason:runner.partyCombatPosition.reason,
                 target:runner.partyCombatPosition.target,issuedAt:runner.partyCombatPosition.issuedAt},runtimeGeneration:runner?.__partyRuntimeGeneration,
               codeHash:runner?.__partyCodeHash,observerGeneration:game.__e2eObserverGeneration}});
