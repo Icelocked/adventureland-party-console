@@ -10,7 +10,7 @@ interface Route {gate:Gate;owner:Owner;onDone:unknown;goal:RecoveryPoint;checked
 interface Ports {
   now():number;self():RecoveryPoint & {name:string;map:string;moving?:boolean;going_x?:number;going_y?:number};
   context():{allowed:boolean;key?:string;target?:string;covered?:boolean};
-  smart():NativeSmart;gate():Gate;safe(point:RecoveryPoint):boolean;
+  smart():NativeSmart;gate():Gate;safe(point:RecoveryPoint):boolean;endpointSafe?(this:void,point:RecoveryPoint):boolean;
   start(goal:RecoveryPoint):unknown;plan():void;stop():void;hold():void;
   segmentClear?(this:void,from:RecoveryPoint,to:RecoveryPoint):boolean;
   approachReady?():boolean; goals?():RecoveryPoint[];
@@ -26,7 +26,7 @@ export function createFormationRecoveryClient(p:Ports) {
   let control:FormationRecovery|undefined, proposal:FormationRecoveryReport|undefined;
   let outcome:FormationRecoveryReport|undefined, route:Route|null=null, seenId='', drawings:Drawing[]=[];
   let movementBlock:string|undefined;
-  let follower:{goal:RecoveryPoint;search:ReturnType<typeof recoveryRoute>;path?:RecoveryPoint[]}|undefined;
+  let follower:{goal:RecoveryPoint;search:ReturnType<typeof recoveryRoute>;path?:RecoveryPoint[];terminal?:RecoveryPoint}|undefined;
   function clearDrawings(){for(const d of drawings)d?.destroy?.();drawings=[];}
   function cancel(){
     follower=undefined;
@@ -150,14 +150,38 @@ export function createFormationRecoveryClient(p:Ports) {
     position();
     return true;
   }
+  function followGoals(goal:RecoveryPoint):RecoveryPoint[]{
+    if(!p.endpointSafe)return [goal];
+    // Followers need proximity and healing coverage, not the mover's exact
+    // position, which can be inside a different role's monster clearance.
+    return [goal,...Array.from({length:16},(_,i)=>({
+      x:goal.x+Math.cos(i*Math.PI/8)*39,y:goal.y+Math.sin(i*Math.PI/8)*39}))].filter(p.endpointSafe);
+  }
+  function followerInvalid(goal:RecoveryPoint):boolean{
+    if(!follower || Math.hypot(goal.x-follower.goal.x,goal.y-follower.goal.y)>40)return true;
+    const terminal=follower.terminal;
+    return !!terminal && (Math.hypot(terminal.x-goal.x,terminal.y-goal.y)>40 ||
+      !!p.endpointSafe && !p.endpointSafe(terminal));
+  }
+  function followerPathReady(goal:RecoveryPoint):boolean{
+    if(!follower!.path){
+      const result=follower!.search.tick();
+      if(result===null){follower=undefined;return false;}
+      follower!.path=result;follower!.terminal=result?.at(-1);
+    }
+    if(followerInvalid(goal)){follower=undefined;return false;}
+    return !!follower!.path;
+  }
   function followPoint(goal:RecoveryPoint):RecoveryPoint|undefined {
     if(!p.segmentClear)return goal;
     const self=p.self();
-    if(!follower || Math.hypot(goal.x-follower.goal.x,goal.y-follower.goal.y)>40)
-      follower={goal:{...goal},search:recoveryRoute(self,goal,p.segmentClear)};
-    if(!follower.path){const result=follower.search.tick();if(result===null){follower=undefined;return;}follower.path=result;}
-    while(follower.path?.length && Math.hypot(follower.path[0]!.x-self.x,follower.path[0]!.y-self.y)<6)follower.path.shift();
-    return follower.path?.[0];
+    if(followerInvalid(goal)){
+      const goals=followGoals(goal);
+      follower={goal:{...goal},search:recoveryRoute(self,goals,p.segmentClear)};
+    }
+    if(!followerPathReady(goal))return;
+    while(follower!.path?.length && Math.hypot(follower!.path[0]!.x-self.x,follower!.path[0]!.y-self.y)<6)follower!.path.shift();
+    return follower!.path?.[0];
   }
   return {accept,tick,report,movement,blocks:()=>valid(),
     followPoint,

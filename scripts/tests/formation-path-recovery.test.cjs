@@ -165,3 +165,40 @@ test('certified alternate recovery goal is reached when the preferred endpoint i
  for(let i=0;i<10&&c.gate.owner;i++){c.gate.owner.tick();await new Promise(setImmediate);}
  assert.equal(c.api.report().outcome,'arrived');assert.deepEqual({x:c.self.x,y:c.self.y},alternative);assert.equal(c.starts,1);
 });
+test('recovery followers stop safely within forty pixels when the leader point is inside monster clearance',async()=>{
+ const leader={x:-427,y:-334},monster={x:-597,y:-184},width=27,height=34;
+ const gap=p=>Math.hypot(Math.max(Math.abs(p.x-monster.x)-(width+31)/2,0),Math.max(Math.abs(p.y-monster.y)-height,0));
+ for(const [origin,safety] of [[{x:-285.34,y:-508.24},191],[{x:-344.13,y:-437.24},193]]){
+  const clear=(a,b)=>{const dx=b.x-a.x,dy=b.y-a.y,length=dx*dx+dy*dy;
+   const t=length?Math.max(0,Math.min(1,((monster.x-a.x)*dx+(monster.y-a.y)*dy)/length)):0;
+   return gap({x:a.x+dx*t,y:a.y+dy*t})>=Math.min(gap(a),safety)-0.01;};
+  assert.ok(gap(leader)<safety,'Captured native leader endpoint is unsafe for the follower');
+  const c=client({segmentClear:clear,endpointSafe:p=>gap(p)>safety});Object.assign(c.self,origin);
+  let point;for(let i=0;i<300&&!point;i++){point=c.api.followPoint(leader);await new Promise(setImmediate);}
+  assert.ok(point,'A certified safe follow terminal point must be found');assert.ok(clear(origin,point));
+  assert.ok(gap(point)>safety);assert.ok(Math.hypot(point.x-leader.x,point.y-leader.y)<=40);
+ }
+});
+test('recovery followers issue no waypoint when the entire follow region is unsafe',()=>{
+ const c=client({segmentClear:()=>false,endpointSafe:()=>false});
+ for(let i=0;i<3;i++)assert.equal(c.api.followPoint({x:80,y:0}),undefined);
+ assert.deepEqual({x:c.self.x,y:c.self.y},{x:0,y:0});assert.equal(c.starts,0);
+});
+test('completed safe follow terminal replans when a small leader drift leaves it outside forty pixels',async()=>{
+ const monster={x:-597,y:-184},gap=p=>Math.hypot(Math.max(Math.abs(p.x-monster.x)-29,0),Math.max(Math.abs(p.y-monster.y)-34,0));
+ const clear=(a,b)=>{const dx=b.x-a.x,dy=b.y-a.y,length=dx*dx+dy*dy;
+  const t=length?Math.max(0,Math.min(1,((monster.x-a.x)*dx+(monster.y-a.y)*dy)/length)):0;
+  return gap({x:a.x+dx*t,y:a.y+dy*t})>=Math.min(gap(a),193)-0.01;};
+ const c=client({segmentClear:clear,endpointSafe:p=>gap(p)>193});Object.assign(c.self,{x:-344.13,y:-437.24});
+ let point;for(let i=0;i<300&&!point;i++){point=c.api.followPoint({x:-427,y:-334});await new Promise(setImmediate);}
+ assert.ok(point);Object.assign(c.self,point);assert.equal(c.api.followPoint({x:-427,y:-334}),undefined);
+ const shifted={x:-442,y:-319};assert.ok(Math.hypot(c.self.x-shifted.x,c.self.y-shifted.y)>40);
+ let next;for(let i=0;i<300&&!next;i++){next=c.api.followPoint(shifted);await new Promise(setImmediate);}
+ assert.ok(next,'A completed terminal outside current follow40 must not leave the follower stuck');
+ assert.ok(clear(c.self,next));assert.ok(gap(next)>193);assert.ok(Math.hypot(next.x-shifted.x,next.y-shifted.y)<=40);
+});
+test('cached follower terminal loses ownership when dynamic endpoint certification becomes unsafe',()=>{
+ let safe=true;const c=client({segmentClear:()=>true,endpointSafe:()=>safe});
+ assert.ok(c.api.followPoint({x:80,y:0}));safe=false;
+ assert.equal(c.api.followPoint({x:80,y:0}),undefined);assert.equal(c.self.x,0);
+});

@@ -40,11 +40,24 @@ test('superseded native Town progress ends quietly and stale pending membership 
   test.setTimeout(180_000);
   await live.post('/formation',{leader:W});
   await live.post('/formation',{character:P,follow:true});
-  await live.admin(`output=(()=>{const p=get_player('${P}');p.x=350;p.y=0;resend(p,'u+cid');return true})()`);
+  const stagingStartedAt=Date.now(),origin={map:'main',x:350,y:0};
+  const previousReceipt=await live.clients[P].run('globalThis.__partyLastCommand||0');
+  expect(await live.clients[P].run("can_move({map:'main',x:350,y:0,going_x:350,going_y:0,base:character.base})"),'The declared native Town origin must be walkable').toBe(true);
+  const admission=await live.post('/command',{character:P,type:'character-travel',location:origin,label:'Native Town supersession origin'});
+  await expect.poll(async()=>{
+    const native=await live.clients[P].snapshot(),state=await live.state(),report=state.characters[P];
+    const receipt=await live.clients[P].run('globalThis.__partyLastCommand||0');
+    const server=await live.admin(`output=(()=>{const p=get_player('${P}');return !!p&&p.map==='main'&&!p.moving&&Math.hypot(p.x-350,p.y)<25})()`);
+    return server&&receipt>previousReceipt&&native.map==='main'&&Math.hypot(native.x-350,native.y)<25&&
+      report?.seenAt>=stagingStartedAt&&report.map==='main'&&!report.moving&&Math.hypot(report.x-350,report.y)<25;
+  },{timeout:30_000,message:'Native priest, authoritative server and fresh receipt must reach the real Town incident origin'}).toBe(true);
+  const staging={origin,admission,previousReceipt,currentReceipt:await live.clients[P].run('globalThis.__partyLastCommand'),native:await live.clients[P].snapshot()};
   let held=false,heldAt=0,releasedAt=0,release!:()=>void,heldBody:{navigationRevision:number;cycleId:string}|undefined;
   const gate=new Promise<void>(resolve=>{release=resolve;});
   const responses:unknown[]=[];
   await live.clients[P].page.route('**/party-api/return-progress',async route=>{
+    // All native clients share this page. Actor ownership comes from the POST.
+    if(route.request().postDataJSON()?.character!==P){await route.continue();return;}
     if(!held){heldBody=route.request().postDataJSON();heldAt=Date.now();held=true;await gate;}
     try{
       const response=await route.fetch();
@@ -98,6 +111,7 @@ test('superseded native Town progress ends quietly and stale pending membership 
     await info.attach('native-town-supersession',{body:JSON.stringify({before,savedBefore,after,savedAfter,resumed,savedResumed:live.savedTownCycle(),responses,events,nativeLog,finalLog}),contentType:'application/json'});
   }finally{
     release();
-    await info.attach('native-town-progress-transport',{body:JSON.stringify({heldBody,heldAt,releasedAt,responses,savedTownCycle:live.savedTownCycle()}),contentType:'application/json'});
+    await live.clients[P].page.unrouteAll({behavior:'wait'});
+    await info.attach('native-town-progress-transport',{body:JSON.stringify({staging,heldBody,heldAt,releasedAt,responses,savedTownCycle:live.savedTownCycle()}),contentType:'application/json'});
   }
 });

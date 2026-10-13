@@ -15901,6 +15901,7 @@
     return {
       now:function(){return Date.now()+coordinatorClockOffset;},self:function(){return character;},context:terrainRecoveryContext,
       gate:sharedConvoyGate,smart:function(){return smart;},safe:terrainRecoverySafe,
+      endpointSafe:function(point){return terrainRecoverySafe(point,true);},
       segmentClear:function(from,to){return terrainRecoverySafe(to,false,from);},
       approachReady:terrainApproachReady,coveredStep:terrainCoverageStep,follow:followTerrainRecovery,stepSize:Math.max(1,Number(character.speed||40)*0.25),
       release:function(){resetCombatMovement();if(root.partyQueueClient)root.partyQueueClient.sight.reset();if(root.partyRoleRunner)root.partyRoleRunner.wake();},

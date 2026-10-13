@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix formation recovery stalling before a selected monster when the leader position is unsafe for ranged followers; choose nearby certified follow positions and replan after leader movement or changing monster clearance.
+
 - Fixed merchant collection getting stuck approaching inaccessible transporter centers, including Desertland; use collision-clear points within the native interaction range.
 
 - Fix headless movement and event-return stalls caused by native pathfinding restoring a CODE-scoped visibility wrapper; preserve the original game visibility function across planning and CODE reloads.
