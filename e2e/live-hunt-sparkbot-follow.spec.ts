@@ -19,7 +19,7 @@ for(const scene of [{monster:'sparkbot',wallRange:false},{monster:'goo',wallRang
  await live.post('/merchant/force-stand',{enabled:true});await live.post('/focus',{monsterFocus:[]});
  const samples:any[]=[],configured:any[]=[],events:Record<string,any[]>={};let seed:any,releasedAt:number|undefined,transport:Awaited<ReturnType<typeof observeNativeTransport>>|undefined;
  await live.admin(`output=(()=>{
-  globalThis.__e2eFollowRespawns=[];
+  globalThis.__e2eFollowRespawns=[];globalThis.__e2eFollowOwnedMonsters=[];
   for(let i=monster_respawns.length-1;i>=0;i--)if(monster_respawns[i][0]?.map==='uhills')__e2eFollowRespawns.push(monster_respawns.splice(i,1)[0]);
   for(const m of Object.values(instances.uhills.monsters))remove_monster(m,{method:'disappear',nospawn:true});
   return true;})()`);
@@ -38,10 +38,13 @@ for(const scene of [{monster:'sparkbot',wallRange:false},{monster:'goo',wallRang
   seed=await live.admin(`output=(()=>{
    const original=G.monsters[${JSON.stringify(monster)}];globalThis.__e2eFollowOriginal=original;G.monsters[${JSON.stringify(monster)}]=${'queue' in scene&&!!scene.queue}?original:{...original,stationary:true};
    const m=new_monster('uhills',{type:${JSON.stringify(monster)},count:1,position:${JSON.stringify(targetPosition)},radius:${'queue' in scene&&!!scene.queue?40:0}},{temp:1});
-   if(!${'queue' in scene&&!!scene.queue}){m.speed=0;m.moving=false;}m.target=null;m.hp=m.max_hp=${'queue' in scene&&!!scene.queue?600000:10000000};m.u=true;m.abs=true;m.cid++;
+   __e2eFollowOwnedMonsters.push({id:String(m.id),type:m.type,map:m.map,instance:m.in});
+   if(!${'queue' in scene&&!!scene.queue}){m.speed=0;m.moving=false;}
+   const observableCombatSeconds=20,partyDps=${JSON.stringify(fighters)}.map(get_player).reduce((sum,p)=>sum+Math.max(1,p.attack)*Math.max(0.1,p.frequency),0);
+   m.target=null;m.hp=m.max_hp=${'queue' in scene&&!!scene.queue}?Math.ceil(partyDps*observableCombatSeconds):10000000;m.u=true;m.abs=true;m.cid++;
    const successors=[];
    if(!can_move({...m,going_x:m.x,going_y:m.y}))throw Error('Actual primary spawn is not native-clear');
-   return {id:String(m.id),x:m.x,y:m.y,map:m.map,speed:m.speed,aggro:original.aggro,at:Date.now(),successors};})()`);
+   return {id:String(m.id),x:m.x,y:m.y,map:m.map,speed:m.speed,aggro:original.aggro,hp:m.hp,partyDps,observableCombatSeconds,at:Date.now(),successors};})()`);
   await expect.poll(async()=>Promise.all(fighters.map(name=>live.clients[name].run(`!!parent.entities[${JSON.stringify(seed.id)}]`))),{timeout:15000}).toEqual([true,true,true]);
   const staging=await Promise.all(fighters.map(name=>live.clients[name].run(`(()=>{
    const c=character,e=parent.entities[${JSON.stringify(seed.id)}],body=v=>({map:v.map,in:v.in,x:v.real_x??v.x,y:v.real_y??v.y,awidth:v.awidth??(v.width||0)/(v.mscale||1),aheight:v.aheight??(v.height||0)/(v.mscale||1)});
@@ -59,7 +62,7 @@ for(const scene of [{monster:'sparkbot',wallRange:false},{monster:'goo',wallRang
    configured.push({at:Date.now(),phase:'held-selection',roles});if(configured.length>32)configured.splice(4,1);
    return roles.map(r=>r.selected);
   },{timeout:15000}).toEqual([true,true,true]);
-  if(queue)seed.successors=await live.admin(`output=(()=>{const primary=instances.uhills.monsters[${JSON.stringify(seed.id)}];if(!primary)throw Error('Declared primary disappeared before successor seeding');const successors=[];for(const dx of [-24,-48]){const x=primary.x+dx,y=primary.y;if(!can_move({map:primary.map,x,y,going_x:x,going_y:y,base:primary.base}))throw Error('Queued native Goo spawn region is not clear');const next=new_monster('uhills',{type:'goo',count:1,position:[x,y],radius:40},{temp:1});next.hp=next.max_hp=10000000;next.u=true;next.abs=true;next.cid++;if(!can_move({...next,going_x:next.x,going_y:next.y}))throw Error('Actual roaming successor spawn is not native-clear');successors.push({id:String(next.id),x:next.x,y:next.y});}return successors;})()`);
+  if(queue)seed.successors=await live.admin(`output=(()=>{const primary=instances.uhills.monsters[${JSON.stringify(seed.id)}];if(!primary)throw Error('Declared primary disappeared before successor seeding');const successors=[];for(const dx of [-24,-48]){const x=primary.x+dx,y=primary.y;if(!can_move({map:primary.map,x,y,going_x:x,going_y:y,base:primary.base}))throw Error('Queued native Goo spawn region is not clear');const next=new_monster('uhills',{type:'goo',count:1,position:[x,y],radius:40},{temp:1});__e2eFollowOwnedMonsters.push({id:String(next.id),type:next.type,map:next.map,instance:next.in});next.hp=next.max_hp=10000000;next.u=true;next.abs=true;next.cid++;if(!can_move({...next,going_x:next.x,going_y:next.y}))throw Error('Actual roaming successor spawn is not native-clear');successors.push({id:String(next.id),x:next.x,y:next.y});}return successors;})()`);
   if(queue){expect(seed.aggro||0).toBe(0);expect(seed.speed).toBeGreaterThan(0);}
   if(monster==='sparkbot')transport=await observeNativeTransport(live.clients[W].page);
   releasedAt=Date.now();live.consoleDrainLease(null);
@@ -113,7 +116,7 @@ for(const scene of [{monster:'sparkbot',wallRange:false},{monster:'goo',wallRang
   live.consoleDrainLease(null);
   await info.attach('native-sparkbot-follow-result',{body:JSON.stringify({seed,releasedAt,configured,samples,events}),contentType:'application/json'});
   for(const name of fighters)await live.clients[name].frame.evaluate(()=>{(window as any).__e2eObserveMoves=false;}).catch(()=>{});
-  await live.admin(`output=(()=>{if(globalThis.__e2eFollowOriginal)G.monsters[${JSON.stringify(monster)}]=__e2eFollowOriginal;monster_respawns.push(...(__e2eFollowRespawns||[]));return true;})()`);
+  await live.admin(`output=(()=>{for(const entry of globalThis.__e2eFollowOwnedMonsters||[]){const m=instances[entry.instance||entry.map]?.monsters?.[entry.id];if(m&&m.type===entry.type&&m.map===entry.map)remove_monster(m,{method:'disappear',nospawn:true});}delete globalThis.__e2eFollowOwnedMonsters;if(globalThis.__e2eFollowOriginal)G.monsters[${JSON.stringify(monster)}]=__e2eFollowOriginal;monster_respawns.push(...(__e2eFollowRespawns||[]));return true;})()`);
  }
 });
 

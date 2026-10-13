@@ -10,7 +10,8 @@ export function createIndependentApproachClient(p:Ports){
   if(!c.goal){c.failed=true;return;}
   c.pending=true;c.direct=p.clear(c.goal);p.position(c.id,c.target,c.radius,c.goal,'routing');
   const issued=c.id;
-  try {void p.start(c.goal,c.id,c.direct).then(()=>{if(current===c&&c.id===issued){c.pending=false;c.arrived=true;}},()=>{if(current===c&&c.id===issued){c.pending=false;c.failed=true;}});}
+  const settled=(arrived:boolean)=>{if(current!==c||c.id!==issued||!c.pending)return;c.pending=false;c.arrived=arrived;c.failed=!arrived;tick();};
+  try {void p.start(c.goal,c.id,c.direct).then(()=>settled(true),()=>settled(false));}
   catch {if(current===c&&c.id===issued){c.pending=false;c.failed=true;}}
  }
  function retireSuperseded(ctx:Context){if(current&&(current.key!==ctx.key||current.target!==ctx.target))stop();}

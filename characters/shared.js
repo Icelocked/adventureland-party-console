@@ -16079,6 +16079,7 @@
         var walking=movement.move({map:character.map,in:character.in,x:goal.x,y:goal.y},undefined,{native:true,town:false,arrivalTolerance:3,owner:{recoveryStage:id}});
         if(direct){try{movement.install([{map:character.map,in:character.in,x:goal.x,y:goal.y}],movement.identity,'direct');}
           catch(error){var report=movement.report();if(report && report.owner && report.owner.recoveryStage===id){try{movement.cancel('Direct combat approach rejected: '+String(error));}catch(_cancelError){}}}}
+        movement.tick();
         return walking;},
       owned:function(id){var report=movement.report();return !!(report && report.owner && report.owner.recoveryStage===id);},
       cancel:function(id){var report=movement.report();if(report && report.owner && report.owner.recoveryStage===id)movement.cancel('Individual combat approach ended');},

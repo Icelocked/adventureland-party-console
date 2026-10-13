@@ -1,0 +1,5 @@
+# Native range-scene cleanup inventory
+
+Before cleanup amendment: focused61bc run38428915054/artifact11830820596 Warrior setup proved actual empty focus on both actors, but Priest remained in an ENGAGED solo encounter for old Goo510 with9999564HP. That previous high-HP range-scene fixture survived its test. The next case's native logins engaged it before map isolation, then correctly retained its lost fight until fresh absence search completed. The15second ownership prerequisite failed; no new Targetron had been created.
+
+Existing range finally restores definitions and respawn entries but does not remove spawned primary/successor monsters. Record native ID/type/map/instance immediately after each real creation, before HP/geometry assertions, so an administrative exception before returning seed data cannot leak monsters. After retaining outcome proof, remove only those exact owned IDs with matching native type/map and suppress respawn. Keep all actual combat/kill assertions and Warrior15second prerequisite; do not weaken engaged-target recovery or alter production ownerless movement.
