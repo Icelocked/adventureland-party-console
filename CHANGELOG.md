@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep native Cave regroup tests clear of encounter pauses by resolving the actual entry-shop choice during setup and checking unfinished encounter clearance before walking.
+
 - Give native event-return tests a separate bounded recovery window after their deliberate CODE replacement, with retained reload and arrival timestamps.
 
 - Verify terrain recovery against actual native movement segments and independent approach ownership, preserving strict movement and attack timing checks.
