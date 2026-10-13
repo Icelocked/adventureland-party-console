@@ -625,7 +625,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
       await info.attach('native-cave-choice-continuation',{body:JSON.stringify(ledger),contentType:'application/json'});
     }
   };
-  const sameTravelTarget=(a:any,b:any)=>!!a&&!!b&&['id','map','x','y','down','to','exit'].every(key=>a[key]===b[key]);
+  const sameTravelTarget=(a:any,b:any)=>!!a&&!!b&&['id','map','x','y','down','to','exit','room','kind','required'].every(key=>a[key]===b[key]);
   const repairedOwnedTravel=(view:any,prior:any)=>{
     const old=prior?.travel,t=view?.state?.travel;
     if(!old||!view?.state||view.state.phase!=='active'||view.state.run!==prior.run||!sameTravelTarget(t?.target,old.target))return;
