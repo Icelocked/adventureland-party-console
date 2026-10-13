@@ -13,3 +13,13 @@ test('BFS cancellation restores exact visibility function',()=>{const r=setup();
 test('unknown runner retains native visibility behavior',()=>{const r=setup(17666);r.begin();r.planner.tick(0);assert.deepEqual(r.observed,[true]);assert.equal(r.parent.is_hidden,r.original);assert.equal(r.planner.report().mode,'native');assert.equal(r.planner.report().reason,'unverified-version');});
 test('missing visibility hook retains normal native planning',()=>{const r=setup(17665,null);r.begin();r.planner.tick(0);assert.deepEqual(r.observed,[undefined]);assert.equal(r.parent.is_hidden,undefined);assert.equal(r.planner.report().reason,'hook-unavailable');});
 test('read-only or accessor visibility hooks are never replaced',()=>{for(const descriptor of [{value:()=>true,writable:false},{get:()=>()=>true}]){const r=setup(17665,descriptor);const before=Object.getOwnPropertyDescriptor(r.parent,'is_hidden');r.begin();r.planner.tick(0);assert.deepEqual(r.observed,[true]);assert.deepEqual(Object.getOwnPropertyDescriptor(r.parent,'is_hidden'),before);}});
+
+const {RunnerScope}=require('../../runtime/lifecycle/runner-scope.ts');
+for(const ending of ['normal','throw','cancel'])test('scoped planner restores native visibility across CODE retirement: '+ending,()=>{
+ const r=setup(),scope=new RunnerScope();r.host.parent=scope.facade(r.parent);
+ const nativeStart=r.native.start;
+ r.native.start=()=>{nativeStart();if(ending==='throw')throw Error('declared search failure');if(ending==='cancel')r.planner.cancel();};
+ r.begin();if(ending==='normal')r.planner.tick(0);else assert.throws(()=>r.planner.tick(0),ending==='throw'?/declared search failure/:/found no route/);
+ assert.deepEqual(r.observed,[false]);assert.equal(r.parent.is_hidden,r.original);
+ scope.dispose();assert.equal(r.parent.is_hidden(),true);assert.equal(r.parent.is_hidden,r.original);
+});

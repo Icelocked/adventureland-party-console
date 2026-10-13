@@ -1,0 +1,5 @@
+# Native planner visibility restoration failure inventory
+
+Before changing source: live native Priest context 3 has draw/heartbeat stale 69 minutes, in_draw true, pending same-position move, and an active watchdog (slow_heartbeats continues increasing). Native is_hidden contains RunnerScope ordinaryMethod rather than the upstream function. The planner reads through the scoped parent get trap, then restores this wrapper into its own raw lookup slot: recursion while active and retirement failure afterward. Both stop physics before move Deferred settlement. Rendering pause does not disable physics.
+
+Required isolated proof, written before source: use maintained RunnerScope facade and planner together, preserve original raw callable identity after normal, throwing, and canceled slices; retire CODE and prove the unchanged native visibility callable still works. Preserve existing unknown-version/accessor/read-only tests. No live functions are invoked, timers changed, or errors suppressed. The fix must obtain only a writable own data-descriptor callable and restore it exactly.

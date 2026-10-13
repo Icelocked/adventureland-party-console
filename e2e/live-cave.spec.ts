@@ -923,18 +923,22 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   const cpuProfile=nativePlannerCpuProfile(live.clients.E2EWarrior.frame);
   const requiredBudget=createNativeProgressBudget(Date.now,300_000,600_000);
   let requiredCompleted=false;
-  let requiredProbeAt=0,requiredProbes=0;
+  let requiredProbeStarted=0,requiredProbeId="",requiredProbes=0;
   try{
   await expect.poll(async()=>{
     requiredBudget.check();
     const v=await dungeon();
-    if(v.state.travel?.stage==='preparing'&&requiredProbes<3&&Date.now()-requiredProbeAt>=5000){
-      requiredProbeAt=Date.now();requiredProbes++;
+    const probeCommand=v.state.commands.E2EWarrior,probeTravel=v.members.find((m:any)=>m.name==='E2EWarrior')?.observation?.travel;
+    const pendingOwned=v.state.travel?.stage==='travelling'&&probeCommand?.action==='move'&&
+      probeTravel?.id===probeCommand.id&&probeTravel.prepared===false;
+    if(pendingOwned&&requiredProbeId!==probeCommand.id){requiredProbeId=probeCommand.id;requiredProbeStarted=Date.now();}
+    if(pendingOwned&&requiredProbes<3&&Date.now()-requiredProbeStarted>=[5000,15000,30000][requiredProbes]){
+      requiredProbes++;
       const sample=await live.clients.E2EWarrior.frame.evaluate(({id,run})=>{
         const p=window as any,w=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
         const m=w?.__partyMovement,c=w?.character,command=w?.__partyDungeonRuntime?.commandIdentity?.();
         return {at:Date.now(),name:c?.name,map:c?.map,in:c?.in,
-          active:!!(m?.state?.moving&&m.state.searching&&!m.state.found&&m.gate.owner&&command?.id===id&&command.run===run&&c?.cave?.run===run),
+          active:!!(m?.state?.moving&&m.state.searching&&!m.state.found&&m.gate.owner&&command?.id===id&&command.run===run&&c?.cave?.run===run&&!c.cave.paused&&!w.__partyMovementPaused),
           command,movement:m?.report?.(),runtimeGeneration:w?.__partyRuntimeGeneration,codeHash:w?.__partyCodeHash,
           nativeMoving:!!w?.character?.moving,transporting:!!p.transporting,
           nativePlanning:w?.__partyMovement?.nativePlanning?.(),schedule:w?.__partyMovement?.report?.()?.planningSchedule,

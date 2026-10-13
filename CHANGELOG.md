@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix headless movement and event-return stalls caused by native pathfinding restoring a CODE-scoped visibility wrapper; preserve the original game visibility function across planning and CODE reloads.
+
 - Add bounded route-planning scheduler diagnostics to distinguish delayed native callbacks from movement-owner pauses during recovery investigations.
 
 - Preserve command-owned native Cave waypoint arrival evidence when subsequent combat movement occurs between E2E samples, without relaxing arrival or ownership checks.

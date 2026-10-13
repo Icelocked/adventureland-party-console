@@ -28,18 +28,20 @@ export const loadouts = {
 } as const;
 
 /** Runs after reset, before native login: no connected character is modified. */
-export async function seedLoadout(admin: (code: string) => Promise<unknown>, profile: NativeLoadout, primaryClass: 'warrior' | 'ranger' | 'mage' = 'warrior') {
+export async function seedLoadout(admin: (code: string) => Promise<unknown>, profile: NativeLoadout, primaryClass: 'warrior' | 'ranger' | 'mage' = 'warrior', extraFighter: 'mage' | null = null) {
+  const names=['E2EWarrior','E2EPriest','E2EMerchant',...(extraFighter?['E2EBankBoi']:[])];
   const selected=loadouts[profile];
   if(!selected)throw Error('Unknown native loadout: '+profile);
   const result = await admin(`output=(async()=>{
     if(Object.keys(players).length||Object.keys(dc_players).length)throw Error('Loadouts require disconnected native clients');
     const profile=${JSON.stringify(profile)},definition=${JSON.stringify(selected)},result={profile,description:definition.description,characters:[]};
-    for(const name of ['E2EWarrior','E2EPriest','E2EMerchant']) {
+    for(const name of ${JSON.stringify(names)}) {
       const c=await db.collection('character').findOne({name:name.toLowerCase()});
       if(!c)throw Error('Missing loadout character: '+name);
       // Keep the fixture account name stable; native login and account discovery
       // both receive the requested class before equipment is calculated.
       if(name==='E2EWarrior')c.type=${JSON.stringify(primaryClass)};
+      if(name==='E2EBankBoi'){c.type=${JSON.stringify(extraFighter)};c.level=80;}
       const slots=structuredClone(G.classes[c.type].base_slots||{});
       const weaponLevel=definition.weaponLevel;
       for(const value of Object.values(slots))if(value&&value.name)value.level=weaponLevel;
@@ -61,9 +63,9 @@ export async function seedLoadout(admin: (code: string) => Promise<unknown>, pro
     return result;
   })()`);
   const seed=result as {profile?:unknown;characters?:{name?:string;slots?:Record<string,Equipment>}[]}|null;
-  if(seed?.profile!==profile||!Array.isArray(seed.characters)||seed.characters.length!==3)
+  if(seed?.profile!==profile||!Array.isArray(seed.characters)||seed.characters.length!==names.length)
     throw Error('Native loadout returned an incomplete seed: '+JSON.stringify(result));
-  for(const name of ['E2EWarrior','E2EPriest','E2EMerchant']) {
+  for(const name of names) {
     const character=seed.characters.find(entry=>entry.name===name);
     const weaponLevel=selected.weaponLevel;
     if(character?.slots?.mainhand?.level!==weaponLevel)

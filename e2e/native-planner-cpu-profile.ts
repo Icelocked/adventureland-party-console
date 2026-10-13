@@ -3,7 +3,7 @@ import {type Frame,type CDPSession} from '@playwright/test';
 export function nativePlannerCpuProfile(frame:Frame){
   let session:CDPSession|undefined,used=false,startedAt=0,stopped=false;
   let pending:Promise<void>|undefined;
-  const evidence:any={errors:[]};
+  const evidence:any={errors:[],probes:[]};
   const record=(error:unknown)=>{evidence.errors.push(String(error));};
   async function stop(){
     if(stopped||!session||!startedAt)return;
@@ -23,6 +23,8 @@ export function nativePlannerCpuProfile(frame:Frame){
   }
   return {
     observe(sample:any){
+      if(evidence.probes.length<3)evidence.probes.push(sample);
+      if(sample?.error)record(sample.error);
       if(used||!sample?.active||sample?.nativeMoving||sample?.transporting||sample?.nativePlanning?.calls<8||!sample?.nativePlanning)return;
       used=true;evidence.trigger=sample;
       pending=(async()=>{

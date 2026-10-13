@@ -34,20 +34,23 @@ export type LiveGame = {
   reconnectClient(name: string): Promise<void>;
 };
 
-export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primaryClass: 'warrior' | 'ranger' | 'mage'; merchantDefault: string | null; liveHeadless: boolean; staleWorkerRealm: string | null; initialPosition: {map: string; x: number; y: number} | null; initialEventSpawn: string | null; initialMonsterSpawn: string | null }>({
+export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primaryClass: 'warrior' | 'ranger' | 'mage'; extraFighter: 'mage' | null; merchantDefault: string | null; liveHeadless: boolean; staleWorkerRealm: string | null; initialPosition: {map: string; x: number; y: number} | null; initialPositions: Record<string,{map:string;x:number;y:number}> | null; initialEventSpawn: string | null; initialMonsterSpawn: string | null }>({
   loadout: ['god', {option:true}],
   primaryClass: ['warrior', {option:true}],
+  extraFighter: [null, {option:true}],
   merchantDefault: ['E2EMerchant', {option:true}],
   initialPosition: [null, {option:true}],
+  initialPositions: [null, {option:true}],
   initialMonsterSpawn: [null, {option:true}],
   initialEventSpawn: [null, {option:true}],
   liveHeadless: [false, {option:true}],
   staleWorkerRealm: [null, {option:true}],
-  live: [async ({ browser, dashboard, loadout, primaryClass, merchantDefault, initialPosition, initialEventSpawn, initialMonsterSpawn, liveHeadless, staleWorkerRealm }, use, testInfo) => {
+  live: [async ({ browser, dashboard, loadout, primaryClass, extraFighter, merchantDefault, initialPosition, initialPositions, initialEventSpawn, initialMonsterSpawn, liveHeadless, staleWorkerRealm }, use, testInfo) => {
     const directory = path.join(root, '.build/e2e', `live-${randomUUID()}`);
     mkdirSync(directory, { recursive: true });
     const manifest = await game.reset();
-    const equipment = await seedLoadout(game.admin, loadout, primaryClass);
+    const names=['E2EWarrior','E2EPriest','E2EMerchant',...(extraFighter?['E2EBankBoi']:[])];
+    const equipment = await seedLoadout(game.admin, loadout, primaryClass, extraFighter);
     if(initialEventSpawn){const spawn=await nativeEventSpawn(game.admin,initialEventSpawn);initialPosition={...spawn,x:spawn.x+160};
       await testInfo.attach('native-event-catalog-initial-position',{body:JSON.stringify({event:initialEventSpawn,spawn,initialPosition}),contentType:'application/json'});}
     if(initialMonsterSpawn){const spawn=await nativeMonsterInitialPosition(game.admin,initialMonsterSpawn);initialPosition={map:spawn.map,x:spawn.x,y:spawn.y};
@@ -55,6 +58,22 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
     if (initialPosition) {
       await game.admin("output=db.collection('character').updateMany({owner:data.owner},{$set:{'info.map':data.map,'info.x':data.x,'info.y':data.y}})", { owner: manifest.auth.split('-')[0], ...initialPosition });
       await testInfo.attach('native-initial-position-seed', { body: JSON.stringify(initialPosition), contentType: 'application/json' });
+    }
+    if(initialPositions){
+      if(Object.keys(initialPositions).some(name=>!names.includes(name)))throw Error('Initial positions contain an unowned native fixture character');
+      const staging=await game.admin(`output=(async()=>{
+        if(Object.keys(players).length||Object.keys(dc_players).length)throw Error('Initial positions require disconnected native clients');
+        const result=[];
+        for(const [name,point] of Object.entries(data.positions)){
+          if(!G.maps[point.map]||!Number.isFinite(point.x)||!Number.isFinite(point.y))throw Error('Invalid declared native position: '+name);
+          const body={type:'character',map:point.map,x:point.x,y:point.y};set_base(body);
+          const cell=smap_data[point.map]===-1?0:smap_data[point.map]?.[rphash(point.x,point.y)];
+          if(!can_move({...body,going_x:point.x,going_y:point.y})||!(cell<2))throw Error('Native geometry rejects declared position: '+name);
+          const updated=await db.collection('character').updateOne({name:name.toLowerCase()},{$set:{'info.map':point.map,'info.in':point.map,'info.x':point.x,'info.y':point.y}});
+          if(updated.matchedCount!==1)throw Error('Native staging character missing: '+name);
+          result.push({name,...point,base:body.base,cell,selfClear:true});
+        }return result;})()`,{positions:initialPositions});
+      await testInfo.attach('native-separated-initial-positions',{body:JSON.stringify(staging),contentType:'application/json'});
     }
     await testInfo.attach('native-loadout-seed', {body:JSON.stringify(equipment,null,2),contentType:'application/json'});
     await testInfo.attach('live-seed', { body: JSON.stringify({ ...manifest, auth: '[disposable credential omitted]' }, null, 2), contentType: 'application/json' });
@@ -202,7 +221,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
         },
       };
       await live.post('/formation', { leader: null });
-      for (const name of ['E2EWarrior', 'E2EPriest', 'E2EMerchant'])
+      for (const name of names)
         await live.post('/formation', { character: name, follow: false, eventSelections: [] });
       const initial = await live.state();
       await testInfo.attach('merchant-before-native-login', {body: JSON.stringify({merchantDefault, merchantCharacter: initial.merchantCharacter}), contentType: 'application/json'});
@@ -211,7 +230,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
         enabled: Object.fromEntries(Object.keys(initial.merchantAutomations || {}).map(key => [key, false])) });
       // Keep this serial: failures retain the already connected clients for teardown and evidence.
       let nativeReadyDeadline=0;
-      for (const name of ['E2EWarrior', 'E2EPriest', 'E2EMerchant']) {
+      for (const name of names) {
         if (name !== primaryName) {
           await expect.poll(async () => {
             const response = await fetch(`http://127.0.0.1:${port}/party-api/steam/connection`);
@@ -223,15 +242,15 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
         }
         clients[name] = await launchGameClient(context, optionsFor(name));
         if (name !== primaryName) {
-          if(name==='E2EMerchant')nativeReadyDeadline=Date.now()+90_000;
+          if(name===names.at(-1))nativeReadyDeadline=Date.now()+90_000;
           await expect.poll(async () => (await live!.state()).steamSwitch?.phase,
-            {timeout:name==='E2EMerchant'?Math.max(1,nativeReadyDeadline-Date.now()):90_000}).toBe('complete');
+            {timeout:name===names.at(-1)?Math.max(1,nativeReadyDeadline-Date.now()):90_000}).toBe('complete');
         }
       }
-      await testInfo.attach('live-server-initial', { body: JSON.stringify(await live.admin("output=Object.fromEntries(Object.values(players).filter(p=>['E2EWarrior','E2EPriest','E2EMerchant'].includes(p.name)).map(p=>[p.name,{name:p.name,map:p.map,x:p.x,y:p.y,hp:p.hp,max_hp:p.max_hp,mp:p.mp,max_mp:p.max_mp,attack:p.attack,frequency:p.frequency,speed:p.speed,armor:p.armor,resistance:p.resistance,gold:p.gold,xp:p.xp,items:p.items,slots:p.slots,s:p.s}]))"), null, 2), contentType: 'application/json' });
+      await testInfo.attach('live-server-initial', { body: JSON.stringify(await live.admin(`output=Object.fromEntries(Object.values(players).filter(p=>${JSON.stringify(names)}.includes(p.name)).map(p=>[p.name,{name:p.name,map:p.map,x:p.x,y:p.y,hp:p.hp,max_hp:p.max_hp,mp:p.mp,max_mp:p.max_mp,attack:p.attack,frequency:p.frequency,speed:p.speed,armor:p.armor,resistance:p.resistance,gold:p.gold,xp:p.xp,items:p.items,slots:p.slots,s:p.s}]))`), null, 2), contentType: 'application/json' });
       // Guard the fixture contract: native recalculation must clamp initial pools.
       // Reading these values never repairs or changes a character's live stats.
-      const nativeStats = await live.admin("output=['E2EWarrior','E2EPriest','E2EMerchant'].map(name=>{const p=get_player(name);return {name,hp:p.hp,max_hp:p.max_hp,mp:p.mp,max_mp:p.max_mp,attack:p.attack,frequency:p.frequency,speed:p.speed,slots:p.slots}})");
+      const nativeStats = await live.admin(`output=${JSON.stringify(names)}.map(name=>{const p=get_player(name);return {name,hp:p.hp,max_hp:p.max_hp,mp:p.mp,max_mp:p.max_mp,attack:p.attack,frequency:p.frequency,speed:p.speed,slots:p.slots}})`);
       for (const stats of nativeStats) {
         for (const key of ['hp','max_hp','mp','max_mp','attack','frequency','speed'])
           expect(Number.isFinite(stats[key]), `${loadout} ${stats.name} native ${key}`).toBe(true);
@@ -242,6 +261,12 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
         expect(stats.slots.mainhand.level, `${loadout} ${stats.name} native weapon`).toBe(loadouts[loadout].weaponLevel);
         for (const [slot, equipped] of Object.entries(loadouts[loadout].armor))
           expect(stats.slots[slot], `${loadout} ${stats.name} native ${slot}`).toMatchObject(equipped);
+      }
+      if(extraFighter){
+        const extra=await clients.E2EBankBoi.run('({name:character.name,ctype:character.ctype,connected:parent.socket?.connected,hp:character.hp,rip:character.rip})');
+        expect(extra.name).toBe('E2EBankBoi');expect(extra.ctype).toBe(extraFighter);
+        expect(extra.connected).toBe(true);expect(extra.hp).toBeGreaterThan(0);expect(extra.rip).toBe(false);
+        await testInfo.attach('native-fourth-fighter-admission',{body:JSON.stringify(extra),contentType:'application/json'});
       }
       await testInfo.attach('live-build-manifest', { path: path.join(root, '.build/game/manifest.json'), contentType: 'application/json' });
       const nativeVersion=await clients[primaryName].run('parent.G.version');
@@ -277,7 +302,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
       try {
         if (live) {
           await attach('live-final-state', await live.state(true).catch(error => ({ error: String(error) })));
-          await attach('live-server-final', await live.admin("output=Object.fromEntries(Object.values(players).filter(p=>['E2EWarrior','E2EPriest','E2EMerchant'].includes(p.name)).map(p=>[p.name,{name:p.name,map:p.map,x:p.x,y:p.y,hp:p.hp,mp:p.mp,gold:p.gold,xp:p.xp,items:p.items,slots:p.slots,s:p.s}]))").catch(error => ({ error: String(error) })));
+          await attach('live-server-final', await live.admin(`output=Object.fromEntries(Object.values(players).filter(p=>${JSON.stringify(names)}.includes(p.name)).map(p=>[p.name,{name:p.name,map:p.map,x:p.x,y:p.y,hp:p.hp,mp:p.mp,gold:p.gold,xp:p.xp,items:p.items,slots:p.slots,s:p.s}]))`).catch(error => ({ error: String(error) })));
         }
         for (const [name, client] of Object.entries(clients)) {
           await attach(name + '-native-disconnects', client.disconnects());

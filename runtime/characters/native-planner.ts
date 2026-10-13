@@ -40,12 +40,14 @@ export function createNativePlanner(host: MovementHost, native: NativeFunctions)
   }
   function sliceProfile() {
     const parent = host.parent, version = Number(parent?.__partyClientVersion || host.G?.version);
-    const visibility = parent?.is_hidden;
     if (![15555,17665].includes(version)) return {version, reason:'unverified-version'};
-    if (typeof visibility !== 'function') return {version, reason:'hook-unavailable'};
     const descriptor = Object.getOwnPropertyDescriptor(parent, 'is_hidden');
+    // A scoped parent getter returns a CODE-owned wrapper; restoring it would poison native draw/watchdog calls.
+    const visibility = descriptor && 'value' in descriptor ? descriptor.value : undefined;
+    if (!descriptor) return {version, reason:'hook-unavailable'};
     if (!descriptor || !('value' in descriptor) || !descriptor.writable) return {version, reason:'hook-not-writable'};
-    return {version, visibility};
+    if (typeof visibility !== 'function') return {version, reason:'hook-unavailable'};
+    return {version, visibility: visibility as () => boolean};
   }
   function recordSlice(started: number, profile: ReturnType<typeof sliceProfile>) {
     let hidden: boolean | undefined;
