@@ -1,0 +1,13 @@
+# Actor-owned combat approach failure inventory
+
+Before implementation, the user observed the same target handoff repeatedly fail while the leader waited for healer coverage and casters searched for a shared terminal. The new contract replaces that planned approach with independent native routes; the existing engaged combat solver remains after each actor reaches actual attack eligibility.
+
+Failures to prevent: shared healing or enemy-envelope candidate constraints preventing any approach; one actor hitting cancelling another actor still approaching the same target; native route arriving behind terrain but falsely admitting attack; unbounded radius-halving; moving target leaving a stale destination; a superseded route callback cancelling a newer command; wrong realm/map/instance or dead target being followed; actual new aggro ignored while pathing; manual stop, deployment hold or dungeon ownership overridden; artificial direct movement bypassing native collision certification.
+
+The retained real-game Sparkbot scenario is updated BEFORE implementation: actual four clients, split positions, native declared gear, real native monster and untouched aggro, actual socket movement and damage. Caster moves must advertise independent owned approach for the exact target before native hit; no legacy formation control can satisfy this proof. Keep its 90-second movement/damage limit, native clear-segment checks, actual displacement and no-Jail assertions. Further isolated controller cases must be written before its implementation to cover cancellation identity, bounded radius levels, sightline failure, same-target global engagement and genuine defensive interruption.
+
+Before review amendments: the new isolated retained controller/actual shared movement cases reproduce four failures (late engaged launch, synchronous native throw, event role entry, old anchor regroup); superseded callback already remains fenced. The amendments also preserve actual group key/selection ownership, exclude Cave capability, and reject active convoy/admin or foreign owned journeys. Native scenario remains the final physical proof.
+
+Capability admission must also reject a missing installed controller and all dungeon-owned clients; existing native Cave scenarios retain their original group recovery protocol and physical route assertions. This guard is recorded before amending the advertisement.
+
+Before pursuit intent amendment, an actual shared telemetry case reproduces within-range but blocked-line-of-sight unreachable routing incorrectly advertised as hold. It must advertise the matched actor route as approach without fabricating range deficit, movement or failed formation acknowledgement; existing pursuit policy then observes genuine stationary exhaustion.

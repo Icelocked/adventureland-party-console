@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Replace shared next-target movement with independent native routes for each fighter; check attack range and line of sight on arrival and progressively halve blocked approach distances before returning to normal combat.
+
 - Reduce native E2E recording overhead while retaining screenshots, traces and game-event evidence; enable diagnostic video explicitly with E2E_NATIVE_VIDEO=1.
 
 - Improve combat formation recovery with safe follower positions inside the party healing envelope, correct retreat movement, and prompt retries when stopped followers cannot find a safe route.

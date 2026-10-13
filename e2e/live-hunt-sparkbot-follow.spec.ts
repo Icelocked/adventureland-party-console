@@ -9,7 +9,7 @@ const starts={
  [M]:{map:'uhills',x:-344.13,y:-437.24},E2EMerchant:{map:'main',x:-63,y:100},
 };
 test.use({loadout:'combat-follow-range',extraFighter:'mage',initialPositions:starts});
-test('planned Sparkbot recovery follows safe proximity instead of an unsafe leader endpoint',async({live},info)=>{
+test('planned Sparkbot approach independently routes each fighter into native attack range',async({live},info)=>{
  test.setTimeout(240000);
  await live.post('/merchant/force-stand',{enabled:true});await live.post('/focus',{monsterFocus:[]});
  const samples:any[]=[],events:Record<string,any[]>={};let seed:any;
@@ -44,9 +44,9 @@ test('planned Sparkbot recovery follows safe proximity instead of an unsafe lead
   for(const name of [P,M]){
    const firstHit=events[name].find(e=>e.event==='hit'&&e.data?.hid===name&&String(e.data?.id)===seed.id&&e.data?.damage>1&&e.data?.source!=='taunt');
    const ownedMove=events[name].find(e=>e.event==='move-issued'&&e.at<=firstHit.at&&e.motion?.position?.target===seed.id&&
-    ['formation-regrouping','formation-path-routing'].includes(e.motion.position.mode)&&e.motion.recovery?.id&&
-    JSON.parse(e.motion.recovery.target)[3]===seed.id&&['routing','regrouping'].includes(e.motion.recovery.phase));
-   expect(ownedMove,'Caster must physically move under the matching recovery control before its first native damage').toBeTruthy();
+    e.motion.position.mode==='independent-approach'&&e.motion.position.movementOwner==='combat-approach'&&
+    e.motion.position.approachId&&e.motion.position.target===seed.id);
+   expect(ownedMove,'Caster must independently move under the matching owned approach before its first native damage').toBeTruthy();
    expect(events[name].some(e=>e.event==='player'&&e.data?.id===name&&e.sequence>ownedMove.sequence&&e.at<=firstHit.at&&
     Math.hypot(e.data.x-ownedMove.data.x,e.data.y-ownedMove.data.y)>1),'Actual socket displacement must follow the owned recovery move').toBe(true);
   }

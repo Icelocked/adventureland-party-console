@@ -9,3 +9,7 @@ Owned early-failure reporting inventory, written before telemetry changes: disti
 Direction failure inventory before step-cap amendment: a role-directed follower can be less than40px from its mover yet need a certified retreat because its current endpoint is unsafe. The old distance-minus40 cap becomes negative and reverses the issued movement. Cap by actual certified waypoint distance and the existing speed step only; retain all live terrain, enemy and healing step gates.
 
 Convergence inventory before tightening: native hitbox healing can accept a200px center separation while groupedCovered requires187-10=177. A parked terminal must satisfy both native healing and the existing center readiness, otherwise safe movement never releases combat. Replaying the captured full obstacle scene under both constraints yields no admissible terminal; retain bounded failure rather than authorize a non-convergent point.
+
+## Native post-login loadout validator failure (2026-10-13)
+
+Run 38361075397 failed before the Sparkbot test body: native Priest staff +12 was compared against the profile base weapon level zero. The seed validator already correctly recognized Priest +12 and Mage +15, but the second post-login validator did not. Preserve native recalculation, pool clamps, armor checks, and all causal combat assertions; read the actual server player class and validate only the declared class-specific staff exception. Other profiles and classes must retain their existing base weapon level. Wrong staff name or level must still fail admission.
