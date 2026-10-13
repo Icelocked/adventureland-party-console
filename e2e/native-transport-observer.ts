@@ -1,3 +1,4 @@
+import {observeNativeRenderer} from './native-renderer-observer.ts';
 import type {Page} from '@playwright/test';
 interface Entry {requestId:string;actor:string;kind:string;endpoint:string;sequence:number|null;at:number;start:number;[key:string]:unknown}
 const endpoints=new Set(['/party-api/status','/party-api/shared-travel','/party-api/convoy-route','/party-api/movement-barrier']);
@@ -6,6 +7,7 @@ const timingFields=['requestTime','proxyStart','proxyEnd','dnsStart','dnsEnd','c
 /** Passive real HTTP metadata; never enables interception or fetches bodies. */
 export async function observeNativeTransport(page:Page) {
   const session=await page.context().newCDPSession(page);
+  const renderer=await observeNativeRenderer(page,session);
   const pending=new Map<string,Entry>(),first:Entry[]=[],latest:Entry[]=[];
   const counts:Record<string,number>={},connections=new Set<number>();
   let peakPending=0,droppedPending=0;
@@ -27,11 +29,18 @@ export async function observeNativeTransport(page:Page) {
     Object.assign(entry,{responseAt:event.timestamp,status:response.status,protocol:response.protocol,connectionId:response.connectionId,reused:response.connectionReused,timing,
       sendAfterRequestMs:t?Math.max(0,(t.requestTime-entry.start)*1000+t.sendStart):null});
     if(Number.isFinite(response.connectionId)&&connections.size<128)connections.add(response.connectionId);
+    if(t&&t.receiveHeadersEnd>=0){
+      const headersAt=t.requestTime+t.receiveHeadersEnd/1000;
+      const notificationLagMs=Math.max(0,(event.timestamp-headersAt)*1000);
+      entry.headersAt=headersAt;entry.notificationLagMs=notificationLagMs;
+      if(notificationLagMs>500)renderer.start({actor:entry.actor,kind:entry.kind,sequence:entry.sequence,
+        at:entry.at,start:entry.start,headersAt,notificationAt:event.timestamp,notificationLagMs});
+    }
   });
   session.on('Network.loadingFinished',event=>{const entry=pending.get(event.requestId);if(!entry)return;pending.delete(event.requestId);
     retain({...entry,end:event.timestamp,durationMs:(event.timestamp-entry.start)*1000,encodedBytes:event.encodedDataLength});});
   session.on('Network.loadingFailed',event=>{const entry=pending.get(event.requestId);if(!entry)return;pending.delete(event.requestId);
     retain({...entry,end:event.timestamp,durationMs:(event.timestamp-entry.start)*1000,cancelled:!!event.canceled,failure:/^net::ERR_[A-Z_]+$/.test(event.errorText)?event.errorText:'network-failure'});});
   await session.send('Network.enable');
-  return {async finish(){const result={counts,peakPending,droppedPending,connectionIds:[...connections],records:[...first,...latest],pending:[...pending.values()]};await session.detach();return result;}};
+  return {async finish(){const result={counts,peakPending,droppedPending,connectionIds:[...connections],records:[...first,...latest],pending:[...pending.values()],renderer:await renderer.finish()};await session.detach();return result;}};
 }

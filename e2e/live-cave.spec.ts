@@ -995,11 +995,26 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
           nativeBodies:{self:{id:c.id||c.name,awidth:c.awidth,aheight:c.aheight,base:c.base,dimensions:p.G.dimensions[c.type]},
             monsters:Object.keys(p.entities||{}).map(id=>p.entities[id]).filter(e=>e.type==='monster'&&!e.dead)
               .sort((a,b)=>Math.hypot(a.real_x-c.real_x,a.real_y-c.real_y)-Math.hypot(b.real_x-c.real_x,b.real_y-c.real_y)).slice(0,5)
-              .map(e=>({id:e.id,mtype:e.mtype,awidth:e.awidth,aheight:e.aheight,base:e.base,dimensions:p.G.dimensions[e.mtype]}))},
-          cave:c.cave?{run:c.cave.run,floor:c.cave.floor}:null,
+              .map(e=>({id:e.id,mtype:e.mtype,map:e.map,in:e.in,x:e.real_x,y:e.real_y,hp:e.hp,dead:e.dead,target:e.target,range:e.range,cave:e.cave,
+                distance:Math.hypot(e.real_x-c.real_x,e.real_y-c.real_y),clear:can_move_to(e.real_x,e.real_y),
+                awidth:e.awidth,aheight:e.aheight,base:e.base,dimensions:p.G.dimensions[e.mtype]}))},
+          command:globalThis.__partyDungeonRuntime?.commandIdentity?.(),entitiesObservedAt:globalThis.__partyEntitiesObservedAt,
+          selected:sharedRoutine.getDungeonTarget()?.id,
+          cave:c.cave?{run:c.cave.run,floor:c.cave.floor,paused:c.cave.paused,choice:c.cave.choice}:null,
           geometry:p.G.geometry[c.map],mapData:p.G.maps[c.map]};
       })()`)));
       await info.attach('native-cave-required-geometry',{body:JSON.stringify(geometry),contentType:'application/json'});
+      const remaining=await live.admin(`output=(()=>{
+        const p=get_player('E2EWarrior'),entry=p&&generated_entry(p),run=entry?.record;
+        if(!run?.cave)return {at:Date.now(),available:false};
+        return {at:Date.now(),run:run.key,players:['E2EWarrior','E2EPriest'].map(name=>{
+          const actor=get_player(name);return actor&&{name,map:actor.map,in:actor.in,x:actor.x,y:actor.y,hp:actor.hp,rip:actor.rip};}),
+          roomsAvailable:Array.isArray(run.cave.rooms),
+          rooms:(Array.isArray(run.cave.rooms)?run.cave.rooms:[]).filter(room=>room.required&&!room.done).slice(0,5).map(room=>({
+            id:room.id,map:room.map,x:room.x,y:room.y,started:room.started,done:room.done,kind:room.kind,
+            actorsAvailable:Array.isArray(room.actors),actors:Array.isArray(room.actors)?room.actors.slice(0,12).map(a=>({id:a.id,mtype:a.mtype,map:a.map,in:a.in,x:a.x,y:a.y,hp:a.hp,dead:a.dead,target:a.target,zone_actor:a.zone_actor})):null}))};
+      })()` ).catch(error=>({error:String(error)}));
+      await info.attach('native-cave-required-remaining-actors',{body:JSON.stringify(remaining),contentType:'application/json'});
     }
   }
   console.log('[Cave verified] Required native rooms completed');
