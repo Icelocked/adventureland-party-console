@@ -257,6 +257,52 @@ for (const encounter of [{id:'mrgreen',add:'greenjr',drop:'ashleaf',map:'spookyt
   });
 }
 
+test.describe('authorized pre-join native staging',()=>{
+  test.use({initialEventSpawn:'mrpumpkin'});
+  test('Halloween future staging survives delayed genuine permission responses before both clients join',async({live},info)=>{
+    test.setTimeout(180_000);
+    const encounter={id:'mrpumpkin',...await nativeEventSpawn(live.admin,'mrpumpkin')};
+    const context=live.clients[W].page.context(),first:Record<string,number>={},ledger:any[]=[];
+    let release!:()=>void,holding=true;const gate=new Promise<void>(resolve=>{release=resolve;});
+    const pending=new Set<Promise<void>>();
+    const handler=async(route:import('@playwright/test').Route)=>{
+      let body:any;try{body=route.request().postDataJSON();}catch{await route.fallback();return;}
+      if(!holding || !fighters.includes(body?.character) || body?.event!=='mrpumpkin'){await route.fallback();return;}
+      const response=await route.fetch({maxRetries:0,maxRedirects:0,timeout:5000}),result=await response.json();
+      if(!response.ok() || result.allowed!==true){await route.fulfill({response});return;}
+      first[body.character]??=Date.now();
+      if(ledger.length<64)ledger.push({at:Date.now(),action:'actual-authorization-response-held',character:body.character,status:response.status(),allowed:result.allowed});
+      const task=(async()=>{await gate;try{await route.fulfill({response});if(ledger.length<64)ledger.push({at:Date.now(),action:'original-authorization-response-delivered',character:body.character});}
+        catch(error){if(ledger.length<64)ledger.push({at:Date.now(),action:'original-request-already-timed-out',character:body.character,error:String(error)});}})();
+      pending.add(task);try{await task;}finally{pending.delete(task);}
+    };
+    await context.route('**/party-api/hunt-event-permission',handler);
+    let beforeRelease:any,arrival:any,firstPrematureReturn:any;
+    try{
+      const timer=await announceSpawn(live,'mrpumpkin',55000);
+      await prepare(live,'mrpumpkin');
+      await expect.poll(()=>fighters.every(name=>Number.isFinite(first[name])),{timeout:30_000,message:'Both actual native event permissions must be authorized before their genuine responses are delayed'}).toBe(true);
+      await expect.poll(async()=>{
+        const state=await live.state(),now=Date.now(),authorizedAt=Math.max(...fighters.map(name=>first[name]));
+        if(state.eventReturn){firstPrematureReturn??={at:now,cycleId:state.eventReturn.cycleId,event:state.eventReturn.event,phase:state.eventReturn.phase};return false;}
+        if(firstPrematureReturn)return false;
+        const ready=fighters.every(name=>{const c=state.characters[name];return c && !c.joinedEvent && c.seenAt>=authorizedAt+10000 && now-c.seenAt<3000 &&
+          c.eventFeedConnected!==false && !c.eventClockStale && c.serverStagingEvents?.some((event:any)=>event.name==='mrpumpkin'&&event.spawnId===Date.parse(timer.spawn));});
+        if(now-authorizedAt>=11000&&ready){beforeRelease={at:now,authorizedAt,timer,characters:Object.fromEntries(fighters.map(name=>[name,{seenAt:state.characters[name].seenAt,joinedEvent:state.characters[name].joinedEvent,server:state.characters[name].server,serverStagingEvents:state.characters[name].serverStagingEvents}])),eventReturn:state.eventReturn};return true;}
+        return false;
+      },{intervals:[100,250],timeout:20_000,message:'Eleven seconds of actual fresh pre-join native staging must retain authorized attendance'}).toBe(true);
+      holding=false;release();await Promise.all([...pending]);
+      await expect.poll(async()=>{const native=await world(live,'mrpumpkin');if(native.boss)return false;
+        const reached=fighters.every(name=>native.players[name]?.map===encounter.map&&Math.hypot(native.players[name].x-encounter.x,native.players[name].y-encounter.y)<80);
+        if(reached)arrival={at:Date.now(),native};return reached;
+      },{timeout:35_000,message:'Both actual native characters must walk to the fixed announced spawn after original permission delivery'}).toBe(true);
+    }finally{
+      holding=false;release();await Promise.allSettled([...pending]);await context.unroute('**/party-api/hunt-event-permission',handler);
+      await info.attach('native-authorized-prejoin-staging',{body:JSON.stringify({first,beforeRelease,arrival,firstPrematureReturn,ledger}),contentType:'application/json'});
+    }
+  });
+});
+
 for (const original of [{ id: 'mrgreen',terminalFault:false }, { id: 'mrpumpkin',terminalFault:false },{id:'mrpumpkin',terminalFault:true}]) {
   test.describe(original.id, () => {
     test.use({ initialEventSpawn: original.id });

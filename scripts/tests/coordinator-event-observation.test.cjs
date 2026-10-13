@@ -153,3 +153,33 @@ test('eligible same-event admission retires exit phase while preserving checkpoi
  f.statuses.W.serverLiveEvents=[];f.observe({name:'W',map:'main',x:0,y:0,serverLiveEvents:[]});
  assert.equal(f.state.deferred.W.phase,'returning-to-checkpoint');assert.equal(f.commands.W.type,'event-resume-travel');
 });
+
+
+test('authorized future Halloween staging survives delayed joined-event reporting',()=>{
+ const f=fixture();f.statuses.P={seenAt:1000,server:'USI',eventFeedConnected:true};
+ f.authorize('P','mrpumpkin');
+ f.observe({name:'P',server:'USI',serverStagingEvents:[{name:'mrpumpkin',spawnAt:50000,spawnId:50000}]});
+ f.time(12000);f.statuses.P.seenAt=12000;
+ f.observe({name:'P',server:'USI',serverStagingEvents:[{name:'mrpumpkin',spawnAt:50000,spawnId:50000}]});
+ assert.equal(f.effects.some(Array.isArray),false,'pre-join transport delay must not retire an authorized future staging round');
+ assert.equal(f.state.sessions.P.stagingSpawnId,50000);
+ assert.deepEqual(f.state.sessions.P.participants,['P']);
+});
+
+for(const invalid of ['unowned','stale','future-status','dead','wrong-event','wrong-realm','missing-realm','disconnected','clock-stale','cancelled','already-live','wrong-participant','unrecorded','incoming-dead','stored-disconnected','stored-clock-stale'])test('pre-join staging cannot extend invalid attendance: '+invalid,()=>{
+ const f=fixture();f.statuses.P={seenAt:1000,server:'USI',eventFeedConnected:true};
+ if(invalid!=='unowned')f.authorize('P','mrpumpkin');
+ if(invalid==='already-live')f.observe({name:'P',serverLiveEvents:[{name:'mrpumpkin'}]});
+ f.time(12000);f.statuses.P.seenAt=invalid==='stale'?1000:invalid==='future-status'?13000:12000;
+ if(invalid==='dead')f.statuses.P.rip=true;
+ if(invalid==='wrong-participant')f.state.sessions.P.participants=['W'];
+ if(invalid==='unrecorded')f.state.sessions.P.participationRecorded=false;
+ if(invalid==='stored-disconnected')f.statuses.P.eventFeedConnected=false;
+ if(invalid==='stored-clock-stale')f.statuses.P.eventClockStale=true;
+ if(invalid==='cancelled')f.intent(1,true);
+ f.observe({name:'P',rip:invalid==='incoming-dead',server:invalid==='missing-realm'?undefined:invalid==='wrong-realm'?'USII':'USI',
+  eventFeedConnected:invalid==='disconnected'?false:true,eventClockStale:invalid==='clock-stale',
+  serverStagingEvents:[{name:invalid==='wrong-event'?'mrgreen':'mrpumpkin',spawnAt:50000,spawnId:50000}]});
+ assert.equal(f.state.sessions.P?.stagingSpawnId,undefined);
+ if(invalid==='unowned')assert.equal(f.state.sessions.P,undefined);
+});

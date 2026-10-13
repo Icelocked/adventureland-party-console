@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserve authorized Halloween staging while characters are still waiting to report joining the announced event, preventing premature returns before its spawn.
+
 - Restore attack range before continuing ordinary combat kiting, preventing prolonged disengagement while preserving terrain and attacker clearance.
 
 - Recover shared return completion when a character has already acknowledged its final native transition, preventing its peers from waiting indefinitely without replaying the transition.

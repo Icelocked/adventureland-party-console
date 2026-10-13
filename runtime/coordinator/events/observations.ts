@@ -138,8 +138,19 @@ export function createEventObservations(
   }
 
   type StagingReport = NonNullable<EventReport["serverStagingEvents"]>[number];
+  function ownsPrejoinStaging(name: string, event: string): boolean {
+    const session=state.sessions[name];
+    return !!session && session.event===event && !session.wasLive && session.participationRecorded===true &&
+      session.participants.includes(name);
+  }
+  function authorizedPrejoinStaging(body: EventReport, event: string): boolean {
+    const status=ports.statuses()[body.name];
+    return ownsPrejoinStaging(body.name,event) && !body.rip && !ports.intent(body.name).cancelled &&
+      freshDeferredFighter(status) && liveFeedReady(status) && typeof body.server==='string' &&
+      body.server.length>0 && body.server===status.server;
+  }
   function validStaging(body: EventReport, report: StagingReport): boolean {
-    return body.joinedEvent === report.name && ["mrgreen", "mrpumpkin"].includes(report.name) &&
+    return (body.joinedEvent === report.name || authorizedPrejoinStaging(body,report.name)) && ["mrgreen", "mrpumpkin"].includes(report.name) &&
       ports.enabled(body.name, report.name) && Number.isFinite(report.spawnAt) &&
       report.spawnAt >= ports.now() - 120000 && report.spawnAt <= ports.now() + 60000;
   }
