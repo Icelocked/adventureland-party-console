@@ -17,9 +17,12 @@ for (const tank of [W, P]) {
       await expect.poll(async () => (await live.state()).designatedTank).toBe(tank);
       await live.post('/farming-mode', { character: W, mode: 'default' });
       await live.post('/focus', { character: W, monsterFocus: ['goo'] });
-      await live.post('/travel', await location(live));
-      await expect.poll(async () => live.admin(`output=(()=>{const ps=${JSON.stringify([W, P, M])}.map(get_player);
-        return ps.every(p=>p.map==='main'&&!p.moving)&&ps.every(p=>Math.hypot(p.x-ps[0].x,p.y-ps[0].y)<250);})()`), { timeout: 120_000 }).toBe(true);
+      const farm = await location(live);
+      await live.post('/travel', farm);
+      // Spawn only once the party has arrived: at login it already stands together, and a goo
+      // spawned there would be left behind town buildings when the party walks to the farm.
+      await expect.poll(async () => live.admin(`output=(()=>{const ps=${JSON.stringify([W, P, M])}.map(get_player),f=${JSON.stringify(farm)};
+        return ps.every(p=>p.map===f.map&&!p.moving&&Math.hypot(p.x-f.x,p.y-f.y)<300)&&ps.every(p=>Math.hypot(p.x-ps[0].x,p.y-ps[0].y)<250);})()`), { timeout: 120_000 }).toBe(true);
       const goo = await live.admin(`output=(()=>{const t=get_player('${tank}');
         const m=new_monster(t.in,{type:'goo',position:[t.x+120,t.y],radius:0,count:1},{temp:1});
         m.hp=m.max_hp=5000000;m.attack=0;target_player(m,t);return String(m.id);})()`);
@@ -31,6 +34,7 @@ for (const tank of [W, P]) {
           return { mode: p && p.mode, reason: p && p.reason, target: p && p.target != null ? String(p.target) : null,
             distance: e ? Math.hypot(character.x - e.x, character.y - e.y) : null,
             ownDistance: own ? Math.hypot(character.x - own.x, character.y - own.y) : null,
+            at: { x: Math.round(character.real_x), y: Math.round(character.real_y) }, ownAt: own ? { x: Math.round(own.x), y: Math.round(own.y) } : null,
             inRange: !!(e && is_in_range(e)), ownInRange: !!(own && is_in_range(own)) }; })()`)));
         samples.push({ at: Date.now(), tank: t, mage });
         await new Promise(resolve => setTimeout(resolve, 1000));
