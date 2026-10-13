@@ -37,3 +37,21 @@ luck set at the kill and restores the tank set (or the gear worn when the swap b
     set (`Luck set`, `Tank set`, `Swapped-out gear`) in place of the automatic rule
     labels they are exempt from; manual marks still take precedence, and a spare copy
     keeps showing its automatic rule.
+
+## Chain kills (2026-10-13, after PR #2)
+
+Written before the change. Once the designated tank holds in melee (PR #2), it kills
+goos about once a second with the next target selected immediately. The swap session
+outlived its target: it restored only on a missing or dead *current* target, so it kept
+the luck set until the 10 s safety timeout, restored for about a second, then swapped
+straight back, about 12 equips every 10 s with the luck set on ~90% of the time.
+Decided: keep luck on while kills keep coming; restore once they stop.
+
+12. **Timeout churn.** While each next target is also about to die, the luck set stays
+    on across kills; the safety timeout must not restore and re-swap mid-chain.
+13. **Stuck in luck.** When the session's target dies and the next target is not about
+    to die (or there is none), the tank set is restored.
+14. **Stale timeout.** Handing the session to the next target re-arms the safety
+    timeout; a target that stops dying still ends in a restore after it.
+15. **Other targets.** A hand-over applies only to this character's next target; a
+    dead target with no replacement still restores, as in 5.

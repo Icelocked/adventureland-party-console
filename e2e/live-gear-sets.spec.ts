@@ -89,10 +89,25 @@ test('the tank wears its whole luck set at the kill, restores its tank set, and 
     const sampler = (async () => { while (sampling) { samples.push({ at: Date.now(), worn: await worn(live).catch(() => null) }); await new Promise(r => setTimeout(r, 100)); } })();
     await expect.poll(async () => samples.some(sample => sample.worn && SLOTS.every(slot => sample.worn[slot] === LUCK[slot])) && (await kills()).length > 0,
       { timeout: 180_000, intervals: [500], message: 'The tank must wear all six luck pieces at once and land a kill' }).toBe(true);
-    // Against fast-dying monsters the next swap follows within a second, so restoration is read from the 100 ms samples.
-    const restored = () => { const first = samples.findIndex(sample => sample.worn && SLOTS.every(slot => sample.worn[slot] === LUCK[slot]));
-      return first >= 0 && samples.slice(first).some(sample => sample.worn && SLOTS.every(slot => sample.worn[slot] === tankWorn[slot])); };
-    await expect.poll(restored, { timeout: 60_000, message: 'The tank set must be restored after the kill, emptying slots that were empty' }).toBe(true);
+    // 12: while goos keep dying the luck set stays on, past the 10 s safety timeout.
+    const first = samples.findIndex(sample => sample.worn && SLOTS.every(slot => sample.worn[slot] === LUCK[slot]));
+    const killsAtFirst = (await kills()).length;
+    await new Promise(resolve => setTimeout(resolve, 15_000));
+    const chain = samples.slice(first).filter(sample => sample.worn);
+    expect((await kills()).length - killsAtFirst, 'Kills must continue during the chain window').toBeGreaterThan(3);
+    expect(chain.filter(sample => !SLOTS.every(slot => sample.worn[slot] === LUCK[slot])).length,
+      'The luck set must stay on while kills keep coming').toBe(0);
+    // 13: once kills stop, the tank set returns and stays. Declared world change: main's goos
+    // are removed and their respawns held, so the party runs out of targets.
+    const held = await live.admin(`output=(()=>{globalThis.__e2eGearGooRespawns=[];
+      for(let i=monster_respawns.length-1;i>=0;i--)if(monster_respawns[i][0].type==='goo'&&monster_respawns[i][0].map==='main')
+        globalThis.__e2eGearGooRespawns.push(monster_respawns.splice(i,1)[0]);
+      let removed=0;for(const m of Object.values(instances.main.monsters))if(m.type==='goo'){remove_monster(m,{method:'disappear',nospawn:true});removed++;}
+      return {removed,held:globalThis.__e2eGearGooRespawns.length};})()`);
+    await info.attach('gear-sets-goos-removed', { body: JSON.stringify(held), contentType: 'application/json' });
+    const tankBack = (sample: any) => sample.worn && SLOTS.every(slot => sample.worn[slot] === tankWorn[slot]);
+    await expect.poll(() => { const recent = samples.slice(-3); return recent.length === 3 && recent.every(tankBack); },
+      { timeout: 60_000, message: 'The tank set must be restored once kills stop, emptying slots that were empty' }).toBe(true);
     sampling = false; await sampler;
 
     // 5. The spare ring is collected for compounding; the two set rings stay with the tank.

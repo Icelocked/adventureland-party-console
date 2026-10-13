@@ -16,6 +16,8 @@ export interface LuckSwapSession {
   expected: Loadout;
   plan: Partial<Record<LuckSlot, GearItem>>;
   restoring: boolean;
+  /** The kill this session is worn for; the session moves to the next target while kills keep coming. */
+  targetId?: string;
 }
 export interface LuckTarget {
   id: string;
@@ -164,11 +166,11 @@ export function createKillLuckSwap(ports: LuckSwapPorts, memory: LuckSwapMemory 
     slots.forEach((slot, index) => { if (found[index] >= 0) plan[slot] = ports.fingerprint(ports.items()[found[index]])!; });
     return plan;
   }
-  function beginSwap(): void {
+  function beginSwap(target: LuckTarget): void {
     const plan = planSwap();
     // No saved luck set, or every carried member is already worn: nothing to swap.
     if (!Object.keys(plan).length) { memory.retryAt = ports.now() + 2000; return; }
-    const next: LuckSwapSession = { original: copyLoadout(), expected: copyLoadout(), plan, restoring: false };
+    const next: LuckSwapSession = { original: copyLoadout(), expected: copyLoadout(), plan, restoring: false, targetId: target.id };
     memory.session = next;
     memory.swappedInAt = ports.now();
     run(() => swap(next));
@@ -186,21 +188,36 @@ export function createKillLuckSwap(ports: LuckSwapPorts, memory: LuckSwapMemory 
     const dps = elapsedSeconds > 0 ? (oldest.hp - newest.hp) / elapsedSeconds : 0;
     return dps > 0 ? newest.hp / dps : Infinity;
   }
-  function shouldSwapIn(target: LuckTarget | null): boolean {
-    if (!target || !ports.isTank() || ports.otherSwapBusy()) return false;
+  /** True when this character's attack, or the target's falling HP, makes the kill imminent. */
+  function killImminent(target: LuckTarget, pieces: number): boolean {
     trackHpTrend(target);
     // A lethal attack from this character sets (or confirms) its own aggro as part of that same
     // kill, even if the monster had no target yet — so the aggro check only gates the trend-based
     // prediction, where the kill (and whichever aggro was already in place) may come from elsewhere.
     if (ports.lethalBasicAttack(target)) return true;
     // Each piece is a server round trip, so a larger set needs a longer lead before the kill.
-    const pieces = Object.keys(planSwap()).length;
     return pieces > 0 && ports.holdsAggro(target) && estimatedSecondsToDeath() <= Math.max(3, 1.5 + 0.35 * pieces);
   }
-  function shouldRestore(target: LuckTarget | null): boolean {
+  function shouldSwapIn(target: LuckTarget | null): boolean {
+    if (!target || !ports.isTank() || ports.otherSwapBusy()) return false;
+    return killImminent(target, Object.keys(planSwap()).length);
+  }
+  /**
+   * The session's kill landed and the tank already has its next target. Keep the luck set on
+   * when that kill is imminent too, rather than restoring and swapping straight back; the
+   * safety timeout then counts from this hand-over.
+   */
+  function handOver(session: LuckSwapSession, target: LuckTarget): boolean {
+    if (!killImminent(target, Object.keys(session.plan).length)) return false;
+    session.targetId = target.id;
+    memory.swappedInAt = ports.now();
+    return true;
+  }
+  function shouldRestore(session: LuckSwapSession, target: LuckTarget | null): boolean {
     if (!ports.isTank()) return true;
     if (!target || target.dead || target.rip) return true;
     if (ports.endangered()) return true;
+    if (session.targetId !== undefined && target.id !== session.targetId && !handOver(session, target)) return true;
     // Safety timeout: covers a boss phase where the trend estimate dipped then stabilized —
     // don't stay in weaker gear indefinitely waiting for a death that isn't imminent anymore.
     if (ports.now() - (memory.swappedInAt || 0) > 10000) return true;
@@ -208,7 +225,7 @@ export function createKillLuckSwap(ports: LuckSwapPorts, memory: LuckSwapMemory 
   }
   function continueSession(session: LuckSwapSession, target: LuckTarget | null): void {
     if (!owned(session)) return;
-    if (!session.restoring && shouldRestore(target)) session.restoring = true;
+    if (!session.restoring && shouldRestore(session, target)) session.restoring = true;
     if (session.restoring) { run(() => restore(session)); return; }
     if (!planApplied(session)) run(() => swap(session));
   }
@@ -218,7 +235,7 @@ export function createKillLuckSwap(ports: LuckSwapPorts, memory: LuckSwapMemory 
       const session = memory.session;
       if (session) { continueSession(session, target); return; }
       if (ports.otherSwapBusy()) return;
-      if (shouldSwapIn(target)) beginSwap();
+      if (shouldSwapIn(target)) beginSwap(target!);
     },
     depart(): void {
       if (!memory.session) return;
