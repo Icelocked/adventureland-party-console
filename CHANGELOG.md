@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep acknowledged final travel completion recoverable after a completion-report transport failure.
+
 - Preserve authorized Halloween staging while characters are still waiting to report joining the announced event, preventing premature returns before its spawn.
 
 - Restore attack range before continuing ordinary combat kiting, preventing prolonged disengagement while preserving terrain and attacker clearance.

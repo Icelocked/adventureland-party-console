@@ -1,11 +1,15 @@
-import { movementError } from './movement-error.ts';
+import { movementError, retryableMovementRequest } from './movement-error.ts';
 import { isTransition, distance, point, type Point, type Step } from '../navigation/contracts.ts';
 import { stepIssue, type ValidationPorts } from '../navigation/validation.ts';
 import type { MovementHost, MovementOptions, MoveState } from './movement-host.ts';
 function transitionLabel(step: Step): string {
   return step.method === 'leave' ? 'leave transition' : step.town ? 'town warp' : 'map transition';
 }
-interface Issued { step: Step; from: Point; at: number; progressAt: number; position: Point; error?: Error | string; townUnavailable?: boolean; acknowledged?: boolean; finished?: boolean; aligned?: boolean; connectorFrom?: Point; connectorSentAt?: number; connectorVersion?: number; reissued?: boolean; sendVersion?: number }
+interface Issued { step: Step; from: Point; at: number; progressAt: number; position: Point; error?: Error | string; completionBarrierError?: Error; townUnavailable?: boolean; acknowledged?: boolean; finished?: boolean; aligned?: boolean; connectorFrom?: Point; connectorSentAt?: number; connectorVersion?: number; reissued?: boolean; sendVersion?: number }
+function retryableCompletionBarrier(error: Error & {partyRequest?: unknown}): boolean {
+  const request=error.partyRequest as {path?:string;kind?:string;status?:number}|undefined;
+  return request?.path==='/movement-barrier' && request.kind!=='aborted' && request.status!==409 && retryableMovementRequest(error);
+}
 export function createMovementExecutor(host: MovementHost, state: MoveState, validation: ValidationPorts, now: () => number, townReady = () => true, lootCollected = () => true) {
   let issued: Issued | undefined, index = 0, barrierPending = false, barrierReady = false, lastBarrier = 0, waitingBarrier = false;
   let walkingEdge: {from: Point; to: Step} | undefined;
@@ -38,7 +42,10 @@ export function createMovementExecutor(host: MovementHost, state: MoveState, val
     barrierPending = true; lastBarrier = now();
     const captured = issued;
     options.barrier(step, index, completed).then(ready => { if (issued === captured) barrierReady = ready; }, error => {
-      if (issued === captured && issued) issued.error = movementError(error);
+      if (issued === captured && issued && !issued.error) {
+        const failure=movementError(error);issued.error=failure;
+        if(completed && retryableCompletionBarrier(failure))issued.completionBarrierError=failure;
+      }
     }).finally(() => { if (issued === captured) barrierPending = false; });
     return false;
   }
@@ -170,7 +177,7 @@ export function createMovementExecutor(host: MovementHost, state: MoveState, val
     current.townUnavailable=/cooldown|unavailable|not.ready|no.mp|disabled/i.test(reason);
   }
   function terminalIssued(current: Issued): boolean {
-    return !current.finished && !current.error && !!current.acknowledged &&
+    return !current.finished && (!current.error || current.error===current.completionBarrierError) && !!current.acknowledged &&
       state.plot.length===1 && state.plot[0]===current.step && !!isTransition(current.step);
   }
   function settledPosition(p: Point, step: Step): boolean {

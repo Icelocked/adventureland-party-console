@@ -772,3 +772,62 @@ for(const mode of ['valid','stale','moving','dead','instance','position','comman
  const done=actors.P.service.last()?.done;for(const r of Object.values(actors))r.dispose();
  assert.equal(done===true,mode==='valid','the acknowledged settled peer must not leave the other actor waiting forever; receipts='+JSON.stringify(http));
 });
+
+
+for(const mode of ['network','timeout','server','superseded','aborted-server','forbidden','unclassified'])test('terminal native ACK distinguishes completion barrier failure provenance: '+mode,async()=>{
+ const owner={convoyId:'return',epoch:3,commandId:7,navigationRevision:1,routeVersion:2};
+ const r=fixture();r.c.hp=100;r.host.G.maps.cyberland={spawns:[[0,0]]};r.c.map=r.c.in='cyberland';
+ const original=r.ports.context;r.ports.context=()=>({...original(),server:'USI'});
+ r.host.parent.push_deferred=()=>{Object.assign(r.c,{map:'main',in:'main',real_x:0,real_y:0});return Promise.resolve();};
+ let rejectCompletion;const pending=new Promise((_,reject)=>{rejectCompletion=reject;});let completionIssued=false;
+ const p=r.service.move({map:'main',in:'main',x:0,y:0},undefined,{shared:true,awaitSharedRoute:true,owner,
+  barrier:async(_step,_index,completed)=>{if(!completed)return true;completionIssued=true;return pending;}});p.catch(()=>{});
+ r.service.install([{map:'main',in:'main',x:0,y:0,method:'leave'}],r.service.identity);await r.ticks(5);r.setNow(1500);await r.ticks(5);
+ assert.equal(completionIssued,true);const id=r.service.report().id,calls=r.calls.length;
+ const metadata={network:{kind:'network',status:0},timeout:{kind:'timeout',status:0},server:{kind:'http',status:503},
+  superseded:{kind:'aborted',status:409,code:'superseded'},'aborted-server':{kind:'aborted',status:503},forbidden:{kind:'http',status:403}}[mode];
+ rejectCompletion(Object.assign(Error('Actual completion request failed'),metadata?{partyRequest:{path:'/movement-barrier',method:'POST',...metadata}}:{}));await settle();
+ const accepted=['network','timeout','server'].includes(mode);
+ assert.equal(r.service.settleTerminal(id,owner),accepted,'only retryable completion transport may acknowledge already executed native action');
+ assert.equal(r.calls.length,calls,'terminal acknowledgement must not send another action');
+ if(accepted){await p;assert.equal(r.service.last().terminalSettlement.acknowledged,true);}r.dispose();
+});
+
+test('a rejected native leave never becomes a terminal receipt even with retryable-looking metadata',async()=>{
+ const owner={convoyId:'return',epoch:3,commandId:7,navigationRevision:1,routeVersion:2},r=fixture();r.c.hp=100;
+ r.host.G.maps.cyberland={spawns:[[0,0]]};r.c.map=r.c.in='cyberland';const original=r.ports.context;r.ports.context=()=>({...original(),server:'USI'});
+ r.host.parent.push_deferred=()=>{Object.assign(r.c,{map:'main',in:'main',real_x:0,real_y:0});return Promise.reject(Object.assign(Error('Native leave rejected'),{partyRequest:{path:'/movement-barrier',kind:'network',status:0}}));};
+ const p=r.service.move({map:'main',in:'main',x:0,y:0},undefined,{shared:true,awaitSharedRoute:true,owner,barrier:async()=>true});p.catch(()=>{});
+ r.service.install([{map:'main',in:'main',x:0,y:0,method:'leave'}],r.service.identity);await r.ticks(5);
+ assert.equal(r.service.settleTerminal(r.service.report()?.id||r.service.last()?.id,owner),false);assert.equal(r.service.last()?.terminalSettlement,undefined);r.dispose();
+});
+
+for(const mode of ['pre-transition','connector'])test('terminal settlement preserves rejected '+mode+' action safety',async()=>{
+ const owner={convoyId:'return',epoch:3,commandId:7,navigationRevision:1,routeVersion:2},r=fixture();r.c.hp=100;
+ r.host.G.maps.cyberland={spawns:[[0,0]]};r.c.map=r.c.in='cyberland';const original=r.ports.context;r.ports.context=()=>({...original(),server:'USI'});
+ r.host.parent.push_deferred=()=>{Object.assign(r.c,{map:'main',in:'main',real_x:5,real_y:0});return Promise.resolve();};
+ if(mode==='connector')r.host.move=async()=>{throw Error('Native connector failed');};
+ const p=r.service.move({map:'main',in:'main',x:0,y:0},undefined,{shared:true,awaitSharedRoute:true,owner,
+  barrier:async()=>{if(mode==='pre-transition')throw Object.assign(Error('Preparation transport failed'),{partyRequest:{path:'/movement-barrier',kind:'network',status:0}});return true;}});p.catch(()=>{});
+ r.service.install([{map:'main',in:'main',x:0,y:0,method:'leave'}],r.service.identity);await r.ticks(8);
+ assert.equal(r.service.settleTerminal(r.service.report()?.id||r.service.last()?.id,owner),false);
+ assert.equal(r.service.last()?.terminalSettlement,undefined);
+ if(mode==='pre-transition')assert.equal(r.calls.some(call=>call[0]==='leave'),false);r.dispose();
+});
+
+
+test('completion transport rejection cannot overwrite a preceding native connector failure',async()=>{
+ const owner={convoyId:'return',epoch:3,commandId:7,navigationRevision:1,routeVersion:2},r=fixture();r.c.hp=100;
+ r.host.G.maps.cyberland={spawns:[[0,0]]};r.c.map=r.c.in='cyberland';const original=r.ports.context;r.ports.context=()=>({...original(),server:'USI'});
+ let rejectConnector,rejectCompletion,completionIssued=false;
+ const connector=new Promise((_,reject)=>{rejectConnector=reject;}),completion=new Promise((_,reject)=>{rejectCompletion=reject;});
+ r.host.parent.push_deferred=()=>{Object.assign(r.c,{map:'main',in:'main',real_x:5,real_y:0});return Promise.resolve();};
+ r.host.move=async(x,y)=>{Object.assign(r.c,{real_x:x,real_y:y});return connector;};
+ const p=r.service.move({map:'main',in:'main',x:0,y:0},undefined,{shared:true,awaitSharedRoute:true,owner,
+  barrier:async(_s,_i,done)=>{if(!done)return true;completionIssued=true;return completion;}});p.catch(()=>{});
+ r.service.install([{map:'main',in:'main',x:0,y:0,method:'leave'}],r.service.identity);await r.ticks(5);r.setNow(1500);await r.ticks(5);
+ assert.equal(completionIssued,true);const id=r.service.report().id;
+ rejectConnector(Error('Native connector rejected'));await settle();
+ rejectCompletion(Object.assign(Error('Control response lost'),{partyRequest:{path:'/movement-barrier',kind:'network',status:0}}));await settle();
+ assert.equal(r.service.settleTerminal(id,owner),false);r.dispose();
+});
