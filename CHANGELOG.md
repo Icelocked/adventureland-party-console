@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Make native event-return fault tests observe the live endpoint promptly, avoiding travel-command expiry during test setup without relaxing recovery assertions.
+
 - Let ranged party members approach their target when another long-range monster is attacking a teammate (#121; thanks to Thefonze74065).
 - Expand native Cave setup and terminal-return coverage, preserve actual saved checkpoint receipts, and retain bounded movement diagnostics.
 
