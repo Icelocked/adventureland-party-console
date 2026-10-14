@@ -211,13 +211,29 @@ test.describe('real server, native clients, maintained character runtime', () =>
     await evidence(live, info, 'native-reconnect-arrival', { destination });
   });
 
-  test('Town executes a real cast after travel and returns both party members', async ({ live }, info) => {
+  for (const minorInjury of [false, true]) {
+  test('Town executes a real cast after travel and returns both party members' + (minorInjury ? ' without passive healing cancelling the channel' : ''), async ({ live }, info) => {
     await party(live);
     const away = await point(live, W, 350);
     await live.post('/travel', away);
     await arrived(live, [W, P], away);
     const spawn = await live.admin(`output={map:'main',x:G.maps.main.spawns[0][0],y:G.maps.main.spawns[0][1],scatter:G.maps.main.spawns[0][3]||0}`);
     const beforeTown = await observed(live);
+    // Failure inventory: a 15-HP deficit triggers passive healing during Town;
+    // native healing clears the caster's channel and splits the returning party.
+    // Declare the initial healing condition once, at the first real channel.
+    // No cast, heal, transport, arrival or successful response is fabricated.
+    if (minorInjury) await live.admin(`output=(()=>{
+      const fixture=globalThis.__e2eTownHealing={armedAt:Date.now()};
+      fixture.timer=setInterval(()=>{const p=get_player(${JSON.stringify(P)});
+        if(fixture.seed||!p?.c?.town)return;
+        fixture.seed={at:Date.now(),map:p.map,x:p.x,y:p.y,hp:p.hp,max_hp:p.max_hp,mp:p.mp,max_mp:p.max_mp,channel:{...p.c.town}};
+        // As in the CI incident, MP recovery takes priority over topping off HP.
+        // Otherwise regen_hp can erase the injury before the party status sees it.
+        p.hp=p.max_hp-15;p.mp=Math.floor(p.max_mp*.4);
+        fixture.seed.declaredHp=p.hp;fixture.seed.declaredMp=p.mp;resend(p,'u+cid');clearInterval(fixture.timer);
+      },10);return {armedAt:fixture.armedAt,missingHp:15,mpRatio:.4};})()`);
+    try {
     await live.post('/town-party', {});
     await expect.poll(async () => {
       const current = await observed(live);
@@ -228,8 +244,25 @@ test.describe('real server, native clients, maintained character runtime', () =>
         Math.abs(current[name].y-spawn.y) <= spawn.scatter/2+1);
     }, { timeout: 90_000, message: 'Both native Town casts must complete inside the actual server spawn bounds' }).toBe(true);
     await expect.poll(async () => (await live.state()).townCycle?.pending?.length || 0).toBe(0);
+    if (minorInjury) {
+      const seed=await live.admin('output=globalThis.__e2eTownHealing.seed');
+      expect(seed,'The native Town channel must receive the declared minor injury').toBeTruthy();
+      const events=await live.clients[P].events();
+      const receipt=events.find((event:any)=>event.event==='new_map'&&event.at>=seed.at&&event.data?.name===spawn.map&&event.data?.effect===1);
+      expect(receipt,'The first real cast must produce a Town transport').toBeTruthy();
+      const channelHeals=events.filter((event:any)=>event.at>=seed.at&&event.at<=receipt.at&&event.event==='hit'&&event.data?.hid===P&&event.data?.source==='heal');
+      const starts=events.filter((event:any)=>event.at>=seed.at&&event.at<=receipt.at&&event.event==='game_response'&&event.data?.place==='town'&&event.data?.in_progress);
+      await info.attach('native-town-healing-channel',{body:JSON.stringify({seed,receipt,channelHeals,starts}),contentType:'application/json'});
+      expect(channelHeals,'Routine heals must not cancel Town channeling').toEqual([]);
+      expect(starts.length,'No second Town request may be needed after the declared injury').toBeLessThanOrEqual(1);
+      expect(receipt.at-seed.at,'The original three-second native cast must finish without a walking fallback').toBeLessThan(8000);
+    }
     await evidence(live, info, 'town-server-arrival', { away, spawn });
+    } finally {
+      if(minorInjury) await live.admin('output=(()=>{const fixture=globalThis.__e2eTownHealing;if(fixture)clearInterval(fixture.timer);delete globalThis.__e2eTownHealing;return true;})()');
+    }
   });
+  }
 
   test('a merchant route crosses a real door into the bank and returns home', async ({ live }, info) => {
     const bank = await live.admin(`output={map:'bank',x:G.maps.bank.spawns[0][0],y:G.maps.bank.spawns[0][1]}`);

@@ -13322,6 +13322,10 @@
 
   async function healPartyBelow(ratio, options) {
     if (character.ctype !== "priest" || character.rip || healingBusy) return false;
+    // Native heal (including self-heal) clears the caster's Town channel.
+    // Include an issued movement cast whose native acknowledgement is pending;
+    // waiting to depart or waiting for peers after arrival still permits healing.
+    if (character.c && character.c.town || typeof movement !== "undefined" && movement.townCasting && movement.townCasting()) return false;
     options = options || {};
     ratio = ratio || 0.9;
     healingBusy = true;

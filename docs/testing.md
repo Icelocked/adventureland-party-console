@@ -1,5 +1,18 @@
 # Testing
 
+## Town channel healing
+
+Run the native cases matching `Town executes a real cast|Halloween mrgreen stages`.
+The minor-injury Town variant declares a 15-HP deficit and 40% MP once during
+the first actual native channel, matching the incident's MP-recovery priority
+without changing casts, healing, transport or responses.
+It requires native arrival from that first cast, no priest heal during the
+channel, and both party members returning. Retain `native-town-healing-channel`
+and the saved-checkpoint Halloween evidence, then run `npm run test:e2e:verify`.
+The retained passive-healing and movement-service regressions cover delayed
+channel acknowledgement, rejection, cancellation, and arrival while a peer
+barrier remains pending. Recovery potions/regeneration remain available.
+
 ## CI parallelism
 
 The full native workflow uses 16 isolated GitHub runners with one Playwright
