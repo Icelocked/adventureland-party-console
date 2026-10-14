@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Let ranged party members approach their target when another long-range monster is attacking a teammate (#121; thanks to Thefonze74065).
+- Expand native Cave setup and terminal-return coverage, preserve actual saved checkpoint receipts, and retain bounded movement diagnostics.
+
 - Keep acknowledged final travel completion recoverable after a completion-report transport failure.
 
 - Preserve authorized Halloween staging while characters are still waiting to report joining the announced event, preventing premature returns before its spawn.

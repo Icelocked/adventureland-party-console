@@ -15611,8 +15611,9 @@
     var range=Number(entity.range || definition.range) || 20;
     var selected=entity.id===formationState.targetId || groupedCombat && groupedCombat.target && entity.id===groupedCombat.target.id;
     if(selected)return Math.min(range,Math.max(6,Number(character.range)-24))+8;
-    // A neutral ranged monster's weapon reach is not a solid collision obstacle.
-    if(!entity.target && range>Number(character.range))return 38;
+    // A ranged monster's reach is not a solid collision obstacle while it targets
+    // a teammate; preserve its full reach for its own target (#121).
+    if(entity.target!==character.name && range>Number(character.range))return 38;
     return range+8;
   }
   var formationFrame = null;

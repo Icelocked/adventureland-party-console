@@ -325,7 +325,18 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
         receipt.id===view.state.commands[name]?.id;
     });
   },{timeout:120_000,message:'Both initial native waypoint moves must complete before raw fixture staging'}).toBe(true);
-  await controls.getByRole('button',{name:'Stop travel',exact:true}).click();
+  const initialStopDeadline=Date.now()+20_000;
+  const initialStopRemaining=()=>{
+    const timeout=initialStopDeadline-Date.now();
+    if(timeout<=0)throw Error('Initial waypoint Stop exhausted its original 20-second click window');
+    return timeout;
+  };
+  const resolvedInitialEncounter=page.getByRole('dialog').filter({has:page.getByText('Encounter result',{exact:true})});
+  if(await resolvedInitialEncounter.isVisible()){
+    await resolvedInitialEncounter.getByRole('button',{name:'Close',exact:true}).click({timeout:initialStopRemaining()});
+    await expect(resolvedInitialEncounter).not.toBeVisible({timeout:initialStopRemaining()});
+  }
+  await controls.getByRole('button',{name:'Stop travel',exact:true}).click({timeout:initialStopRemaining()});
   await expect.poll(async()=>{
     const state=(await dungeon()).state;
     return !state.travel && state.progress?.enabled===false &&
@@ -1314,7 +1325,7 @@ test('Cave assembly regroups displaced completed participants before departure',
     shopSetupEvidence.push({stage:'choice',choice:entryChoice});
     const nativeReplies=await live.admin(`output=G.events.dreams.encounters.find(encounter=>encounter.id==='e31').options.map(option=>({id:option.id,effect:option.effect}));`);
     shopSetupEvidence.push({stage:'native-reply-effects',replies:nativeReplies});
-    const option=entryChoice.options.find((o:any)=>nativeReplies.some((reply:any)=>reply.id===o.id&&reply.effect==='leave')&&!o.unavailable&&!o.cost&&!o.amber);
+    const option=entryChoice.options.find((o:any)=>nativeReplies.some((reply:any)=>reply.id===o.id&&['leave','story','inspect'].includes(reply.effect))&&!o.unavailable&&!o.cost&&!o.amber);
     expect(option,'Only the free noncombat entry-shop reply may be used for setup').toBeTruthy();
     shopSetupEvidence.push({stage:'selected-reply',choice:entryChoice.id,option});
     await act({action:'vote',run:shop.run,choice:entryChoice.id,option:option.id});
