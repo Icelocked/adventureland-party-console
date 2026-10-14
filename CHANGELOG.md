@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Reconcile BankBoi transfer-row requests at startup and after account changes, clearing stale staging work when the final BankBoi is removed without requiring another bank visit.
+- Recover displaced manual upgrade work from unfinished inventory without confusing completed copies for survivors. Report item, levels and candidate slots for genuine ambiguity, and pause retries until relevant inventory or upgrade intent changes.
+
 - Keep approaching a selected combat target's last known position when it temporarily leaves everyone's view. Reacquisition preserves whole-party attack confirmation; confirmed local absence retires the target after the existing bounded search.
 
 - Update retained equipment-comparison and merchant-upgrade test fixtures for loadout totals and manual offering checkpoints, preserving their existing behavior assertions.

@@ -5735,10 +5735,11 @@
       var survivors = [];
       character.items.forEach(function (candidate, index) {
         if (!used[index] && candidate && (Number(candidate.level) || 0) >= start &&
-            (Number(candidate.level) || 0) <= target &&
+            (Number(candidate.level) || 0) < target &&
             sameItem(Object.assign({},candidate,{level:mark.item.level}),mark.item)) survivors.push(index);
       });
-      if (survivors.length > 1) throw Error("Automatic upgrade survivor is ambiguous; waiting for inventory recovery");
+      if (survivors.length > 1) throw Error("Upgrade inventory recovery ambiguous: " + mark.item.name + " +" + start + " to +" + target +
+        "; original slot " + slot + "; unfinished candidates " + survivors.map(function(index){return index + " (+" + (Number(character.items[index].level)||0) + ")";}).join(", "));
       if (survivors.length === 1) return survivors[0];
     }
     return character.items.findIndex(function (candidate, index) {
