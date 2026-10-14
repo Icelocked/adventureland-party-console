@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Prevent native event-entry and manual-travel recovery tests from accidentally timing out planner requests while inspecting them. Fault injection now observes actual status traffic, preserves exact journey ownership, and records decision latency and transport failures.
+
 - Recover Cave participants displaced after completing a waypoint or stair approach, waiting for combat to clear and issuing bounded independent return paths before continuing the floor transition.
 - Honor disabled Town shortcuts during event walking retries. Exhausted event entry now returns the owned party through Main to its saved checkpoints and skips that occurrence, preventing stranded survivors and repeated rejoin attempts.
 

@@ -1,4 +1,5 @@
 import {test,expect} from './live-fixtures';
+import {observeNativePlanner} from './native-planner-observation';
 
 const W='E2EWarrior',P='E2EPriest',members=[W,P];
 // Declare separated native actors before login so manual travel must assemble
@@ -12,34 +13,29 @@ test(`explicit ${entry} travel skips only the current native event occurrence`,a
   const samples:unknown[]=[],retirements:unknown[]=[];
   const world=()=>live.admin(`output=Object.fromEntries(${JSON.stringify(members)}.map(name=>{const p=get_player(name);return [name,{map:p.map,x:p.x,y:p.y,rip:!!p.rip,moving:!!p.moving}]}))`);
   const context=live.clients[P].page.context(),planningFaults:unknown[]=[],recoveryHolds:unknown[]=[],unmatchedPlans:unknown[]=[];
+  const observer=observeNativePlanner(context);
   let faultArmed=false;
   const interruptInitialPlan=async(route:import('@playwright/test').Route)=>{
     const request=route.request(),body=request.method()==='POST'?request.postDataJSON():null;
     if(faultArmed&&body?.character===P&&planningFaults.length===0){
-      // A runtime survives event -> manual-travel handoff. Match the actual
-      // journey and its owner, not a late event request from that same runtime.
-      const deadline=Date.now()+5000;
-      for(;;){
-      const movement=await live.clients[P].run('globalThis.__partyMovement?.report?.()');
-      const s=await live.state(),c=s.activeConvoy,expected=c?.expected?.[P],status=s.characters[P];
-      const owner=status?.convoyNavigation,rally=c?.rally;
-      const candidate=faultArmed&&planningFaults.length===0&&c?.phase==='assemble'&&c.purpose==='party-travel'&&!c.runtimes&&
-          expected?.phase==='assemble'&&expected.runtimeId&&movement?.id===body.id&&
-          String(body.id).startsWith(P+':'+expected.runtimeId+':')&&rally&&body.to?.map===rally.map&&
-          body.to.x===rally.x&&body.to.y===rally.y;
-      // Initial assembly uses generic navigate(), so the movement report has
-      // no owner. Native status samples its journey and convoy together.
-      if(candidate&&status.seenAt>=Date.now()-3000&&status.movement?.id===body.id&&
-          owner?.phase==='assembling'&&owner.id===c.id&&owner.epoch===c.epoch&&
+      const started=Date.now(),sample=await observer.sample(body);
+      if(sample){
+        const s=await live.state(),c=s.activeConvoy,expected=c?.expected?.[P],rally=c?.rally;
+        const owner=sample.body.convoyNavigation;
+        // One atomic native status binds this journey to its actual owner.
+        // No iframe lookup or five-second polling inside the two-second request.
+        if(faultArmed&&planningFaults.length===0&&Date.now()-started<1500&&
+          c?.phase==='assemble'&&c.purpose==='party-travel'&&!c.runtimes&&expected?.phase==='assemble'&&
+          rally&&body.to?.map===rally.map&&body.to.x===rally.x&&body.to.y===rally.y&&
+          owner.phase==='assembling'&&owner.id===c.id&&owner.epoch===c.epoch&&
           owner.commandId===expected.commandId&&owner.navigationRevision===expected.revision&&owner.runtimeId===expected.runtimeId){
-        planningFaults.push({at:Date.now(),request:body,movement,owner,reportedMovement:status.movement,convoy:c});
-        await route.abort('connectionreset');return;
-      }
-      if(candidate&&Date.now()<deadline){await new Promise(resolve=>setTimeout(resolve,50));continue;}
-      unmatchedPlans.push({at:Date.now(),request:body,movement,owner,reportedMovement:status?.movement,convoy:c?.id,epoch:c?.epoch,expected,rally});
+          planningFaults.push({at:Date.now(),request:body,movement:sample.body.movement,owner,convoy:c,elapsedMs:Date.now()-started});
+          await route.abort('connectionreset');return;
+        }
+        unmatchedPlans.push({at:Date.now(),request:body,owner,reportedMovement:sample.body.movement,
+          convoy:c?.id,epoch:c?.epoch,expected,rally,elapsedMs:Date.now()-started});
+      }else unmatchedPlans.push({at:Date.now(),request:body,reason:'No current native movement sample',elapsedMs:Date.now()-started});
       if(unmatchedPlans.length>32)unmatchedPlans.shift();
-      break;
-      }
     }
     await route.continue();
   };
@@ -159,7 +155,8 @@ test(`explicit ${entry} travel skips only the current native event occurrence`,a
   }finally{
     faultArmed=false;
     if(entry==='travel')await context.unroute('**/party-api/movement-plan',interruptInitialPlan);
-    await info.attach('native-manual-event-assembly-transport',{body:JSON.stringify({planningFaults,unmatchedPlans,recoveryHolds,samples}),contentType:'application/json'});
+    observer.dispose();
+    await info.attach('native-manual-event-assembly-transport',{body:JSON.stringify({planningFaults,unmatchedPlans,requestFailures:observer.failures,recoveryHolds,samples}),contentType:'application/json'});
     try{await live.post('/formation',{character:W,eventSelections:[]});await live.post('/formation',{character:P,follow:false});await live.post('/formation',{character:P,eventSelections:[]});}
     finally{try{await retire();}finally{await live.admin(`output=(()=>{const owned=globalThis.__e2eManualEventCatalog;
       if(!owned)return null;if(G.monsters.mrpumpkin!==owned.configured)throw Error('Declared event catalog ownership changed before restore');

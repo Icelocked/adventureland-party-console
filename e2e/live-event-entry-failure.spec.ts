@@ -1,5 +1,6 @@
 import {test,expect} from './live-fixtures';
 import type {Route} from '@playwright/test';
+import {observeNativePlanner} from './native-planner-observation';
 
 const W='E2EWarrior', P='E2EPriest', names=[W,P];
 test.use({initialPosition:{map:'halloween',x:-550,y:-290}});
@@ -16,18 +17,24 @@ test(`native event entry recovers ${fault}`,async({live},info)=>{
     E.mrpumpkin={live:true,id:String(m.id),map:m.map,x:m.x,y:m.y,hp:m.hp,max_hp:m.max_hp};broadcast_e();
     return {id:String(m.id),map:m.map,x:m.x,y:m.y};
   })()`);
-  const context=live.clients[W].page.context(), requests:any[]=[], samples:any[]=[];
+  const context=live.clients[W].page.context(), requests:any[]=[], samples:any[]=[], unmatched:any[]=[];
+  const observer=observeNativePlanner(context);
   let refusals=0;
   const rejectEntry=async(route:Route)=>{
     const req=route.request(),body=req.method()==='POST'?req.postDataJSON():null;
     if(body?.character!==W)return route.fallback();
+    const started=Date.now(),sample=await observer.sample(body);
+    if(!sample){unmatched.push({at:Date.now(),body,elapsedMs:Date.now()-started,reason:'No current native movement sample'});return route.fallback();}
     const s=await live.state(),c=s.activeConvoy;
-    if(c?.walkingActivity!=='event'||c.walkingEvent!=='mrpumpkin')return route.fallback();
-    const movement=await live.clients[W].run('globalThis.__partyMovement?.report?.()');
-    if(movement?.id!==body.id)return route.fallback();
+    const owner=sample.body.convoyNavigation,expected=c?.expected?.[W];
+    if(c?.walkingActivity!=='event'||c.walkingEvent!=='mrpumpkin'||owner.id!==c.id||owner.epoch!==c.epoch||
+      owner.commandId!==expected?.commandId||owner.navigationRevision!==expected?.revision||owner.runtimeId!==expected?.runtimeId||
+      body.to?.map!==c.location?.map||body.to.x!==c.location.x||body.to.y!==c.location.y||Date.now()-started>=1500){
+      unmatched.push({at:Date.now(),body,owner,expected,elapsedMs:Date.now()-started});return route.fallback();
+    }
     const rejected=fault==='entry unavailable until exhausted'||refusals===0;
     requests.push({at:Date.now(),body,convoy:c.id,revision:c.walkingParents?.[W]?.revision,
-      recoveryAttempts:c.recoveryAttempts,disableTown:c.disableTown,rejected});
+      recoveryAttempts:c.recoveryAttempts,disableTown:c.disableTown,rejected,owner,elapsedMs:Date.now()-started});
     if(!rejected)return route.fallback();
     refusals++;
     // Declared failure at the planner HTTP boundary. All recovery movement,
@@ -64,7 +71,8 @@ test(`native event entry recovers ${fault}`,async({live},info)=>{
     }
   }finally{
     await context.unroute('**/party-api/movement-plan',rejectEntry);
-    await info.attach('native-event-entry-recovery',{body:JSON.stringify({fault,seed,requests,samples,final:await live.state(),events:await live.clients[W].events()}),contentType:'application/json'});
+    observer.dispose();
+    await info.attach('native-event-entry-recovery',{body:JSON.stringify({fault,seed,requests,unmatched,requestFailures:observer.failures,samples,final:await live.state(),events:await live.clients[W].events()}),contentType:'application/json'});
     await live.post('/formation',{character:W,eventSelections:[]});
     await live.admin(`output=(()=>{const m=get_monster('mrpumpkin');if(String(m?.id)===${JSON.stringify(seed.id)})remove_monster(m,{silent:true});G.monsters.mrpumpkin=globalThis.__entryRecoveryOriginalPumpkin;delete globalThis.__entryRecoveryOriginalPumpkin;delete E.mrpumpkin;broadcast_e();return true;})()`);
   }
