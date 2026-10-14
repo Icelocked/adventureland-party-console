@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Let an explicitly authorized Franky evacuation cross a door while a living monster still targets the party, preserving Town, loot and ordinary-travel safety checks.
+- Bound the native cold-defense response fault to its intended recovery phase, and observe safe-reload walking coherently so short real movements are not missed by test preflight checks.
+
 - Align native farming-handoff coverage with the explicitly requested catalog farm area and normal weapon ranges, retaining physical arrival and real post-arrival attack checks.
 
 - Declare native gathering skill availability before login in capacity regressions, preventing queued login cooldown updates from racing the test setup while preserving actual inventory-blocking checks.

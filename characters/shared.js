@@ -14656,7 +14656,7 @@
           if(lastFailure && convoyDiagnosticClock()-began>=10000)return Promise.reject(lastFailure);
           if(!owned())return Promise.reject(ownerError());
         return request('/movement-barrier', {method:'POST',timeout:Math.max(1,Math.min(2000,10000-(convoyDiagnosticClock()-began))),body:Object.assign(sharedConvoyIdentity(command),{
-          step:index, destination:step, completed:completed, ready:completed || ((command.continuousReturn === 1 || command.huntTarget) && !step.town || !departureCombatPending()) && (command.continuousReturn === 1 || command.huntTarget || eligibleDepartureChests().length === 0) && (!step.town || can_use('use_town'))
+          step:index, destination:step, completed:completed, ready:completed || ((command.continuousReturn === 1 || command.huntTarget || command.purpose === 'franky-exit' && command.navigationExempt === true && command.combatHandoffAllowed === false) && !step.town || !departureCombatPending()) && (command.continuousReturn === 1 || command.huntTarget || eligibleDepartureChests().length === 0) && (!step.town || can_use('use_town'))
         })}).then(function(result){
             if(!owned())throw ownerError();
             return !!result.ready;

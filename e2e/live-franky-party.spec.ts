@@ -9,20 +9,22 @@ test.use({ loadout: 'fragile' });
 
 test('disabling inherited Franky interrupts native boss combat and evacuates both participants', async ({ live }, info) => {
   test.setTimeout(480_000);
-  const world = () => live.admin(`output={live:!!E.franky?.live,boss:!!get_monster('franky'),bossHp:get_monster('franky')?.hp,
+  const world = () => live.admin(`output={live:!!E.franky?.live,boss:!!get_monster('franky'),bossHp:get_monster('franky')?.hp,bossTarget:get_monster('franky')?.target,
     players:Object.fromEntries(${JSON.stringify(members)}.map(name=>{const p=get_player(name);
       return [name,{map:p.map,x:p.x,y:p.y,rip:!!p.rip}]}))}`);
   await live.post('/formation', { leader: W });
   await live.post('/formation', { character: P, follow: true });
   const seed = await live.admin(`output=(()=>{
     if(events.franky || get_monster('franky')) throw Error('Franky needs a clean baseline');
-    const initial={attack:1,spawns:[],range:0,charge:0,speed:0,aggro:0};
+    // Keep native reach and pursuit so a living attacker remains during evacuation.
+    const initial={attack:1,spawns:[],aggro:0};
     globalThis.__e2eFrankyDefinition=Object.fromEntries(Object.keys(initial).map(key=>[key,G.monsters.franky[key]]));
     Object.assign(G.monsters.franky,initial);
     globalThis.__e2eFrankyBoundary=G.maps.level2w.monsters[0].boundary.slice();
     G.maps.level2w.monsters[0].boundary=[-529,-185,-527,-183];
     events.franky=true;delete timers.franky;
     return {original:globalThis.__e2eFrankyDefinition,initial,
+      nativeCombat:{range:G.monsters.franky.range,speed:G.monsters.franky.speed,charge:G.monsters.franky.charge},
       originalBoundary:globalThis.__e2eFrankyBoundary,initialBoundary:G.maps.level2w.monsters[0].boundary,
       scope:'native visible-boss combat, deselection, exit ownership and actual Mainland evacuation'};
   })()`);
@@ -74,6 +76,8 @@ test('disabling inherited Franky interrupts native boss combat and evacuates bot
   await context.unroute(permission);
   await info.attach('hunt-event-native-death-reentry', { body: JSON.stringify({ death, denied, server: await world(), coordinator: await live.state() }), contentType: 'application/json' });
   await live.post('/farming-mode', { character: W, mode: 'default' });
+  await expect.poll(async()=>members.includes((await world()).bossTarget),
+    {timeout:30_000,message:'A real living Franky must target a party member before evacuation'}).toBe(true);
   const before = { server: await world(), coordinator: await live.state() };
   expect(before.server.bossHp).toBeGreaterThan(0);
   await info.attach('franky-party-before-disable', { body: JSON.stringify(before), contentType: 'application/json' });

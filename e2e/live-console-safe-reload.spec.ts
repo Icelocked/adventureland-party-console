@@ -116,13 +116,14 @@ for(const mode of ['safe','now'] as const)test(`console reload resumes native fa
     if(mode==='safe'){
       let admission:any;
       await expect.poll(async()=>{
-        admission=await live.clients[W].run(`(()=>{
-          const service=globalThis.__partyMovement,report=service.report(),goal=${JSON.stringify(destination)},state=service.state;
-          return {id:report?.id,owner:report?.owner,name:character.name,map:character.map,moving:!!character.moving,
-            goalMatch:state.map===goal.map&&state.x===goal.x&&state.y===goal.y};
-        })()`);
+        admission=await live.clients[W].frame.evaluate(goal=>{
+          const game=window as any,runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+          const service=runner?.__partyMovement,report=service?.report(),state=service?.state,character=game.character;
+          return {id:report?.id,owner:report?.owner,name:character?.name,map:character?.map,moving:!!character?.moving,
+            goalMatch:state?.map===goal.map&&state?.x===goal.x&&state?.y===goal.y};
+        },destination);
         return !!admission.id&&admission.name===W&&admission.map===destination.map&&admission.moving&&admission.goalMatch;
-      },{timeout:30000,message:'The native character and active owned journey must be walking toward the requested probe together'}).toBe(true);
+      },{timeout:30000,intervals:[50,100],message:'The native character and active owned journey must be walking toward the requested probe together'}).toBe(true);
       const journey=admission.id;
       live.consoleDrainLease('reload-walk');
       await expect.poll(()=>live.clients[W].run('globalThis.__partyConsoleMaintenance?.id'),{timeout:10000}).toBe('reload-walk');
