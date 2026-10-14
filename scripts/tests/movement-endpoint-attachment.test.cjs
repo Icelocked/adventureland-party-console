@@ -12,7 +12,7 @@ const repair=(plot,destination=f.to,start=from,p=ports)=>require('../../runtime/
 test('captured native gather executes a certified corner connector and reaches the exact owned anchor',async()=>{
  assert.equal(walk(f.plot.at(-2),f.to),false);assert.equal(walk(f.to,f.to),true);
  const calls=[],c={name:'P',map:f.map,in:f.map,real_x:f.from.x,real_y:f.from.y,moving:false,speed:79,base:f.base,items:[]};
- const host={character:c,G:n.game,parent:{__partyClientVersion:f.version},smart:{},
+ const host={character:c,G:n.game,parent:{__partyClientVersion:f.version,socket:new(require('node:events').EventEmitter)()},smart:{},
   smart_move:()=>{Object.assign(host.smart,{moving:true,searching:false,found:false});return Promise.resolve();},
   stop:async()=>{host.smart.moving=false;},smart_move_logic(){},
   start_pathfinding(){Object.assign(host.smart,{searching:true,found:true,plot:f.plot.map(p=>({...p}))});},continue_pathfinding(){},

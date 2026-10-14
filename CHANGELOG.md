@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Stop and revalidate an owned walking segment after an accepted native position correction, preventing stale movement velocity from carrying a return route into blocked terrain.
+- Stop and revalidate an owned walking segment after an accepted native position correction, preventing stale movement velocity from carrying a return route into blocked terrain. Keep the retained corner-connector fixture aligned with the native socket contract.
 
 - Lead moving combat targets using their native direction and speed plus each fighter's speed and a 10-unit margin inside attack range, reducing short chase steps while preserving terrain safety and fresh whole-party attack confirmation.
 - Keep manual travel in control during events by skipping only the current occurrence, preventing event rejoin loops while preserving future attendance.
