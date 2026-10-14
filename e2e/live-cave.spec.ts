@@ -1269,7 +1269,8 @@ test('Cave shared-route pacing keeps the party together and stops the selected r
 
 
 
-test('Cave assembly regroups displaced completed participants before departure', async ({live,page},info) => {
+for (const layout of ['random', 'unavailable entry shop'] as const) {
+test(`Cave assembly regroups displaced completed participants before departure (${layout})`, async ({live,page},info) => {
   test.setTimeout(300_000);
   await live.admin("Dev=true;Prod=false;G.events.dreams.disabled=false;G.events.dreams.encounters=G.events.dreams.encounters.filter(e=>['e11','e20','e31','e50'].includes(e.id));output=true");
   await live.post('/formation',{leader:'E2EWarrior'});
@@ -1296,9 +1297,33 @@ test('Cave assembly regroups displaced completed participants before departure',
     await expect.poll(async()=>{const p=(await positions())[name];return Math.hypot(p.x-destination.x,p.y-destination.y);},{timeout:20_000}).toBeLessThan(5);
   };
   await expect.poll(async()=>{const v=await view();return v.members.length===2&&v.members.every((m:any)=>m.fresh&&m.observation?.ready&&m.observation?.visit?.available&&m.observation.members.length===2);},{timeout:60_000}).toBe(true);
-  await act({action:'enter'});
-  await expect.poll(async()=>(await view()).state.phase,{timeout:60_000}).toBe('active');
-  const nativeShop=()=>live.admin(`output=(()=>{const p=get_player('E2EWarrior'),run=generated_entry(p).record,room=run.cave.rooms.find(r=>r.id===G.maps[p.map].generated.floor+':shop');return {run:run.key,map:p.map,paused:!!run.paused_at,room:room?{id:room.id,map:room.map,x:room.x,y:room.y,encounter:room.encounter?.id,voted:!!room.voted,done:!!room.done,npc:room.npc?{id:room.npc.id,x:room.npc.x,y:room.npc.y}:null,vote:room.vote?{id:room.vote.id,resolved:room.vote.resolved}:null}:null};})()`);
+  // Declare only the native layout's random input. Generation, NPC placement,
+  // entry, votes and all later movement still run through the real server.
+  if(layout==='unavailable entry shop')await live.admin(`
+    globalThis.__assemblyRandomBytes=crypto.randomBytes;
+    crypto.randomBytes=function(size,...args){
+      if(size===16&&!args.length&&new Error().stack.includes('open_generated_zone')){
+        crypto.randomBytes=globalThis.__assemblyRandomBytes;
+        return Buffer.from('00000000000000000000000000000020','hex');
+      }
+      return globalThis.__assemblyRandomBytes.call(this,size,...args);
+    };output=true;`);
+  try {
+    await act({action:'enter'});
+    await expect.poll(async()=>(await view()).state.phase,{timeout:60_000}).toBe('active');
+  } finally {
+    if(layout==='unavailable entry shop')await live.admin('crypto.randomBytes=globalThis.__assemblyRandomBytes;delete globalThis.__assemblyRandomBytes;output=true');
+  }
+  const nativeShop=()=>live.admin(`output=(()=>{
+    const p=get_player('E2EWarrior'),run=generated_entry(p).record,room=run.cave.rooms.find(r=>r.id===G.maps[p.map].generated.floor+':shop');
+    const placements=[];
+    if(room?.bounds){const b=room.bounds;
+      for(const dy of [96,128,160])for(let dx=64;dx<=(b[2]-b[0])/2;dx+=32)for(const x of [b[0]+dx,b[2]-dx]){
+        const y=b[1]+dy;
+        if(is_xy_safe(room.map,x,y)&&closest_line(room.map,x,y)>=32&&!G.maps[room.map].spawns.some(s=>Math.hypot(x-s[0],y-s[1])<112))placements.push({x,y});
+      }
+    }
+    return {run:run.key,seed:run.seed,map:p.map,paused:!!run.paused_at,placements,room:room?{id:room.id,map:room.map,x:room.x,y:room.y,bounds:room.bounds,started:!!room.started,encounter:room.encounter?.id,voted:!!room.voted,done:!!room.done,npc:room.npc?{id:room.npc.id,x:room.npc.x,y:room.npc.y}:null,vote:room.vote?{id:room.vote.id,resolved:room.vote.resolved}:null}:null};})()`);
   const cave=(await view()).members[0].observation.cave;
   const initialNativeShop=await nativeShop();
   if(cave.choice&&!cave.choice.resolved&&initialNativeShop.room?.vote?.id!==cave.choice.id){
@@ -1315,10 +1340,21 @@ test('Cave assembly regroups displaced completed participants before departure',
     },{timeout:30_000,message:'Both native participant votes must settle before assembly staging'}).toBe(true);
   }
   const shopSetupStarted=Date.now(),shopSetupEvidence:any[]=[];
-  const shop=await nativeShop();
+  let shop=await nativeShop();
   try {
-  if(shop.room?.encounter==='e31'){
-    expect(shop.room.done,'Declared entry shop must remain available for its explicit native setup vote').toBe(false);
+  if(layout==='unavailable entry shop'){
+    expect(shop.seed).toBe('00000000000000000000000000000020');
+    expect(shop.room?.encounter).toBe('e31');
+    expect(shop.room?.npc).toBeNull();
+    expect(shop.placements).toEqual([]);
+  }
+  if(shop.room?.encounter==='e31'&&!shop.room.done){
+    await expect.poll(async()=>{
+      shop=await nativeShop();shopSetupEvidence.push({stage:'availability',native:shop});
+      return !!shop.room?.npc||(!shop.paused&&!shop.room?.vote&&!shop.room?.started&&shop.placements.length===0);
+    },{timeout:10_000,message:'Entry shop must spawn or have no valid native placement'}).toBe(true);
+  }
+  if(shop.room?.encounter==='e31'&&!shop.room.done&&shop.room.npc){
     if(!shop.room.vote||shop.room.vote.resolved){
     const goals=await live.admin(`output=(()=>{const people=['E2EWarrior','E2EPriest'].map(name=>get_player(name)),run=generated_entry(people[0]).record,room=run.cave.rooms.find(r=>r.id===${JSON.stringify(shop.room.id)}),npc=room.npc;if(!npc)throw Error('Entry shop NPC unavailable');return people.map(p=>{const goals=[];for(const radius of [120,80,0])for(let i=0;i<16;i++){const x=npc.x+radius*Math.cos(i*Math.PI/8),y=npc.y+radius*Math.sin(i*Math.PI/8);if(Math.hypot(x-room.x,y-room.y)<260&&can_move({map:p.map,x:p.x,y:p.y,going_x:x,going_y:y,base:p.base}))goals.push({name:p.name,x,y});}goals.sort((a,b)=>Math.hypot(a.x-p.x,a.y-p.y)-Math.hypot(b.x-p.x,b.y-p.y));if(!goals.length)throw Error('No native-clear entry shop setup walk');return goals[0];});})()`);
     for(const goal of goals) {
@@ -1471,3 +1507,4 @@ test('Cave assembly regroups displaced completed participants before departure',
   await expect.poll(async()=>{const p=await positions();return ['E2EWarrior','E2EPriest'].every(name=>Math.hypot(p[name].x-offset.x,p[name].y-offset.y)<35);},{timeout:90_000}).toBe(true);
   await info.attach('native-cave-completed-assembly-regroup',{body:JSON.stringify({initialId,regroupId,positions:await positions(),dungeon:await view()}),contentType:'application/json'});
 });
+}

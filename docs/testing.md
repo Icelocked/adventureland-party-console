@@ -3,7 +3,7 @@
 ## CI parallelism
 
 The full native workflow uses 16 isolated GitHub runners with one Playwright
-worker each. Shards 1–3 run the three named `live-cave.spec.ts` journeys separately;
+worker each. Shards 1–3 run the three named `live-cave.spec.ts` journey groups separately;
 shards 4–16 set `E2E_SKIP_CAVE=1` and distribute the remaining live project over
 13 shards. Focused `grep` runs retain one runner and include Cave normally.
 When adding or renaming a Cave scenario, update its workflow filter. Validate
@@ -769,6 +769,25 @@ the complete paired sequence; the 150-second ordinary-job, 180-second final-job,
 and 20-second potion-recovery deadlines still enforce progress independently.
 
 The assembly regroup fixture must first find a nearby native staging position.
+Run 38609591558 shard 3 failed before assembly because the declared entry shop
+had no NPC. Native merchant placement can reject every position near a doorway;
+declaring an encounter does not guarantee that its actor spawned. The setup
+now distinguishes unavailable placement from delayed spawning and resolves real
+pending shop votes before staging. Missing NPCs with valid positions still fail
+after a bounded readiness wait; unresolved votes and unsafe staging remain errors.
+The assembly group covers both a randomized layout and native seed
+`00000000000000000000000000000020`, whose candidate shop positions all fall
+inside the native 112-unit spawn exclusion. Only the layout RNG input is declared,
+scoped to native entry and restored in finally; no NPC, vote or movement outcome
+is fabricated. Both cases must finish the same physical displacement, new gather
+command and party-arrival assertions. Retain `native-cave-entry-shop-setup` and
+`native-cave-completed-assembly-regroup` evidence. Run with
+`npm test -- -- --project=live --grep "Cave assembly regroups"`.
+Both cases passed locally in 3.5 minutes with 78 verified evidence files. The
+fixed seed produced `npc: null`, zero placements, a new regroup command, and
+both participants stopped at the shared destination. The 16-shard allocation
+check contains all 200 native tests exactly once (two assembly cases on shard 3).
+
 Run 37775616033 placed the doorway 408 pixels from a farm, making its former
 410-pixel clearance check impossible in every direction. Before changing this
 fixture, the failure modes were recorded: no connected safe staging geometry,

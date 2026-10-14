@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Make native Cave regroup test setup tolerate an optional entry shop with no valid NPC placement, with a reproducible missing-shop layout alongside randomized coverage and unchanged regrouping checks.
+
 - Reconcile BankBoi transfer-row requests at startup and after account changes, clearing stale staging work when the final BankBoi is removed without requiring another bank visit.
 - Recover displaced manual upgrade work from unfinished inventory without confusing completed copies for survivors. Report item, levels and candidate slots for genuine ambiguity, and pause retries until relevant inventory or upgrade intent changes.
 
