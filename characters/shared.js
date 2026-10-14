@@ -323,15 +323,7 @@
   migratePartyCombatSockets();
   if (root.__partyEscapeTimer) clearInterval(root.__partyEscapeTimer);
   root.__partyEscapeTimer = setInterval(function () { escapeSurvivalPulse().catch(function () {}); escapePulse().catch(function () {}); }, 100);
-  // This routine means "ensure music is off", not "toggle music". Checking
-  // the live flag first prevents a hot reload from accidentally turning it on.
-  if (parent.sound_music) {
-    if (typeof parent.sound_off === "function") parent.sound_off();
-    else {
-      parent.sound_music = "";
-      if (typeof parent.reflect_music === "function") parent.reflect_music();
-    }
-  }
+  // Keep the native audio preferences; the Steam Characters bar owns toggles.
   // Navigation labels and half-finished searches live on the game window,
   // outside this routine's closure. Clean them during every code generation.
   root.__partyNavigationDetail = null;
@@ -4609,7 +4601,7 @@
       else if (journal.destroyed || (!live && !journal.commerce) || JSON.stringify(fingerprint(live)) === JSON.stringify(fingerprint(journal.item))) journal.success=false;
       else throw Error("Production outcome needs review before another attempt: " + journal.item.name);
     }
-    if (journal.commerce) journal.outcomeItem = journal.destroyed ? null : fingerprint(character.items[journal.slots[0]]);
+    if (journal.request && journal.request.kind === "upgrade" || journal.commerce) journal.outcomeItem = journal.destroyed ? null : fingerprint(character.items[journal.slots[0]]);
     journal.phase="complete";await saveProductionJournal(journal);
     await finishProductionJournal(journal);
   }
@@ -4677,7 +4669,7 @@
     if (failure && /timed out|uncertain|interrupted|recovery/i.test(String(failure.message || failure))) throw failure;
     journal.destroyed = !!(failure && failure.reason === "upgrade_destroyed" && failure.confirmedDestroyed === true);
     journal.success=!!live && live.name===item.name && (live.level || 0)===(item.level || 0)+1;
-    if (journal.commerce) journal.outcomeItem = journal.destroyed ? null : fingerprint(live);
+    if (kind === "upgrade") journal.outcomeItem = journal.destroyed ? null : fingerprint(live);
     journal.phase="complete";await saveProductionJournal(journal);
     await finishProductionJournal(journal);
     if (failure) throw failure;
@@ -5735,11 +5727,11 @@
     // unique survivor to another slot after inventory recovery.
     var start = Number(mark.item.level) || 0;
     var target = Math.min(maximumItemLevel(G.items[mark.item.name]), start + (Number(mark.tiers) || 1));
-    var slot = mark.slot, item = Number.isInteger(slot) && character.items[slot];
+    var slot = Number.isInteger(mark.liveSlot) ? mark.liveSlot : mark.slot, item = Number.isInteger(slot) && character.items[slot];
     if (item && !used[slot] && (Number(item.level) || 0) >= start &&
         (Number(item.level) || 0) <= target &&
         sameItem(Object.assign({}, item, { level: mark.item.level }), mark.item)) return slot;
-    if (mark.auto && mark.passId) {
+    if (mark.auto && mark.passId || !mark.auto && mark.requestId) {
       var survivors = [];
       character.items.forEach(function (candidate, index) {
         if (!used[index] && candidate && (Number(candidate.level) || 0) >= start &&
@@ -5772,43 +5764,87 @@
     var found = availableOfferingEntries(checkpoint).find(function(entry) { return !entry.pack && entry.item.name === name; });
     return found ? found.slot : -1;
   }
+  function carriedOfferingQuantity(checkpoint,name) {
+    return availableOfferingEntries(checkpoint).filter(function(entry){return !entry.pack && entry.item.name===name;})
+      .reduce(function(sum,entry){return sum+(Number(entry.item.q)||1);},0);
+  }
+  function upgradeOfferingDemand(command,checkpoint,name) {
+    var used={},demand=0;
+    (command.upgrades || []).forEach(function(mark){
+      var slot=findUpgradeMarkSlot(mark,used);if(slot<0)return;used[slot]=true;
+      var item=character.items[slot],target=(Number(mark.item.level)||0)+(Number(mark.tiers)||1);
+      for(var level=Number(item.level)||0;level<target;level++){
+        var rule=globalThis.partyResolveUpgradeOffering(checkpoint.upgradeOfferingRules || [],item.name,level,mark.offering);
+        if(rule && rule.offering===name)demand++;
+        if(mark.offering)break;
+      }
+    });
+    return Math.max(1,demand);
+  }
   async function retrieveUpgradeOffering(command, name, mark, item, activity) {
+    // Authorize and batch the dependency before a bank checkpoint can hand the
+    // merchant slot to storage. Only a later carried observation permits rolling.
+    if (await requestUpgradeOfferingSupply(command,name,mark,item,activity)) return;
     await merchantVisitBank(command,activity);
     var floors = accessibleBankSortFloors();
     for (var i=0;i<floors.length;i++) {
       if (character.map !== floors[i]) await smart_move(floors[i]);
       var checkpoint = await upgradeOfferingCheckpoint(command);
-      if (carriedOffering(checkpoint,name) >= 0) return;
+      if (carriedOfferingQuantity(checkpoint,name) >= upgradeOfferingDemand(command,checkpoint,name)) return;
       var packs = bankPacksOnCurrentFloor();
-      var found = availableOfferingEntries(checkpoint).find(function(entry) {
+      var found;
+      while ((found=availableOfferingEntries(checkpoint).find(function(entry) {
         return entry.pack && packs.indexOf(entry.pack)>=0 && entry.item.name===name;
-      });
-      if (!found) continue;
-      if (freeInventorySlots()<1) throw Error("Merchant needs a free slot for upgrade offering");
-      await bankRetrieveConfirmed(found.pack,found.slot);
-      if (carriedOffering(await upgradeOfferingCheckpoint(command),name)>=0) return;
+      }))) {
+        if (freeInventorySlots()<1) throw Error("Merchant needs a free slot for upgrade offering");
+        await bankRetrieveConfirmed(found.pack,found.slot);
+        checkpoint=await upgradeOfferingCheckpoint(command);
+        if (carriedOfferingQuantity(checkpoint,name)>=upgradeOfferingDemand(command,checkpoint,name)) return;
+      }
     }
     // BankBoi owns a different native login slot. Yield this exact job before
     // storage takes that slot; its original upgrade intent survives the handoff.
+    await requestUpgradeOfferingSupply(command,name,mark,item,activity);
+  }
+  async function requestUpgradeOfferingSupply(command,name,mark,item,activity) {
     var supply = await request("/merchant/offering-supply", {method:"POST",body:{
       jobId:command.jobId, commandId:command.id || command.commandId,
       offering:name, item:fingerprint(item), mark:mark,
     }});
     if (supply && supply.pending) {
-      activity.push({level:"info",message:"Waiting for BankBoi upgrade offering",details:{offering:name}});
+      activity.push({level:"info",message:"Waiting for upgrade offering delivery",details:supply});
       throw new Error("bankboi_pending");
+    }
+    return supply && supply.state==='delivered';
+  }
+  async function preloadUpgradeOfferings(command,activity) {
+    if (!(command.upgrades || []).length || command.target && command.target!==character.name) return;
+    var checkpoint=await upgradeOfferingCheckpoint(command),used={},seen={};
+    for(var index=0;index<command.upgrades.length;index++){
+      var mark=command.upgrades[index],slot=findUpgradeMarkSlot(mark,used);
+      if(slot<0)continue;used[slot]=true;
+      var item=character.items[slot],rule=globalThis.partyResolveUpgradeOffering(checkpoint.upgradeOfferingRules || [],item.name,Number(item.level)||0,mark.offering);
+      if(!rule || seen[rule.offering])continue;seen[rule.offering]=true;
+      var carried=carriedOfferingQuantity(checkpoint,rule.offering);
+      if(carried<upgradeOfferingDemand(command,checkpoint,rule.offering) && Number((checkpoint.upgradeOfferingStock || {})[rule.offering])>carried)
+        await retrieveUpgradeOffering(command,rule.offering,mark,item,activity);
     }
   }
   async function prepareUpgradeOffering(command, mark, slot, activity) {
-    if (!mark.auto && !mark.offering) return undefined;
     var checkpoint = await upgradeOfferingCheckpoint(command), item = character.items[slot];
     var level = Number(item.level)||0;
-    var rule = mark.offering ? {offering:mark.offering,required:true} : (checkpoint.upgradeOfferingRules || []).find(function(rule) {
-      return rule.name===item.name && rule.floor<=level && level<rule.ceiling;
-    });
+    var rule = globalThis.partyResolveUpgradeOffering(checkpoint.upgradeOfferingRules || [],item.name,level,mark.offering);
     if (!rule) return undefined;
-    if (carriedOffering(checkpoint,rule.offering)<0 && Number((checkpoint.upgradeOfferingStock || {})[rule.offering])>0) {
-      await retrieveUpgradeOffering(command,rule.offering,mark,item,activity);
+    if (carriedOfferingQuantity(checkpoint,rule.offering)<upgradeOfferingDemand(command,checkpoint,rule.offering) && Number((checkpoint.upgradeOfferingStock || {})[rule.offering])>carriedOfferingQuantity(checkpoint,rule.offering)) {
+      try { await retrieveUpgradeOffering(command,rule.offering,mark,item,activity); }
+      catch(error) {
+        if(String(error.reason || error.message || error)==='bankboi_pending') throw error;
+        await request("/merchant/production", {method:"POST",body:{character:character.name,action:"wait-offering",
+          owner:command.target || character.name,mark:mark,liveSlot:findItem(item),level:level,offering:rule.offering,reason:String(error.reason || error.message || error)}});
+        (command._offeringWaits ||= []).push(mark);
+        activity.push({level:"error",message:"Upgrade offering retrieval blocked",details:String(error.reason || error.message || error)});
+        throw error;
+      }
       checkpoint = await upgradeOfferingCheckpoint(command);
     }
     var offeringSlot = carriedOffering(checkpoint,rule.offering);
@@ -5819,7 +5855,7 @@
       activity.push({level:"info",message:"Waiting for " + (G.items[rule.offering].name || rule.offering) + " to upgrade " + item.name + " from +"+level+" to +"+(level+1)});
       return {waiting:true};
     }
-    return offeringSlot<0 ? undefined : {offering:rule.offering,requestId:mark.requestId};
+    return offeringSlot<0 ? undefined : {offering:rule.offering,...(mark.offering ? {requestId:mark.requestId} : {})};
   }
 
   async function merchantImprove(command, activity) {
@@ -5863,9 +5899,16 @@
           scrollSlot = findInventoryItemByName(scrollName);
         }
         await smart_move(find_npc("newupgrade"));
+        // Scroll procurement and travel can outlive a rule edit.
+        offeringAttempt = await prepareUpgradeOffering(command, mark, slot, activity);
+        if (offeringAttempt && offeringAttempt.waiting) break;
         try {
           var before = character.items[slot].level || 0;
-          var outcome = await upgradeConfirmed(slot, scrollSlot, undefined, undefined, mark.auto ? {family:"upgrade",key:mark.item.name+"@+"+(mark.item.level||0),mark:Object.assign({},mark,{slot:slot,equipped:false})} : undefined, offeringAttempt);
+          var outcome = await upgradeConfirmed(slot, scrollSlot, undefined, undefined, {family:mark.auto ? "upgrade" : "manual-upgrade",key:mark.auto ? mark.item.name+"@+"+(mark.item.level||0) : undefined,mark:Object.assign({},mark,{slot:slot,equipped:false})}, offeringAttempt);
+          if(outcome && outcome.item) {
+            var resultSlot=Number.isInteger(outcome.slot) && sameItem(character.items[outcome.slot],outcome.item) ? outcome.slot : findItem(outcome.item);
+            if(resultSlot>=0) {slot=resultSlot;mark.liveSlot=slot;used[slot]=true;}
+          }
           if (mark.offering) {
             activity.push({level:outcome && outcome.success === false ? "info" : "success", message:"Completed one upgrade attempt with " + mark.offering});
             break;
@@ -6883,6 +6926,7 @@
           await unequip(statMark.slot);
       }
       if ((command.bankUpgradeRules || []).length) await prepareBankUpgrades(command, activity);
+      await preloadUpgradeOfferings(command, activity);
       await preloadStatScrolls(command, activity);
       await prepareManualImprovementScrolls(command, activity);
       await applyStatScrolls(command, activity);
@@ -13613,7 +13657,6 @@
     var id=root.partyRoleRunner&&root.partyRoleRunner.engagedTargetId&&root.partyRoleRunner.engagedTargetId(),entity=id&&get_entity(id);
     return entity&&entity.visible&&!entity.dead&&entity.hp>0?{id:String(id),map:character.map,in:character.in,server:reunionRealm(),at:Date.now()+coordinatorClockOffset}:null;
   }
-
   function activeCombatTarget() {
     var id=root.partyCombatState && root.partyCombatState.selectedTarget;
     var e=id && get_entity(id);
@@ -15954,9 +15997,11 @@
     for(var i=0;i<offsets.length;i++){
       var point={x:character.x+Math.cos(heading+offsets[i])*length,y:character.y+Math.sin(heading+offsets[i])*length};
       // An obstacle detour can temporarily increase distance to the priest.
+      // The healer must also be able to round a wall when a fighter owns
+      // recovery; otherwise the fighter waits for coverage that cannot advance.
       // Only the certified route direction may do this, during peaceful recovery;
       // every issued segment still checks live terrain and monster clearance.
-      var detour=i===0 && client && client.followPoint && mover.ctype==='priest' &&
+      var detour=i===0 && client && client.followPoint && (mover.ctype==='priest' || character.ctype==='priest') &&
         terrainRecoveryContext().allowed && !can_move_to(mover.x,mover.y);
       if((terrainCoverageStep(point) || detour) && terrainRecoverySafe(point)){
         sendCombatMove(g.target,point,'formation-regrouping');

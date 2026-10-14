@@ -28,15 +28,21 @@ export function createCoordinatorStorageService(state: StorageState, persist: ()
       if (pending) persist();
       return pending;
     },
-    queueOffering(offering:UpgradeOffering):boolean {
-      const entry=protectedMerchantStorageStock(state).find(entry=>String(entry.craftLocation).startsWith('bankboi:') &&
-        entry.item?.name===offering && !entry.item.l && !entry.item.b);
-      if(!entry) return false;
+    queueOffering(offering:UpgradeOffering,quantity=1):boolean {
       const requests=state.withdrawals[String(state.merchantCharacter)] ||= [];
-      if(!requests.some(request=>request.pack===entry.craftLocation && request.slot===entry.slot))
-        requests.push({pack:String(entry.craftLocation),slot:entry.slot,item:entry.item});
-      persist();
-      return true;
+      let remaining=quantity, pending=false;
+      // Native bank stock precedes remote whole stacks; existing references own
+      // their quantity and remain untouched across repeated requests/restarts.
+      const stock=protectedMerchantStorageStock(state).filter(entry=>entry.item?.name===offering && !entry.item.l && !entry.item.b && !entry.craftLocation.startsWith('inventory:'))
+        .sort((a,b)=>Number(a.craftLocation.startsWith('bankboi:'))-Number(b.craftLocation.startsWith('bankboi:')));
+      for(const entry of stock){
+        if(remaining<=0) break;
+        if(!requests.some(request=>request.pack===entry.craftLocation && request.slot===entry.slot))
+          requests.push({pack:entry.craftLocation,slot:entry.slot,item:entry.item});
+        remaining-=Number(entry.item?.q)||1;pending=true;
+      }
+      if(pending) persist();
+      return pending;
     },
   };
 }

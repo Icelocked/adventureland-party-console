@@ -14,6 +14,8 @@ interface Mark {
   auto?: boolean;
   offering?: UpgradeOffering;
   requestId?: string;
+  /** Legacy bank-withdrawal identity retained when loading existing marks. */
+  passId?: string;
 }
 type Rule = number | string | { tiers: number; quantity?: number };
 interface UpgradeState extends SharedScope {
@@ -76,7 +78,8 @@ export function createUpgradeCommands(state: UpgradeState, ports: UpgradePorts) 
       ...(body.equipped === true ? { equipped: true } : {}),
       tiers,
       ...(auto ? { auto: true } : {}),
-      ...(!auto && isUpgradeOffering(body.offering) ? {offering:body.offering, requestId:randomUUID()} : {}),
+      ...(!auto ? {requestId:randomUUID()} : {}),
+      ...(!auto && isUpgradeOffering(body.offering) ? {offering:body.offering} : {}),
     };
     if (index >= 0) list[index] = entry;
     else list.push(entry);

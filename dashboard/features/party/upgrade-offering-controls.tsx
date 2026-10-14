@@ -94,7 +94,7 @@ function OfferingDialog({selection, rules, stock, catalog, close, save}: {
       <DialogHeader><DialogTitle>{manual ? 'Confirm upgrade' : selection.rule ? 'Edit upgrade rule' : 'Add upgrade rule'}</DialogTitle>
         <DialogDescription className="text-slate-300">{manual
           ? `Use ${upgradeOfferings[rule.offering]} to upgrade ${name} from +${level} to +${level+1}?`
-          : 'Use an offering during automatic upgrades within this level range.'}</DialogDescription>
+          : 'Use an offering during manual and automatic upgrades within this level range.'}</DialogDescription>
       </DialogHeader>
       <div className="flex items-center gap-3"><OfferingIcon name={selection.item.name} catalog={catalog}/><span>{name}</span></div>
       {manual ? <div className="flex items-center gap-3"><OfferingIcon name={rule.offering} catalog={catalog}/>{upgradeOfferings[rule.offering]}</div>

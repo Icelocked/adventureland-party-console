@@ -1305,10 +1305,17 @@ stores item-wide half-open level ranges: +7 to +9 applies at +7 and +8. The
 `upgrade-offering-rule` character command creates, edits, or removes a range;
 overlapping ranges are rejected. Required offerings preserve an unfinished mark
 with `waitingOffering` until stock or policy changes. Optional offerings retrieve
-owned bank stock before falling back. Neither mode buys offerings. Merchant and
+usable carried, native-bank and BankBoi stock before permitting an unboosted
+attempt when none is available. Ordinary manual and automatic work share this
+current-level policy; explicit selections remain one-attempt overrides. Neither mode buys offerings. Merchant and
 bank availability excludes locked stock and existing crafting/delivery reservations.
 Manual `upgrade-mark` requests with `offering` authorize one attempt and carry a
-durable `requestId`; a surviving failure does not retry. Production receipts and
+durable `requestId`; a surviving failure does not retry. Ordinary manual marks
+also carry stable request identities without becoming one-attempt requests.
+Offering supply counts admitted unfinished transitions, subtracts usable carried
+stock, and deduplicates whole-stack withdrawals. A persisted `offeringSupply`
+dependency holds upgrades until native-bank collection confirms merchant receipt.
+Retrieval failures preserve an explicit wait reason; queued stock is not delivery. Production receipts and
 lucky-slot journals account for the offering and prevent duplicate consumption.
 An unissued manual attempt can be abandoned during recovery without losing its
 request. Validate with `upgrade-offerings*.test.cjs`,

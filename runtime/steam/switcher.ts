@@ -1,7 +1,16 @@
 import type { BridgeReply } from "./bridge.ts";
 import type { SteamAction } from "../roster/steam-group.ts";
 import { orderCharacters } from "../roster/character-order.ts";
-interface ViewHost { document: Document; localStorage?: Storage; character?: { name: string }; socket?: { connected: boolean }; }
+/** Native js/functions.js audio flags and preference-saving controls. */
+export interface NativeAudioHost {
+  sound_sfx?: string | boolean;
+  sound_music?: string | boolean;
+  sfx_on?(): void;
+  sfx_off?(): void;
+  sound_on?(): void;
+  sound_off?(): void;
+}
+interface ViewHost extends NativeAudioHost { document: Document; localStorage?: Storage; character?: { name: string }; socket?: { connected: boolean }; }
 const minimizedKey = "party-steam-minimized-v1";
 const buttonStyle = "font:inherit;background:#242424;color:#fff;border:2px solid #888;border-radius:0;padding:3px 6px;cursor:pointer;box-shadow:inset -2px -2px #080808;line-height:20px";
 export function createSwitcher(host: ViewHost, action: (name: string, action?: SteamAction | "headless-all") => Promise<unknown>) {
@@ -10,6 +19,42 @@ export function createSwitcher(host: ViewHost, action: (name: string, action?: S
   let minimized = host.localStorage?.getItem(minimizedKey) === "1";
   let minimizedPosition: { left: number; top: number } | null = null;
   let dialog: HTMLDialogElement | null = null, latest: BridgeReply | null = null, busy = false;
+  let audioControls: (() => void)[] = [];
+  // Native settings and CODE can change flags between roster replies. Refresh
+  // only the buttons, preserving keyboard focus and character dialogs.
+  const audioTimer = host.document.defaultView?.setInterval(() => audioControls.forEach(update => update()), 250);
+  function audioButton(music: boolean) {
+    const label = music ? "mute game music" : "mute game sounds";
+    const control = button("", label, () => {
+      const enabled = music ? !!host.sound_music : !!host.sound_sfx;
+      try {
+        if (music) { if (enabled) host.sound_off?.(); else host.sound_on?.(); }
+        else { if (enabled) host.sfx_off?.(); else host.sfx_on?.(); }
+      }
+      catch (error) { popup("Audio setting failed", String(error)); }
+      audioControls.forEach(update => update());
+    });
+    const svg = host.document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("width", "22"); svg.setAttribute("height", "22");
+    // The outer speaker wave extends past the viewport; keep its stroke inside
+    // the button padding without clipping it at the SVG's right edge.
+    if (!music) svg.style.cssText = "overflow:visible;transform:translateX(-3px)";
+    svg.setAttribute("fill", "none"); svg.setAttribute("stroke", "currentColor"); svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("stroke-linecap", "round"); svg.setAttribute("stroke-linejoin", "round"); svg.setAttribute("aria-hidden", "true");
+    const icon = host.document.createElementNS(svg.namespaceURI, "path");
+    icon.setAttribute("d", music ? "M9 18V5l12-2v13 M9 8l12-2 M9 18a3 3 0 1 1-3-3c1.7 0 3 1.3 3 3 M21 16a3 3 0 1 1-3-3c1.7 0 3 1.3 3 3" : "M11 5 6 9H2v6h4l5 4Z M15 8a6 6 0 0 1 0 8 M18 5a10 10 0 0 1 0 14 M21 2a14 14 0 0 1 0 20");
+    const slash = host.document.createElementNS(svg.namespaceURI, "path"); slash.setAttribute("d", "M2 2 22 22");
+    svg.append(icon, slash); control.append(svg);
+    const update = () => {
+      const muted = music ? !host.sound_music : !host.sound_sfx;
+      control.setAttribute("aria-pressed", String(muted));
+      control.title = `${music ? "Game music" : "Game sounds"}: ${muted ? "muted · click to unmute" : "on · click to mute"}`;
+      control.style.color = muted ? "#ffaaaa" : "#70ee70";
+      slash.setAttribute("visibility", muted ? "visible" : "hidden");
+      control.disabled = music ? !(host.sound_on && host.sound_off) : !(host.sfx_on && host.sfx_off);
+    };
+    audioControls.push(update); update(); return control;
+  }
   function button(text: string, title: string, click: () => void) {
     const b = host.document.createElement("button"); b.textContent = text; b.title = title;
     b.setAttribute("aria-label", title); b.style.cssText = buttonStyle; b.onclick = click;
@@ -48,6 +93,7 @@ export function createSwitcher(host: ViewHost, action: (name: string, action?: S
       "Stop this character and its routine. Removing the primary briefly reconnects the remaining Steam characters.", execute);
   }
   function render() {
+    audioControls = [];
     panel.replaceChildren();
     panel.style.cssText = `position:fixed;top:${minimized && minimizedPosition ? minimizedPosition.top - 3 : 8}px;left:${minimized && minimizedPosition ? minimizedPosition.left - 3 + "px" : "50%"};transform:${minimized && minimizedPosition ? "none" : "translateX(-50%)"};max-width:calc(100vw - 16px);z-index:999999;background:#111;color:#fff;border:3px solid #888;padding:${minimized ? "0" : "5px"};box-sizing:border-box;font:24px Pixel,monospace;line-height:24px`;
     const toggle = button("_", minimized ? "Restore Steam character controls" : "Minimize Steam character controls", () => {
@@ -64,7 +110,7 @@ export function createSwitcher(host: ViewHost, action: (name: string, action?: S
         void action("", "headless-all").catch(error => popup("Headless handoff failed", String(error))).finally(() => { busy = false; render(); });
       }));
     all.disabled = busy || !latest?.members.some(member => member.hosting === "steam") || !!latest?.operation && latest.operation.phase !== "complete";
-    controls.append(toggle, all); header.append(title, controls); panel.append(header);
+    controls.append(audioButton(false), audioButton(true), toggle, all); header.append(title, controls); panel.append(header);
     const list = host.document.createElement("div"); list.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;max-height:160px;overflow:auto";
     const pending = busy || !!latest?.operation && latest.operation.phase !== "complete";
     const members = latest?.members || [];
@@ -85,5 +131,5 @@ export function createSwitcher(host: ViewHost, action: (name: string, action?: S
     }
     panel.append(list);
   }
-  return { dispose() { close(); panel.remove(); }, render(reply: BridgeReply) { latest = reply; render(); } };
+  return { dispose() { host.document.defaultView?.clearInterval(audioTimer); audioControls = []; close(); panel.remove(); }, render(reply: BridgeReply) { latest = reply; render(); } };
 }

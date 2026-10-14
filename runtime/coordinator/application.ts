@@ -554,7 +554,12 @@ export function startCoordinatorApplication(
       persist: persistSettings,
       dispatch: dispatchMerchant,
       queueStorage: queueExchangeStorage,
-      queueOffering:offering=>storageService.queueOffering(offering),
+      collectOfferings:()=>{
+        const requests=party.withdrawals[String(party.merchantCharacter)] || [];
+        if(requests.some(request=>!String(request.pack).startsWith('bankboi:')))
+          queueMerchant([party.merchantCharacter],"manual bank exchange");
+      },
+      queueOffering:(offering,quantity)=>storageService.queueOffering(offering,quantity),
     });
     const {
       visits: anniversaryVisitRoutes,

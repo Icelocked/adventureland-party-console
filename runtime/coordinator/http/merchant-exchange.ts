@@ -30,7 +30,8 @@ interface ExchangePorts {
   persist(): void;
   dispatch(): void;
   queueStorage(job: MerchantWork, shortages: Parameters<typeof queueExchangeStorage>[1]): boolean;
-  queueOffering(offering:UpgradeOffering):boolean;
+  collectOfferings?():void;
+  queueOffering(offering:UpgradeOffering,quantity:number):boolean;
 }
 
 function normalizeExchange(raw: unknown, choices: ExchangeChoice[]): ExchangeLine | null {
@@ -113,5 +114,5 @@ export function createMerchantExchangeRoutes(state: ExchangeState, ports: Exchan
     }
     return enqueue(exchanges, res);
   }
-  return { progress, supply, order, offeringSupply:createOfferingSupplyRoute(state,offering=>ports.queueOffering(offering)) };
+  return { progress, supply, order, offeringSupply:createOfferingSupplyRoute(state,(offering,quantity)=>{const pending=ports.queueOffering(offering,quantity);if(pending)ports.collectOfferings?.();return pending;},()=>ports.persist()) };
 }

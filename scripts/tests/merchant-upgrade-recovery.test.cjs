@@ -146,3 +146,18 @@ test('the Town watchdog cannot interrupt merchant work even with a stale global 
   assert.deepEqual(stops, []);
   assert.equal(r.root.__partyTownGuardTimer, null);
 });
+test('legacy manual bank pass identity survives normalization and an admitted old command',()=>{
+ const {initialItemIntents}=require('../../runtime/coordinator/inventory/initial-intents.ts');
+ const {rememberUpgradeContinuation}=require('../../runtime/coordinator/inventory/upgrade-continuation.ts');
+ const mark={passId:'bank-manual-pass',slot:7,item:{name:'sshield',level:0},tiers:4};
+ const intents=initialItemIntents({upgrades:{M:[mark]}});
+ assert.equal(intents.upgrades.M[0].requestId,mark.passId);
+ const state={...intents,merchantCharacter:'M',autoUpgradeMarks:{}};
+ const body={kind:'upgrade',item:{name:'sshield',level:1},automatic:{family:'manual-upgrade',mark:{...mark,slot:9}}};
+ rememberUpgradeContinuation(state,body);
+ assert.equal(state.upgrades.M[0].liveSlot,9);
+ assert.equal(state.upgrades.M[0].liveItem.level,1);
+ assert.throws(()=>rememberUpgradeContinuation(state,{...body,automatic:{family:'manual-upgrade',mark:{...mark,passId:'other'}}}),/continuation changed/);
+ assert.throws(()=>rememberUpgradeContinuation(state,{...body,item:{name:'helmet',level:1}}),/item changed/);
+ assert.throws(()=>rememberUpgradeContinuation(state,{...body,automatic:{family:'manual-upgrade',mark:{...mark,tiers:5}}}),/target changed/);
+});

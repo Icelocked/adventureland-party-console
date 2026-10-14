@@ -981,7 +981,6 @@ export const InventoryPanel = memo(function InventoryPanel({
                         meta={entry.meta}
                         mark={upgradeMark}
                         autoTiers={upgradeRuleTiers(autoUpgradeMarks[autoRuleKey])}
-                        allowBuy={character.name !== merchant}
                         onMark={(tiers, remove) =>
                           onCommand(character.name, "upgrade-mark", entry.item, {
                             slot: entry.slot,

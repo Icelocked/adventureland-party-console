@@ -176,7 +176,7 @@ export function createCompletionRetries(state: CompletionState, ports: Completio
     if (!decision.retry) return;
     const retry: CompletionJob = {
       ...job,
-      id: decision.movementOwned ? job.id : "merchant-" + ports.now() + "-" + ports.nextCommand(),
+      id: retryIdentity(job,decision),
       resumedFrom: job.id,
       retryCount: (Number(job.retryCount) || 0) + retryIncrement(decision),
       rendezvousRetryCount: (Number(job.rendezvousRetryCount) || 0) + (decision.rendezvous ? 1 : 0),
@@ -200,6 +200,9 @@ export function createCompletionRetries(state: CompletionState, ports: Completio
       logOrderRetry(retry);
     }
     logLuckRetry(job);
+  }
+  function retryIdentity(job:CompletionJob,decision:RetryDecision):string {
+    return decision.movementOwned || decision.storageYield ? job.id : "merchant-" + ports.now() + "-" + ports.nextCommand();
   }
   function logOrderRetry(retry: CompletionJob): void {
     if (retry.reason !== 'merchant commerce') return;

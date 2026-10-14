@@ -93,3 +93,35 @@ test('warrior recovers a blocked Targetron approach in the reported UHills layou
     }
   }
 });
+
+test.describe('selected UHills handoff',()=>{
+  test.use({loadout:'combat-range',initialPosition:{map:'uhills',x:-536.23,y:-431.28}});
+  test('selected UHills robot engages while the healer rounds its approach',async({live},info)=>{
+    test.setTimeout(180000);
+    await live.post('/merchant/force-stand',{enabled:true});
+    await live.admin(`output=(()=>{for(const m of Object.values(instances.uhills.monsters))remove_monster(m,{method:'disappear',nospawn:true});for(let i=monster_respawns.length-1;i>=0;i--)if(monster_respawns[i][0]?.map==='uhills')monster_respawns.splice(i,1);return true;})()`);
+    await live.admin(`output=(()=>{const p=get_player('${P}');p.slots.mainhand={name:'firestaff',level:8};p.slots.offhand=null;p.slots.shoes={name:'shoes',level:0};cache_player_items(p);calculate_player_stats(p);resend(p,'reopen+cid');return {range:p.range,speed:p.speed};})()`);
+    const geometry=await live.clients[W].run(`(()=>{const closest=(x,y)=>{const points=[];for(let dx=-96;dx<=96;dx+=8)for(let dy=-96;dy<=96;dy+=8){const p={x:x+dx,y:y+dy};if(can_move({map:character.map,x:p.x,y:p.y,going_x:p.x,going_y:p.y,base:character.base}))points.push(p);}return points.sort((a,b)=>Math.hypot(a.x-x,a.y-y)-Math.hypot(b.x-x,b.y-y))[0];};return {priest:closest(-331,-484),target:closest(-648,-209),alternate:closest(-816,-320)};})()`);
+    await info.attach('selected-uhills-native-geometry',{body:JSON.stringify(geometry),contentType:'application/json'});
+    await live.clients[P].run(`smart_move({map:'uhills',x:${geometry.priest.x},y:${geometry.priest.y}})`);
+    await expect.poll(()=>live.clients[P].run(`Math.hypot(character.real_x-(${geometry.priest.x}),character.real_y-(${geometry.priest.y}))`),{timeout:60000}).toBeLessThan(10);
+    await live.post('/formation',{leader:W});
+    await live.post('/formation',{character:P,follow:true});
+    await live.post('/focus',{monsterFocus:['targetron','sparkbot'],monsterPriorities:{targetron:999,sparkbot:500},monsterSearchRadius:800});
+    await live.post('/farming-mode',{character:W,mode:'default'});
+    await live.post('/checkpoint',{});
+    const seed=await live.admin(`output=(()=>{globalThis.__selectedRobotOriginal={targetron:G.monsters.targetron,sparkbot:G.monsters.sparkbot};for(const type of ['targetron','sparkbot'])G.monsters[type]={...G.monsters[type],speed:0,charge:0,hp:10000000};const primary=new_monster('uhills',{type:'targetron',count:1,position:[${geometry.target.x},${geometry.target.y}],radius:0},{temp:1});const alternate=new_monster('uhills',{type:'sparkbot',count:1,position:[${geometry.alternate.x},${geometry.alternate.y}],radius:0},{temp:1});for(const m of [primary,alternate]){m.speed=0;m.charge=0;m.hp=m.max_hp=10000000;}return {primary:String(primary.id),alternate:String(alternate.id)};})()`);
+    const samples:any[]=[];
+    try{
+      await expect.poll(async()=>{
+        for(const name of [W,P])samples.push(await live.clients[name].run('({name:character.name,at:Date.now(),x:character.real_x,y:character.real_y,positioning:globalThis.partyCombatPosition,group:globalThis.sharedRoutine.getGroupedCombat?.()})'));
+        return (await live.clients[W].events()).some((e:any)=>e.event==='hit'&&String(e.data?.id)===seed.primary&&e.data?.hid===W&&e.data?.damage>1&&e.data?.source!=='taunt');
+      },{timeout:35000,intervals:[100,250],message:'The selected robot must receive a native warrior attack without exhausted recovery'}).toBe(true);
+      expect((await live.clients[W].events()).some((e:any)=>e.event==='hit'&&String(e.data?.id)===seed.alternate&&e.data?.hid===W)).toBe(false);
+    }finally{
+      await evidence(live,info,'selected-uhills-native-handoff',{seed,samples});
+      await info.attach('selected-uhills-view',{body:await live.clients[W].page.screenshot(),contentType:'image/png'});
+      await live.admin(`output=(()=>{for(const id of ${JSON.stringify([seed.primary,seed.alternate])}){const m=instances.uhills.monsters[id];if(m)remove_monster(m,{silent:true});}Object.assign(G.monsters,globalThis.__selectedRobotOriginal);delete globalThis.__selectedRobotOriginal;return true;})()`);
+    }
+  });
+});

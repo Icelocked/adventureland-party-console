@@ -71,6 +71,7 @@ test('BankBoi-only boosters enable upgrade choices and manual confirmation',asyn
   await info.attach('bankboi-derived-offering-availability',{body:JSON.stringify(evidence),contentType:'application/json'});
 });
 
+
 test('ordinary upgrade menus label only the destination offering step and scroll price',async({page,app,request},info)=>{
   const browserErrors:string[]=[];
   page.on('pageerror',error=>browserErrors.push(error.message));
@@ -103,4 +104,34 @@ test('ordinary upgrade menus label only the destination offering step and scroll
   }
   expect(browserErrors).toEqual([]);
   await info.attach('offering-menu-rules',{body:JSON.stringify({state:await app.state(),browserErrors}),contentType:'application/json'});
+});
+
+
+for(const automatic of [false,true]) test(`offering supply authorizes ${automatic?'automatic':'ordinary manual'} batch demand and retains blocked work across restart`,async({page,app,request},info)=>{
+  await page.goto('/');await expect(page.getByRole('heading',{name:'M',exact:true})).toBeVisible();
+  const initial=await app.state(),enabled=Object.fromEntries(Object.keys(initial.merchantAutomations).map(name=>[name,['manual upgrades','auto upgrade','manual bank exchange','withdrawals'].includes(name)]));
+  expect((await request.post(app.url+'/party-api/merchant/routine-priorities',{headers:{Origin:app.url},data:{priorities:{},enabled}})).ok()).toBe(true);
+  const previous=(await app.state()).merchantCurrent;
+  if(previous) await app.deliverMerchantCompletion({jobId:previous.id,commandId:previous.commandId,success:true});
+  const post=async(body:unknown)=>request.post(app.url+'/party-api/command',{headers:{Origin:app.url},data:body});
+  expect((await post({character:'M',type:'upgrade-offering-rule',rule:{name:'sword',floor:0,ceiling:2,offering:'offeringp',required:true}})).ok()).toBe(true);
+  expect((await post({character:'M',type:automatic?'auto-upgrade-mark':'upgrade-mark',slot:0,item:{name:'sword',level:0},tiers:2})).ok()).toBe(true);
+  await expect.poll(async()=>(await app.state()).merchantCurrent?.reason).toBe(automatic?'auto upgrade':'manual upgrades');
+  const before=await app.state(),job=before.merchantCurrent,mark=before.upgrades.M[0];
+  const body={jobId:job.id,commandId:job.commandId,offering:'offeringp',item:{name:'sword',level:0},mark};
+  const supply=async(value:unknown)=>request.post(app.url+'/party-api/merchant/offering-supply',{headers:{Origin:app.url},data:value});
+  const response=await supply(body),result=await response.json();
+  expect(response.ok()).toBe(true);expect(result).toMatchObject({pending:true,state:'pending',outstanding:2});expect(result.blockingReason).toBeTruthy();
+  expect((await supply(body)).ok()).toBe(true);
+  expect((await supply({...body,mark:{...mark,tiers:3}})).status()).toBe(409);
+  expect((await supply({...body,offering:'offeringx'})).status()).toBe(409);
+  const pending=await app.state();expect(pending.withdrawals.M).toHaveLength(1);
+  await app.deliverMerchantCompletion({jobId:job.id,commandId:job.commandId,success:false,error:'bankboi_pending'});
+  await app.restartCoordinator();
+  const recovered=await app.state();
+  expect(recovered.withdrawals.M).toHaveLength(1);
+  expect(recovered.upgrades.M[0]).toMatchObject({item:{name:'sword',level:0},tiers:2});
+  expect(recovered.merchantQueue.some((job:any)=>job.offeringSupply?.offering==='offeringp')).toBe(true);
+  expect(recovered.merchantCurrent?.reason).not.toBe('manual bank exchange');
+  await info.attach('blocked-offering-demand-ledger',{body:JSON.stringify({automatic,before,body,result,pending,recovered}),contentType:'application/json'});
 });

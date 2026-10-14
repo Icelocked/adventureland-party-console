@@ -63,6 +63,11 @@ export function runnableBankUpgrades(state: BankImprovementState): BankUpgradeRu
   const available = availableUpgradeStock(state);
   return sharedUpgradeRules(state).filter(rule => !hasWaitingUpgrade(state, rule) && (rule.quantity === -1 || rule.quantity > 0) && !itemRuleConflicts(state,{name:rule.name,level:rule.level}).length && available.some(entry => matchesUpgrade(rule, entry)));
 }
+/** Remote stock needs a storage handoff before it can admit an upgrade visit. */
+export function localBankUpgrades(state: BankImprovementState, rules = runnableBankUpgrades(state)): BankUpgradeRule[] {
+  const local = availableUpgradeStock(state).filter(entry => !entry?.craftLocation?.startsWith('bankboi:'));
+  return rules.filter(rule => local.some(entry => matchesUpgrade(rule, entry)));
+}
 function workerUpgrade(state: BankImprovementState, rule: BankUpgradeRule): StorageReference[] {
   const entry = availableUpgradeStock(state).find(entry => entry?.craftLocation?.startsWith('bankboi:') && matchesUpgrade(rule,entry));
   if (entry && Number.isSafeInteger(entry.slot)) return [{pack:entry.craftLocation!,slot:entry.slot,item:entry.item,improvement:'auto upgrade'}];
