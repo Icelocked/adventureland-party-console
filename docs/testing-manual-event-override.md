@@ -27,3 +27,9 @@ Successful cases attach `native-manual-event-occurrence-override` with both actu
 The native retirement operation asserts the declared monster is temporary before calling silent remove_monster. The pinned implementation excludes temporary monsters from respawn scheduling, decrements the native count and removes the exact instance entry. The following native event loop therefore cannot reconstruct E from that removed monster. Artifacts retain retirement ID, temporary flag, remaining native type count and feed presence. No player kill is claimed.
 
 The serial native run also exposed a setup boundary: the preceding terminal-return case intentionally leaves a living declared boss. Before manual actions, this case retires only exact previous __e2eHalloweenDeclared IDs and their real master-chain descendants using the same ownership inventory as Halloween setup. It rejects an unrelated live Pumpkin rather than deleting arbitrary world entities. The cleanup artifact retains IDs/types/master links and the remaining native boss count. This is a between-scenario declaration, never an in-fight shortcut or player kill.
+
+CI fixture correction: the retained monster-popup test omitted the existing clock
+port and status collection because earlier selection never read them. The new
+manual occurrence guard requires both. Supply a deterministic clock and empty
+status collection to represent no active event; preserve every original override
+assertion. CI d009eb2 had this sole unit failure (ports.now is not a function).

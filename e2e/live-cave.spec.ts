@@ -333,11 +333,17 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
       return timeout;
     };
     const resolvedEncounter=page.getByRole('dialog').filter({has:page.getByText('Encounter result',{exact:true})});
-    if(await resolvedEncounter.isVisible()){
+    const dismissed:unknown[]=[];
+    await page.addLocatorHandler(resolvedEncounter,async()=>{
+      dismissed.push({control:name,at:Date.now(),text:await resolvedEncounter.innerText(),dungeon:await dungeon()});
       await resolvedEncounter.getByRole('button',{name:'Close',exact:true}).click({timeout:remaining()});
-      await expect(resolvedEncounter).not.toBeVisible({timeout:remaining()});
+    });
+    try {
+      await controls.getByRole('button',{name,exact:true}).click({timeout:remaining()});
+    } finally {
+      await page.removeLocatorHandler(resolvedEncounter);
+      await info.attach('native-cave-control-result-obstructions',{body:JSON.stringify({control:name,dismissed}),contentType:'application/json'});
     }
-    await controls.getByRole('button',{name,exact:true}).click({timeout:remaining()});
   };
   await clickCaveControl('Stop travel');
   await expect.poll(async()=>{

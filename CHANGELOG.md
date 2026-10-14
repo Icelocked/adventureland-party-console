@@ -6,7 +6,7 @@
 - Keep manual travel in control during events by skipping only the current occurrence, preventing event rejoin loops while preserving future attendance.
 - Hand completed individual approaches back to normal combat, preventing repeated tiny approach/cancel cycles and false movement-failure messages.
 - Prefer directly reachable attack-range positions during individual combat approaches; promptly shrink the approach radius when the planner confirms a disconnected destination, while retaining fresh whole-party readiness checks.
-- Keep native E2E scenarios isolated by retiring temporary combat monsters correctly and waiting for the public state API after explicit test restarts.
+- Keep native E2E scenarios isolated by retiring temporary combat monsters correctly, waiting for the public state API after explicit test restarts, and dismissing completed Cave results that arrive during a control click.
 
 - Make native event-return fault tests observe the live endpoint promptly, avoiding travel-command expiry during test setup without relaxing recovery assertions.
 
