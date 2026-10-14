@@ -1,3 +1,4 @@
+import {isolateNativeMapAmbient,restoreNativeMapAmbient} from './native-map-ambient-isolation';
 import {test,expect} from './live-fixtures';
 import {W,P} from './hunt-interruption-helpers';
 const M='E2EBankBoi',fighters=[W,P,M];
@@ -18,12 +19,9 @@ test(`planned Main hawks recover ranged actors from disconnected approach ring p
  test.setTimeout(240000);
  await live.post('/merchant/force-stand',{enabled:true});await live.post('/focus',{monsterFocus:[]});
  const samples:any[]=[],configured:any[]=[],events:Record<string,any[]>={};let seed:any,releasedAt:number|undefined;
- await live.admin(`output=(()=>{
-  globalThis.__e2eFollowRespawns=[];globalThis.__e2eFollowOwnedMonsters=[];
-  for(let i=monster_respawns.length-1;i>=0;i--)if(monster_respawns[i][0]?.map==='main')__e2eFollowRespawns.push(monster_respawns.splice(i,1)[0]);
-  for(const m of Object.values(instances.main.monsters))remove_monster(m,{method:'disappear',nospawn:true});
-  return true;})()`);
+ await live.admin(`output=(globalThis.__e2eFollowOwnedMonsters=[],true)`);
  try{
+  await isolateNativeMapAmbient(live,'main');
   for(const name of fighters)await live.clients[name].frame.evaluate(()=>{const p=window as any;p.__e2eObserveMoves=true;p.__e2eObservedMoveCount=0;p.__e2eIndependentObservedAttackCount=0;p.__e2eIndependentObservedTargets={};});
   await live.post('/formation',{leader:W});for(const name of [P,M])await live.post('/formation',{character:name,follow:true});
   await live.post('/focus',{monsterFocus:[monster],monsterPriorities:{[monster]:999},monsterSearchRadius:600});
@@ -36,7 +34,7 @@ test(`planned Main hawks recover ranged actors from disconnected approach ring p
   live.consoleDrainLease('native-range-setup');
   await expect.poll(async()=>{const state=await live.state();return fighters.every(name=>state.characters[name]?.consoleMaintenance?.id==='native-range-setup'&&state.characters[name].consoleMaintenance.ready);},{timeout:15000}).toBe(true);
   // Measure each client's actual native-rendered body; a Steam sprite clone is not a headless body.
-  const calibration=await live.admin(`output=(()=>{const original=G.monsters.bigbird;globalThis.__e2eFollowOriginal=original;G.monsters.bigbird={...original,aggro:0,rage:0,stationary:true};const w=get_player('${W}'),point=[[32,0],[0,32],[-32,0],[0,-32]].map(([dx,dy])=>({x:w.x+dx,y:w.y+dy})).find(p=>can_move({...w,going_x:p.x,going_y:p.y}));if(!point)throw Error('No nearby native-clear calibration input');const m=new_monster('main',{type:'bigbird',count:1,position:[point.x,point.y],radius:0},{temp:1});__e2eFollowOwnedMonsters.push({id:String(m.id),type:m.type,map:m.map,instance:m.in});m.speed=0;m.moving=false;m.hp=m.max_hp=1000000;m.u=true;m.abs=true;m.cid++;return {id:String(m.id),point};})()`);
+  const calibration=await live.admin(`output=(()=>{const original=G.monsters.bigbird;globalThis.__e2eFollowOriginal=original;G.monsters.bigbird={...original,aggro:0,rage:0,stationary:true};const w=get_player('${W}'),point=[[32,0],[0,32],[-32,0],[0,-32]].map(([dx,dy])=>({x:w.x+dx,y:w.y+dy})).find(p=>can_move({...w,going_x:p.x,going_y:p.y}));if(!point)throw Error('No nearby native-clear calibration input');const m=new_monster('main',{__e2eAmbientExempt:true,type:'bigbird',count:1,position:[point.x,point.y],radius:0},{temp:1});__e2eFollowOwnedMonsters.push({id:String(m.id),type:m.type,map:m.map,instance:m.in});m.speed=0;m.moving=false;m.hp=m.max_hp=1000000;m.u=true;m.abs=true;m.cid++;return {id:String(m.id),point};})()`);
   const calibrationBodies:Record<string,any>={};
   try{for(const name of fighters){await expect.poll(()=>live.clients[name].run(`!!get_entity(${JSON.stringify(calibration.id)})`),{timeout:15000}).toBe(true);
     calibrationBodies[name]=await live.clients[name].run(`(()=>{const e=get_entity(${JSON.stringify(calibration.id)}),c=character;return {actor:{name:c.name,x:c.x,y:c.y,real_x:c.real_x,real_y:c.real_y,range:c.range,width:get_width(c),height:get_height(c),vision:c.vision||parent.character.vision},body:{type:e.type,mtype:e.mtype,map:e.map,in:e.in,width:get_width(e),height:get_height(e)},raw:{width:e.width,height:e.height,awidth:e.awidth,aheight:e.aheight,mscale:e.mscale}};})()`);
@@ -55,7 +53,7 @@ test(`planned Main hawks recover ranged actors from disconnected approach ring p
   const targetPosition=[declaration.target.x,declaration.target.y];
   seed=await live.admin(`output=(()=>{
    const original=globalThis.__e2eFollowOriginal;G.monsters[${JSON.stringify(monster)}]={...original,aggro:0,rage:0,stationary:true};
-   const m=new_monster('main',{type:${JSON.stringify(monster)},count:1,position:${JSON.stringify(targetPosition)},radius:0},{temp:1});
+   const m=new_monster('main',{__e2eAmbientExempt:true,type:${JSON.stringify(monster)},count:1,position:${JSON.stringify(targetPosition)},radius:0},{temp:1});
    __e2eFollowOwnedMonsters.push({id:String(m.id),type:m.type,map:m.map,instance:m.in});
    m.speed=0;m.moving=false;
    const observableCombatSeconds=20,partyDps=${JSON.stringify(fighters)}.map(get_player).reduce((sum,p)=>sum+Math.max(1,p.attack)*Math.max(0.1,p.frequency),0);
@@ -118,7 +116,7 @@ test(`planned Main hawks recover ranged actors from disconnected approach ring p
       if(!can_move({...primary,going_x:point.x,going_y:point.y}))return false;
       for(let oy=-radius;oy<=radius;oy++){checks++;if(!can_move({map:primary.map,x:point.x-radius,y:point.y+oy,going_x:point.x+radius,going_y:point.y+oy,base:primary.base}))return false;}return true;});
     if(!candidate)throw Error('No collision-clear, connected and mutually visible native roaming declaration');const {x,y}=candidate,centerFallback=false;
-const next=new_monster('main',{type:'bigbird',count:1,position:[x,y],radius:40},{temp:1});__e2eFollowOwnedMonsters.push({id:String(next.id),type:next.type,map:next.map,instance:next.in});next.hp=next.max_hp=10000000;next.u=true;next.abs=true;next.cid++;if(!can_move({...next,going_x:next.x,going_y:next.y}))throw Error('Actual roaming successor spawn is not native-clear');if(!can_move({map:primary.map,x,y,going_x:next.x,going_y:next.y,base:next.base}))throw Error('Declared safe roaming region did not contain the actual native spawn');successors.push({id:String(next.id),x:next.x,y:next.y,center:{x,y},centerFallback,radius,checks,visibility:people.map(({name,player:p,vision})=>({name,x:p.x,y:p.y,vision}))});}return successors;})()`);
+const next=new_monster('main',{__e2eAmbientExempt:true,type:'bigbird',count:1,position:[x,y],radius:40},{temp:1});__e2eFollowOwnedMonsters.push({id:String(next.id),type:next.type,map:next.map,instance:next.in});next.hp=next.max_hp=10000000;next.u=true;next.abs=true;next.cid++;if(!can_move({...next,going_x:next.x,going_y:next.y}))throw Error('Actual roaming successor spawn is not native-clear');if(!can_move({map:primary.map,x,y,going_x:next.x,going_y:next.y,base:next.base}))throw Error('Declared safe roaming region did not contain the actual native spawn');successors.push({id:String(next.id),x:next.x,y:next.y,center:{x,y},centerFallback,radius,checks,visibility:people.map(({name,player:p,vision})=>({name,x:p.x,y:p.y,vision}))});}return successors;})()`);
    const queued=seed.successors.map((m:any)=>m.id);
    await expect.poll(async()=>{for(const name of fighters)events[name]=await live.clients[name].events();samples.push({at:Date.now(),queue:await live.clients[W].run(`(()=>{const g=globalThis.__partyGroupedCombat,e=parent.entities[${JSON.stringify(seed.id)}];return {target:g?.target?.id,ids:g?.queue?.map(t=>t.id),primaryAlive:!!e&&e.hp>0&&!e.dead};})()`)});return events[W].some(e=>e.event==='death'&&String(e.data?.id)===seed.id)&&fighters.some(name=>events[name].some(e=>(e.event==='attack-issued'||e.event==='offensive-skill-issued')&&(queued.includes(e.data?.id)||e.data?.ids?.some((id:string)=>queued.includes(id))||queued.includes(e.motion?.independent?.target))));},{timeout:90000,message:'Real native first hawk death must advance to an initially queued successor'}).toBe(true);
    expect(samples.some(s=>s.queue?.target===seed.id&&s.queue.primaryAlive&&queued.every((id:string)=>s.queue.ids?.includes(id))),'Both actual successors must be observed queued while the first native primary is alive').toBe(true);
@@ -150,7 +148,9 @@ const next=new_monster('main',{type:'bigbird',count:1,position:[x,y],radius:40},
   try{await info.attach('native-main-hawk-approach-result',{body:JSON.stringify({seed,releasedAt,configured,samples,events}),contentType:'application/json'});}
   finally{
   for(const name of fighters)await live.clients[name].frame.evaluate(()=>{(window as any).__e2eObserveMoves=false;}).catch(()=>{});
-  await live.admin(`output=(()=>{for(const entry of globalThis.__e2eFollowOwnedMonsters||[]){const m=instances[entry.instance||entry.map]?.monsters?.[entry.id];if(m&&m.temp&&m.type===entry.type&&m.map===entry.map&&m.in===(entry.instance||entry.map))remove_monster(m,{method:'disappear'});}delete globalThis.__e2eFollowOwnedMonsters;if(globalThis.__e2eFollowOriginal)G.monsters[${JSON.stringify(monster)}]=__e2eFollowOriginal;monster_respawns.push(...(__e2eFollowRespawns||[]));return true;})()`);
+  try{
+  await live.admin(`output=(()=>{for(const entry of globalThis.__e2eFollowOwnedMonsters||[]){const m=instances[entry.instance||entry.map]?.monsters?.[entry.id];if(m&&m.temp&&m.type===entry.type&&m.map===entry.map&&m.in===(entry.instance||entry.map))remove_monster(m,{method:'disappear'});}delete globalThis.__e2eFollowOwnedMonsters;if(globalThis.__e2eFollowOriginal)G.monsters[${JSON.stringify(monster)}]=__e2eFollowOriginal;return true;})()`);
+  }finally{const ambient=await restoreNativeMapAmbient(live,true);await info.attach('native-ambient-isolation-restored',{body:JSON.stringify(ambient),contentType:'application/json'});}
   }
  }
 });

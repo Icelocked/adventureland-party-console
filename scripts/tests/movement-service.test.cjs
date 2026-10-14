@@ -49,7 +49,7 @@ function fixture(options={}) {
  let now=1000, revision=1, runtime='test', searches=0, request;
  const calls=[], logs=[], c={name:'Test',map:'main',in:'main',x:0,y:0,real_x:0,real_y:0,speed:60,base:{h:8,v:7,vn:2},items:[],moving:false};
  const G={version:16846,geometry:{},maps:{main:{spawns:[[0,0]],doors:[],npcs:[]},bank:{spawns:[[0,0]],doors:[],npcs:[]},...options.maps},npcs:{transporter:{places:{}}}};
- const host={character:c,G,smart:{moving:false,plot:[]},parent:{socket:{emit:(...a)=>calls.push(a)},push_deferred:()=>Promise.resolve()},
+ const host={character:c,G,smart:{moving:false,plot:[]},parent:{socket:options.socket||{emit:(...a)=>calls.push(a)},push_deferred:()=>Promise.resolve()},
   smart_move:()=>{host.smart.moving=true;host.smart.found=false;host.smart.searching=false;return Promise.resolve();},
   stop:async()=>{host.smart.moving=false;},smart_move_logic(){},start_pathfinding:()=>{searches++;host.smart.found=true;host.smart.plot=options.nativePlot||[{map:'main',x:100,y:0}];},continue_pathfinding(){},
   move:async(x,y)=>{calls.push(['move',x,y]);if(!options.stall)Object.assign(c,{x,y,real_x:x,real_y:y});},use:async()=>{calls.push(['town']);Object.assign(c,{x:0,y:0,real_x:0,real_y:0});},
@@ -862,4 +862,53 @@ test('an intentional approach handoff cancels ownership without reporting a fail
  const r=fixture({pending:true}),walking=r.service.move({map:'main',x:100,y:0});const rejected=assert.rejects(walking);
  await r.ticks(1);r.service.cancel('Individual combat approach cancelled',{code:'combat-approach-cancelled'});await rejected;
  assert.equal(r.service.last().done,false);assert.equal(r.service.last().failureContext.code,'combat-approach-cancelled');assert.equal(r.logs.at(-1).phase,'Movement cancelled');r.dispose();
+});
+
+// Retained pinned native functions execute before the maintained CODE listener.
+function correctionFixture(options={}) {
+ const {EventEmitter}=require('node:events'),vm=require('node:vm');
+ const socket=new EventEmitter();let actor;
+ const native=require('./fixtures/native-correction-contract.json');
+ const context=vm.createContext({socket, get character(){return actor;}, can_move:()=>options.accept!==false,
+  add_log(){},phrase:{html:s=>s},console:{log(){}},sqrt:Math.sqrt,sq:x=>x*x,Place:'game'});
+ vm.runInContext(native.velocity+';'+native.correction,context);
+ const r=fixture({stall:true,socket,...options});actor=r.c;
+ Object.assign(actor,{from_x:0,from_y:0,going_x:100,going_y:0,vx:60,vy:0,ref_speed:60});
+ return {...r,socket};
+}
+test('accepted native correction stops the current owned walk before its old velocity drifts',async()=>{
+ const r=correctionFixture(),p=r.service.move({map:'main',x:100,y:0},undefined,{shared:true});p.catch(()=>{});
+ await r.ticks();const id=r.service.report().id, before=r.calls.length;
+ r.socket.emit('correction',{x:10,y:20});
+ assert.deepEqual(r.calls.slice(before),[['move',10,20]]);
+ assert.equal(r.service.report().id,id);assert.equal(r.service.report().progress.phase,'idle');
+ assert.equal(r.service.state.plot.length,1);r.dispose();await assert.rejects(p);
+});
+test('native correction listener is scoped to its live owned walking journey',async()=>{
+ for(const scenario of ['rejected','nonfinite','revision','runtime','idle']) {
+  const r=correctionFixture({accept:scenario!=='rejected'}),p=scenario==='idle'?null:r.service.move({map:'main',x:100,y:0},undefined,{shared:true});p?.catch(()=>{});
+  await r.ticks();if(scenario==='revision')r.supersede();if(scenario==='runtime')r.reload();const n=r.calls.length;
+  r.socket.emit('correction',scenario==='nonfinite'?{x:NaN,y:0}:{x:10,y:20});
+  assert.equal(r.calls.length,n,scenario);r.dispose();if(p)await assert.rejects(p);
+ }
+});
+test('disposing a movement runtime removes only its own correction listener',()=>{
+ const r=correctionFixture();assert.equal(r.socket.listenerCount('correction'),2);
+ r.dispose();assert.equal(r.socket.listenerCount('correction'),1);
+});
+test('pinned correction retains the old velocity when unchanged native speed accepts a new origin',()=>{
+ const r=correctionFixture();r.c.moving=true;r.socket.emit('correction',{x:10,y:20});
+ assert.equal(r.c.real_x,10);assert.equal(r.c.real_y,20);assert.equal(r.c.vx,60);assert.equal(r.c.vy,0);r.dispose();
+});
+
+test('correction never interferes with a native transition or foreign segment map',async()=>{
+ for(const transition of [true,false]) {
+  const r=correctionFixture({plot:transition?[{map:'bank',x:0,y:0,town:true}]:undefined}),p=r.service.move({map:transition?'bank':'main',x:transition?0:100,y:0},undefined,{shared:true});p.catch(()=>{});
+  await r.ticks();if(!transition)r.c.map='bank';const n=r.calls.length;
+  r.socket.emit('correction',{x:10,y:20});assert.equal(r.calls.length,n);r.dispose();await assert.rejects(p);
+ }
+});
+test('correction listener never throws a rejected supported stop into native event delivery',async()=>{
+ const r=correctionFixture(),p=r.service.move({map:'main',x:100,y:0},undefined,{shared:true});p.catch(()=>{});await r.ticks();
+ const move=r.host.move;r.host.move=()=>{throw Error('native stop unavailable');};assert.doesNotThrow(()=>r.socket.emit('correction',{x:10,y:20}));r.host.move=move;r.dispose();await assert.rejects(p);
 });

@@ -91,12 +91,15 @@ test.afterEach(async({live},info)=>{
 async function prepare(live: LiveGame, event: string) {
   await live.post('/formation', { leader: W });
   await live.post('/formation', { character: P, follow: true });
-  const checkpoint = await live.admin(`output=(()=>{const p=get_player(${JSON.stringify(W)});return {map:p.map,x:p.x,y:p.y}})()`);
+  let checkpoint!: {map:string;x:number;y:number};
   await expect.poll(async () => {
+    const native = await live.admin(`output=(()=>{const p=get_player(${JSON.stringify(W)});return {map:p.map,x:p.x,y:p.y}})()`);
     const state = await live.state();
     const leader=state.characters[W];
-    return leader&&Date.now()-leader.seenAt<3000&&leader.map===checkpoint.map&&
-      Math.hypot(leader.x-checkpoint.x,leader.y-checkpoint.y)<1;
+    const matched=!!leader&&Date.now()-leader.seenAt<3000&&leader.map===native.map&&
+      Math.hypot(leader.x-native.x,leader.y-native.y)<1;
+    if(matched)checkpoint=native;
+    return matched;
   }, { timeout: 30_000, message:'Save only the fresh native leader checkpoint' }).toBe(true);
   const checkpointReceipt=await live.post('/checkpoint', {}),saved=checkpointReceipt.partyLocation;
   expect(saved?.map,'The actual checkpoint receipt must match the independently observed native map').toBe(checkpoint.map);
