@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Align native farming-handoff coverage with the explicitly requested catalog farm area and normal weapon ranges, retaining physical arrival and real post-arrival attack checks.
+
 - Declare native gathering skill availability before login in capacity regressions, preventing queued login cooldown updates from racing the test setup while preserving actual inventory-blocking checks.
 
 - Keep native Cave staging responsive during exhaustive terrain searches, preserving player connections and rechecking current safety before the assembly regression.
