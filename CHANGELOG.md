@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Update retained equipment-comparison and merchant-upgrade test fixtures for loadout totals and manual offering checkpoints, preserving their existing behavior assertions.
+
 - Apply upgrade offering rules to manual as well as automatic upgrades, collecting batch supplies from the bank and BankBoi before resuming. Preserve upgrade identities and intermediate progress through storage handoffs and restarts; wait for remote inputs before admitting upgrade work and retry interrupted storage checkpoints.
 - Let a peaceful priest round terrain toward the party's recovery mover, preserving combat and monster-clearance checks.
 - Hide irrelevant +0 levels on stand buy orders for items that cannot be upgraded or compounded.

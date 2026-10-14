@@ -34,6 +34,13 @@ function loopRuntime(operation) {
   const character = { items: [{ name: 'wshoes', level: 0 }, { name: 'wshoes', level: 0 }] };
   const calls = [];
   const r = require('./helpers/shared-context.cjs').createSharedContext({ character, G: { items: { wshoes: {} } }, maximumItemLevel: () => 13, merchantOperationStage: async () => {},
+    // Manual upgrades now consult offering rules too. Declare an empty-rule
+    // checkpoint so these cases still exercise actual item/receipt selection.
+    partyResolveUpgradeOffering: require('../../runtime/upgrade-offerings.ts').resolveUpgradeOffering,
+    request: async (route, {body}) => {
+      assert.equal(route, '/merchant/checkpoint'); assert.equal(body.protectionOnly, true);
+      return {craftProtection: {requirements: []}, upgradeOfferingRules: [], upgradeOfferingStock: {}};
+    },
     sameItem: (a, b) => a && a.name === b.name && a.level === b.level, fingerprint: item => item && { ...item },
     item_grade: () => 0, findInventoryItemByName: () => 9, find_npc: () => 'upgrade', smart_move: async () => {},
     upgradeConfirmed: async slot => { calls.push(slot); return operation(character, slot, calls.length); } });

@@ -5,6 +5,8 @@ const vm = require('node:vm');
 const ts = require('../../dashboard/node_modules/typescript');
 
 // Exercise the projection used by the dialog, including its stat and set deltas.
+// Fixture boundary: the projection now consumes complete actual loadout totals;
+// omitting those inputs throws before the frequency/speed assertions can run.
 const source = require('./helpers/dashboard-source.cjs')();
 const projection = ts.transpileModule(source.slice(source.indexOf('  const strArmor ='),
   source.indexOf('  const currentPreview = project(')), {
@@ -14,7 +16,7 @@ function frequency(oldProps, newProps, oldSets = {}, newSets = {}) {
   const context = vm.createContext({
     character: { ctype: 'mage', primaryStat: 'int', level: 70, frequency: 1.485,
       str: 19, int: 198, dex: 22, vit: 32, max_hp: 3956, max_mp: 4000 },
-    actualEquipment: [], actualOldProps: oldProps, currentSets: { totals: oldSets },
+    actualEquipment: [], actualTotals: oldProps, actualSets: { totals: oldSets },
     prop: (properties, key) => Number(properties[key] || 0), newProps, newSets,
   });
   return vm.runInContext(projection + '\nproject(newProps, newSets).frequency', context);
@@ -29,7 +31,7 @@ test('unchanged gear preserves reported attack speed', () => {
 });
 test('merchant gear comparison projects DEX from unrestricted speed, not stand speed 10',()=>{
  const context=vm.createContext({character:{ctype:'merchant',speed:10,unrestrictedSpeed:75,standOpen:true,level:46,str:6,dex:99},
-   actualEquipment:[],actualOldProps:{dex:4},currentSets:{totals:{}},prop:(p,k)=>Number(p[k]||0)});
+   actualEquipment:[],actualTotals:{dex:4},actualSets:{totals:{}},prop:(p,k)=>Number(p[k]||0)});
  const speed=vm.runInContext(projection+'\nproject({dex:36},{}).speed',context);
  assert.equal(speed,76);
 });
