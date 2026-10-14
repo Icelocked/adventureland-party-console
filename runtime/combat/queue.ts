@@ -65,7 +65,9 @@ export function reconcileQueue(old: Group | undefined | null, members: Member[],
     const f=fights.find(f=>identity(f)===identity({...t,server:m.status!.server}));
     if(f){f.x=t.x;f.y=t.y;f.fighter=leader;}
   }
-  const recovery=recoverLostTargets(fights,members,old?.searches||{},now);
+  const selectedPlan=old?.queue?.find(t=>t.state==='planned' && old.target && targetIdentity(t)===targetIdentity(old.target as Fight) &&
+    t.startedAt>=resetAt && !excluded(t,t.startedAt) && !fights.some(f=>targetIdentity(f)===targetIdentity(t)));
+  const recovery=recoverLostTargets(selectedPlan?[...fights,selectedPlan]:fights,members,old?.searches||{},now);
   lostTargets.push(...recovery.lost);
   for(let i=fights.length-1;i>=0;i--)if(recovery.lost.some(t=>targetIdentity(t)===targetIdentity(fights[i])))fights.splice(i,1);
   const selector=members.find(m=>m.name===leader);
@@ -74,7 +76,7 @@ export function reconcileQueue(old: Group | undefined | null, members: Member[],
   const reported = reports.flatMap(m => (m.status!.groupedCombat?.candidates || [])
     .filter(t => m.name === leader || t.passiveRare === true || t.mtype === huntTarget)
     .filter(t => m.status!.server === s?.server && t.map === m.status!.map && t.in === m.status!.in));
-  const retained=retainNominations((old?.queue||[]).filter(t=>t.startedAt>=resetAt),members,now);
+  const retained=retainNominations((old?.queue||[]).filter(t=>t.startedAt>=resetAt),members,now,old?.target);
   const unique:Candidate[] = s ? [...new Map<string,Candidate>([...reported,...retained].map(t => [identity({...t,server:s.server}),t])).values()] : [];
   const candidates=(selector&&fresh(selector)?unique:[])
     .filter(t=>t.map===s?.map&&t.in===s?.in&&!excluded({...t,server:s!.server},now)&&!rejected({...t,server:s!.server})&&!(old?.pursuitExclusions||[]).some(e=>e.until>now&&e.identity===targetIdentity({...t,server:s!.server}))&&!fights.some(f=>identity(f)===identity({...t,server:s!.server})))

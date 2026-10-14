@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep approaching a selected combat target's last known position when it temporarily leaves everyone's view. Reacquisition preserves whole-party attack confirmation; confirmed local absence retires the target after the existing bounded search.
+
 - Update retained equipment-comparison and merchant-upgrade test fixtures for loadout totals and manual offering checkpoints, preserving their existing behavior assertions.
 
 - Apply upgrade offering rules to manual as well as automatic upgrades, collecting batch supplies from the bank and BankBoi before resuming. Preserve upgrade identities and intermediate progress through storage handoffs and restarts; wait for remote inputs before admitting upgrade work and retry interrupted storage checkpoints.

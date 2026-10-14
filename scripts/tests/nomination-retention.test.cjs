@@ -44,3 +44,28 @@ test('explicit retention rejection removes the neutral; positive sighting wins o
  assert.equal(retainNominations([target],m,1000).length,1);
  m[1].status.groupedCombat.retentionPaused=true;assert.equal(retainNominations([target],m,1000).length,0);
 });
+
+test('selected neutral keeps its last position while unseen en route, then retires only after local absence',()=>{
+ const m=members();for(const v of m){v.status.x=-500;v.status.groupedCombat.observationAt=1000;}
+ let old={queue:[target],target,fights:[]};
+ function tick(at,x){for(const v of m){v.status.seenAt=at;v.status.x=x;v.status.groupedCombat.observationAt=at;v.status.groupedCombat.retentions[0].at=at;}
+  const result=reconcileQueue(old,m,'W',at,'key');old={...result};return result;}
+ assert.equal(tick(1000,-500).target?.id,'A');
+ assert.equal(tick(10000,-500).target?.id,'A','elapsed travel alone cannot prove disappearance');
+ assert.equal(tick(11000,10).target?.id,'A','first observation near the last position is not enough');
+ const result=tick(12000,10);assert.equal(result.target,null);assert.equal(result.lostTargets[0].id,'A');
+});
+test('selected neutral reacquisition resets absence without granting an attack',()=>{
+ const m=members();let old={queue:[target],target,fights:[]};
+ let result=reconcileQueue(old,m,'W',1000,'key');assert.equal(result.target?.id,'A');
+ m[1].status.groupedCombat.retentions[0].eligible=true;
+ m[1].status.groupedCombat.sightings=[target];
+ result=reconcileQueue(result,m,'W',1100,'key');
+ assert.equal(result.target.id,'A');assert.deepEqual(result.searches,{});assert.equal(result.target.state,'planned');
+});
+test('selected neutral still respects explicit invalidation while unseen',()=>{
+ for(const reason of ['retention boundary','failed approach','focus changed','external claim','confirmed death']){
+  const m=members();m[0].status.groupedCombat.retentions[0].reason=reason;
+  const result=reconcileQueue({queue:[target],target,fights:[]},m,'W',1000,'key');assert.equal(result.target,null,reason);
+ }
+});
