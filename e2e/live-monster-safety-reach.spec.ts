@@ -34,19 +34,28 @@ test('a mage reaches its booboo while a second booboo attacks the warrior', asyn
     // The setup itself: the mage has to approach to reach either booboo.
     expect(await live.clients[M].run(`${JSON.stringify(spawned)}.every(id => !parent.entities[id] || !is_in_range(parent.entities[id]))`)).toBe(true);
 
-    // 1: within a minute the mage is in native range of its booboo most of the time.
-    const deadline = Date.now() + 60_000;
-    while (Date.now() < deadline) {
-      samples.push(await live.clients[M].run(`(() => { const p = globalThis.partyCombatPosition, t = p && p.target && parent.entities[p.target];
-        return { at: Date.now(), target: t && t.mtype, inRange: !!(t && is_in_range(t)), mode: p && p.mode, reason: p && p.reason,
-          constraint: p && p.constraint }; })()`));
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
+    // Sample actual native readiness in the client; CDP latency must not reduce the cadence.
+    await live.clients[M].run(`(() => {
+      const ledger={samples:[],deadline:Date.now()+60000,timer:null};
+      globalThis.__e2eMonsterReachSamples=ledger;
+      const capture=()=>{const p=globalThis.partyCombatPosition,t=p&&p.target&&parent.entities[p.target];
+        if(Date.now()>ledger.deadline||ledger.samples.length>=60){clearInterval(ledger.timer);return;}
+        ledger.samples.push({at:Date.now(),selectedId:t&&String(t.id),target:t&&t.mtype,
+          inRange:!!(t&&is_in_range(t)),x:character.real_x,y:character.real_y,
+          mode:p&&p.mode,reason:p&&p.reason,constraint:p&&p.constraint});};
+      ledger.timer=setInterval(capture,1000);capture();return true;
+    })()`);
+    await new Promise(resolve=>setTimeout(resolve,60000));
+    samples.push(...await live.clients[M].run('globalThis.__e2eMonsterReachSamples.samples'));
     const booboo = samples.filter(s => s.target === 'booboo');
     expect(booboo.length, 'The party must select a booboo').toBeGreaterThan(30);
     expect(booboo.filter(s => s.inRange).length, 'The mage must spend most of the minute in range').toBeGreaterThan(booboo.length / 2);
   } finally {
-    try {await info.attach('mage-reach-samples', { body: JSON.stringify(samples), contentType: 'application/json' });}
+    try {
+      try {const retained=await live.clients[M].run(`(() => {const ledger=globalThis.__e2eMonsterReachSamples;if(!ledger)return [];clearInterval(ledger.timer);delete globalThis.__e2eMonsterReachSamples;return ledger.samples;})()`);if(retained.length>samples.length)samples.splice(0,samples.length,...retained);}
+      catch(error){await info.attach('mage-reach-sampler-observation-error',{body:String(error),contentType:'text/plain'});}
+      await info.attach('mage-reach-samples', { body: JSON.stringify(samples), contentType: 'application/json' });
+    }
     finally {await live.admin(`output=(()=>{for(const entry of globalThis.__e2eMonsterReachOwned||[]){const m=instances[entry.in]?.monsters[entry.id];if(m&&m.type===entry.type&&m.map===entry.map)remove_monster(m,{method:'disappear',nospawn:true});}delete globalThis.__e2eMonsterReachOwned;return true;})()`);}
   }
 });

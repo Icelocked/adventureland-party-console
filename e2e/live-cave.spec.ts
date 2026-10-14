@@ -325,18 +325,21 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
         receipt.id===view.state.commands[name]?.id;
     });
   },{timeout:120_000,message:'Both initial native waypoint moves must complete before raw fixture staging'}).toBe(true);
-  const initialStopDeadline=Date.now()+20_000;
-  const initialStopRemaining=()=>{
-    const timeout=initialStopDeadline-Date.now();
-    if(timeout<=0)throw Error('Initial waypoint Stop exhausted its original 20-second click window');
-    return timeout;
+  const clickCaveControl=async(name:string)=>{
+    const deadline=Date.now()+20_000;
+    const remaining=()=>{
+      const timeout=deadline-Date.now();
+      if(timeout<=0)throw Error(`${name} exhausted its original 20-second click window`);
+      return timeout;
+    };
+    const resolvedEncounter=page.getByRole('dialog').filter({has:page.getByText('Encounter result',{exact:true})});
+    if(await resolvedEncounter.isVisible()){
+      await resolvedEncounter.getByRole('button',{name:'Close',exact:true}).click({timeout:remaining()});
+      await expect(resolvedEncounter).not.toBeVisible({timeout:remaining()});
+    }
+    await controls.getByRole('button',{name,exact:true}).click({timeout:remaining()});
   };
-  const resolvedInitialEncounter=page.getByRole('dialog').filter({has:page.getByText('Encounter result',{exact:true})});
-  if(await resolvedInitialEncounter.isVisible()){
-    await resolvedInitialEncounter.getByRole('button',{name:'Close',exact:true}).click({timeout:initialStopRemaining()});
-    await expect(resolvedInitialEncounter).not.toBeVisible({timeout:initialStopRemaining()});
-  }
-  await controls.getByRole('button',{name:'Stop travel',exact:true}).click({timeout:initialStopRemaining()});
+  await clickCaveControl('Stop travel');
   await expect.poll(async()=>{
     const state=(await dungeon()).state;
     return !state.travel && state.progress?.enabled===false &&
@@ -397,7 +400,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   const selectWaypoint=async()=>{
     const previous=(await dungeon()).state;
     const previousIds=new Set([previous.travel?.target?.id,...Object.values(previous.commands).map((c:any)=>c.target?.id)]);
-    await controls.getByRole('button',{name:'View full map',exact:true}).click();
+    await clickCaveControl('View full map');
     await activateWaypoint(safe.target.map);
     const box=(await fullMap.locator('canvas').boundingBox())!;
     const scale=Math.min(box.width/(bounds.max_x-bounds.min_x+100),box.height/(bounds.max_y-bounds.min_y+100));
