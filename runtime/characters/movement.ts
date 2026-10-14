@@ -181,6 +181,12 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
     const plot = planner.tick(ports.now());
     if (plot) install(plot, true);
   }
+  function planFailure(j: Journey, result: PlanResult & {mode?: string}, from: Point, destination: Point) {
+    const verified = result.failure === 'unreachable' && result.mode === 'alclient' && result.id === j.id &&
+      result.version === version && result.fingerprint === fingerprint;
+    if (j.options.rejectUnreachableGoal && verified) finish(false, result.error);
+    else fallback(j, {reason:result.error!,from,to:destination});
+  }
   function requestPlan(j: Journey) {
     if (j.pending) return;
     j.pending = true; state.searching = true; j.searches++;
@@ -194,7 +200,10 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
     planning.then(value => {
       if (!current(j)) return;
       const result = value as PlanResult & { mode?: string; error?: string };
-      if (result.error) { fallback(j, { reason: result.error, from, to: destination }); return; }
+      if (result.error) {
+        planFailure(j, result, from, destination);
+        return;
+      }
       if (result.id !== j.id || result.version !== version || result.fingerprint !== fingerprint) throw Error('Planner response identity mismatch');
       if (distance(position(), from) > 1) {
         replanDrift(j);

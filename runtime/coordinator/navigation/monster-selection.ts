@@ -1,9 +1,11 @@
+import {skipManualEventOccurrences, type EventAttendance} from '../events/attendance-limits.ts';
 import type { ReturnLocation } from "../events/return-types.ts";
 export interface MonsterSelectionState {
+  eventAttendance?: EventAttendance;
   leader: string | null;
   followers: Record<string, boolean>;
   monsterChoices?: { id: string }[] | null;
-  statuses: Record<string, { seenAt: number } | undefined>;
+  statuses: Record<string, { seenAt: number; server?:string; joinedEvent?:unknown; mapEvent?:unknown; eventFeedConnected?:boolean; eventClockStale?:boolean } | undefined>;
   farmAreaState: unknown;
   farmingPolicy: string;
   monsterFocus: string[];
@@ -15,7 +17,7 @@ export interface MonsterSelectionState {
   scatterBreakTarget: unknown;
   eventReturn: unknown;
   deferredEventReturns: Record<string, unknown>;
-  eventSessions: Record<string, unknown>;
+  eventSessions: Record<string, {event:string; id?:string|null; lastLiveAt?:number; authorizedRealm?:string; authorizedAt?:number; participants:string[]; participationRecorded?:boolean} | undefined>;
   commands: Record<string, { type: string; manualMonsterOverride?: boolean } | undefined>;
   passiveHunting?: import("./passive-settings.ts").PassiveSettings;
   passiveRareHunts: unknown;
@@ -58,11 +60,13 @@ export function createMonsterSelection(state: MonsterSelectionState, ports: Mons
     state.eventSessions = {};
   }
   function select(id: string, location: ReturnLocation, phoenixOrder: unknown): string[] | null {
-    reset(id, location);
     const names = ports.members();
+    const sessions = state.eventSessions;
+    reset(id, location);
     ports.authorize(names, location, true);
     if (!ports.start(location, "the " + id + " spawn", names, "manual-monster-override"))
       return null;
+    skipManualEventOccurrences({...state, eventSessions: sessions, eventAttendance: state.eventAttendance ||= {}}, names, ports.now());
     for (const name of names) {
       const command = state.commands[name];
       if (command?.type === "party-monster-travel") command.manualMonsterOverride = true;

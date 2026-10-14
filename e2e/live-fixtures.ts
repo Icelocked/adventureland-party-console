@@ -1,3 +1,4 @@
+import {waitForLiveRestartState, type RestartStateProbe} from './live-restart-readiness';
 import { test as base, expect, unusedPort, child, environment, stop } from './fixtures';
 import { launchGameClient, type LiveClient } from './live-game-client';
 import { type ChildProcess } from 'node:child_process';
@@ -116,6 +117,13 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
         current.on('message', message); current.once('error', failed); current.once('exit', exited);
       });
     }
+    async function publicRestartReady(reason:string):Promise<void> {
+      const observations:RestartStateProbe[]=[];
+      try{await waitForLiveRestartState(live!.url,row=>{
+        observations.push(row);if(observations.length>32)observations.splice(8,1);
+      });}
+      finally{exchanges.push({at:Date.now(),coordinatorRestartReadiness:reason,observations});}
+    }
     try {
       await start();
       await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
@@ -169,9 +177,9 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           else rmSync(file,{force:true});
           exchanges.push({at:Date.now(),hostMaintenanceLease:id,expires});
         },
-        async restartCoordinator() { await stop(coordinator!, true); await start(); },
+        async restartCoordinator() { await stop(coordinator!, true); await start(); await publicRestartReady('explicit restart'); },
         deploymentPaths:{directory,apiUrl:`http://127.0.0.1:${port}`,codeRoots:[path.join(root,'.build/CODE/adventure_land'),path.join(directory,'CODE/adventure_land')]},
-        async restartCoordinatorIdentity(artifactId,hash){identityEnvironment={AL_CONSOLE_ARTIFACT_ID:artifactId,AL_CONSOLE_COORDINATOR_HASH:hash};await stop(coordinator!,true);await start();},
+        async restartCoordinatorIdentity(artifactId,hash){identityEnvironment={AL_CONSOLE_ARTIFACT_ID:artifactId,AL_CONSOLE_COORDINATOR_HASH:hash};await stop(coordinator!,true);await start();await publicRestartReady('identity restart');},
         async restoreHistoricalSettings(restore) {
           await stop(coordinator!, true);
           const journal = path.join(directory, 'state.jsonl');
@@ -200,6 +208,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           for (const [stateKey, value] of Object.entries(restored))
             appendFileSync(journal, JSON.stringify({ [stateKey]: value }) + '\n');
           await start();
+          await publicRestartReady('historical settings restart');
         },
         async reconnectClient(name) {
           if (!clients[name]) throw Error('Unknown owned native client: ' + name);

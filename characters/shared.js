@@ -16008,6 +16008,7 @@
   }
   function formationDesiredRange(reference, priest, selfPriest, members, step) {
     var desired=desiredCombatRange();
+    if(!is_in_range(reference))desired=Math.min(desired,Math.max(1,(Number(character.range)||1)-10));
     if(!selfPriest)return desired;
     var safeRange=Number(priest.range)-Math.min(20,Math.max(8,Number(priest.range)*0.1));
     members.forEach(function(ally){
@@ -16046,6 +16047,24 @@
     var r=movement.report();return !!(r && r.owner && typeof r.owner.recoveryStage==='string' && r.owner.recoveryStage.indexOf('combat-approach:')===0);
   }
   var independentApproachReference=null;
+  function combatRangeReference(target,point) {
+    var body=formationBody(target,point);body.type=target.type;body.mtype=target.mtype;
+    if(target.map===undefined)delete body.map;
+    if(target.in===undefined)delete body.in;
+    return body;
+  }
+  function combatInterceptCenter(target,desired,record) {
+    var current={x:Number.isFinite(target.real_x)?target.real_x:target.x,y:Number.isFinite(target.real_y)?target.real_y:target.y},client=root.partyQueueClient && root.partyQueueClient.independent;
+    if(!target.moving || !client || typeof client.intercept!=='function')return current;
+    var motion=formationMotion(target),self=formationBody(character);
+    var reach=desired+Math.max(0,Math.hypot(self.x-motion.body.x,self.y-motion.body.y)-combatDistance(target));
+    var ownSpeed=Number(character.speed),point=client.intercept(self,ownSpeed,motion.body,reach,motion);
+    if(record && motion.duration>0 && Number.isFinite(ownSpeed) && ownSpeed>0)Object.assign(record,{
+      at:Date.now(),target:{x:motion.body.x,y:motion.body.y},destination:{x:target.going_x,y:target.going_y},
+      targetSpeed:Number(target.speed),own:{x:self.x,y:self.y},ownSpeed:ownSpeed,reach:reach,
+      horizon:Math.hypot(point.x-motion.body.x,point.y-motion.body.y)/Math.hypot(motion.vx,motion.vy)});
+    return point;
+  }
   function independentApproachPorts() {
     function context() {
       var coordinated=!!(groupedFarming() && groupedFresh() && groupedCombat.independentApproach);
@@ -16061,31 +16080,36 @@
         (coordinated || e.visible && !e.dead && e.hp>0) && (!coordinated || t.map===character.map && t.in===character.in && t.server===reunionRealm()) &&
         !Object.values(parent.entities||{}).some(function(other){return other && other.type==='monster' && !other.dead &&
           (other.target===character.name || other.id!==e.id && isAttackingPartyMember(other));}));
+      var prediction={},radius=Math.max(1,(Number(character.range)||1)-10),point=combatInterceptCenter(e,radius,prediction);
       return {allowed:allowed,planned:coordinated?t.state==='planned':true,selection:coordinated?groupedCombat.selection:undefined,committed:coordinated?!!groupedCombat.committed:true,confirmation:coordinated && groupedCombat.independentConfirmation && groupedCombat.independentConfirmation.selection===groupedCombat.selection && groupedCombat.independentConfirmation.target===String(t.id)?groupedCombat.independentConfirmation.id:undefined,target:String(t.id),
-        key:JSON.stringify([t.id,character.map,character.in,reunionRealm(),navigationIntent.revision,coordinated?[groupedCombat.key,groupedCombat.selection,groupedCombat.resetAt]:joinedEvent]),point:{x:e.x,y:e.y},radius:Math.max(1,Number(character.range)-3)};
+        key:JSON.stringify([t.id,character.map,character.in,reunionRealm(),navigationIntent.revision,coordinated?[groupedCombat.key,groupedCombat.selection,groupedCombat.resetAt]:joinedEvent]),point:point,prediction:prediction.at!==undefined?prediction:undefined,radius:radius};
     }
     return {
       context:context,now:function(){return Date.now()+coordinatorClockOffset;},
       ready:function(){var c=context(),e=c && get_entity(c.target);return !!(c && c.allowed && e && e.visible && !e.dead && e.hp>0 && is_in_range(e));},
+      buffered:function(){var c=context(),e=c && get_entity(c.target);if(!e || !is_in_range(e))return false;
+        var gap=typeof distance==='function'?distance(character,e):combatDistance(e);
+        return gap<=Math.max(1,(Number(character.range)||1)-10);},
       clear:function(goal){return can_move({map:character.map,x:character.real_x,y:character.real_y,going_x:goal.x,going_y:goal.y,base:character.base});},
       goal:function(point,radius){
         var c=context(),observed=c && get_entity(c.target),e=observed && observed.visible?observed:groupedCombat && groupedCombat.target;
         if(!c || !c.allowed || !e || String(e.id)!==c.target)return null;
-        var first=combatApproachPoint(e,radius),angle=Math.atan2(first.y-e.y,first.x-e.x),reach=Math.hypot(first.x-e.x,first.y-e.y),goals=[];
-        for(var i=0;i<16;i++){var a=angle+i*Math.PI/8,p={x:e.x+Math.cos(a)*reach,y:e.y+Math.sin(a)*reach};
+        var actual={x:Number.isFinite(e.real_x)?e.real_x:e.x,y:Number.isFinite(e.real_y)?e.real_y:e.y};
+        var first=combatApproachPoint(e,radius,actual),angle=Math.atan2(character.real_y-point.y,character.real_x-point.x),reach=Math.hypot(first.x-actual.x,first.y-actual.y),goals=[];
+        for(var i=0;i<16;i++){var a=angle+i*Math.PI/8,p={x:point.x+Math.cos(a)*reach,y:point.y+Math.sin(a)*reach};
           if(can_move({map:character.map,x:p.x,y:p.y,going_x:p.x,going_y:p.y,base:character.base}))goals.push(p);}
-        goals.sort(function(a,b){return Math.hypot(a.x-character.real_x,a.y-character.real_y)-Math.hypot(b.x-character.real_x,b.y-character.real_y);});return goals[0]||null;
+        goals.sort(function(a,b){return Math.hypot(a.x-character.real_x,a.y-character.real_y)-Math.hypot(b.x-character.real_x,b.y-character.real_y);});return goals.find(function(p){return can_move({map:character.map,x:character.real_x,y:character.real_y,going_x:p.x,going_y:p.y,base:character.base});})||goals[0]||null;
       },
       start:function(goal,id,direct){var approach=root.partyCombatPosition;
         cancelGroupRoute();cancelFightRoute();cancelFarmApproach('individual combat approach');resetCombatMovement();
         if(approach && approach.mode==='independent-approach' && approach.movementOwner==='combat-approach' && approach.approachId===id)root.partyCombatPosition=approach;
-        var walking=movement.move({map:character.map,in:character.in,x:goal.x,y:goal.y},undefined,{native:true,town:false,arrivalTolerance:3,owner:{recoveryStage:id}});
+        var walking=movement.move({map:character.map,in:character.in,x:goal.x,y:goal.y},undefined,{rejectUnreachableGoal:true,town:false,arrivalTolerance:3,owner:{recoveryStage:id}});
         if(direct){try{movement.install([{map:character.map,in:character.in,x:goal.x,y:goal.y}],movement.identity,'direct');}
           catch(error){var report=movement.report();if(report && report.owner && report.owner.recoveryStage===id){try{movement.cancel('Direct combat approach rejected: '+String(error));}catch(_cancelError){}}}}
         movement.tick();
         return walking;},
       owned:function(id){var report=movement.report();return !!(report && report.owner && report.owner.recoveryStage===id);},
-      cancel:function(id){var report=movement.report();if(report && report.owner && report.owner.recoveryStage===id)movement.cancel('Individual combat approach ended');},
+      cancel:function(id){var report=movement.report();if(report && report.owner && report.owner.recoveryStage===id)movement.cancel('Individual combat approach cancelled',{code:'combat-approach-cancelled'});},
       position:function(id,target,radius,goal,phase){root.partyCombatPosition={at:Date.now(),mode:'independent-approach',movementOwner:'combat-approach',
         approachId:id,target:target,radius:radius,phase:phase,destination:goal,reason:phase==='ready'?'In native attack range; waiting for every fighter':'Independently approaching native attack range'};}
     };
@@ -16163,6 +16187,11 @@
     }
 
     var desired = formationDesiredRange(reference, priest, selfPriest, members, step);
+    var rangeReference=reference;
+    if(!is_in_range(reference)) {
+      var intercept=combatInterceptCenter(reference,desired);
+      rangeReference=combatRangeReference(reference,intercept);
+    }
     var warrior = formationMelee(character);
     var mage = character.ctype === "mage";
     var priestSpacing = 25;
@@ -16204,7 +16233,7 @@
         var before = Math.max(0, limit + 4 - formationDistance(character, enemy));
         return sum + Math.max(0, limit + 4 - formationDistance(candidate, enemy) - before);
       }, 0);
-      var rangeError = Math.abs(formationDistance(candidate, reference) - desired);
+      var rangeError = Math.abs(formationDistance(candidate, rangeReference) - desired);
       var towardPriestX = priest.x - reference.x, towardPriestY = priest.y - reference.y;
       var facing = !selfPriest && ((point.x - reference.x) * towardPriestX +
         (point.y - reference.y) * towardPriestY < 0) ? 1 : 0;
@@ -16224,7 +16253,7 @@
         clearance: clearance, direction: Math.abs(orbitCross) < 0.01 ? 0 : Math.sign(orbitCross),
         facing: facing, progress: progress, heading: heading, turn: turn,
         score: mage ? [Math.round((danger + secondaryRisk) * 2), Math.ceil(coverage / 2), facing,
-          Math.ceil(Math.max(0, formationDistance(candidate, reference) - Number(character.range)) / 3),
+          Math.ceil(Math.max(0, formationDistance(candidate, rangeReference) - Number(character.range)) / 3),
           Math.round(targetRisk * 2),
           Math.ceil(Math.max(0, formationDistance(candidate, priest) - priestSpacing) / 3),
           chased ? -progress : Math.hypot(dx, dy), rangeError, turn] :
@@ -16437,13 +16466,22 @@
     return typeof distance === "function" ? distance(character, target) :
       Math.hypot(character.x - target.x, character.y - target.y);
   }
-  function combatApproachPoint(target, desired) {
+  function combatApproachPoint(target, desired, center) {
     if (!target) return null;
-    var dx = character.x - target.x, dy = character.y - target.y, length = Math.hypot(dx, dy);
+    var selfX=Number.isFinite(character.real_x)?character.real_x:character.x,selfY=Number.isFinite(character.real_y)?character.real_y:character.y;
+    var targetX=Number.isFinite(target.real_x)?target.real_x:target.x,targetY=Number.isFinite(target.real_y)?target.real_y:target.y;
+    var dx = selfX - targetX, dy = selfY - targetY, length = Math.hypot(dx, dy);
     if (length < 0.001) { dx = 1; dy = 0; length = 1; }
     // Translate the engine's hitbox-aware attack distance into a center radius.
-    var radius = (desired == null ? desiredCombatRange() : desired) + Math.max(0, length - combatDistance(target));
-    return { x: target.x + dx / length * radius, y: target.y + dy / length * radius };
+    var approach=desired==null?desiredCombatRange():desired;
+    if(typeof is_in_range==='function' && !is_in_range(target) && Number(character.range)>0)
+      approach=Math.min(approach,Math.max(1,Number(character.range)-10));
+    var radius = approach + Math.max(0, length - combatDistance(target));
+    if(!center && typeof combatInterceptCenter==='function' && typeof is_in_range==='function' && !is_in_range(target))
+      center=combatInterceptCenter(target,approach);
+    center=center||{x:targetX,y:targetY};dx=selfX-center.x;dy=selfY-center.y;length=Math.hypot(dx,dy);
+    if(length<0.001){dx=1;dy=0;length=1;}
+    return { x: center.x + dx / length * radius, y: center.y + dy / length * radius };
   }
   function resetCombatMovement() {
     if(independentApproachOwnsJourney())return;

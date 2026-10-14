@@ -108,7 +108,7 @@ export const EventSelectionControl = memo(function EventSelectionControl({ state
       {rows.map(event => {
         const supported = supportedEvents.includes(event.id), allowed = supported;
         const ignored = [state.eventAttendance?.[name]?.[event.id], state.eventAttendance?.[policy.source]?.[event.id]]
-          .find(entry => entry?.ignored && !entry.ended)?.ignored;
+          .find((entry,index) => entry?.ignored && !entry.ended && (index === 0 || entry.ignored !== 'manual travel'))?.ignored;
         return <div key={event.id} data-event={event.id} className={`flex items-center gap-2 rounded border bg-slate-950 px-2 py-2 text-emerald-50 ${dragged === event.id ? 'border-cyan-300 opacity-25' : 'border-emerald-900/70'}`}>
           <button type="button" aria-label={`Move ${event.name}`} title="Drag to reorder; use arrow keys to move" disabled={!supported || policy.inherited}
             style={{touchAction:'none'}} className="shrink-0 cursor-grab rounded border border-slate-600 bg-[#10201b] p-1 text-slate-200 hover:bg-slate-700 hover:text-white active:cursor-grabbing disabled:opacity-30"

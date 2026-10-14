@@ -831,3 +831,35 @@ test('completion transport rejection cannot overwrite a preceding native connect
  rejectCompletion(Object.assign(Error('Control response lost'),{partyRequest:{path:'/movement-barrier',kind:'network',status:0}}));await settle();
  assert.equal(r.service.settleTerminal(id,owner),false);r.dispose();
 });
+
+
+test('only opted-in verified ALClient no-route rejects a combat goal without native search',async()=>{
+ for(const variant of ['verified','legacy','wrong-id','wrong-version','wrong-fingerprint','shadow','no-opt-in']){
+  const r=fixture({pending:true});let outcome;
+  const walking=r.service.move({map:'main',x:100,y:0},undefined,variant==='no-opt-in'?{}:{rejectUnreachableGoal:true});
+  void walking.then(()=>outcome='arrived',()=>outcome='rejected');await r.ticks(1);
+  const result={...r.request,plot:[],ms:1,error:'ALClient found no route',failure:'unreachable',mode:'alclient'};
+  if(variant==='legacy')delete result.failure;
+  if(variant==='wrong-id')result.id='old';
+  if(variant==='wrong-version')result.version++;
+  if(variant==='wrong-fingerprint')result.fingerprint='foreign';
+  if(variant==='shadow')result.mode='shadow';
+  fixture.resolve(result);await r.ticks(10);
+  assert.equal(outcome,variant==='verified'?'rejected':'arrived',variant);
+  assert.equal(r.searches,variant==='verified'?0:1,variant);r.dispose();
+ }
+});
+test('a retired classified no-route response cannot retire a newer owned journey',async()=>{
+ const r=fixture({pending:true});const old=r.service.move({map:'main',x:100,y:0},undefined,{rejectUnreachableGoal:true});
+ const rejected=assert.rejects(old);await r.ticks(1);const reply=fixture.resolve,request={...r.request};
+ const next=r.service.move({map:'main',x:100,y:0},undefined,{native:true,owner:{recoveryStage:'new'}});
+ reply({...request,plot:[],ms:1,error:'ALClient found no route',failure:'unreachable',mode:'alclient'});
+ await r.ticks(10);await rejected;await next;assert.equal(r.c.real_x,100);assert.equal(r.searches,1);r.dispose();
+});
+
+
+test('an intentional approach handoff cancels ownership without reporting a failed path or success',async()=>{
+ const r=fixture({pending:true}),walking=r.service.move({map:'main',x:100,y:0});const rejected=assert.rejects(walking);
+ await r.ticks(1);r.service.cancel('Individual combat approach cancelled',{code:'combat-approach-cancelled'});await rejected;
+ assert.equal(r.service.last().done,false);assert.equal(r.service.last().failureContext.code,'combat-approach-cancelled');assert.equal(r.logs.at(-1).phase,'Movement cancelled');r.dispose();
+});

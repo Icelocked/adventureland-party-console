@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Lead moving combat targets using their native direction and speed plus each fighter's speed and a 10-unit margin inside attack range, reducing short chase steps while preserving terrain safety and fresh whole-party attack confirmation.
+- Keep manual travel in control during events by skipping only the current occurrence, preventing event rejoin loops while preserving future attendance.
+- Hand completed individual approaches back to normal combat, preventing repeated tiny approach/cancel cycles and false movement-failure messages.
+- Prefer directly reachable attack-range positions during individual combat approaches; promptly shrink the approach radius when the planner confirms a disconnected destination, while retaining fresh whole-party readiness checks.
+- Keep native E2E scenarios isolated by retiring temporary combat monsters correctly and waiting for the public state API after explicit test restarts.
+
 - Make native event-return fault tests observe the live endpoint promptly, avoiding travel-command expiry during test setup without relaxing recovery assertions.
 
 - Let ranged party members approach their target when another long-range monster is attacking a teammate (#121; thanks to Thefonze74065).

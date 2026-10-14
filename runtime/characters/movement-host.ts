@@ -50,6 +50,8 @@ export interface MovementContext {
 export interface MovementOptions {
   // Cave combat may stop direct movement without retiring the dungeon journey.
   retainOnDirectStop?: boolean;
+  // Independent combat may promptly try a smaller radius after a verified planner rejection.
+  rejectUnreachableGoal?: boolean;
   // Cave combat can displace an actor off its validated shared walking edge.
   // Repair only the local same-map connector, never the destination route.
   repairSharedDrift?: boolean;

@@ -98,6 +98,27 @@ for(const scene of [{monster:'sparkbot',wallRange:false},{monster:'goo',wallRang
    expect(barrier.confirmation?.target).toBe(barrier.target);expect(barrier.serverAt).toBeLessThan(barrier.confirmation.expiresAt);
    for(const name of fighters){const ready=barrier.ready[name];expect(ready.confirmation).toBe(barrier.confirmation.id);expect(ready.selection).toBe(barrier.selection);expect(ready.target).toBe(barrier.target);expect(ready.ready).toBe(true);expect(ready.at).toBeGreaterThanOrEqual(barrier.confirmation.startedAt);expect(barrier.serverAt-ready.at).toBeLessThanOrEqual(1000);}
    await info.attach('native-queued-successor-confirmation',{body:JSON.stringify({seed,attack}),contentType:'application/json'});
+   const firstMoves=new Map<string,any>();
+   for(const name of fighters)for(const event of events[name].filter(e=>e.event==='move-issued')){const r=event.motion?.independentRoute;
+    if(r?.id&&!firstMoves.has(name+':'+r.id))firstMoves.set(name+':'+r.id,{name,event});}
+   const candidates=[...firstMoves.values()].filter(({event})=>{const r=event.motion?.independentRoute,t=r?.nativeTarget,input=r?.prediction;
+    return r?.direct===true&&r.id===event.motion?.position?.approachId&&r.target===t?.id&&t.moving&&t.inRange===false&&Math.hypot(t.going_x-t.x,t.going_y-t.y)>0.000001&&input?.targetSpeed>0&&
+      Math.hypot(input.destination.x-t.going_x,input.destination.y-t.going_y)<0.01&&Math.abs(input.targetSpeed-t.speed)<0.01;
+   }).sort((a,b)=>a.event.at-b.event.at);
+   const first=candidates[0];
+   await info.attach('native-moving-target-issued-intercept',{body:JSON.stringify({candidates:candidates.slice(0,12),first}),contentType:'application/json'});
+   expect(first,'A coherent first actual direct move must observe a genuinely moving native target outside attack range').toBeTruthy();
+   const route=first.event.motion.independentRoute,input=route.prediction,point=route.point,native=route.nativeTarget;
+   const dx=input.destination.x-input.target.x,dy=input.destination.y-input.target.y,leg=Math.hypot(dx,dy),px=point.x-input.target.x,py=point.y-input.target.y;
+   expect(input.ownSpeed).toBeGreaterThan(0);expect(input.horizon).toBeGreaterThan(0);expect(input.horizon).toBeLessThanOrEqual(2+0.000001);
+   expect((px*dx+py*dy)/leg,'The actually issued center must lead along its immutable native motion input').toBeGreaterThan(0.000001);
+   expect(Math.abs(px*dy-py*dx)/leg).toBeLessThanOrEqual(0.000001);
+   expect(Math.hypot(px,py)).toBeLessThanOrEqual(input.targetSpeed*2+0.000001);
+   expect(Math.hypot(px,py)).toBeLessThanOrEqual(leg+0.000001);
+   expect(Math.abs(Math.hypot(px,py)-input.targetSpeed*input.horizon)).toBeLessThanOrEqual(0.000001);
+   expect(first.event.at-input.at,'Issued inputs and actual native packet share the native clock').toBeGreaterThanOrEqual(0);
+   expect(((point.x-native.x)*dx+(point.y-native.y)*dy)/leg,'The issued center must still lead the actual moving monster at its first packet').toBeGreaterThan(0);
+
   }
   for(const name of scene.wallRange?[]:[P,M]){
    const firstHit=events[name].find(e=>e.event==='hit'&&e.data?.hid===name&&String(e.data?.id)===seed.id&&e.data?.damage>1&&e.data?.source!=='taunt');
@@ -115,7 +136,7 @@ for(const scene of [{monster:'sparkbot',wallRange:false},{monster:'goo',wallRang
   live.consoleDrainLease(null);
   await info.attach('native-sparkbot-follow-result',{body:JSON.stringify({seed,releasedAt,configured,samples,events}),contentType:'application/json'});
   for(const name of fighters)await live.clients[name].frame.evaluate(()=>{(window as any).__e2eObserveMoves=false;}).catch(()=>{});
-  await live.admin(`output=(()=>{for(const entry of globalThis.__e2eFollowOwnedMonsters||[]){const m=instances[entry.instance||entry.map]?.monsters?.[entry.id];if(m&&m.type===entry.type&&m.map===entry.map)remove_monster(m,{method:'disappear',nospawn:true});}delete globalThis.__e2eFollowOwnedMonsters;if(globalThis.__e2eFollowOriginal)G.monsters[${JSON.stringify(monster)}]=__e2eFollowOriginal;monster_respawns.push(...(__e2eFollowRespawns||[]));return true;})()`);
+  await live.admin(`output=(()=>{for(const entry of globalThis.__e2eFollowOwnedMonsters||[]){const m=instances[entry.instance||entry.map]?.monsters?.[entry.id];if(m&&m.temp&&m.type===entry.type&&m.map===entry.map&&m.in===(entry.instance||entry.map))remove_monster(m,{method:'disappear'});}delete globalThis.__e2eFollowOwnedMonsters;if(globalThis.__e2eFollowOriginal)G.monsters[${JSON.stringify(monster)}]=__e2eFollowOriginal;monster_respawns.push(...(__e2eFollowRespawns||[]));return true;})()`);
  }
 });
 
