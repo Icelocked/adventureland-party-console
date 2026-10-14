@@ -1,3 +1,5 @@
+import {observeNativeNavigationHttp} from './native-navigation-http-observer';
+import {installTerminalSettlementFault} from './native-terminal-settlement-fault';
 import {observeNativeStatus} from './native-status-observer';
 import { test, expect, type LiveGame } from './live-fixtures';
 import { killNativeCharacter } from './hunt-interruption-helpers';
@@ -97,8 +99,14 @@ async function prepare(live: LiveGame, event: string) {
     return leader&&Date.now()-leader.seenAt<3000&&leader.map===checkpoint.map&&
       Math.hypot(leader.x-checkpoint.x,leader.y-checkpoint.y)<1;
   }, { timeout: 30_000, message:'Save only the fresh native leader checkpoint' }).toBe(true);
-  await live.post('/checkpoint', {});
+  const checkpointReceipt=await live.post('/checkpoint', {}),saved=checkpointReceipt.partyLocation;
+  expect(saved?.map,'The actual checkpoint receipt must match the independently observed native map').toBe(checkpoint.map);
+  expect(Number.isFinite(saved?.x)&&Number.isFinite(saved?.y),'The saved native checkpoint must have finite coordinates').toBe(true);
+  expect(checkpointReceipt.ok,'The actual native checkpoint must be accepted').toBe(true);
+  const after=await live.admin(`output=(()=>{const p=get_player(${JSON.stringify(W)});return {map:p.map,x:p.x,y:p.y}})()`);
+  const savedCheckpoint={location:{map:saved.map,x:saved.x,y:saved.y},nativeBefore:checkpoint,nativeAfter:after,receipt:checkpointReceipt};
   await live.post('/formation', { character: W, eventSelections: [event] });
+  return savedCheckpoint;
 }
 
 async function world(live: LiveGame, event: string) {
@@ -256,15 +264,62 @@ for (const encounter of [{id:'mrgreen',add:'greenjr',drop:'ashleaf',map:'spookyt
   });
 }
 
-for (const original of [{ id: 'mrgreen' }, { id: 'mrpumpkin' }]) {
+test.describe('authorized pre-join native staging',()=>{
+  test.use({initialEventSpawn:'mrpumpkin'});
+  test('Halloween future staging survives delayed genuine permission responses before both clients join',async({live},info)=>{
+    test.setTimeout(180_000);
+    const encounter={id:'mrpumpkin',...await nativeEventSpawn(live.admin,'mrpumpkin')};
+    const context=live.clients[W].page.context(),first:Record<string,number>={},ledger:any[]=[];
+    let release!:()=>void,holding=true;const gate=new Promise<void>(resolve=>{release=resolve;});
+    const pending=new Set<Promise<void>>();
+    const handler=async(route:import('@playwright/test').Route)=>{
+      let body:any;try{body=route.request().postDataJSON();}catch{await route.fallback();return;}
+      if(!holding || !fighters.includes(body?.character) || body?.event!=='mrpumpkin'){await route.fallback();return;}
+      const response=await route.fetch({maxRetries:0,maxRedirects:0,timeout:5000}),result=await response.json();
+      if(!response.ok() || result.allowed!==true){await route.fulfill({response});return;}
+      first[body.character]??=Date.now();
+      if(ledger.length<64)ledger.push({at:Date.now(),action:'actual-authorization-response-held',character:body.character,status:response.status(),allowed:result.allowed});
+      const task=(async()=>{await gate;try{await route.fulfill({response});if(ledger.length<64)ledger.push({at:Date.now(),action:'original-authorization-response-delivered',character:body.character});}
+        catch(error){if(ledger.length<64)ledger.push({at:Date.now(),action:'original-request-already-timed-out',character:body.character,error:String(error)});}})();
+      pending.add(task);try{await task;}finally{pending.delete(task);}
+    };
+    await context.route('**/party-api/hunt-event-permission',handler);
+    let beforeRelease:any,arrival:any,firstPrematureReturn:any;
+    try{
+      const timer=await announceSpawn(live,'mrpumpkin',55000);
+      await prepare(live,'mrpumpkin');
+      await expect.poll(()=>fighters.every(name=>Number.isFinite(first[name])),{timeout:30_000,message:'Both actual native event permissions must be authorized before their genuine responses are delayed'}).toBe(true);
+      await expect.poll(async()=>{
+        const state=await live.state(),now=Date.now(),authorizedAt=Math.max(...fighters.map(name=>first[name]));
+        if(state.eventReturn){firstPrematureReturn??={at:now,cycleId:state.eventReturn.cycleId,event:state.eventReturn.event,phase:state.eventReturn.phase};return false;}
+        if(firstPrematureReturn)return false;
+        const ready=fighters.every(name=>{const c=state.characters[name];return c && !c.joinedEvent && c.seenAt>=authorizedAt+10000 && now-c.seenAt<3000 &&
+          c.eventFeedConnected!==false && !c.eventClockStale && c.serverStagingEvents?.some((event:any)=>event.name==='mrpumpkin'&&event.spawnId===Date.parse(timer.spawn));});
+        if(now-authorizedAt>=11000&&ready){beforeRelease={at:now,authorizedAt,timer,characters:Object.fromEntries(fighters.map(name=>[name,{seenAt:state.characters[name].seenAt,joinedEvent:state.characters[name].joinedEvent,server:state.characters[name].server,serverStagingEvents:state.characters[name].serverStagingEvents}])),eventReturn:state.eventReturn};return true;}
+        return false;
+      },{intervals:[100,250],timeout:20_000,message:'Eleven seconds of actual fresh pre-join native staging must retain authorized attendance'}).toBe(true);
+      holding=false;release();await Promise.all([...pending]);
+      await expect.poll(async()=>{const native=await world(live,'mrpumpkin');if(native.boss)return false;
+        const reached=fighters.every(name=>native.players[name]?.map===encounter.map&&Math.hypot(native.players[name].x-encounter.x,native.players[name].y-encounter.y)<80);
+        if(reached)arrival={at:Date.now(),native};return reached;
+      },{timeout:35_000,message:'Both actual native characters must walk to the fixed announced spawn after original permission delivery'}).toBe(true);
+    }finally{
+      holding=false;release();await Promise.allSettled([...pending]);await context.unroute('**/party-api/hunt-event-permission',handler);
+      await info.attach('native-authorized-prejoin-staging',{body:JSON.stringify({first,beforeRelease,arrival,firstPrematureReturn,ledger}),contentType:'application/json'});
+    }
+  });
+});
+
+for (const original of [{ id: 'mrgreen',terminalFault:false }, { id: 'mrpumpkin',terminalFault:false },{id:'mrpumpkin',terminalFault:true}]) {
   test.describe(original.id, () => {
     test.use({ initialEventSpawn: original.id });
-    test(`Halloween ${original.id} stages from native timer, fights, recovers death and returns after deselection`, async ({ live }, info) => {
+    test(`Halloween ${original.id} stages from native timer, fights, recovers death and returns after deselection${original.terminalFault?' with a lost final native completion response':''}`, async ({ live }, info) => {
       const encounter={id:original.id,...await nativeEventSpawn(live.admin,original.id)};
       test.setTimeout(600_000);
       const timer = await announceSpawn(live, encounter.id, 55000);
       await info.attach('declared-native-spawn-announcement', { body: JSON.stringify(timer), contentType: 'application/json' });
-      await prepare(live, encounter.id);
+      const savedCheckpoint=await prepare(live, encounter.id);
+      await info.attach('native-pre-event-checkpoint-receipt',{body:JSON.stringify(savedCheckpoint),contentType:'application/json'});
       await expect.poll(async () => {
         const state = await live.state();
         return fighters.every(name => state.characters[name]?.joinedEvent === encounter.id &&
@@ -292,6 +347,9 @@ for (const original of [{ id: 'mrgreen' }, { id: 'mrpumpkin' }]) {
         return native.players[W] && !native.players[W].rip && native.players[W].map === encounter.map && state.characters[W]?.joinedEvent === encounter.id && reentryHit;
       }, { timeout: 180_000, message: 'Native death must preserve event reentry instead of losing the saved activity' }).toBe(true);
       await info.attach('native-halloween-death-and-reentry', { body: JSON.stringify({ death, native: await world(live, encounter.id), coordinator: await live.state() }), contentType: 'application/json' });
+      const navigationHttp=encounter.id==='mrpumpkin'?observeNativeNavigationHttp(live.clients[W].page):null;
+      const terminalFault=original.terminalFault?await installTerminalSettlementFault(live,live.clients[W].page):null;
+      try{
       const returnPhases:{deselectedAt:number;replacementRequestedAt?:number;replacementAcknowledgedAt?:number;recoveryStartedAt:number;recoveryDeadline:number;arrivalObservedAt?:number}={
         deselectedAt:Date.now(),recoveryStartedAt:Date.now(),recoveryDeadline:0};
       let returnDeadline = returnPhases.deselectedAt + (encounter.id === 'mrgreen' ? 240_000 : 180_000);
@@ -333,19 +391,24 @@ for (const original of [{ id: 'mrgreen' }, { id: 'mrpumpkin' }]) {
           await info.attach('native-green-exit-code-turnover',{body:JSON.stringify({before,after,observations,phases:returnPhases,native:await world(live,encounter.id)}),contentType:'application/json'});
         }
       }
+      if(terminalFault)await info.attach('native-terminal-settlement-fault-proof',{body:JSON.stringify(await terminalFault.prove(returnDeadline)),contentType:'application/json'});
       await expect.poll(async () => {
         const native = await world(live, encounter.id);
-        return fighters.every(name => native.players[name] && native.players[name].map === encounter.map && Math.hypot(native.players[name].x - (encounter.x + 160), native.players[name].y - encounter.y) < 100);
+        return fighters.every(name => native.players[name] && native.players[name].map === savedCheckpoint.location.map && Math.hypot(native.players[name].x - savedCheckpoint.location.x, native.players[name].y - savedCheckpoint.location.y) < 100);
       }, { timeout: Math.max(1,returnDeadline-Date.now()), message: 'Deselection must return both actual clients to their saved pre-event checkpoint' }).toBe(true);
       returnPhases.arrivalObservedAt=Date.now();
       const nativeArrivalReceipts=await Promise.all(fighters.map(async name=>{
         const events=await live.clients[name].events(),main=events.filter((event:any)=>event.event==='new_map'&&
           event.at>=returnPhases.recoveryStartedAt&&event.data?.name==='main').at(-1);
-        const arrival=main&&events.find((event:any)=>event.event==='player'&&event.at>main.at&&event.data?.map===encounter.map&&
-          Math.hypot(event.data.x-(encounter.x+160),event.data.y-encounter.y)<100);
+        const arrival=main&&events.find((event:any)=>event.event==='player'&&event.at>main.at&&event.data?.map===savedCheckpoint.location.map&&
+          Math.hypot(event.data.x-savedCheckpoint.location.x,event.data.y-savedCheckpoint.location.y)<100);
         return {name,main,arrival};
       }));
-      await info.attach('halloween-saved-checkpoint-return', { body: JSON.stringify({phases:returnPhases,nativeArrivalReceipts, native: await world(live, encounter.id), coordinator: await live.state() }), contentType: 'application/json' });
+      await info.attach('halloween-saved-checkpoint-return', { body: JSON.stringify({savedCheckpoint,phases:returnPhases,nativeArrivalReceipts, native: await world(live, encounter.id), coordinator: await live.state() }), contentType: 'application/json' });
+      }finally{
+        try{if(terminalFault)await info.attach('native-terminal-settlement-fault-final',{body:JSON.stringify(await terminalFault.finish()),contentType:'application/json'});}
+        finally{if(navigationHttp)await info.attach('native-pumpkin-return-http',{body:JSON.stringify(await navigationHttp.finish()),contentType:'application/json'});}
+      }
     });
   });
 }

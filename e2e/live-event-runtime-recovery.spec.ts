@@ -26,6 +26,7 @@ test('native fixed-end event timer survives clock resync and a limit added durin
   const checkpoint={map:'halloween',x:-550,y:-290};
   await live.post('/formation',{leader:W});
   await live.post('/formation',{character:P,follow:true});
+  await live.clients[W].run('parent.__e2eObserveMoves=true;parent.__e2eObservedMoveCount=0');
   await live.post('/travel',checkpoint);
   await expect.poll(async()=>{const s=await live.state();return !s.activeConvoy&&fighters.every(name=>
     s.characters[name]?.map===checkpoint.map&&Math.hypot(s.characters[name].x-checkpoint.x,s.characters[name].y-checkpoint.y)<100);},{timeout:90000}).toBe(true);
@@ -54,9 +55,11 @@ test('native fixed-end event timer survives clock resync and a limit added durin
       !s.characters[name]?.joinedEvent&&s.characters[name]?.map===checkpoint.map&&Math.hypot(s.characters[name].x-checkpoint.x,s.characters[name].y-checkpoint.y)<100);},{timeout:150000}).toBe(true);
     expect((await live.clients[W].events()).some(packet=>packet.event==='hit'&&String(packet.data?.id)===seed.id&&packet.data?.hid===W&&packet.data?.damage>0)).toBe(true);
   }finally{
-    await info.attach('fixed-end-event-timer',{body:JSON.stringify({seed,samples,state:await live.state(),events:await Promise.all(fighters.map(name=>live.clients[name].events()))}),contentType:'application/json'});
+    try{await info.attach('fixed-end-event-timer',{body:JSON.stringify({seed,samples,state:await live.state(),events:await Promise.all(fighters.map(name=>live.clients[name].events()))}),contentType:'application/json'});
+    }finally{try{await live.clients[W].run('parent.__e2eObserveMoves=false');}finally{
     await live.post('/formation',{character:W,eventSelections:[]});
     await live.admin(`output=(()=>{for(const i of Object.values(instances))for(const m of Object.values(i.monsters||{}))if(String(m.id)===${JSON.stringify(seed.id)})remove_monster(m,{silent:true});G.monsters.mrpumpkin=${JSON.stringify(seed.original)};delete E.mrpumpkin;broadcast_e();return true;})()`);
+    }}
   }
 });
 
@@ -138,16 +141,36 @@ test.describe('retired event exit ownership',()=>{
           warriorSession:admission.farmingProfiles[W].eventSessions[W],priestDeferred:admission.deferredEventReturns[P]});
         holdUntil=0;
       }
-      await expect.poll(async()=>{const s=await live.state();
+      await expect.poll(async()=>{
+        const observationStartedAt=Date.now();
         const native=Object.fromEntries(await Promise.all(fighters.map(async name=>[name,
-          await live.clients[name].run(`(()=>{const owner=globalThis.__partyEventExitOwner;
-            return {owner:owner?{cycleId:owner.cycleId,cancelled:!!owner.cancelled,commandId:owner.commandId}:null,
-              selectionPublished:Object.prototype.hasOwnProperty.call(globalThis,'__partyEventRecoveryCycleId'),
-              selectedCycle:globalThis.__partyEventRecoveryCycleId===undefined?null:globalThis.__partyEventRecoveryCycleId};})()`)])));
+          await live.clients[name].frame.evaluate(expectedName=>{
+            const runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as
+              (Window & {character?:Pick<import('typed-adventureland').CharacterEntity,'name'>;__partyEventExitOwner?:{cycleId?:string;cancelled?:boolean;commandId?:number};
+                __partyEventRecoveryCycleId?:string|null;__partyRuntimeGeneration?:number})|null;
+            if(!runner||runner.character?.name!==expectedName)throw Error('Current native maincode identity mismatch: '+expectedName);
+            const owner=runner.__partyEventExitOwner;
+            return {name:runner.character.name,runtimeGeneration:runner.__partyRuntimeGeneration,
+              owner:owner?{cycleId:owner.cycleId,cancelled:!!owner.cancelled,commandId:owner.commandId}:null,
+              selectionPublished:Object.prototype.hasOwnProperty.call(runner,'__partyEventRecoveryCycleId'),
+              selectedCycle:runner.__partyEventRecoveryCycleId===undefined?null:runner.__partyEventRecoveryCycleId};
+          },name)])));
+        const nativeObservedAt=Date.now(),s=await live.state(),stateObservedAt=Date.now();
+        const checks=Object.fromEntries(fighters.map(name=>{
+          const session=s.farmingProfiles[W].eventSessions[name];
+          return [name,{runtimeUnchanged:s.characters[name]?.dashboardRuntime===started.characters[name].dashboardRuntime,
+            selectionPublished:native[name].selectionPublished,selectionRetired:native[name].selectedCycle!==oldCycle,
+            ownerRetired:!native[name].owner||native[name].owner.cancelled||native[name].owner.cycleId!==oldCycle,
+            admissionResumed:!deferred||!s.deferredEventReturns[name]&&!!session?.participants?.includes(name)}];
+        }));
         if(exitOwnerSamples.length===64)exitOwnerSamples.shift();
-        exitOwnerSamples.push({at:Date.now(),native,diagnostics:Object.fromEntries(fighters.map(name=>[name,s.characters[name]?.eventRecovery]))});
-        return fighters.every(name=>s.characters[name]?.dashboardRuntime===started.characters[name].dashboardRuntime &&
-          native[name].selectionPublished && native[name].selectedCycle!==oldCycle && (!native[name].owner || native[name].owner.cancelled || native[name].owner.cycleId!==oldCycle));
+        exitOwnerSamples.push({at:stateObservedAt,observationStartedAt,nativeObservedAt,stateObservedAt,native,checks,
+          diagnostics:Object.fromEntries(fighters.map(name=>[name,{eventRecovery:s.characters[name]?.eventRecovery,
+            expectedRuntime:started.characters[name].dashboardRuntime,actualRuntime:s.characters[name]?.dashboardRuntime,
+            deferred:s.deferredEventReturns[name]||null,session:s.farmingProfiles[W].eventSessions[name]&&{
+              event:s.farmingProfiles[W].eventSessions[name].event,participants:s.farmingProfiles[W].eventSessions[name].participants,
+              waypoint:s.farmingProfiles[W].eventSessions[name].waypoints?.[name]}}]))});
+        return fighters.every(name=>Object.values(checks[name]).every(Boolean));
       },{timeout:15_000}).toBe(true);
       if(deferred){const resumed=await live.state();for(const name of fighters){
         expect(resumed.deferredEventReturns[name]).toBeUndefined();

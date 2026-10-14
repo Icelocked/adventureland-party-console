@@ -325,7 +325,21 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
         receipt.id===view.state.commands[name]?.id;
     });
   },{timeout:120_000,message:'Both initial native waypoint moves must complete before raw fixture staging'}).toBe(true);
-  await controls.getByRole('button',{name:'Stop travel',exact:true}).click();
+  const clickCaveControl=async(name:string)=>{
+    const deadline=Date.now()+20_000;
+    const remaining=()=>{
+      const timeout=deadline-Date.now();
+      if(timeout<=0)throw Error(`${name} exhausted its original 20-second click window`);
+      return timeout;
+    };
+    const resolvedEncounter=page.getByRole('dialog').filter({has:page.getByText('Encounter result',{exact:true})});
+    if(await resolvedEncounter.isVisible()){
+      await resolvedEncounter.getByRole('button',{name:'Close',exact:true}).click({timeout:remaining()});
+      await expect(resolvedEncounter).not.toBeVisible({timeout:remaining()});
+    }
+    await controls.getByRole('button',{name,exact:true}).click({timeout:remaining()});
+  };
+  await clickCaveControl('Stop travel');
   await expect.poll(async()=>{
     const state=(await dungeon()).state;
     return !state.travel && state.progress?.enabled===false &&
@@ -386,7 +400,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   const selectWaypoint=async()=>{
     const previous=(await dungeon()).state;
     const previousIds=new Set([previous.travel?.target?.id,...Object.values(previous.commands).map((c:any)=>c.target?.id)]);
-    await controls.getByRole('button',{name:'View full map',exact:true}).click();
+    await clickCaveControl('View full map');
     await activateWaypoint(safe.target.map);
     const box=(await fullMap.locator('canvas').boundingBox())!;
     const scale=Math.min(box.width/(bounds.max_x-bounds.min_x+100),box.height/(bounds.max_y-bounds.min_y+100));
@@ -1034,6 +1048,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   const stairSamples:any[]=[];
   let lastStairKey='';
   let blockedStairAt=0,blockedStairId='';
+  let stairMoveFlags:{name:string;enabled:boolean;count:number}[]=[];
   const stairNativeReads:Promise<unknown>[]=[];
   const stairPlanningReads:Promise<unknown>[]=[];
   const stairPlanningStarted=Date.now();
@@ -1054,7 +1069,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     if(!id){blockedStairAt=0;blockedStairId='';return;}
     if(id!==blockedStairId){blockedStairId=id;blockedStairAt=Date.now();}
     if(stairNativeReads.length>=3||Date.now()-blockedStairAt<(stairNativeReads.length+1)*20000)return;
-    stairNativeReads.push(Promise.allSettled(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].run(`(()=>{
+    stairNativeReads.push(Promise.allSettled([...['E2EWarrior','E2EPriest'].map(name=>live.clients[name].run(`(()=>{
       const c=character,p=parent.character,now=Date.now();
       const body=o=>o?{name:o.name,map:o.map,in:o.in,x:o.x,y:o.y,real_x:o.real_x,real_y:o.real_y,
         hp:o.hp,rip:o.rip,moving:o.moving,base:o.base,width:o.width,height:o.height,
@@ -1067,7 +1082,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
           id:o.id,mtype:o.mtype,type:o.type,target:o.target,dead:o.dead,visible:o.visible,side:o.cave?.side})),
         chests:Object.entries(parent.chests||{}).filter(([id,o])=>near(o)).slice(0,20).map(([id,o])=>({
           id,map:o.map,in:o.in,x:o.x,y:o.y,deleted:o.to_delete,owner:o.owner,opened:o.opened,skin:o.skin}))};
-    })()`))));
+    })()`)),live.admin(`output=(()=>{const people=['E2EWarrior','E2EPriest'].map(name=>get_player(name));return {at:Date.now(),version:G.version,players:people.map(p=>{if(!p)return null;const g=G.geometry[p.map];return {name:p.name,map:p.map,in:p.in,x:p.x,y:p.y,hp:p.hp,rip:p.rip,moving:p.moving,base:p.base,selfClear:can_move({map:p.map,x:p.x,y:p.y,going_x:p.x,going_y:p.y,base:p.base}),geometry:g?{x_lines:(g.x_lines||[]).filter(line=>Math.abs(line[0]-p.x)<=32&&line[1]-32<=p.y&&line[2]+32>=p.y).slice(0,12),y_lines:(g.y_lines||[]).filter(line=>Math.abs(line[0]-p.y)<=32&&line[1]-32<=p.x&&line[2]+32>=p.x).slice(0,12)}:null};})};})()`)]));
   };
   const recordStairs=(v:any)=>{
     const at=Date.now(),state=v.state;
@@ -1096,6 +1111,13 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
       stairNativeChoices.push({at:Date.now(),advertised:c.choice.id,...identity});if(stairNativeChoices.length>100)stairNativeChoices.splice(5,1);
       if(identity.run!==c.run||identity.id!==c.choice.id||identity.resolved)return false;
       const reply=c.choice.options.find((o:any)=>!o.unavailable&&!o.cost&&!o.amber);
+      if(!stairMoveFlags.length&&identity.run===farewellDeclaration.run&&identity.room===farewellDeclaration.room){
+        stairMoveFlags=await Promise.all(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].frame.evaluate(name=>{
+          const g=window as Window&{__e2eObserveMoves?:boolean;__e2eObservedMoveCount?:number};
+          const previous={name,enabled:g.__e2eObserveMoves===true,count:g.__e2eObservedMoveCount||0};
+          g.__e2eObservedMoveCount=0;g.__e2eObserveMoves=true;return previous;
+        },name)));
+      }
       try{
         await choice.getByRole('button',{name:reply.label,exact:true}).click();
       }catch(error){
@@ -1126,8 +1148,15 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
       if(latest)captureBlockedStairs({state:{phase:latest.phase,run:latest.run,travel:latest.travel}});return completed;},
       {timeout:300_000,message:'Manual stairs must continue after the farewell vote and transport both members'}).toBe(true);
   }finally{
-    await info.attach('native-cave-stairs-readiness',{body:JSON.stringify({farewellDeclaration,nativeChoices:stairNativeChoices,samples:stairSamples,planning:await Promise.allSettled(stairPlanningReads),native:await Promise.allSettled(stairNativeReads),
-      unavailable:['Coordinator status position/seenAt and CODE loading/socket ownership are not exposed by this dungeon response.']}),contentType:'application/json'});
+    try{
+      await info.attach('native-cave-stairs-readiness',{body:JSON.stringify({farewellDeclaration,nativeChoices:stairNativeChoices,samples:stairSamples,planning:await Promise.allSettled(stairPlanningReads),native:await Promise.allSettled(stairNativeReads),
+        unavailable:['Coordinator status position/seenAt and CODE loading/socket ownership are not exposed by this dungeon response.']}),contentType:'application/json'});
+    }finally{
+      await Promise.all(stairMoveFlags.map(previous=>live.clients[previous.name].frame.evaluate(previous=>{
+        const g=window as Window&{__e2eObserveMoves?:boolean;__e2eObservedMoveCount?:number};
+        g.__e2eObserveMoves=previous.enabled;g.__e2eObservedMoveCount=previous.count;
+      },previous)));
+    }
   }
   expect(answeredFarewell).toBe(true);
   console.log('[Cave verified] Both characters reached the next native floor');
@@ -1263,8 +1292,10 @@ test('Cave assembly regroups displaced completed participants before departure',
   await expect.poll(async()=>{const v=await view();return v.members.length===2&&v.members.every((m:any)=>m.fresh&&m.observation?.ready&&m.observation?.visit?.available&&m.observation.members.length===2);},{timeout:60_000}).toBe(true);
   await act({action:'enter'});
   await expect.poll(async()=>(await view()).state.phase,{timeout:60_000}).toBe('active');
+  const nativeShop=()=>live.admin(`output=(()=>{const p=get_player('E2EWarrior'),run=generated_entry(p).record,room=run.cave.rooms.find(r=>r.id===G.maps[p.map].generated.floor+':shop');return {run:run.key,map:p.map,paused:!!run.paused_at,room:room?{id:room.id,map:room.map,x:room.x,y:room.y,encounter:room.encounter?.id,voted:!!room.voted,done:!!room.done,npc:room.npc?{id:room.npc.id,x:room.npc.x,y:room.npc.y}:null,vote:room.vote?{id:room.vote.id,resolved:room.vote.resolved}:null}:null};})()`);
   const cave=(await view()).members[0].observation.cave;
-  if(cave.choice&&!cave.choice.resolved){
+  const initialNativeShop=await nativeShop();
+  if(cave.choice&&!cave.choice.resolved&&initialNativeShop.room?.vote?.id!==cave.choice.id){
     const option=cave.choice.options.find((o:any)=>!o.unavailable&&!o.cost&&!o.amber);
     expect(option).toBeTruthy();
     await act({action:'vote',run:cave.run,choice:cave.choice.id,option:option.id});
@@ -1278,13 +1309,15 @@ test('Cave assembly regroups displaced completed participants before departure',
     },{timeout:30_000,message:'Both native participant votes must settle before assembly staging'}).toBe(true);
   }
   const shopSetupStarted=Date.now(),shopSetupEvidence:any[]=[];
-  const nativeShop=()=>live.admin(`output=(()=>{const p=get_player('E2EWarrior'),run=generated_entry(p).record,room=run.cave.rooms.find(r=>r.id===G.maps[p.map].generated.floor+':shop');return {run:run.key,map:p.map,paused:!!run.paused_at,room:room?{id:room.id,map:room.map,x:room.x,y:room.y,encounter:room.encounter?.id,voted:!!room.voted,done:!!room.done,npc:room.npc?{id:room.npc.id,x:room.npc.x,y:room.npc.y}:null,vote:room.vote?{id:room.vote.id,resolved:room.vote.resolved}:null}:null};})()`);
   const shop=await nativeShop();
   try {
-  if(shop.room?.encounter==='e31'&&!shop.room.voted&&!shop.room.done){
+  if(shop.room?.encounter==='e31'){
+    expect(shop.room.done,'Declared entry shop must remain available for its explicit native setup vote').toBe(false);
+    if(!shop.room.vote||shop.room.vote.resolved){
     const goals=await live.admin(`output=(()=>{const people=['E2EWarrior','E2EPriest'].map(name=>get_player(name)),run=generated_entry(people[0]).record,room=run.cave.rooms.find(r=>r.id===${JSON.stringify(shop.room.id)}),npc=room.npc;if(!npc)throw Error('Entry shop NPC unavailable');return people.map(p=>{const goals=[];for(const radius of [120,80,0])for(let i=0;i<16;i++){const x=npc.x+radius*Math.cos(i*Math.PI/8),y=npc.y+radius*Math.sin(i*Math.PI/8);if(Math.hypot(x-room.x,y-room.y)<260&&can_move({map:p.map,x:p.x,y:p.y,going_x:x,going_y:y,base:p.base}))goals.push({name:p.name,x,y});}goals.sort((a,b)=>Math.hypot(a.x-p.x,a.y-p.y)-Math.hypot(b.x-p.x,b.y-p.y));if(!goals.length)throw Error('No native-clear entry shop setup walk');return goals[0];});})()`);
     for(const goal of goals) {
       await live.clients[goal.name].frame.evaluate(({x,y})=>(window as any).move(x,y),goal);
+    }
     }
     let entryChoice:any;
     await expect.poll(async()=>{
@@ -1292,8 +1325,12 @@ test('Cave assembly regroups displaced completed participants before departure',
       shopSetupEvidence.push({stage:'walking',native});
       entryChoice=v.members[0]?.observation?.cave?.choice;
       return native.run===shop.run&&!!entryChoice&&!!native.room?.vote&&native.room.vote.id===entryChoice.id&&!entryChoice.resolved;},{timeout:Math.max(1,30_000-(Date.now()-shopSetupStarted)),message:'Real entry shop must present its own native choice'}).toBe(true);
-    const option=entryChoice.options.find((o:any)=>o.id==='e31_2'&&!o.unavailable&&!o.cost&&!o.amber);
+    shopSetupEvidence.push({stage:'choice',choice:entryChoice});
+    const nativeReplies=await live.admin(`output=G.events.dreams.encounters.find(encounter=>encounter.id==='e31').options.map(option=>({id:option.id,effect:option.effect}));`);
+    shopSetupEvidence.push({stage:'native-reply-effects',replies:nativeReplies});
+    const option=entryChoice.options.find((o:any)=>nativeReplies.some((reply:any)=>reply.id===o.id&&['leave','story','inspect'].includes(reply.effect))&&!o.unavailable&&!o.cost&&!o.amber);
     expect(option,'Only the free noncombat entry-shop reply may be used for setup').toBeTruthy();
+    shopSetupEvidence.push({stage:'selected-reply',choice:entryChoice.id,option});
     await act({action:'vote',run:shop.run,choice:entryChoice.id,option:option.id});
     await expect.poll(async()=>{
       const native=await nativeShop(),v=await view();

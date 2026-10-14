@@ -1,3 +1,4 @@
+import {terminalSettlementMatches} from './terminal-settlement.ts';
 import {classifyTravelDefense} from './travel-defense.ts';
 import { requestObject } from '../http/contracts.ts';
 import { routeOwner, routeIdentityOwned, sharedRoute } from './shared-route-store.ts';
@@ -31,7 +32,7 @@ export function movementBarrier(state: SharedState, input: unknown, now: number)
   const name = String(body.character), members = c.participants.filter(n => !c.completed.includes(n));
   if(townBlocked(state,c,barrier,body,now))return {ready:false,waiting:'fresh party observations without attackers'};
   acknowledge(state,barrier,body,name,now);
-  if (body.completed === true) return { ready: members.every(n => barrier!.completed.has(n)) };
+  if (body.completed === true) return completedBarrier(state,c,barrier,members,body,now);
   if (!barrier.releasedAt && members.every(n => readyOwner(state,barrier.ready.get(n),now))) barrier.releasedAt = now;
   return { ready: !!barrier.releasedAt };
 }
@@ -74,4 +75,9 @@ function publishedStep(c: SharedConvoy, body: Record<string,unknown>): boolean {
 function townBlocked(state:SharedState,c:SharedConvoy,barrier:Barrier,body:Record<string,unknown>,now:number):boolean {
   return !barrier.releasedAt && !!c.continuousReturn && !!(body.destination as {town?:boolean}).town &&
     classifyTravelDefense(state,c.participants,now).state!=='clear';
+}
+
+function completedBarrier(state:SharedState,c:SharedConvoy,barrier:Barrier,members:string[],body:Record<string,unknown>,now:number) {
+  if(barrier.releasedAt)for(const peer of members)if(terminalSettlementMatches(state,c,peer,Number(body.step),body.destination as Point,now))barrier.completed.add(peer);
+  return {ready:members.every(n=>barrier.completed.has(n))};
 }

@@ -581,3 +581,24 @@ test(ctype+' Franky attendance suppresses farming/passing targets and ordinary m
     assert.equal(exitSelection,r.target,'exit defense takes ownership');
   } finally {r.c.partyRoleRunner.stop();}
 });
+
+
+test('ordinary out-of-range attacker closes range before outward kite fallback', async () => {
+  const {c,target,moves}=geometry(179);
+  c.character.x=235;c.is_in_range=()=>false;
+  // Only a narrow east/west corridor: orbit arcs collide, but inward approach is clear.
+  c.can_move_to=(_x,y)=>Math.abs(y)<1;
+  assert.equal(await c.kiteIfNeeded(target),true);
+  assert.ok(moves.at(-1).x<235,'out-of-range selected attacker must be approached');
+  assert.equal(c.partyCombatPosition.mode,'approaching');
+});
+
+test('ordinary out-of-range approach retains secondary attacker clearance', async () => {
+  const {c,target,moves}=geometry(179);
+  c.character.x=235;c.is_in_range=()=>false;
+  c.can_move_to=(_x,y)=>Math.abs(y)<1;
+  c.parent.entities.add={id:'add',type:'monster',visible:true,x:200,y:0,target:'Us',range:40};
+  assert.equal(await c.kiteIfNeeded(target),true);
+  assert.ok(moves.at(-1).x>235,'unsafe inward approach must retain validated escape');
+  assert.equal(c.partyCombatPosition.mode,'escaping');
+});

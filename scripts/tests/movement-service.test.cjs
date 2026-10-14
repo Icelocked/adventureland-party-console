@@ -48,7 +48,7 @@ test('diagnostics snapshot coordinates and deduplicate independently of mutable 
 function fixture(options={}) {
  let now=1000, revision=1, runtime='test', searches=0, request;
  const calls=[], logs=[], c={name:'Test',map:'main',in:'main',x:0,y:0,real_x:0,real_y:0,speed:60,base:{h:8,v:7,vn:2},items:[],moving:false};
- const G={version:16846,geometry:{},maps:{main:{spawns:[[0,0]],doors:[],npcs:[]},bank:{spawns:[[0,0]],doors:[],npcs:[]}},npcs:{transporter:{places:{}}}};
+ const G={version:16846,geometry:{},maps:{main:{spawns:[[0,0]],doors:[],npcs:[]},bank:{spawns:[[0,0]],doors:[],npcs:[]},...options.maps},npcs:{transporter:{places:{}}}};
  const host={character:c,G,smart:{moving:false,plot:[]},parent:{socket:{emit:(...a)=>calls.push(a)},push_deferred:()=>Promise.resolve()},
   smart_move:()=>{host.smart.moving=true;host.smart.found=false;host.smart.searching=false;return Promise.resolve();},
   stop:async()=>{host.smart.moving=false;},smart_move_logic(){},start_pathfinding:()=>{searches++;host.smart.found=true;host.smart.plot=options.nativePlot||[{map:'main',x:100,y:0}];},continue_pathfinding(){},
@@ -702,4 +702,132 @@ test('exhausted owned route preserves declared arrival tolerance and inferred sa
  const r=fixture();r.c.in='generated-owner';const p=r.service.move({map:'main',x:100,y:0},undefined,{arrivalTolerance:40});
  r.c.real_x=70;r.service.install([],r.service.identity);await r.ticks();await p;
  assert.equal(r.service.last().done,true);assert.equal(r.service.last().retries,0);r.dispose();
+});
+
+for(const mode of ['valid','stale','moving','dead','instance','position','command','revision','runtime','route','cancelled','missing','unreleased','walking-tail','missing-realm','empty-journey'])for(const continuous of [false,true])test('native acknowledged terminal settlement cannot strand a fresh peer completion barrier; mode='+mode+' continuous='+continuous,async()=>{
+ const {movementBarrier}=require('../../runtime/coordinator/navigation/movement-barrier.ts');
+ const {publishSharedRoute}=require('../../runtime/coordinator/navigation/shared-route-store.ts');
+ const {sharedCommand}=require('../../runtime/coordinator/navigation/shared-navigation.ts');
+ const {routeOwner}=require('../../runtime/coordinator/navigation/shared-route-store.ts');
+ const {createConvoyAcknowledgementRoutes}=require('../../runtime/coordinator/http/convoy-acknowledgements.ts');
+ const names=['W','P'],actors=Object.fromEntries(names.map(n=>[n,fixture({maps:{cyberland:{spawns:[[0,0]]}}})]));let now=1000;
+ const step={map:'main',in:'main',x:0,y:0,method:'leave'},plot=[step];
+ const c={id:'return',epoch:3,routeProtocol:4,routeVersion:1,phase:'shared-prepare',
+  purpose:'shared-walk-return',continuousReturn:continuous?1:undefined,returnLegs:continuous?undefined:[{type:'walk',location:step}],leader:'W',participants:names,completed:[],runtimes:{W:'test',P:'test'},
+  location:step,rally:{map:'cyberland',in:'cyberland',x:0,y:0}};
+ const state={activeConvoy:c,commands:{},statuses:{},navigationIntents:{W:{revision:1},P:{revision:1}},nextCommandId:7,eventReturn:null,combatLogs:{}},http=[];
+ function identity(n){return {character:n,convoyId:c.id,epoch:c.epoch,commandId:n==='W'?7:8,navigationRevision:1,runtimeId:'test',routeVersion:1};}
+ function sync(){for(const n of names){const r=actors[n];r.setNow(now);Object.assign(state.statuses[n],{seenAt:now,map:r.c.map,in:r.c.in,x:r.c.real_x,y:r.c.real_y,moving:r.c.moving,transporting:false});}}
+ for(const n of names){const r=actors[n];r.c.name=n;r.c.hp=100;r.c.map=r.c.in='cyberland';r.host.G.maps.cyberland={spawns:[[0,0]]};
+  const context=r.ports.context;r.ports.context=()=>({...context(),server:'USI'});
+  state.statuses[n]={seenAt:now,map:'cyberland',in:'cyberland',x:0,y:0,hp:100,moving:false,transporting:false,server:'USI',
+   convoyNavigation:{id:c.id,epoch:c.epoch,commandId:identity(n).commandId,navigationRevision:1,runtimeId:'test',routeVersion:1,phase:'walking'}};
+  r.host.parent.push_deferred=()=>{Object.assign(r.c,{map:'main',in:'main',real_x:0,real_y:0});sync();return Promise.resolve();};
+ }
+ for(const n of names){state.commands[n]=sharedCommand(state,c,'shared-prepare',n);assert.equal(state.commands[n].returnLeg,!continuous);}
+ assert.equal(publishSharedRoute(state,{...identity('W'),route:{version:1,geometry:actors.W.service.identity,origin:c.rally,destination:step,plot,source:'search'}},now),null);c.phase='travel';c.departAt=now;
+ function applyNegative(){if(!state.statuses.W.movement)return;
+  const w=state.statuses.W;
+  if(mode==='stale')w.seenAt=now-3001;
+  if(mode==='moving')w.moving=true;
+  if(mode==='dead')w.rip=true;
+  if(mode==='instance')w.in='foreign';
+  if(mode==='position')w.x=20;
+  if(mode==='command')state.commands.W.id=70;
+  if(mode==='revision')state.navigationIntents.W.revision=2;
+  if(mode==='runtime')w.convoyNavigation.runtimeId='new';
+  if(mode==='route')w.convoyNavigation.routeVersion=2;
+  if(mode==='cancelled')state.navigationIntents.W.cancelled=true;
+  if(mode==='missing')w.movement={done:true};
+  if(mode==='missing-realm'){delete w.server;delete w.movement.terminalSettlement.server;}
+  if(mode==='empty-journey'){w.movement.id='';w.movement.terminalSettlement.journeyId='';}
+  if(mode==='walking-tail'&&!state.replaced){state.replaced=true;
+    const r=require('../../runtime/coordinator/navigation/shared-route-store.ts').sharedRoute(c);
+    r.plot.push({map:'main',in:'main',x:20,y:0});r.destination={map:'main',in:'main',x:20,y:0};}
+
+  if(mode==='unreleased'&&!state.replaced){state.replaced=true;state.activeConvoy={...c,phase:'shared-prepare'};publishSharedRoute(state,{...identity('W'),route:{version:1,geometry:actors.W.service.identity,origin:c.rally,destination:step,plot,source:'search'}},now);state.activeConvoy.phase='travel';}
+ }
+ const promises={};
+ for(const n of names){const r=actors[n],owner={convoyId:c.id,epoch:c.epoch,commandId:identity(n).commandId,navigationRevision:1,routeVersion:1};
+  promises[n]=r.service.move(step,undefined,{shared:true,awaitSharedRoute:true,owner,barrier:async(destination,index,completed)=>{
+   sync();applyNegative();const body={...identity(n),step:index,destination,completed,ready:true},result=movementBarrier(state,body,now);http.push({actor:n,completed,result});return !!result.ready;}});
+  promises[n].catch(()=>{});r.service.install(plot,r.service.identity);
+ }
+ await actors.W.ticks(1);await actors.P.ticks(1);now+=500;sync();await actors.W.ticks(1);await actors.W.ticks(1);await actors.P.ticks(1);
+ assert.equal(actors.W.c.map,'main');assert.equal(actors.P.c.map,'main');
+ const owner={convoyId:c.id,epoch:c.epoch,commandId:7,navigationRevision:1,routeVersion:1};
+ assert.equal(actors.W.service.settleTerminal(actors.W.service.report().id,owner),true);await promises.W;
+ state.statuses.W.convoyNavigation.phase=continuous?'arrived':'leg-arrived';state.statuses.W.movement=actors.W.service.last();
+ if(continuous){let result;const res={status(){return this;},json(value){result=value;return value;}};
+  const ack=createConvoyAcknowledgementRoutes(state,{now:()=>now,owned:()=>true,valid:body=>routeOwner(state,body,now),nextCommand:()=>state.nextCommandId++,persist(){},history(){},hold(){},error(){}});
+  ack.complete({body:identity('W')},res);assert.deepEqual(result,{ok:false,waiting:true},'actual convoy completion waits for the stranded peer');
+ }
+ assert.equal(http.some(x=>x.actor==='W'&&x.completed),false,'owned final settlement did not emit a completion POST');
+ for(let i=0;i<8;i++){now+=500;sync();
+  await actors.P.ticks(2);
+ }
+ assert.equal(actors.W.service.last().done,true);assert.deepEqual(c.completed,[]);
+ assert.ok(http.some(x=>x.actor==='P'&&x.completed),'peer sent real completion requests');
+ for(const r of Object.values(actors))assert.equal(r.calls.filter(call=>call[0]==='leave').length,1,'no native transition is replayed');
+ const done=actors.P.service.last()?.done;for(const r of Object.values(actors))r.dispose();
+ assert.equal(done===true,mode==='valid','the acknowledged settled peer must not leave the other actor waiting forever; receipts='+JSON.stringify(http));
+});
+
+
+for(const mode of ['network','timeout','server','superseded','aborted-server','forbidden','unclassified'])test('terminal native ACK distinguishes completion barrier failure provenance: '+mode,async()=>{
+ const owner={convoyId:'return',epoch:3,commandId:7,navigationRevision:1,routeVersion:2};
+ const r=fixture();r.c.hp=100;r.host.G.maps.cyberland={spawns:[[0,0]]};r.c.map=r.c.in='cyberland';
+ const original=r.ports.context;r.ports.context=()=>({...original(),server:'USI'});
+ r.host.parent.push_deferred=()=>{Object.assign(r.c,{map:'main',in:'main',real_x:0,real_y:0});return Promise.resolve();};
+ let rejectCompletion;const pending=new Promise((_,reject)=>{rejectCompletion=reject;});let completionIssued=false;
+ const p=r.service.move({map:'main',in:'main',x:0,y:0},undefined,{shared:true,awaitSharedRoute:true,owner,
+  barrier:async(_step,_index,completed)=>{if(!completed)return true;completionIssued=true;return pending;}});p.catch(()=>{});
+ r.service.install([{map:'main',in:'main',x:0,y:0,method:'leave'}],r.service.identity);await r.ticks(5);r.setNow(1500);await r.ticks(5);
+ assert.equal(completionIssued,true);const id=r.service.report().id,calls=r.calls.length;
+ const metadata={network:{kind:'network',status:0},timeout:{kind:'timeout',status:0},server:{kind:'http',status:503},
+  superseded:{kind:'aborted',status:409,code:'superseded'},'aborted-server':{kind:'aborted',status:503},forbidden:{kind:'http',status:403}}[mode];
+ rejectCompletion(Object.assign(Error('Actual completion request failed'),metadata?{partyRequest:{path:'/movement-barrier',method:'POST',...metadata}}:{}));await settle();
+ const accepted=['network','timeout','server'].includes(mode);
+ assert.equal(r.service.settleTerminal(id,owner),accepted,'only retryable completion transport may acknowledge already executed native action');
+ assert.equal(r.calls.length,calls,'terminal acknowledgement must not send another action');
+ if(accepted){await p;assert.equal(r.service.last().terminalSettlement.acknowledged,true);}r.dispose();
+});
+
+test('a rejected native leave never becomes a terminal receipt even with retryable-looking metadata',async()=>{
+ const owner={convoyId:'return',epoch:3,commandId:7,navigationRevision:1,routeVersion:2},r=fixture();r.c.hp=100;
+ r.host.G.maps.cyberland={spawns:[[0,0]]};r.c.map=r.c.in='cyberland';const original=r.ports.context;r.ports.context=()=>({...original(),server:'USI'});
+ r.host.parent.push_deferred=()=>{Object.assign(r.c,{map:'main',in:'main',real_x:0,real_y:0});return Promise.reject(Object.assign(Error('Native leave rejected'),{partyRequest:{path:'/movement-barrier',kind:'network',status:0}}));};
+ const p=r.service.move({map:'main',in:'main',x:0,y:0},undefined,{shared:true,awaitSharedRoute:true,owner,barrier:async()=>true});p.catch(()=>{});
+ r.service.install([{map:'main',in:'main',x:0,y:0,method:'leave'}],r.service.identity);await r.ticks(5);
+ assert.equal(r.service.settleTerminal(r.service.report()?.id||r.service.last()?.id,owner),false);assert.equal(r.service.last()?.terminalSettlement,undefined);r.dispose();
+});
+
+for(const mode of ['pre-transition','connector'])test('terminal settlement preserves rejected '+mode+' action safety',async()=>{
+ const owner={convoyId:'return',epoch:3,commandId:7,navigationRevision:1,routeVersion:2},r=fixture();r.c.hp=100;
+ r.host.G.maps.cyberland={spawns:[[0,0]]};r.c.map=r.c.in='cyberland';const original=r.ports.context;r.ports.context=()=>({...original(),server:'USI'});
+ r.host.parent.push_deferred=()=>{Object.assign(r.c,{map:'main',in:'main',real_x:5,real_y:0});return Promise.resolve();};
+ if(mode==='connector')r.host.move=async()=>{throw Error('Native connector failed');};
+ const p=r.service.move({map:'main',in:'main',x:0,y:0},undefined,{shared:true,awaitSharedRoute:true,owner,
+  barrier:async()=>{if(mode==='pre-transition')throw Object.assign(Error('Preparation transport failed'),{partyRequest:{path:'/movement-barrier',kind:'network',status:0}});return true;}});p.catch(()=>{});
+ r.service.install([{map:'main',in:'main',x:0,y:0,method:'leave'}],r.service.identity);await r.ticks(8);
+ assert.equal(r.service.settleTerminal(r.service.report()?.id||r.service.last()?.id,owner),false);
+ assert.equal(r.service.last()?.terminalSettlement,undefined);
+ if(mode==='pre-transition')assert.equal(r.calls.some(call=>call[0]==='leave'),false);r.dispose();
+});
+
+
+test('completion transport rejection cannot overwrite a preceding native connector failure',async()=>{
+ const owner={convoyId:'return',epoch:3,commandId:7,navigationRevision:1,routeVersion:2},r=fixture();r.c.hp=100;
+ r.host.G.maps.cyberland={spawns:[[0,0]]};r.c.map=r.c.in='cyberland';const original=r.ports.context;r.ports.context=()=>({...original(),server:'USI'});
+ let rejectConnector,rejectCompletion,completionIssued=false;
+ const connector=new Promise((_,reject)=>{rejectConnector=reject;}),completion=new Promise((_,reject)=>{rejectCompletion=reject;});
+ r.host.parent.push_deferred=()=>{Object.assign(r.c,{map:'main',in:'main',real_x:5,real_y:0});return Promise.resolve();};
+ r.host.move=async(x,y)=>{Object.assign(r.c,{real_x:x,real_y:y});return connector;};
+ const p=r.service.move({map:'main',in:'main',x:0,y:0},undefined,{shared:true,awaitSharedRoute:true,owner,
+  barrier:async(_s,_i,done)=>{if(!done)return true;completionIssued=true;return completion;}});p.catch(()=>{});
+ r.service.install([{map:'main',in:'main',x:0,y:0,method:'leave'}],r.service.identity);await r.ticks(5);r.setNow(1500);await r.ticks(5);
+ assert.equal(completionIssued,true);const id=r.service.report().id;
+ rejectConnector(Error('Native connector rejected'));await settle();
+ rejectCompletion(Object.assign(Error('Control response lost'),{partyRequest:{path:'/movement-barrier',kind:'network',status:0}}));await settle();
+ assert.equal(r.service.settleTerminal(id,owner),false);r.dispose();
 });

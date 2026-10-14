@@ -51,3 +51,10 @@ test('combat-only heartbeat does not deliver or decorate pending navigation comm
  assert.equal(state.commands.P,command);assert.equal(command.navigationRevision,undefined);
  assert.equal(Object.hasOwn(response,'command'),false);
 });
+
+test('retained deferred checkpoint does not publish its retired exit cycle in heartbeat',()=>{
+ const f=fixture();f.state.deferredEventReturns={P:{cycleId:'old',phase:'awaiting-event-admission',checkpoint:{map:'uhills',x:1,y:2}},W:{cycleId:'peer',phase:'returning-to-checkpoint'}};
+ assert.equal(f.api.response('P').eventReturnCycleId,null);assert.equal(f.api.response('W').eventReturnCycleId,'peer');
+ f.state.eventReturn={cycleId:'current',participants:['P']};assert.equal(f.api.response('P').eventReturnCycleId,'current');
+ f.state.eventReturn=null;f.state.deferredEventReturns.P.phase='returning-to-town';assert.equal(f.api.response('P').eventReturnCycleId,'old');
+});

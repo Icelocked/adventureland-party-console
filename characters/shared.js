@@ -15129,7 +15129,7 @@
       navigationRevision:Number(command.navigationRevision)||0,runtimeId:convoyRuntimeId,routeVersion:command.routeVersion};
   }
   function sharedMovementOptions(command) {
-    return { owner: {convoyId:command.convoyId,epoch:command.epoch,commandId:command.id,navigationRevision:command.navigationRevision,recoveryStage:command.routeRecovery && command.routeRecovery.stage},
+    return { owner: {convoyId:command.convoyId,epoch:command.epoch,commandId:command.id,navigationRevision:command.navigationRevision,routeVersion:command.routeVersion,recoveryStage:command.routeRecovery && command.routeRecovery.stage},
       relocation:command.routeRecovery && command.routeRecovery.relocation, shared: true, avoidLeave: !!command.avoidLeave, native: !!command.nativeFallback, speed: command.slowestSpeed,
       transitionComplete:function(destination) {
         if(convoyTraveling && convoyTraveling.commandId===command.id)convoyTraveling.transitionMap=destination.map;
@@ -16129,8 +16129,8 @@
     var range=Number(entity.range || definition.range) || 20;
     var selected=entity.id===formationState.targetId || groupedCombat && groupedCombat.target && entity.id===groupedCombat.target.id;
     if(selected)return Math.min(range,Math.max(6,Number(character.range)-24))+8;
-    // A ranged monster's weapon reach is not a solid collision obstacle, and it only
-    // threatens the character it targets: a monster on a teammate keeps the body radius (#121).
+    // A ranged monster's reach is not a solid collision obstacle while it targets
+    // a teammate; preserve its full reach for its own target (#121).
     if(entity.target!==character.name && range>Number(character.range))return 38;
     return range+8;
   }
@@ -17056,7 +17056,7 @@
     if (!attacker || attacker.dead) { kiteState.targetId = null; return false; }
     // The tank stands in its own target's attack range on purpose. Other attackers still kite it.
     if (designatedTankHolds() && target && attacker.id === target.id) { kiteState.targetId = null; return false; }
-    if (eventBossMovement(target) && !is_in_range(target) && await approachCombatTarget(target)) return true;
+    if (target && (target.id === attacker.id || eventBossMovement(target)) && !is_in_range(target) && await approachCombatTarget(target)) return true;
     if (kiteState.targetId !== attacker.id) { kiteState.targetId = attacker.id; kiteState.direction = 1; }
     var dx = character.x - attacker.x, dy = character.y - attacker.y;
     var radius = Math.hypot(dx, dy), angle = Math.atan2(dy, dx);

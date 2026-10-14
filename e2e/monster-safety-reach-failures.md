@@ -6,7 +6,7 @@ monster for the formation solver. A monster that outranges the character keeps i
 reach (`range + 8`) unless it has no target at all, even while it is attacking a
 teammate. Live journey: `e2e/live-monster-safety-reach.spec.ts`.
 
-1. **Fenced out.** Two long-range monsters side by side attack the priest; the mage
+1. **Fenced out.** Two long-range monsters side by side attack the warrior; the mage
    must stand within its range of the selected one and 428 from the other, finds no
    point, holds as "formation-blocked" and never attacks.
 2. **Own attacker ignored.** A long-range monster that targets the character itself
@@ -17,3 +17,5 @@ teammate. Live journey: `e2e/live-monster-safety-reach.spec.ts`.
    character's, or the selected target, get a different radius.
 5. **Retarget not honoured.** When a fenced-off monster switches to the character, its
    full reach does not come back on the next tick.
+
+Fixture-owned native monster IDs are recorded immediately after creation and removed only after retained evidence, including setup failures. No live deployment is part of this change.

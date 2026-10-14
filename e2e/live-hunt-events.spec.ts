@@ -151,6 +151,7 @@ for(const type of ['phoenix','goldenbat','cutebee','hen','rooster','tinyp']) tes
       await expect.poll(async()=>quantity((await live.state()).characters[W].items.map((entry:any)=>entry?.item),'fieldgen0')).toBe(1);
     }
     await live.post('/rare-hunting',{rules:{[type]:{enabled:true,keepMoving:false,priority:999}},useFieldGenerators:type==='tinyp'});
+    await live.clients[W].run('parent.__e2eObserveMoves=true;parent.__e2eObservedMoveCount=0');
     const before=await world(live),spawnedAt=Date.now(),spawn=await spawnRare(live,type);
     await info.attach('native-rare-initial-encounter',{body:JSON.stringify(spawn),contentType:'application/json'});
     if(type==='tinyp') {
@@ -216,7 +217,15 @@ for(const type of ['phoenix','goldenbat','cutebee','hen','rooster','tinyp']) tes
     }
     await expect.poll(async()=>(await world(live)).players[W].quest?.c,{timeout:Math.max(1,resumedDeadline-Date.now())}).toBeLessThan(afterRare.players[W].quest.c);
     await info.attach('native-rare-hunt-resumed',{body:JSON.stringify({hunt,spawn,before,afterRare,final:await world(live),state:await live.state()}),contentType:'application/json'});
-  } finally {await cleanupEvents(live);}
+  } finally {
+    try {
+      const packets=(await live.clients[W].events()).filter((event:any)=>['move-issued','player','new_map','game_log'].includes(event.event)).slice(-400);
+      await info.attach('native-rare-return-movement-packets',{body:JSON.stringify(packets),contentType:'application/json'});
+    } finally {
+      try {await live.clients[W].run('parent.__e2eObserveMoves=false');}
+      finally {await cleanupEvents(live);}
+    }
+  }
 });
 
 test('disabled rare stays alive while native Hunt progresses and rejected settings preserve preferences',async({live},info)=>{

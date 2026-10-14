@@ -12,7 +12,7 @@ import { planReturnCandidates } from './return-planner.ts';
 import {createPlanningScheduleMetrics} from './planning-schedule-metrics.ts';
 import {repairWalkingEndpoint} from '../navigation/walking-endpoint.ts';
 interface SegmentRepair { plot: Step[]; index: number; target: Point; started: boolean; instance?: string | number; retainEndpoint?: boolean }
-interface Journey { scheduling?: ReturnType<typeof createPlanningScheduleMetrics>; settlingAt?: number; repair?: SegmentRepair; repaired?: boolean; repairEndpoints?: string[]; firstIssue?: Issue; failureContext?: Record<string, unknown>; id: string; context: MovementContext; options: MovementOptions; native: boolean; pending: boolean; searches: number; retries: number; started: number; planningAt: number; fallback: boolean; plannerMs?: number; requestMs?: number; distance?: number; transitions?: number; importedEngine?: string }
+interface Journey { terminalSettlement?: Record<string,unknown>; scheduling?: ReturnType<typeof createPlanningScheduleMetrics>; settlingAt?: number; repair?: SegmentRepair; repaired?: boolean; repairEndpoints?: string[]; firstIssue?: Issue; failureContext?: Record<string, unknown>; id: string; context: MovementContext; options: MovementOptions; native: boolean; pending: boolean; searches: number; retries: number; started: number; planningAt: number; fallback: boolean; plannerMs?: number; requestMs?: number; distance?: number; transitions?: number; importedEngine?: string }
 const failurePhases = new Map([
   ['superseded', 'Movement cancelled'],
   ['convoy-communication-hold', 'Movement paused: coordinator communication unavailable'],
@@ -78,7 +78,7 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
     if (done) executor.reset(); else executor.cancel();
     last = {id:j.id,engine:engine(j),version,fingerprint,done,reason,elapsedMs:ports.now()-j.started,
       failureContext:{code: done ? 'arrived' : 'route-failed', character:host.character.name, journeyId:j.id, planner:engine(j), base:{...host.character.base}, ...j.options.owner,...j.failureContext,...cause,origin:position(),destination:point(state),firstIssue:j.firstIssue, relocation:movementRelocation(host.G,position(),state.use_town)},
-      searches:j.searches,retries:j.retries,plannerMs:j.plannerMs,requestMs:j.requestMs,walkingDistance:j.distance,transitions:j.transitions,nativePlanning:planner.report(),planningSchedule:j.scheduling?.report(),progress};
+      terminalSettlement:j.terminalSettlement,searches:j.searches,retries:j.retries,plannerMs:j.plannerMs,requestMs:j.requestMs,walkingDistance:j.distance,transitions:j.transitions,nativePlanning:planner.report(),planningSchedule:j.scheduling?.report(),progress};
     ports.metrics?.(last);
     if (j.fallback || !done) report(j.id, state, outcome(done, reason, cause), j.firstIssue, reason, last.failureContext as Record<string, unknown>);
     state.on_done(done, reason, failure);
@@ -336,7 +336,10 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
   function settleTerminal(id: string, owner: NonNullable<MovementOptions['owner']>): boolean {
     const j=journey;
     if(!j || j.id!==id || !state.moving || !state.found || !terminalContext(j) ||
-      !terminalOwner(j,owner) || !terminalGoal() || !executor.settleTerminal(j.options))return false;
+      !terminalOwner(j,owner) || !terminalGoal())return false;
+    const receipt=executor.settleTerminal(j.options);if(!receipt)return false;
+    j.terminalSettlement={...receipt,...j.options.owner,runtimeId:j.context.runtime,server:j.context.server,
+      geometry:{version,fingerprint},journeyId:j.id};
     finish(true);return true;
   }
   function completeOwnedRoute(j: Journey): void {

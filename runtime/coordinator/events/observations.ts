@@ -138,8 +138,19 @@ export function createEventObservations(
   }
 
   type StagingReport = NonNullable<EventReport["serverStagingEvents"]>[number];
+  function ownsPrejoinStaging(name: string, event: string): boolean {
+    const session=state.sessions[name];
+    return !!session && session.event===event && !session.wasLive && session.participationRecorded===true &&
+      session.participants.includes(name);
+  }
+  function authorizedPrejoinStaging(body: EventReport, event: string): boolean {
+    const status=ports.statuses()[body.name];
+    return ownsPrejoinStaging(body.name,event) && !body.rip && !ports.intent(body.name).cancelled &&
+      freshDeferredFighter(status) && liveFeedReady(status) && typeof body.server==='string' &&
+      body.server.length>0 && body.server===status.server;
+  }
   function validStaging(body: EventReport, report: StagingReport): boolean {
-    return body.joinedEvent === report.name && ["mrgreen", "mrpumpkin"].includes(report.name) &&
+    return (body.joinedEvent === report.name || authorizedPrejoinStaging(body,report.name)) && ["mrgreen", "mrpumpkin"].includes(report.name) &&
       ports.enabled(body.name, report.name) && Number.isFinite(report.spawnAt) &&
       report.spawnAt >= ports.now() - 120000 && report.spawnAt <= ports.now() + 60000;
   }
@@ -443,9 +454,32 @@ export function createEventObservations(
     return intent.revision;
   }
 
+  function awaitingRetiredSameEvent(name: string, recovery: DeferredRecovery): boolean {
+    const report=ports.statuses()[name], intent=ports.intent(name);
+    if(state.current || intent.cancelled || recovery.navigationRevision!==intent.revision ||
+      !freshDeferredFighter(report) || !liveFeedReady(report) || !ports.enabled(name,recovery.event))return false;
+    return !!report?.serverLiveEvents?.some(entry=>entry.name===recovery.event &&
+      !(entry.name==='slenderman' && report.slendermanSearchExhausted));
+  }
+  function awaitEventAdmission(recovery: DeferredRecovery): void {
+    if(recovery.phase==="awaiting-event-admission")return;
+    recovery.phase="awaiting-event-admission";ports.persist();
+  }
+  function retireOldDeferredContinuation(name: string, cycleId: string): void {
+    // Actual authorization adopts the checkpoint and records participation.
+    // These hooks reject unrelated commands, walks and renewed navigation.
+    ports.retireDeferredWalk?.(name,cycleId);
+    ports.retireDeferredCommand?.(name,cycleId);
+  }
   function resumeDeferred(body: EventReport): void {
     const recovery = state.deferred[body.name];
-    if (!recovery || ports.hasCommand(body.name) || nextLiveEvent(body.name, recovery.event)) return;
+    if (!recovery) return;
+    if(awaitingRetiredSameEvent(body.name,recovery)){
+      retireOldDeferredContinuation(body.name,recovery.cycleId);
+      awaitEventAdmission(recovery);
+      return;
+    }
+    if (ports.hasCommand(body.name) || nextLiveEvent(body.name, recovery.event)) return;
     const atTown = body.map === "main" && Math.hypot(Number(body.x), Number(body.y)) <= 90;
     const revision = invalidateCheckpoint(recovery, body.name);
     if (atTown && !recovery.checkpoint) delete state.deferred[body.name];

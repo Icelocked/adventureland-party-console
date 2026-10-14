@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Let ranged party members approach their target when another long-range monster is attacking a teammate (#121; thanks to Thefonze74065).
+- Expand native Cave setup and terminal-return coverage, preserve actual saved checkpoint receipts, and retain bounded movement diagnostics.
+
+- Keep acknowledged final travel completion recoverable after a completion-report transport failure.
+
+- Preserve authorized Halloween staging while characters are still waiting to report joining the announced event, preventing premature returns before its spawn.
+
+- Restore attack range before continuing ordinary combat kiting, preventing prolonged disengagement while preserving terrain and attacker clearance.
+
+- Recover shared return completion when a character has already acknowledged its final native transition, preventing its peers from waiting indefinitely without replaying the transition.
+
+- Retire obsolete event-exit instructions in heartbeats while preserving deferred checkpoints, so characters can enter a new event without waiting on an old return.
+
+- Let eligible live events retire obsolete deferred return commands before admission, preserving saved checkpoints and attendance limits.
+
 - Require an exhausted owned walking route to settle at its destination before reporting arrival, preventing false Cave regroup completion after combat displacement.
 
 - Verify brief manual merchant weapon swaps using ordered native item receipts, retaining gathering restoration and restart checks.

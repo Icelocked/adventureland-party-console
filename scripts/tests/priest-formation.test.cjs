@@ -377,10 +377,9 @@ test('terrain-clear mage approach stalled by a monster gets a safe detour or an 
 test('no safe monster detour reports blockage without emitting another wandering move',()=>{
  const r=setup(),{c,warrior:mage,priest,monster,entities,moves}=r;
  Object.assign(mage,{ctype:'mage',range:200,x:-300,y:0});Object.assign(priest,{x:0,y:0});Object.assign(monster,{x:180,target:null});
- // A monster that outranges the mage reserves only its body clearance unless it
- // targets the mage (#121). This blocker matches the mage's own range, so its
- // 208-unit safety radius still covers every regroup endpoint within the priest's
- // healing coverage.
+ // A monster outranging the mage only reserves body clearance while targeting
+ // a teammate. Match the mage's range so the blocker's 208-unit safety radius
+ // still covers every regroup endpoint within the priest's healing coverage.
  entities.blocker={id:'blocker',type:'monster',visible:true,map:'main',x:0,y:0,range:200,target:'P'};
  c.can_move=()=>true;c.can_move_to=()=>true;c.formationMove(monster);moves.length=0;r.now(12000);c.formationMove(monster);
  assert.equal(c.partyCombatPosition.mode,'formation-blocked');assert.equal(c.partyCombatPosition.constraint,'monster-blocked approach');assert.equal(moves.length,0);

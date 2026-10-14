@@ -98,6 +98,14 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
         }catch{}
       });
       const observeOutgoing=(event:string,...args:any[])=>{
+        if(event==='leave' && game.__e2eObserveTransitions && game.socket===socket && game.character?.name){
+          if((game.__e2eObservedLeaveCount||0)>=32)return;game.__e2eObservedLeaveCount=(game.__e2eObservedLeaveCount||0)+1;
+          const c=game.character,runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+          const owner=runner?.__partyMovement?.report?.()?.owner;
+          game.__e2eEvents.push({sequence:++game.__e2eEventSequence,at:Date.now(),event:'leave-issued',
+            data:{actor:c.name,map:c.map,in:c.in,x:c.real_x??c.x,y:c.real_y??c.y,owner}});
+          if(game.__e2eEvents.length>2000)game.__e2eEvents.shift();return;
+        }
         if(event==='move'){
           if(!game.__e2eObserveMoves||game.socket!==socket||!game.character?.name||!args[0]||typeof args[0]!=='object')return;
           if((game.__e2eObservedMoveCount||0)>=200)return;
