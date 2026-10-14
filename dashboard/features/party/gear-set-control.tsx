@@ -43,11 +43,11 @@ export const GearSetControl = memo(function GearSetControl({ name, model, sets }
 /** Mounted only while the popover is open; bag and equipment arrive through the inventory subscription, not the presence state. */
 function GearSetDetails({ name, model, sets }: { name: string; model: InventoryModel; sets: GearSets | undefined }) {
   const action = usePartyAction();
-  const update = (set: string, kind: "save" | "clear") => action.mutate({ path: "/gear-sets", body: { character: name, set, action: kind } });
+  const update = (set: string, kind: "save" | "clear" | "equip") => action.mutate({ path: "/gear-sets", body: { character: name, set, action: kind } });
   const char: Char | undefined = usePanelModel(model, { inventory: true }).state.characters[name];
   const loaded = !!char && Array.isArray(char.items) && !!char.slots;
   return <>
-      <p className="text-slate-300">Sets are saved from the gear {name} is wearing. Set members are never taken by automatic compound, upgrade or cleanout rules.</p>
+      <p className="text-slate-300">Sets are saved from the gear {name} is wearing, every slot included. Equip wears a saved set from the bag (never the elixir) and pauses the tank&apos;s automatic return to its tank set for 10 minutes, so you can adjust and save again. Set members are never taken by automatic compound, upgrade or cleanout rules.</p>
       {SETS.map(([id, label, purpose]) => {
         const set = sets?.[id], state = set && loaded && completeness(char, set.slots as Record<string, GearSetItem>);
         return <section key={id} aria-label={`${label} gear set`} className="space-y-1 rounded border border-slate-600 bg-[#0b1513] p-2">
@@ -57,9 +57,11 @@ function GearSetDetails({ name, model, sets }: { name: string; model: InventoryM
           </div>
           <p className="text-emerald-50">{!set ? "Not saved" : !state ? "Loading inventory…" : `${state!.worn + state!.carried}/${state!.total} pieces available (${state!.worn} worn, ${state!.carried} in bag)` +
             (state!.missing.length ? ` · missing ${state!.missing.join(", ")}` : "")}</p>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button type="button" disabled={action.isPending} onClick={() => update(id, "save")}
               className="rounded border border-emerald-600 bg-slate-950 px-2 py-1 text-emerald-100 hover:bg-emerald-950 disabled:opacity-50">Save current gear as {label}</button>
+            {set && <button type="button" disabled={action.isPending} onClick={() => update(id, "equip")}
+              className="rounded border border-sky-600 bg-slate-950 px-2 py-1 text-sky-100 hover:bg-sky-950 disabled:opacity-50">Equip {label}</button>}
             {set && <button type="button" disabled={action.isPending} onClick={() => update(id, "clear")}
               className="rounded border border-rose-700 bg-slate-950 px-2 py-1 text-rose-200 hover:bg-rose-950 disabled:opacity-50">Clear</button>}
           </div>

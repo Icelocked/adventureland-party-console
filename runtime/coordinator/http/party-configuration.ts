@@ -26,6 +26,6 @@ export function createCoordinatorPartyConfiguration(
     ...ports,
     nextCommand: () => state.nextCommandId++,
   });
-  const gearSets = createGearSetRoute(state, ports);
+  const gearSets = createGearSetRoute(state, { ...ports, nextCommand: () => state.nextCommandId++ });
   return { focus, formation, actions, gearSets };
 }

@@ -84,3 +84,16 @@ game's other three `character_slots`.
     goes back to the tank set's (or empty), like the other slots.
 21. **Elixir consumed.** Swaps and corrections never equip or unequip an elixir: equipping
     one consumes it and the game refuses to unequip it ("cant").
+
+## Equip a saved set (2026-10-14)
+
+Written before the change. Requested: an Equip button per set, so a small change to a set
+does not need every piece swapped by hand before saving again.
+
+22. **Partial equip.** Equip wears every carried member of the set in its slot (both rings
+    from identical copies, weapon and shield included) and empties slots the set left
+    empty; the elixir is never touched.
+23. **Fought by the tank correction.** Equipping the luck set on the designated tank is
+    undone within seconds by the stranded-luck correction; a manual equip must pause it
+    long enough to edit and re-save the set.
+24. **Missing pieces hidden.** Members not carried are reported, not silently skipped.

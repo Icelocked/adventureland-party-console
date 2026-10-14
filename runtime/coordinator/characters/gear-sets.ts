@@ -14,12 +14,14 @@ export type GearSets = Record<string, Partial<Record<GearSetName, GearSet>> | un
 
 interface GearSetState {
   gearSets: GearSets;
+  commands: Record<string, unknown>;
   statuses: Record<string, { seenAt?: number; slots?: Record<string, { item?: Record<string, unknown> } | undefined> } | undefined>;
 }
 interface GearSetPorts {
   now(): number;
   owned(name: string): unknown;
   persist(): void;
+  nextCommand(): number;
 }
 
 /** The identity a set member is matched by; lock state and quantity may change without it becoming another item. */
@@ -43,6 +45,12 @@ export function createGearSetRoute(state: GearSetState, ports: GearSetPorts) {
     const sets = (state.gearSets[name] ||= {});
     if (body.action === "clear") {
       delete sets[set as GearSetName];
+    } else if (body.action === "equip") {
+      // Wears the saved set from the bag; the character pauses its automatic swaps first.
+      const saved = sets[set as GearSetName];
+      if (!saved) return res.status(409).json({ error: "that gear set is not saved" });
+      state.commands[name] = { id: ports.nextCommand(), type: "gear-set-equip", set, slots: saved.slots };
+      return res.json({ ok: true });
     } else if (body.action === "save") {
       const status = state.statuses[name];
       if (!status?.slots || !(Number(status.seenAt) >= ports.now() - 10000))

@@ -6733,6 +6733,28 @@
     var definition = G.items[item && item.name] || {};
     return ["helmet", "pants", "chest", "weapon", "amulet", "earring", "shoes", "gloves", "ring", "shield", "belt", "source", "orb", "quiver", "cape", "misc_offhand", "tool"].includes(definition.type);
   }
+  // Gear-set Equip: wear every carried member in its slot and empty the slots the set left
+  // empty. The elixir is skipped: equipping one consumes it and the game refuses to unequip it.
+  var GEAR_SET_EQUIP_SLOTS = ["mainhand", "offhand", "chest", "pants", "helmet", "gloves", "shoes", "cape", "belt",
+    "orb", "amulet", "ring1", "ring2", "earring1", "earring2"];
+  async function equipGearSet(command) {
+    var slots = command.slots || {}, missing = [], taken = {};
+    if (root.partyPorcupineEquipment) await root.partyPorcupineEquipment.manual();
+    if (root.partyKillLuckSwap) await root.partyKillLuckSwap.manual();
+    for (var i = 0; i < GEAR_SET_EQUIP_SLOTS.length; i++) {
+      var slot = GEAR_SET_EQUIP_SLOTS[i], wanted = slots[slot];
+      if (!wanted) {
+        if (character.slots[slot]) await unequip(slot);
+        continue;
+      }
+      if (sameItem(character.slots[slot], wanted)) continue;
+      var index = character.items.findIndex(function (item, at) { return !taken[at] && sameItem(item, wanted); });
+      if (index < 0) { missing.push(slot + " (" + wanted.name + ")"); continue; }
+      taken[index] = true;
+      await equip(index, slot);
+    }
+    game_log("Equipped " + command.set + " set" + (missing.length ? "; not carried: " + missing.join(", ") : ""), missing.length ? "#fbbf24" : "#51D2E1");
+  }
   async function equipDashboardItem(command) {
     if (!isDashboardEquipment(command.item)) throw new Error("item is not equipment; use its explicit Use action instead");
     if (root.partyPorcupineEquipment) await root.partyPorcupineEquipment.manual();
@@ -10829,6 +10851,7 @@
     if (command.type === "equip") {
       await equipDashboardItem(command);
     }
+    if (command.type === "gear-set-equip") await equipGearSet(command);
     if (command.type === "equip-deliveries") {
       var equipResults = await equipDeliveredItems(command.items || []);
       equipResults.forEach(function(result, index) { if (command.deliveryIds) result.deliveryId = command.deliveryIds[index]; });

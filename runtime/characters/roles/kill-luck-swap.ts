@@ -30,6 +30,8 @@ export interface LuckSwapMemory {
   pending?: Promise<void>;
   retryAt?: number;
   swappedInAt?: number;
+  /** A manual equip (dashboard item or gear-set Equip) holds the stranded-luck correction off until then. */
+  manualUntil?: number;
   hpTrend?: { id: string; samples: { t: number; hp: number }[] };
 }
 export interface LuckSwapPorts {
@@ -272,7 +274,7 @@ export function createKillLuckSwap(ports: LuckSwapPorts, memory: LuckSwapMemory 
       if (session) { continueSession(session, target); return; }
       if (ports.otherSwapBusy()) return;
       if (shouldSwapIn(target)) { beginSwap(target!); return; }
-      if (!ports.isTank()) return;
+      if (!ports.isTank() || ports.now() < (memory.manualUntil || 0)) return;
       const stranded = strandedLuckPieces();
       if (Object.keys(stranded).length) run(() => putBack(stranded));
     },
@@ -284,6 +286,8 @@ export function createKillLuckSwap(ports: LuckSwapPorts, memory: LuckSwapMemory 
     },
     async manual(): Promise<void> {
       relinquish();
+      // Long enough to adjust a set by hand and save it again.
+      memory.manualUntil = ports.now() + 10 * 60_000;
       await memory.pending;
     },
     busy: () => !!memory.pending,
