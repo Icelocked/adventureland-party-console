@@ -55,3 +55,19 @@ Decided: keep luck on while kills keep coming; restore once they stop.
     timeout; a target that stops dying still ends in a restore after it.
 15. **Other targets.** A hand-over applies only to this character's next target; a
     dead target with no replacement still restores, as in 5.
+
+## Luck set left on without a swap (2026-10-14)
+
+Written before the change. Reported: the priest tank keeps being found in its luck gear,
+even while just starting a long boss. Only the session that put the luck set on can
+restore it, and the session is lost when the game client restarts (build activation,
+disconnect) or a dashboard equip/unequip relinquishes it, so the tank fights on in luck
+gear until a later swap finishes near the next kill. Live journey:
+`e2e/live-gear-set-recovery.spec.ts`.
+
+16. **Stranded luck set.** With no swap in progress and no kill imminent, a designated
+    tank wearing luck-set pieces where its tank set differs stays in them.
+17. **Wrong restore.** Slots go back to the tank set's piece (when carried) or empty
+    when the tank set left them empty; slots holding anything else are left alone.
+18. **Fights the kill swap.** The correction must not undo a swap in progress or one
+    that is about to start for an imminent kill.

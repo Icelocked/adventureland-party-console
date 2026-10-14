@@ -52,9 +52,10 @@ test('the tank wears its whole luck set at the kill, restores its tank set, and 
     const saved = (await live.state()).gearSets?.[W];
     expect(Object.fromEntries(SLOTS.map(slot => [slot, saved?.luck?.slots?.[slot]?.name]))).toEqual(LUCK);
 
-    // 2. Back into the tank gear: the luck pieces return to the bag (earrings and orb to empty slots).
-    for (const slot of SLOTS) if (!tankWorn[slot]) await live.clients[W].run(`unequip(${JSON.stringify(slot)})`);
-    await equipBy(live, tankWorn);
+    // 2. Back into the tank gear on its own: a tank left in luck-set pieces with no swap in progress
+    //    returns to its tank set (gear-sets-failures 16-17), earrings and orb to empty slots.
+    await expect.poll(async () => { const now = await worn(live); return SLOTS.every(slot => now[slot] === tankWorn[slot]); },
+      { timeout: 30_000, message: 'The stranded luck set must return to the tank set' }).toBe(true);
     await expect.poll(async () => bagCount(live, 'ringofluck'), { timeout: 15_000 }).toBe(5);
 
     // 3. An automatic compound rule for Rings of Luck and an Auto bank rule for the luck amulet, collected promptly.

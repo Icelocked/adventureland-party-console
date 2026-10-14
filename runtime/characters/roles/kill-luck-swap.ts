@@ -166,6 +166,38 @@ export function createKillLuckSwap(ports: LuckSwapPorts, memory: LuckSwapMemory 
     slots.forEach((slot, index) => { if (found[index] >= 0) plan[slot] = ports.fingerprint(ports.items()[found[index]])!; });
     return plan;
   }
+  /**
+   * Luck-set pieces worn with no session to restore them: a client restart or a dashboard
+   * equip drops the session that put them on. Each such slot maps to its tank-set piece when
+   * carried, or to null when the tank set left the slot empty (saved sets record every worn
+   * slot). Slots holding anything else are left as they are.
+   */
+  function strandedLuckPieces(): Partial<Record<LuckSlot, GearItem | null>> {
+    const luck = ports.gearSet("luck"), tank = ports.gearSet("tank");
+    if (!luck || !tank) return {};
+    const stranded: Partial<Record<LuckSlot, GearItem | null>> = {};
+    const slots = LUCK_SWAP_SLOTS.filter(slot => {
+      const worn = ports.equipped(slot);
+      return luck[slot] && member(worn, luck[slot]!) && !(tank[slot] && member(worn, tank[slot]!));
+    });
+    const found = locate(slots.map(slot => tank[slot]).filter((item): item is GearItem => !!item));
+    let next = 0;
+    for (const slot of slots) {
+      if (!tank[slot]) { stranded[slot] = null; continue; }
+      const index = found[next++];
+      if (index >= 0) stranded[slot] = ports.fingerprint(ports.items()[index]);
+    }
+    return stranded;
+  }
+  async function putBack(stranded: Partial<Record<LuckSlot, GearItem | null>>): Promise<void> {
+    for (const slot of Object.keys(stranded) as LuckSlot[]) {
+      if (memory.session) return;
+      const wanted = stranded[slot];
+      if (!wanted) { await ports.unequip(slot); continue; }
+      const index = find(wanted);
+      if (index >= 0) await ports.equip(index, slot);
+    }
+  }
   function beginSwap(target: LuckTarget): void {
     const plan = planSwap();
     // No saved luck set, or every carried member is already worn: nothing to swap.
@@ -213,11 +245,15 @@ export function createKillLuckSwap(ports: LuckSwapPorts, memory: LuckSwapMemory 
     memory.swappedInAt = ports.now();
     return true;
   }
+  /** The session's target is gone and the tank's next kill is not imminent enough to keep the luck set on. */
+  function lostItsKill(session: LuckSwapSession, target: LuckTarget): boolean {
+    return session.targetId !== undefined && target.id !== session.targetId && !handOver(session, target);
+  }
   function shouldRestore(session: LuckSwapSession, target: LuckTarget | null): boolean {
     if (!ports.isTank()) return true;
     if (!target || target.dead || target.rip) return true;
     if (ports.endangered()) return true;
-    if (session.targetId !== undefined && target.id !== session.targetId && !handOver(session, target)) return true;
+    if (lostItsKill(session, target)) return true;
     // Safety timeout: covers a boss phase where the trend estimate dipped then stabilized —
     // don't stay in weaker gear indefinitely waiting for a death that isn't imminent anymore.
     if (ports.now() - (memory.swappedInAt || 0) > 10000) return true;
@@ -235,7 +271,10 @@ export function createKillLuckSwap(ports: LuckSwapPorts, memory: LuckSwapMemory 
       const session = memory.session;
       if (session) { continueSession(session, target); return; }
       if (ports.otherSwapBusy()) return;
-      if (shouldSwapIn(target)) beginSwap(target!);
+      if (shouldSwapIn(target)) { beginSwap(target!); return; }
+      if (!ports.isTank()) return;
+      const stranded = strandedLuckPieces();
+      if (Object.keys(stranded).length) run(() => putBack(stranded));
     },
     depart(): void {
       if (!memory.session) return;

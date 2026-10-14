@@ -31,7 +31,12 @@ export function installKillLuckSwap(
     isTank: () => !!sharedRoutine.isTank?.(),
     equipped: (slot: LuckSlot) => character.slots[slot] as GearItem | null,
     items: () => character.items as (GearItem | null)[],
-    gearSet: name => (root.partyGearSets?.[character.name]?.[name]?.slots as Partial<Record<LuckSlot, GearItem>> | undefined) || null,
+    gearSet: name => {
+      const slots = root.partyGearSets?.[character.name]?.[name]?.slots as Partial<Record<LuckSlot, GearItem>> | undefined;
+      if (!slots) return null;
+      // Sets saved before gearSetItem was fixed recorded an empty slot as an item named "undefined".
+      return Object.fromEntries(Object.entries(slots).filter(([, item]) => item && item.name !== "undefined")) as Partial<Record<LuckSlot, GearItem>>;
+    },
     fingerprint,
     same: (item, wanted) => JSON.stringify(fingerprint(item)) === JSON.stringify(fingerprint(wanted)),
     equip: (index, slot) => Promise.resolve(equip(index, slot)),

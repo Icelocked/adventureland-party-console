@@ -25,7 +25,8 @@ interface GearSetPorts {
 /** The identity a set member is matched by; lock state and quantity may change without it becoming another item. */
 export function gearSetItem(value: unknown): GearSetItem | null {
   const item = requestObject(value);
-  const name = requestText(item.name);
+  // An empty slot reports an item without a name; String() would save it as "undefined".
+  const name = typeof item.name === "string" ? item.name : "";
   if (!name) return null;
   const member: GearSetItem = { name };
   if (Number.isFinite(Number(item.level)) && item.level !== undefined) member.level = Number(item.level);
