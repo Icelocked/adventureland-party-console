@@ -139,6 +139,34 @@ function goobrawlReturnFixture(activity='farm-recovery') {
  return {...t,names,checkpoint,farm,old,service};
 }
 
+function exhaustedEntry(){
+ const t=goobrawlReturnFixture('event');
+ Object.assign(t.old,{retryExhausted:true,walkingEvent:'icegolem',routeServer:'USII'});
+ t.state.eventAttendance={};
+ for(const name of t.names){
+  t.state.eventSessions[name]={event:'icegolem',participants:[name],participationRecorded:true,checkpoint:t.checkpoint,
+   waypoints:{[name]:{revision:1,location:t.checkpoint}}};
+  t.state.eventAttendance[name]={icegolem:{id:'native-1',realm:'USII',ended:false,attending:true}};
+ }
+ return t;
+}
+test('exhausted owned event entry evacuates with its saved checkpoints and skips only that occurrence',()=>{
+ const t=exhaustedEntry();t.service.reconcile();
+ assert.equal(t.state.activeConvoy,null);assert.equal(t.state.eventReturn.event,'icegolem');
+ for(const n of t.names){assert.equal(t.state.commands[n].type,'event-return-town');
+ assert.equal(t.state.eventAttendance[n].icegolem.ignored,'travel failure');
+ assert.deepEqual(t.state.eventReturn.waypoints[n].location,t.checkpoint);}
+ const id=t.state.eventReturn.cycleId;t.service.reconcile();assert.equal(t.state.eventReturn.cycleId,id);
+});
+test('exhausted event recovery cannot steal newer commands, revisions, profiles or interrupted work',()=>{
+ for(const change of [t=>t.state.navigationIntents.F.revision++,t=>t.state.commands.F={id:999,type:'character-travel'},
+ t=>t.old.merchantInterruption={},t=>t.old.nonPreemptible=true,t=>t.old.retryExhausted=false,
+ t=>t.state.statuses.F.seenAt=-10000,t=>t.state.eventSessions.F.event='mrpumpkin',
+ t=>t.state.eventAttendance.F.icegolem.ended=true]){
+ const t=exhaustedEntry();change(t);t.service.reconcile();assert.equal(t.state.eventReturn,null);
+ assert.equal(t.state.activeConvoy,t.old);assert.equal(t.state.eventAttendance.L.icegolem.ignored,undefined);}
+});
+
 test('Snowman repairs persisted staging failure, completes recovery, and releases all-ready Backup Hunt',()=>{
  const t=goobrawlReturnFixture('anniversary-staging');
  t.state.characterLocations=Object.fromEntries(t.names.map(n=>[n,t.checkpoint]));

@@ -3,6 +3,7 @@ import {nativePlannerCpuProfile} from './native-planner-cpu-profile';
 import { test, expect } from './live-fixtures';
 import { createRequire } from 'node:module';
 import {createNativeProgressBudget} from './native-progress-budget.js';
+import type {Route} from '@playwright/test';
 const sharp: typeof import('../dashboard/node_modules/sharp') = createRequire(import.meta.url)('../dashboard/node_modules/sharp');
 test.use({ initialPosition: { map: 'main', x: 816, y: 1180 } });
 
@@ -362,7 +363,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   const wrongFloor=await page.request.post(live.url+'/party-api/daily-dungeons',{headers:{Origin:live.url},data:{action:'waypoint',operationId:crypto.randomUUID(),run:(await dungeon()).state.run,map:before.characters.E2EWarrior.map.replace(/_0$/,'_1'),x:432,y:384}});
   expect(wrongFloor.status()).toBe(409);
   expect((await wrongFloor.json()).error).toContain('different floor');
-  const safe=await live.admin(`output=(()=>{
+  const safe=await live.admin(`output=(async()=>{
     const people=['E2EWarrior','E2EPriest'].map(n=>get_player(n)),p=people[0],run=generated_entry(p).record;
     const rooms=run.cave.rooms.filter(r=>r.map===p.map&&['farm','patrol','fight','boss','darkmage'].includes(r.kind)).map(r=>({id:r.id,x:r.x,y:r.y}));
     const enemies=Array.from(run.cave.actors).filter(a=>!a.dead&&a.map===p.map&&['enemy','predator'].includes(a.zone_actor?.side)).map(a=>({id:a.id,x:a.x,y:a.y}));
@@ -377,7 +378,9 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
       return result;
     };
     const walk=(from,to)=>can_move({map:p.map,x:from.x,y:from.y,going_x:to.x,going_y:to.y,base:p.base});
-    for(const distance of [320,260,200])for(let radius=0;radius<=200;radius+=20)for(let i=0;i<32;i++){
+    for(const distance of [320,260,200])for(let radius=0;radius<=1200;radius+=20){
+    await new Promise(resolve=>setImmediate(resolve));
+    for(let i=0;i<32;i++){
       const a=i*Math.PI/16,origin={map:p.map,x:p.x+radius*Math.cos(a),y:p.y+radius*Math.sin(a)};
       if(clearanceSquared(origin,origin,rooms)<410*410 || !people.every(actor=>clearanceSquared(actor,origin,enemies)>=300*300))continue;
       if(!people.every(actor=>walk(actor,origin)))continue;
@@ -390,6 +393,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
         if(enemySquared<300*300)continue;
         if(endpoints.every(point=>walk(origin,point)))return {origin,target,distance,roomClearance:Math.sqrt(roomSquared),enemyClearance:Math.sqrt(enemySquared),endpointMargin:20,rooms,enemies};
       }
+    }
     }
     throw Error('No collision-safe noncombat native Stop/resume segment');
   })()`);
@@ -1058,6 +1062,35 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   const stairNativeReads:Promise<unknown>[]=[];
   const stairPlanningReads:Promise<unknown>[]=[];
   const stairPlanningStarted=Date.now();
+  let stairDisplacement:any=null, displacingStairArrival=false;
+  const stairContext=live.clients.E2EWarrior.page.context();
+  const displaceCompletedStairs=async(route:Route)=>{
+    const body=route.request().method()==='POST'?route.request().postDataJSON():null;
+    if(body?.name!=='E2EWarrior')return route.fallback();
+    if(displacingStairArrival)return route.abort('failed');
+    const receipt=body.dungeon?.action;
+    if(!answeredFarewell||stairDisplacement||receipt?.status!=='complete'||receipt.command?.action!=='move'||
+      receipt.command?.target?.id!==stairs.id)return route.fallback();
+    displacingStairArrival=true;
+    stairDisplacement={at:Date.now(),receipt};
+    // Lose this completion packet while a real native walk displaces its actor.
+    // Never fabricate a receipt, position, readiness flag or transport outcome.
+    await route.abort('failed');
+    try{
+      const point=await live.admin(`output=(()=>{const p=get_player('E2EWarrior');
+        const before={map:p.map,x:p.x,y:p.y};
+        if(Math.hypot(p.x-${stairs.x},p.y-${stairs.y})>65)return {before,alreadyDisplaced:true};
+        for(let i=0;i<32;i++){const a=i*Math.PI/16,x=p.x+110*Math.cos(a),y=p.y+110*Math.sin(a);
+          if(Math.hypot(x-${stairs.x},y-${stairs.y})>65&&can_move({map:p.map,x:p.x,y:p.y,going_x:x,going_y:y,base:p.base}))return {before,x,y};}
+        throw Error('No native displacement from completed stairs');})()`);
+      stairDisplacement.point=point;
+      if(!point.alreadyDisplaced)await live.clients.E2EWarrior.frame.evaluate(({x,y})=>(window as any).move(x,y),point);
+      await expect.poll(async()=>live.admin(`output=(()=>{const p=get_player('E2EWarrior');return Math.hypot(p.x-${stairs.x},p.y-${stairs.y});})()`),{timeout:20_000}).toBeGreaterThan(60);
+      stairDisplacement.completed=true;
+    }catch(error){stairDisplacement.error=String(error);}
+    finally{displacingStairArrival=false;}
+  };
+  await stairContext.route('**/party-api/status',displaceCompletedStairs);
   const captureStairPlanning=()=>{
     const thresholds=[15000,60000,120000];
     if(answeredFarewell||stairPlanningReads.length>=thresholds.length||Date.now()-stairPlanningStarted<thresholds[stairPlanningReads.length])return;
@@ -1154,8 +1187,9 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
       if(latest)captureBlockedStairs({state:{phase:latest.phase,run:latest.run,travel:latest.travel}});return completed;},
       {timeout:300_000,message:'Manual stairs must continue after the farewell vote and transport both members'}).toBe(true);
   }finally{
+    await stairContext.unroute('**/party-api/status',displaceCompletedStairs);
     try{
-      await info.attach('native-cave-stairs-readiness',{body:JSON.stringify({farewellDeclaration,nativeChoices:stairNativeChoices,samples:stairSamples,planning:await Promise.allSettled(stairPlanningReads),native:await Promise.allSettled(stairNativeReads),
+      await info.attach('native-cave-stairs-readiness',{body:JSON.stringify({farewellDeclaration,stairDisplacement,nativeChoices:stairNativeChoices,samples:stairSamples,planning:await Promise.allSettled(stairPlanningReads),native:await Promise.allSettled(stairNativeReads),
         unavailable:['Coordinator status position/seenAt and CODE loading/socket ownership are not exposed by this dungeon response.']}),contentType:'application/json'});
     }finally{
       await Promise.all(stairMoveFlags.map(previous=>live.clients[previous.name].frame.evaluate(previous=>{
@@ -1165,6 +1199,9 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     }
   }
   expect(answeredFarewell).toBe(true);
+  expect(stairDisplacement?.completed,'Native completed stairs must exercise actual displacement').toBe(true);
+  expect(stairSamples.some(s=>s.members.some((m:any)=>m.expected?.independent===true)),
+    'Displaced completion must receive a fresh independent movement command before stairs').toBe(true);
   console.log('[Cave verified] Both characters reached the next native floor');
   await info.attach('native-cave-floor-transition',{body:JSON.stringify({stairReplies,dungeon:await dungeon(),state:await live.state()}),contentType:'application/json'});
   const newFloorChoice=(await dungeon()).members[0].observation.cave.choice;

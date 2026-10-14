@@ -75,7 +75,8 @@ export function createEventReturns(state: EventReturnState, ports: EventReturnPo
     return true;
   }
 
-  function recentReturn(event: string): boolean {
+  function recentReturn(event: string, forced: boolean): boolean {
+    if (forced) return false;
     if (state.last?.event !== event || ports.now() - state.last.finishedAt >= 60_000) return false;
     return !ports
       .activeNames()
@@ -197,7 +198,7 @@ export function createEventReturns(state: EventReturnState, ports: EventReturnPo
   ): EventRecovery | null {
     if (waitingForCombat(event, forced)) return null;
     if (state.current) return reuseReturn(state.current, event, session, forced);
-    if (recentReturn(event)) return null;
+    if (recentReturn(event, forced)) return null;
     const participants = participantsFor(event, session?.participants, forced);
     if (!participants.length) return null;
     const recovery = newRecovery(event, participants, session?.waypoints);

@@ -2512,8 +2512,8 @@
         catch(error) { movement.cancel('Cave convoy route could not be shared: '+String(error),{code:'cave-route-rejected'}); }
       },
       move: function (point, command) {
-        travelTrack = command.cruiseSpeed ? {id:command.id,distance:0,x:character.real_x,y:character.real_y,leader:character.name===cavePartyNames()[0],prepared:false} : null;
-        var journey = movement.move(point, undefined, { native: true, shared:!!command.cruiseSpeed, arrivalTolerance:command.action==='gather'?1:20, town: false, retainOnDirectStop: true,
+        travelTrack = command.cruiseSpeed && !command.independent ? {id:command.id,distance:0,x:character.real_x,y:character.real_y,leader:character.name===cavePartyNames()[0],prepared:false} : null;
+        var journey = movement.move(point, undefined, { native: true, shared:!!travelTrack, arrivalTolerance:command.action==='gather'?1:20, town: false, retainOnDirectStop: true,
         awaitSharedRoute:!!travelTrack && !travelTrack.leader, nativePlanningTimeoutMs:travelTrack ? 90000 : 30000,
         nativePlanningProgressMs:travelTrack ? 240000 : undefined,
         repairSharedDrift:!!travelTrack,
@@ -14675,7 +14675,7 @@
       },
       skipLootWait: command.continuousReturn === 1,
       compareTown: command.continuousReturn === 1 && !command.disableTown,
-      town: command.continuousReturn === 1 ? !command.disableTown : command.routeRecovery && command.routeRecovery.relocation === 'town' || command.purpose !== 'monster-hunt' || command.phase === 'plan-return' && !!command.allowTown,
+      town: !command.disableTown && (command.continuousReturn === 1 || command.routeRecovery && command.routeRecovery.relocation === 'town' || command.purpose !== 'monster-hunt' || command.phase === 'plan-return' && !!command.allowTown),
       townAttempt: command.continuousReturn !== 1 ? undefined : function(state, index, from, destination) {
         var c=convoyTraveling;
         if(!c || c.id!==command.convoyId || c.commandId!==command.id)return;

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Recover Cave participants displaced after completing a waypoint or stair approach, waiting for combat to clear and issuing bounded independent return paths before continuing the floor transition.
+- Honor disabled Town shortcuts during event walking retries. Exhausted event entry now returns the owned party through Main to its saved checkpoints and skips that occurrence, preventing stranded survivors and repeated rejoin attempts.
+
 - Match native manual-travel fault injection to the current assembly journey and command, preventing delayed event requests from causing false recovery-test failures.
 
 - Make native Cave regroup test setup tolerate an optional entry shop with no valid NPC placement, with a reproducible missing-shop layout alongside randomized coverage and unchanged regrouping checks.

@@ -12,7 +12,7 @@ export interface AttendanceInstance {
   deaths: number;
   lastDeathAt: number;
   dead: boolean;
-  ignored?: 'death limit' | 'time limit' | 'manual travel';
+  ignored?: 'death limit' | 'time limit' | 'manual travel' | 'travel failure';
   /** Explicit navigation owns this occurrence's exit, independently of limits. */
   manualTravel?: boolean;
 }
