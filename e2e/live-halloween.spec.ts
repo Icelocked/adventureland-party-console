@@ -98,8 +98,14 @@ async function prepare(live: LiveGame, event: string) {
     return leader&&Date.now()-leader.seenAt<3000&&leader.map===checkpoint.map&&
       Math.hypot(leader.x-checkpoint.x,leader.y-checkpoint.y)<1;
   }, { timeout: 30_000, message:'Save only the fresh native leader checkpoint' }).toBe(true);
-  await live.post('/checkpoint', {});
+  const checkpointReceipt=await live.post('/checkpoint', {}),saved=checkpointReceipt.partyLocation;
+  expect(saved?.map,'The actual checkpoint receipt must match the independently observed native map').toBe(checkpoint.map);
+  expect(Number.isFinite(saved?.x)&&Number.isFinite(saved?.y),'The saved native checkpoint must have finite coordinates').toBe(true);
+  expect(checkpointReceipt.ok,'The actual native checkpoint must be accepted').toBe(true);
+  const after=await live.admin(`output=(()=>{const p=get_player(${JSON.stringify(W)});return {map:p.map,x:p.x,y:p.y}})()`);
+  const savedCheckpoint={location:{map:saved.map,x:saved.x,y:saved.y},nativeBefore:checkpoint,nativeAfter:after,receipt:checkpointReceipt};
   await live.post('/formation', { character: W, eventSelections: [event] });
+  return savedCheckpoint;
 }
 
 async function world(live: LiveGame, event: string) {
@@ -311,7 +317,8 @@ for (const original of [{ id: 'mrgreen',terminalFault:false }, { id: 'mrpumpkin'
       test.setTimeout(600_000);
       const timer = await announceSpawn(live, encounter.id, 55000);
       await info.attach('declared-native-spawn-announcement', { body: JSON.stringify(timer), contentType: 'application/json' });
-      await prepare(live, encounter.id);
+      const savedCheckpoint=await prepare(live, encounter.id);
+      await info.attach('native-pre-event-checkpoint-receipt',{body:JSON.stringify(savedCheckpoint),contentType:'application/json'});
       await expect.poll(async () => {
         const state = await live.state();
         return fighters.every(name => state.characters[name]?.joinedEvent === encounter.id &&
@@ -386,17 +393,17 @@ for (const original of [{ id: 'mrgreen',terminalFault:false }, { id: 'mrpumpkin'
       if(terminalFault)await info.attach('native-terminal-settlement-fault-proof',{body:JSON.stringify(await terminalFault.prove(returnDeadline)),contentType:'application/json'});
       await expect.poll(async () => {
         const native = await world(live, encounter.id);
-        return fighters.every(name => native.players[name] && native.players[name].map === encounter.map && Math.hypot(native.players[name].x - (encounter.x + 160), native.players[name].y - encounter.y) < 100);
+        return fighters.every(name => native.players[name] && native.players[name].map === savedCheckpoint.location.map && Math.hypot(native.players[name].x - savedCheckpoint.location.x, native.players[name].y - savedCheckpoint.location.y) < 100);
       }, { timeout: Math.max(1,returnDeadline-Date.now()), message: 'Deselection must return both actual clients to their saved pre-event checkpoint' }).toBe(true);
       returnPhases.arrivalObservedAt=Date.now();
       const nativeArrivalReceipts=await Promise.all(fighters.map(async name=>{
         const events=await live.clients[name].events(),main=events.filter((event:any)=>event.event==='new_map'&&
           event.at>=returnPhases.recoveryStartedAt&&event.data?.name==='main').at(-1);
-        const arrival=main&&events.find((event:any)=>event.event==='player'&&event.at>main.at&&event.data?.map===encounter.map&&
-          Math.hypot(event.data.x-(encounter.x+160),event.data.y-encounter.y)<100);
+        const arrival=main&&events.find((event:any)=>event.event==='player'&&event.at>main.at&&event.data?.map===savedCheckpoint.location.map&&
+          Math.hypot(event.data.x-savedCheckpoint.location.x,event.data.y-savedCheckpoint.location.y)<100);
         return {name,main,arrival};
       }));
-      await info.attach('halloween-saved-checkpoint-return', { body: JSON.stringify({phases:returnPhases,nativeArrivalReceipts, native: await world(live, encounter.id), coordinator: await live.state() }), contentType: 'application/json' });
+      await info.attach('halloween-saved-checkpoint-return', { body: JSON.stringify({savedCheckpoint,phases:returnPhases,nativeArrivalReceipts, native: await world(live, encounter.id), coordinator: await live.state() }), contentType: 'application/json' });
       }finally{
         try{if(terminalFault)await info.attach('native-terminal-settlement-fault-final',{body:JSON.stringify(await terminalFault.finish()),contentType:'application/json'});}
         finally{if(navigationHttp)await info.attach('native-pumpkin-return-http',{body:JSON.stringify(await navigationHttp.finish()),contentType:'application/json'});}
