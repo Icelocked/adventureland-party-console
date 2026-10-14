@@ -88,7 +88,7 @@ export type PartyState = {
   deconstructionMarks?: DeconstructionMark[];
   autoDeconstruction?: Record<string, Record<string, { item: Item }>>;
   deconstructionCatalog?: DeconstructionCatalog;
-  autoNpcSales?: Record<string, { item: Item; createdAt: number; character?: string }>;
+  autoNpcSales?: Record<string, { item: Item; createdAt: number; character?: string; keep?: number }>;
   autoStandMarks?: Record<string, { item: Item; price: number; createdAt: number }>;
   merchantRoutinePriorities?: Record<string, number>;
   marketIgnoredItems?: import("../../../runtime/market-preferences").MarketIgnoredItem[];
