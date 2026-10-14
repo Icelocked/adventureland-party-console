@@ -3,10 +3,10 @@ import { requestObject, requestText, type HttpRequest, type HttpResponse } from 
 /** Named equipment sets per character: `luck` for the tank's kill-time swap, `tank` to restore after it. */
 export const GEAR_SET_NAMES = ["luck", "tank", "gold"] as const;
 export type GearSetName = (typeof GEAR_SET_NAMES)[number];
-/** Equip slots a gear set covers. Weapons stay out: the porcupine weapon swap owns them. */
+/** Every equipment slot (the game's character_slots). The elixir is recorded but never swapped. */
 export const GEAR_SET_SLOTS = [
-  "chest", "pants", "helmet", "gloves", "shoes", "cape", "belt", "orb", "amulet",
-  "ring1", "ring2", "earring1", "earring2",
+  "mainhand", "offhand", "chest", "pants", "helmet", "gloves", "shoes", "cape", "belt", "orb", "amulet",
+  "ring1", "ring2", "earring1", "earring2", "elixir",
 ] as const;
 export type GearSetItem = { name: string; level?: number; p?: string; stat_type?: string };
 export interface GearSet { slots: Partial<Record<(typeof GEAR_SET_SLOTS)[number], GearSetItem>>; savedAt: number }

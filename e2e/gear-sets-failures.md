@@ -71,3 +71,16 @@ gear until a later swap finishes near the next kill. Live journey:
     when the tank set left them empty; slots holding anything else are left alone.
 18. **Fights the kill swap.** The correction must not undo a swap in progress or one
     that is about to start for an imminent kill.
+
+## Every equipment slot (2026-10-14)
+
+Written before the change. Reported: swapping the priest's shield does not change the tank
+set's "(13 worn)": sets covered 13 slots and left out mainhand, offhand and elixir, the
+game's other three `character_slots`.
+
+19. **Slots left out.** Saving a set must record all 16 equipment slots that hold an item,
+    including mainhand, offhand and elixir, and the dashboard count includes them.
+20. **Weapons not restored.** A luck-set weapon or shield left on with no swap in progress
+    goes back to the tank set's (or empty), like the other slots.
+21. **Elixir consumed.** Swaps and corrections never equip or unequip an elixir: equipping
+    one consumes it and the game refuses to unequip it ("cant").

@@ -5,7 +5,7 @@ import { W, P } from './game/hunt-events';
 // the tank's bag and one stationary, harmless 5M HP goo attacking the tank. The tank is
 // left wearing its luck set with no swap in progress, as after a client restart; the
 // correction, the fight and every equip are native.
-const LUCK: Record<string, string> = { ring1: 'ringofluck', ring2: 'ringofluck', earring1: 'mearring', earring2: 'mearring', orb: 'rabbitsfoot', amulet: 'spookyamulet' };
+const LUCK: Record<string, string> = { ring1: 'ringofluck', ring2: 'ringofluck', earring1: 'mearring', earring2: 'mearring', orb: 'rabbitsfoot', amulet: 'spookyamulet', offhand: 'shield' };
 const SLOTS = Object.keys(LUCK);
 const worn = (live: LiveGame) => live.clients[W].run(`(${JSON.stringify(SLOTS)}).reduce((out,slot)=>{out[slot]=character.slots[slot]?character.slots[slot].name:null;return out},{})`);
 async function equipBy(live: LiveGame, wanted: Record<string, string | null>) {
@@ -24,15 +24,21 @@ test('a tank left in its luck set returns to its tank set at the start of a long
     await live.post('/formation', { leader: W, tank: W });
     await live.post('/formation', { character: P, follow: true });
     await live.admin(`output=(()=>{const p=get_player(${JSON.stringify(W)});
-      for(const name of ['ringofluck','ringofluck','mearring','mearring','rabbitsfoot','spookyamulet']){const i=p.items.findIndex(x=>!x);if(i<0)throw Error('bag full');p.items[i]={name,level:0};}
+      for(const name of ['ringofluck','ringofluck','mearring','mearring','rabbitsfoot','spookyamulet','shield']){const i=p.items.findIndex(x=>!x);if(i<0)throw Error('bag full');p.items[i]={name,level:0};}
       cache_player_items(p);resend(p,'u+cid+reopen');return true})()`);
     await expect.poll(async () => live.clients[W].run(`character.items.filter(i=>i&&i.name==='ringofluck').length`), { timeout: 30_000 }).toBe(2);
     const tankWorn = await worn(live);
+    expect(tankWorn.offhand, 'The tank starts without a shield').toBeNull();
+    const mainhand = await live.clients[W].run('character.slots.mainhand && character.slots.mainhand.name');
     await expect.poll(async () => (await live.post('/gear-sets', { character: W, set: 'tank', action: 'save' }).catch(() => ({}))).ok, { timeout: 30_000 }).toBe(true);
     await equipBy(live, LUCK);
     await expect.poll(async () => { const slots = (await live.state()).characters[W]?.slots || {};
       return SLOTS.every(slot => slots[slot]?.item?.name === LUCK[slot]); }, { timeout: 15_000 }).toBe(true);
     expect((await live.post('/gear-sets', { character: W, set: 'luck', action: 'save' })).ok).toBe(true);
+    // 19: sets record the weapon and shield slots too.
+    const sets = (await live.state()).gearSets?.[W];
+    expect(sets?.tank?.slots?.mainhand?.name).toBe(mainhand);
+    expect(sets?.luck?.slots?.offhand?.name).toBe('shield');
     // 16: still in the luck set, no swap session: the state a client restart leaves behind.
     expect(await live.clients[W].run('!(parent.__partyKillLuckSwap && parent.__partyKillLuckSwap.session)')).toBe(true);
     goo = await live.admin(`output=(()=>{const t=get_player(${JSON.stringify(W)});
@@ -46,7 +52,7 @@ test('a tank left in its luck set returns to its tank set at the start of a long
       restored = SLOTS.every(slot => sample.worn[slot] === tankWorn[slot]);
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
-    // 16, 17: the tank set is back, empty slots emptied, while the long fight continues.
+    // 16, 17, 20: the tank set is back, empty slots (the shield's included) emptied, while the long fight continues.
     expect(restored, 'The tank set must return during the fight').toBe(true);
     const hp = samples.at(-1)!.hp;
     expect(hp, 'The fight must be under way and far from a kill').toBeGreaterThan(4_000_000);

@@ -1,12 +1,12 @@
 export type GearItem = { name: string; level?: number; [key: string]: unknown };
 /**
- * Equip-swappable slots this module will touch. mainhand/offhand are deliberately excluded:
- * they'd collide with porcupine-equipment's weapon swap and losing weapon damage/defense for a
- * loot-odds swap is a worse trade than skipping those two slots. "elixir" is excluded too — it's
- * a one-time consumable, not a restorable equip slot.
+ * Equip slots this module swaps: every gear-set slot but the elixir, which equipping consumes and
+ * the game refuses to unequip. The porcupine weapon swap shares mainhand/offhand; the luck swap
+ * waits while it is busy (otherSwapBusy). Mainhand goes before offhand so a two-handed weapon is
+ * replaced before a shield returns.
  */
 export const LUCK_SWAP_SLOTS = [
-  "chest", "pants", "helmet", "gloves", "shoes", "cape", "belt", "orb", "amulet",
+  "mainhand", "offhand", "chest", "pants", "helmet", "gloves", "shoes", "cape", "belt", "orb", "amulet",
   "ring1", "ring2", "earring1", "earring2",
 ] as const;
 export type LuckSlot = (typeof LUCK_SWAP_SLOTS)[number];
