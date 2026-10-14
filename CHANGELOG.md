@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recover interrupted initial party assembly after a route-planning network failure, using fresh stopped acknowledgements before continuing manual travel out of an event. Verify native return response-loss recovery even when a genuine terminal arrival precedes the test fault.
+
 - Stop and revalidate an owned walking segment after an accepted native position correction, preventing stale movement velocity from carrying a return route into blocked terrain. Keep the retained corner-connector fixture aligned with the native socket contract.
 
 - Lead moving combat targets using their native direction and speed plus each fighter's speed and a 10-unit margin inside attack range, reducing short chase steps while preserving terrain safety and fresh whole-party attack confirmation.

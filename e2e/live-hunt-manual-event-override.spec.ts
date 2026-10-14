@@ -1,13 +1,31 @@
 import {test,expect} from './live-fixtures';
 
 const W='E2EWarrior',P='E2EPriest',members=[W,P];
+// Declare separated native actors before login so manual travel must assemble
+// a real follower route instead of sometimes beginning already co-located.
+test.use({initialConsoleHold:true,initialPositions:{[W]:{map:'halloween',x:0,y:0},[P]:{map:'halloween',x:1212,y:101}}});
 
 // Failure inventory and lifecycle declaration: docs/testing-manual-event-override.md.
 for(const entry of ['command','travel'] as const){
 test(`explicit ${entry} travel skips only the current native event occurrence`,async({live},info)=>{
   test.setTimeout(480_000);
   const samples:unknown[]=[],retirements:unknown[]=[];
-  const world=()=>live.admin(`output=Object.fromEntries(${JSON.stringify(members)}.map(name=>{const p=get_player(name);return [name,{map:p.map,x:p.x,y:p.y,rip:!!p.rip}]}))`);
+  const world=()=>live.admin(`output=Object.fromEntries(${JSON.stringify(members)}.map(name=>{const p=get_player(name);return [name,{map:p.map,x:p.x,y:p.y,rip:!!p.rip,moving:!!p.moving}]}))`);
+  const context=live.clients[P].page.context(),planningFaults:unknown[]=[],recoveryHolds:unknown[]=[];
+  let faultArmed=false;
+  const interruptInitialPlan=async(route:import('@playwright/test').Route)=>{
+    const request=route.request(),body=request.method()==='POST'?request.postDataJSON():null;
+    if(faultArmed&&body?.character===P&&planningFaults.length===0){
+      const s=await live.state(),c=s.activeConvoy,expected=c?.expected?.[P];
+      if(c?.phase==='assemble'&&c.purpose==='party-travel'&&!c.runtimes&&expected?.runtimeId&&
+          String(body.id).startsWith(P+':'+expected.runtimeId+':')){
+        planningFaults.push({at:Date.now(),request:body,convoy:c});
+        await route.abort('connectionreset');return;
+      }
+    }
+    await route.continue();
+  };
+  if(entry==='travel')await context.route('**/party-api/movement-plan',interruptInitialPlan);
   let ownedId:string|undefined;
   let competingReturn=false;
   const declare=async()=>{
@@ -55,14 +73,18 @@ test(`explicit ${entry} travel skips only the current native event occurrence`,a
     })()`);
     await info.attach('native-manual-event-initial-world',{body:JSON.stringify(baseline),contentType:'application/json'});
     expect(baseline.remaining,'An unrelated live Pumpkin cannot be replaced by this fixture').toEqual([]);
-    await live.post('/formation',{leader:W});await live.post('/formation',{character:P,follow:true});
+    await live.post('/formation',{leader:W});await live.post('/formation',{character:P,follow:false});
     const first=await declare();
     await live.post('/formation',{character:W,eventSelections:['mrpumpkin']});
+    await live.post('/formation',{character:P,eventSelections:['mrpumpkin']});
+    live.consoleDrainLease(null);
     await expect.poll(async()=>{const s=await live.state(),native=await world();
       return members.every(name=>native[name].map==='halloween'&&s.characters[name]?.joinedEvent==='mrpumpkin'&&
         s.eventAttendance?.[name]?.mrpumpkin?.id===null);
     },{timeout:120_000,message:'Both native actors must really attend the declared occurrence'}).toBe(true);
+    await live.post('/formation',{character:P,follow:true});
     const destination={map:'main',x:0,y:0};
+    faultArmed=entry==='travel';
     const response=entry==='command'
       ?await live.post('/command',{character:W,type:'party-monster-travel',location:destination,label:'manual event override regression'})
       :await live.post('/travel',destination);
@@ -70,12 +92,23 @@ test(`explicit ${entry} travel skips only the current native event occurrence`,a
     await expect.poll(async()=>{
       const s=await live.state(),native=await world();
       competingReturn ||= !!s.eventReturn?.participants?.some((name:string)=>members.includes(name));
+      const c=s.activeConvoy;
+      if(c?.phase==='communication-hold'&&members.every(name=>{
+        const status=s.characters[name],report=status?.convoyNavigation,expected=c.expected?.[name];
+        return !native[name].moving&&!native[name].rip&&status?.seenAt>=Date.now()-3000&&
+          report?.phase==='held'&&report.id===c.id&&report.epoch===c.epoch&&expected&&
+          report.commandId===expected.commandId&&report.navigationRevision===expected.revision&&report.runtimeId===expected.runtimeId;
+      }))recoveryHolds.push({at:Date.now(),convoy:c,native});
       samples.push({at:Date.now(),convoy:s.activeConvoy?.id,return:s.eventReturn,
         attendance:s.eventAttendance,characters:Object.fromEntries(members.map(name=>[name,{native:native[name],joined:s.characters[name]?.joinedEvent}]))});
       if(samples.length>64)samples.shift();
       return members.every(name=>native[name].map==='main'&&!native[name].rip&&Math.hypot(native[name].x,native[name].y)<100)&&!s.activeConvoy;
     },{timeout:180_000,message:'Explicit travel must reach its native destination without an event rejoin stealing the route'}).toBe(true);
     expect(competingReturn,'No forced return may compete with explicit manual travel').toBe(false);
+    if(entry==='travel'){
+      expect(planningFaults,'The initial follower route must encounter the declared transport failure').toHaveLength(1);
+      expect(recoveryHolds.length,'Both clients must freshly acknowledge the stopped recovery hold').toBeGreaterThan(0);
+    }
     const arrivedAt=Date.now();
     await live.restartCoordinator();
     let rejoined=false;
@@ -106,7 +139,10 @@ test(`explicit ${entry} travel skips only the current native event occurrence`,a
     await info.attach('native-manual-event-occurrence-override',{body:JSON.stringify({first,second,destination,response,issuedAt,arrivedAt,skipped,samples,retirements,
       native:await world(),state:await live.state(),events:await live.clients[W].events()}),contentType:'application/json'});
   }finally{
-    try{await live.post('/formation',{character:W,eventSelections:[]});}
+    faultArmed=false;
+    if(entry==='travel')await context.unroute('**/party-api/movement-plan',interruptInitialPlan);
+    await info.attach('native-manual-event-assembly-transport',{body:JSON.stringify({planningFaults,recoveryHolds,samples}),contentType:'application/json'});
+    try{await live.post('/formation',{character:W,eventSelections:[]});await live.post('/formation',{character:P,follow:false});await live.post('/formation',{character:P,eventSelections:[]});}
     finally{try{await retire();}finally{await live.admin(`output=(()=>{const owned=globalThis.__e2eManualEventCatalog;
       if(!owned)return null;if(G.monsters.mrpumpkin!==owned.configured)throw Error('Declared event catalog ownership changed before restore');
       G.monsters.mrpumpkin=owned.original;delete globalThis.__e2eManualEventCatalog;return {restored:true};})()`);}}
