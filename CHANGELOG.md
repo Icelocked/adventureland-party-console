@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep native Cave staging responsive during exhaustive terrain searches, preserving player connections and rechecking current safety before the assembly regression.
+
 - Recover interrupted initial party assembly after a route-planning network failure, using fresh stopped acknowledgements before continuing manual travel out of an event. Verify native return response-loss recovery even when a genuine terminal arrival precedes the test fault.
 
 - Stop and revalidate an owned walking segment after an accepted native position correction, preventing stale movement velocity from carrying a return route into blocked terrain. Keep the retained corner-connector fixture aligned with the native socket contract.
