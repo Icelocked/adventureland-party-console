@@ -13,3 +13,15 @@ The captured proof is `.build/live-event-runtime-recovery-proof.json`; it record
 old/new identities and observed positions without changing character assets or
 issuing a manual movement command. Dedicated disposable native E2E and a coherent
 full-suite run are still required for repeatable release validation.
+# Different-event boss fixture lifetime
+
+Failure inventory from CI 38622108845 before the fixture correction: restoring
+the boss catalog immediately after spawning allows native stat recalculation to
+restore Mr. Green's charge speed (90). Event replacement succeeds, but the priest
+can produce only avoided projectiles: that run recorded 108 avoided hits and one
+miss, with no positive damage. The declaration must remain owned until cleanup,
+including across actual CODE and coordinator restart. Keep both positive native
+damage assertions. Verify native recalculation still yields the declared stats,
+allowing the native common-stat minimum speed of 1 with charge remaining zero;
+remove only the exact seeded monsters, and restore both catalog entries even
+when a preceding diagnostic or deselection fails.

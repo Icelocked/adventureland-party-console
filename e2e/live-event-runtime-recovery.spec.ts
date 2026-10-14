@@ -252,13 +252,17 @@ test('native event selection replaces a failed old entry without waiting on anot
   // Failure inventory: CODE turnover plus a different genuine event selection
   // must not leave the old failed rendezvous holding both live event workflows.
   await live.post('/formation',{leader:W});await live.post('/formation',{character:P,follow:true});
-  const seeds=await live.admin(`output=(()=>{const result={};
+  const seeds=await live.admin(`output=(()=>{const result={},owned={};
+    if(globalThis.__e2eDifferentEventCatalog)throw Error('Different-event fixture catalog already owned');
+    globalThis.__e2eDifferentEventCatalog=owned;
     for(const [type,x,y] of [['mrpumpkin',-495,685],['mrgreen',-495,650]]){
-      const original=G.monsters[type];try{G.monsters[type]={...original,hp:100000000,attack:1,speed:0,charge:0,range:1,aggro:0,spawns:[]};
+      const original=G.monsters[type],configured={...original,hp:100000000,attack:1,speed:0,charge:0,range:1,aggro:0,spawns:[]};
+      owned[type]={original,configured};G.monsters[type]=configured;
+      {
         const m=new_monster('halloween',{type,count:1,boundary:[x,y,x,y]},{temp:1});
         result[type]={id:m.id,map:m.map,x:m.x,y:m.y};
         if(type==='mrpumpkin')E[type]={live:true,map:m.map,x:m.x,y:m.y,hp:m.hp,max_hp:m.max_hp};
-      }finally{G.monsters[type]=original;}}
+      }}
     broadcast_e();return result;})()`);
   const samples:unknown[]=[];
   let before:any;
@@ -278,11 +282,22 @@ test('native event selection replaces a failed old entry without waiting on anot
       if(samples.length>64)samples.shift();
       return hits.every(value=>!!value.hit);
     },{timeout:180000,intervals:[500,1000],message:'Each genuinely selected boss must receive native fighter damage after CODE replacement and restart'}).toBe(true);
+    const recalculated=await live.admin(`output=Object.entries(globalThis.__e2eDifferentEventCatalog).map(([type,owned])=>{
+      if(G.monsters[type]!==owned.configured)throw Error('Different-event catalog ownership changed');
+      const seed=${JSON.stringify(seeds)}[type],m=instances[seed.map].monsters[seed.id];
+      if(!m||m.type!==type)throw Error('Declared native boss missing');
+      calculate_monster_stats(m);
+      return {type,id:String(m.id),speed:m.speed,attack:m.attack,charge:G.monsters[type].charge};
+    })`);
+    await info.attach('native-different-event-recalculated-stats',{body:JSON.stringify(recalculated),contentType:'application/json'});
+    for(const monster of recalculated)expect(monster).toMatchObject({speed:1,attack:1,charge:0});
   } finally {
-    await info.attach('native-different-event-turnover',{body:JSON.stringify({seeds,before,samples}),contentType:'application/json'});
+    try{await info.attach('native-different-event-turnover',{body:JSON.stringify({seeds,before,samples}),contentType:'application/json'});
     await live.post('/formation',{character:W,eventSelections:[]});
-    await live.admin(`output=(()=>{for(const [type,seed]of Object.entries(${JSON.stringify(seeds)})){
-      const m=Object.values(instances).flatMap(i=>Object.values(i.monsters||{})).find(m=>String(m.id)===String(seed.id)&&m.type===type);if(m)remove_monster(m,{silent:true});delete E[type];}broadcast_e();return true;})()`);
+    }finally{await live.admin(`output=(()=>{for(const [type,seed]of Object.entries(${JSON.stringify(seeds)})){
+      const m=Object.values(instances).flatMap(i=>Object.values(i.monsters||{})).find(m=>String(m.id)===String(seed.id)&&m.type===type);if(m)remove_monster(m,{silent:true});delete E[type];}
+      for(const [type,owned]of Object.entries(globalThis.__e2eDifferentEventCatalog||{}))G.monsters[type]=owned.original;
+      delete globalThis.__e2eDifferentEventCatalog;broadcast_e();return true;})()`);}
   }
 });
 

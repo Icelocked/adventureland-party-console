@@ -18,23 +18,30 @@ test(`explicit ${entry} travel skips only the current native event occurrence`,a
   const interruptInitialPlan=async(route:import('@playwright/test').Route)=>{
     const request=route.request(),body=request.method()==='POST'?request.postDataJSON():null;
     if(faultArmed&&body?.character===P&&planningFaults.length===0){
-      const started=Date.now(),sample=await observer.sample(body);
-      if(sample){
-        const s=await live.state(),c=s.activeConvoy,expected=c?.expected?.[P],rally=c?.rally;
-        const owner=sample.body.convoyNavigation;
-        // One atomic native status binds this journey to its actual owner.
-        // No iframe lookup or five-second polling inside the two-second request.
-        if(faultArmed&&planningFaults.length===0&&Date.now()-started<1500&&
-          c?.phase==='assemble'&&c.purpose==='party-travel'&&!c.runtimes&&expected?.phase==='assemble'&&
-          rally&&body.to?.map===rally.map&&body.to.x===rally.x&&body.to.y===rally.y&&
-          owner.phase==='assembling'&&owner.id===c.id&&owner.epoch===c.epoch&&
-          owner.commandId===expected.commandId&&owner.navigationRevision===expected.revision&&owner.runtimeId===expected.runtimeId){
-          planningFaults.push({at:Date.now(),request:body,movement:sample.body.movement,owner,convoy:c,elapsedMs:Date.now()-started});
-          await route.abort('connectionreset');return;
-        }
-        unmatchedPlans.push({at:Date.now(),request:body,owner,reportedMovement:sample.body.movement,
-          convoy:c?.id,epoch:c?.epoch,expected,rally,elapsedMs:Date.now()-started});
-      }else unmatchedPlans.push({at:Date.now(),request:body,reason:'No current native movement sample',elapsedMs:Date.now()-started});
+      const started=Date.now();
+      // Initial assembly may not have emitted its first status packet yet.
+      // Read the current native CODE through its game DOM in ONE round trip;
+      // do not run the multi-step iframe reacquisition helper or wait for a tick.
+      const [sample,s]=await Promise.all([
+        live.clients[P].frame.evaluate(()=>{
+          const runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+          return {movement:runner?.__partyMovement?.report?.(),trace:runner?.sharedRoutine?.combatTraceSnapshot?.(),
+            revision:runner?.__partyNavigationIntent?.revision,commandId:runner?.__partyLastCommand};
+        }),live.state()]);
+      const c=s.activeConvoy,expected=c?.expected?.[P],rally=c?.rally;
+      const owner={id:sample.trace?.convoy,epoch:sample.trace?.convoyEpoch,phase:sample.trace?.convoyPhase,
+        commandId:sample.commandId,navigationRevision:sample.revision,runtimeId:expected?.runtimeId};
+      if(faultArmed&&planningFaults.length===0&&Date.now()-started<1500&&sample.movement?.id===body.id&&
+        !sample.movement.done&&String(body.id).startsWith(P+':'+expected?.runtimeId+':')&&
+        c?.phase==='assemble'&&c.purpose==='party-travel'&&!c.runtimes&&expected?.phase==='assemble'&&
+        rally&&body.to?.map===rally.map&&body.to.x===rally.x&&body.to.y===rally.y&&
+        owner.phase==='assembling'&&owner.id===c.id&&owner.epoch===c.epoch&&
+        owner.commandId===expected.commandId&&owner.navigationRevision===expected.revision){
+        planningFaults.push({at:Date.now(),request:body,movement:sample.movement,owner,convoy:c,elapsedMs:Date.now()-started});
+        await route.abort('connectionreset');return;
+      }
+      unmatchedPlans.push({at:Date.now(),request:body,owner,reportedMovement:sample.movement,
+        convoy:c?.id,epoch:c?.epoch,expected,rally,elapsedMs:Date.now()-started});
       if(unmatchedPlans.length>32)unmatchedPlans.shift();
     }
     await route.continue();

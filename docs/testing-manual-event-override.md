@@ -29,13 +29,15 @@ pass through. The transport ledger retains unmatched requests and the selected
 movement owner; all-party stopped recovery and real arrival remain mandatory.
 Initial assembly calls generic navigation without a movement `owner` field.
 Match its journey to the real status sample, which captures movement and convoy
-identity together. Observe outgoing status packets directly, wait at most 750ms
-for that evidence, and validate the current coordinator owner before aborting.
+identity together. Initial assembly can precede its first outgoing movement
+status. Read the native movement plus existing combat/navigation diagnostics in
+one atomic game-frame evaluation, in parallel with validating the coordinator
+owner, and complete the decision within 1500ms before aborting.
 The production planner request has a two-second deadline: the previous CODE
 iframe lookup and five-second poll could themselves cause a timeout in CI.
 A late event destination or ownerless movement report never authorizes the
 injected failure. See testing-planner-fault-observation.md for the CI evidence
-and the bounded observation contract shared with event-entry recovery.
+and the bounded status-traffic observation used for event-entry recovery.
 The corrected local run passed both entry points in 5.1 minutes with 70 verified
 evidence files. The faulted case captured exactly one matching assembly request
 and five fresh whole-party stopped holds, followed by native arrival, restart

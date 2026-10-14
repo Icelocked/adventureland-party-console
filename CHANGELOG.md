@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep declared Mr. Green and Mr. Pumpkin stats active throughout the native event-switch regression, including native stat recalculation, then restore them during cleanup. This prevents unintended boss movement from turning ranged damage checks into intermittent projectile misses.
+
 - Prevent native event-entry and manual-travel recovery tests from accidentally timing out planner requests while inspecting them. Fault injection now observes actual status traffic, preserves exact journey ownership, and records decision latency and transport failures.
 
 - Recover Cave participants displaced after completing a waypoint or stair approach, waiting for combat to clear and issuing bounded independent return paths before continuing the floor transition.

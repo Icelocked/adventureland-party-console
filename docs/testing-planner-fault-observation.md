@@ -23,3 +23,11 @@ deadline; do not resolve browser frames inside planner interception. Retain
 decision timing and request failures. Keep native damage, exactly one/three
 declared failures, all-party stopped hold, arrival, restart and occurrence
 assertions. Run the affected scenarios repeatedly and retain verified evidence.
+
+The first focused Linux rerun passed both event-entry cases, but initial manual
+assembly had not emitted a movement status within the 750ms observation budget.
+It correctly passed the request through, so no fault was injected. That phase now
+reads the existing native movement and combat/navigation diagnostics atomically
+through the current game DOM in one evaluation, in parallel with coordinator
+ownership validation. This preserves every ownership check without waiting for
+a future heartbeat or reacquiring the runner through several browser calls.
