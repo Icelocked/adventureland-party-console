@@ -749,3 +749,28 @@ test('designated tank: stops holding below half HP or outside the priest heal ra
  const n=setup();n.c.tank='W';n.c.currentPartyList=()=>['W'];n.c.partyPositions=[n.warrior];
  assert.equal(n.c.designatedTankHolds(),true,'no priest in the party');
 });
+
+test('ordinary committed warrior movement intercepts transverse native motion instead of chasing its current center',()=>{
+ const r=setup();Object.assign(r.warrior,{x:0,y:0,real_x:0,real_y:0,range:30,speed:60});
+ Object.assign(r.priest,{x:0,y:0,range:1000});Object.assign(r.monster,{x:100,y:0,moving:true,going_x:100,going_y:100,speed:40,target:null});
+ r.c.partyQueueClient={independent:{movement:()=>false,report:()=>null,intercept:require('../../runtime/combat/interception.ts').predictCombatIntercept}};
+ r.c.is_in_range=()=>Math.hypot(r.monster.x-r.warrior.x,r.monster.y-r.warrior.y)<=30;
+ r.c.recoverFormationCorner=()=>null;
+ assert.equal(r.c.formationMove(r.monster),true);assert.equal(r.moves.length,1);
+ assert.ok(r.moves[0].y>5,'The actual collision-safe issued step must lead the transverse native leg');
+});
+
+
+test('numeric intercept body preserves both pinned native combat distance contracts',()=>{
+ const r=setup(),{namedFunction}=require('./helpers/named-function.cjs');
+ const monster={type:'monster',mtype:'goo',map:'main',x:100,y:100,width:120,height:60,mscale:2,renderer:{private:true}};
+ const point={x:140,y:160};
+ const projected=r.c.combatRangeReference(monster,point);assert.equal(projected.type,'monster');assert.equal(projected.mtype,'goo');assert.equal(projected.renderer,undefined);assert.equal('in' in projected,false);
+ for(const version of ['15555','17665']){
+  const fixture=require('./fixtures/native-combat-distance-contracts.json').versions[version];
+  const c=vm.createContext({G:{dimensions:{goo:[24,24]},monsters:{goo:{}}}});
+  for(const declaration of fixture.functions)vm.runInContext(declaration,c);
+  const own={x:0,y:0,map:'main',width:20,height:20};
+  assert.equal(c.distance(own,projected),c.distance(own,{...monster,...point}),version);
+ }
+});

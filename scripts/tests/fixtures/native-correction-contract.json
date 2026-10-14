@@ -1,0 +1,9 @@
+{
+  "version": 15555,
+  "sourceSHA256": {
+    "game": "3298ffb3466dd7e39a6c0eb91e68f1cfd7d80d141a49b9ef54f362ad664650be",
+    "common": "0be5b557755a98034a50278a4f427f4a44a5292601f072ea698ba85472c95f88"
+  },
+  "correction": "socket.on(\"correction\", function (data) {\n\t\tif (can_move({ map: character.map, x: character.real_x, y: character.real_y, going_x: data.x, going_y: data.y, base: character.base })) {\n\t\t\tadd_log(phrase.html(\"game.location_corrected\"), \"gray\");\n\t\t\tconsole.log(\"Character correction\");\n\t\t\tcharacter.real_x = parseFloat(data.x);\n\t\t\tcharacter.real_y = parseFloat(data.y);\n\t\t\t// character.moving=false; character.vx=character.vy=0;\n\t\t\trecalculate_vxy(character);\n\t\t\t// resolve_deferreds(\"move\",{reason:\"correction\"});\n\t\t}\n\t});",
+  "velocity": "function calculate_vxy(monster,speed_mult)\n{\n\tif(!speed_mult) speed_mult=1;\n\tmonster.ref_speed=monster.speed;\n\tvar total=0.0001+sq(monster.going_x-monster.from_x)+sq(monster.going_y-monster.from_y);\n\ttotal=sqrt(total);\n\tmonster.vx=monster.speed*speed_mult*(monster.going_x-monster.from_x)/total;\n\tmonster.vy=monster.speed*speed_mult*(monster.going_y-monster.from_y)/total;\n\tif(1 || Place==\"game\") monster.angle=Math.atan2(monster.going_y-monster.from_y,monster.going_x-monster.from_x)*180/Math.PI; // now the .angle is used on .resync [03/08/16]\n\t// -90 top | 0 right | 180/-180 left | 90 bottom\n\t// if(monster==character) console.log(monster.angle);\n}\n\nfunction recalculate_vxy(monster)\n{\n\tif(monster.moving && monster.ref_speed!=monster.speed)\n\t{\n\t\tif(Place==\"server\") monster.move_num++;\n\t\tcalculate_vxy(monster);\n\t}\n}"
+}

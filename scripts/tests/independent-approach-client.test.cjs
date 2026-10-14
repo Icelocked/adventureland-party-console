@@ -1,10 +1,10 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const {createIndependentApproachClient}=require('../../runtime/combat/independent-approach-client.ts');
-function fixture(){const ctx={allowed:true,planned:true,key:'USII:uhills:target',target:'target',point:{x:100,y:100},radius:200,selection:'s1',committed:false};let owner=null,throwing=false,ready=false,now=10000,clear=true;
- const routes=[];const client=createIndependentApproachClient({context:()=>ctx,now:()=>now,ready:()=>ready,clear:()=>clear,goal:(p,r)=>({x:p.x-r,y:p.y}),
+function fixture(){const ctx={allowed:true,planned:true,key:'USII:uhills:target',target:'target',point:{x:100,y:100},radius:200,selection:'s1',committed:false};let owner=null,throwing=false,ready=false,buffered=true,now=10000,clear=true;
+ const routes=[];const client=createIndependentApproachClient({context:()=>ctx,now:()=>now,ready:()=>ready,buffered:()=>buffered,clear:()=>clear,goal:(p,r)=>({x:p.x-r,y:p.y}),
   start:(goal,id,direct)=>{if(throwing)throw Error('native start rejected');owner=id;return new Promise((resolve,reject)=>routes.push({goal,id,direct,resolve,reject}));},
   owned:id=>owner===id,cancel:id=>{if(owner===id)owner=null;},position:()=>{}});
- return {client,routes,ctx,get owner(){return owner;},set throwing(v){throwing=v;},set ready(v){ready=v;},set now(v){now=v;},set clear(v){clear=v;}};}
+ return {client,routes,ctx,get owner(){return owner;},set throwing(v){throwing=v;},set ready(v){ready=v;},set buffered(v){buffered=v;},set now(v){now=v;},set clear(v){clear=v;}};}
 test('late caster begins own route after shared target engagement',()=>{const f=fixture();f.ctx.planned=false;assert.equal(f.client.tick(),true);assert.equal(f.routes.length,1);assert.equal(f.client.report().target,'target');});
 test('synchronous native start rejection becomes bounded approach failure',()=>{const f=fixture();f.throwing=true;assert.doesNotThrow(()=>f.client.tick());for(let i=0;i<12;i++){f.now=10000+(i+1)*250;assert.doesNotThrow(()=>f.client.tick());}assert.equal(f.client.report().phase,'unreachable');assert.ok(f.client.report().level<=8);});
 test('old native completion cannot settle newer owned route',async()=>{const f=fixture();f.client.tick();const first=f.routes[0];f.ctx.point={x:130,y:100};f.now=10250;f.client.tick();const second=f.routes[1];first.resolve();await Promise.resolve();assert.equal(f.client.report().pending,true);assert.equal(f.owner,second.id);assert.equal(f.client.report().id,second.id);});
@@ -47,7 +47,7 @@ function snapshotPorts(){
   root:{sharedRoutine:{isOccupied:()=>false},partyRoleRunner:{isKnownDead:()=>false}}});
  vm.runInContext(source.slice(start,end),c);return {c,moves,ports:c.independentApproachPorts(),set entity(v){entity=v;}};
 }
-test('fresh owned invisible target snapshot routes natively but cannot advertise readiness',async()=>{const f=snapshotPorts(),ctx=f.ports.context();assert.equal(ctx.allowed,true);assert.equal(f.ports.ready(),false);const goal=f.ports.goal(ctx.point,ctx.radius);await f.ports.start(goal,'combat-approach:snapshot');assert.equal(f.moves.length,1);assert.equal(f.moves[0].options.native,true);assert.equal(f.moves[0].goal.map,'uhills');assert.equal(f.moves[0].goal.in,'uhills');assert.equal(f.ports.ready(),false);f.entity={id:'boss',x:400,y:0,visible:true,dead:false,hp:100};f.c.character.real_x=203;assert.equal(f.ports.ready(),true);});
+test('fresh owned invisible target snapshot routes natively but cannot advertise readiness',async()=>{const f=snapshotPorts(),ctx=f.ports.context();assert.equal(ctx.allowed,true);assert.equal(f.ports.ready(),false);const goal=f.ports.goal(ctx.point,ctx.radius);await f.ports.start(goal,'combat-approach:snapshot');assert.equal(f.moves.length,1);assert.equal(f.moves[0].options.native,undefined);assert.equal(f.moves[0].options.rejectUnreachableGoal,true);assert.equal(f.moves[0].goal.map,'uhills');assert.equal(f.moves[0].goal.in,'uhills');assert.equal(f.ports.ready(),false);f.entity={id:'boss',x:400,y:0,visible:true,dead:false,hp:100};f.c.character.real_x=203;assert.equal(f.ports.ready(),true);});
 test('snapshot routing preserves stale realm instance death and manual fences',()=>{for(const change of [f=>f.c.groupedFresh=()=>false,f=>f.c.groupedCombat.target.server='EU',f=>f.c.groupedCombat.target.in='other',f=>f.c.root.partyRoleRunner.isKnownDead=()=>true,f=>f.c.navigationIntent.cancelled=true]){const f=snapshotPorts();change(f);assert.ok(!f.ports.context()?.allowed);assert.equal(f.ports.ready(),false);}});
 
 test('direct connector is attempted first, blocked connector uses owned smart route',()=>{for(const clear of [true,false]){const f=fixture();f.clear=clear;f.client.tick();assert.equal(f.routes[0].direct,clear);}});
@@ -89,4 +89,97 @@ test('shared approach starts the owned direct or native executor immediately',as
   f.c.movement.install=()=>{};f.c.movement.tick=()=>{assert.equal(started,true);observeNativeEdge();ticks++;};
   await f.ports.start({x:100,y:0},id,direct);assert.equal(ticks,1);
  }
+});
+
+
+test('a slightly farther direct-clear native range candidate wins over the nearest blocked ring point',()=>{
+ const f=snapshotPorts();f.entity={id:'boss',x:1400,y:280,visible:true,hp:100};
+ Object.assign(f.c.character,{real_x:1437.5,real_y:-445.5,x:1437.5,y:-445.5});
+ f.c.combatApproachPoint=(e,r)=>{const a=Math.atan2(f.c.character.real_y-e.y,f.c.character.real_x-e.x);return {x:e.x+Math.cos(a)*r,y:e.y+Math.sin(a)*r};};
+ f.c.can_move=p=>p.x===p.going_x&&p.y===p.going_y || p.going_x>1480&&p.going_x<1510;
+ const goal=f.ports.goal({x:1400,y:280},207);
+ assert.ok(goal.x>1480&&goal.x<1510,'Choose native direct-clear right-hand ring instead of nearest blocked point');
+ assert.ok(Math.abs(Math.hypot(goal.x-1400,goal.y-280)-207)<0.001);
+ f.c.can_move=p=>p.x===p.going_x&&p.y===p.going_y;
+ const blocked=f.ports.goal({x:1400,y:280},207);assert.ok(blocked.x<1420,'All-blocked keeps nearest walkable goal for maintained smart planner');
+ f.c.can_move=()=>false;assert.equal(f.ports.goal({x:1400,y:280},207),null);
+});
+
+
+test('own committed arrival retires pull approach until a genuinely new context or explicit stop',()=>{
+ const f=fixture();f.ctx.committed=true;f.ctx.planned=false;f.client.tick();assert.equal(f.routes.length,1,'Peer engagement alone must not stop own arrival');
+ f.ready=true;assert.equal(f.client.tick(),false);assert.equal(f.owner,null);
+ f.ready=false;for(let i=0;i<4;i++){f.now=11000+i*250;assert.equal(f.client.tick(),false,'Normal engaged combat owns subsequent range recovery');}
+ assert.equal(f.routes.length,1);
+ f.ctx.allowed=false;assert.equal(f.client.tick(),false);f.ctx.allowed=true;assert.equal(f.client.tick(),false);assert.equal(f.routes.length,1,'Same-target defense must retain completed approach');
+ f.ctx.key='new-selection';assert.equal(f.client.tick(),true);assert.equal(f.routes.length,2);
+ f.ready=true;f.client.tick();f.ready=false;f.client.stop();assert.equal(f.client.tick(),true);assert.equal(f.routes.length,3,'Explicit stop retires completion history');
+});
+test('shared approach intentional cancellation preserves exact owner and cancellation provenance',()=>{
+ const f=snapshotPorts();let owner='combat-approach:owned',cancelled;
+ f.c.movement.report=()=>({owner:{recoveryStage:owner}});
+ f.c.movement.cancel=(reason,cause)=>{cancelled={reason,cause};};
+ f.ports.cancel('foreign');assert.equal(cancelled,undefined);
+ f.ports.cancel(owner);assert.match(cancelled.reason,/cancelled/i);assert.equal(cancelled.cause.code,'combat-approach-cancelled');
+});
+
+
+test('projected target center actually drives the native-clear independent goal ring',()=>{
+ const f=snapshotPorts(),point={x:400,y:100};f.entity={id:'boss',x:400,y:0,visible:true,hp:100};
+ const goal=f.ports.goal(point,197);assert.ok(Math.abs(Math.hypot(goal.x-point.x,goal.y-point.y)-197)<1e-7);
+});
+test('ordinary combat chase leads only while actual native range is missing',()=>{
+ const source=fs.readFileSync('characters/shared.js','utf8'),start=source.indexOf('  function combatApproachPoint('),end=source.indexOf('  function resetCombatMovement(',start);
+ const c=vm.createContext({character:{x:0,y:0,real_x:0,real_y:0},desiredCombatRange:()=>20,combatDistance:()=>100,
+  combatInterceptCenter:()=>({x:120,y:0}),is_in_range:()=>false});vm.runInContext(source.slice(start,end),c);
+ assert.equal(c.combatApproachPoint({x:100,y:0}).x,100,'Aim at projected center minus actual attack reach');
+ c.is_in_range=()=>true;assert.equal(c.combatApproachPoint({x:100,y:0}).x,80,'Do not lead a currently ready target');
+ assert.equal(c.combatApproachPoint({x:100,y:0},20,{x:110,y:0}).x,90,'Explicit center is not projected twice');
+});
+
+
+test('approach report retains the actually issued center without exposing mutable controller state',()=>{
+ const f=fixture();f.client.tick();const report=f.client.report();assert.deepEqual(report.point,{x:100,y:100});
+ report.point.x=999;f.ctx.point={x:110,y:100};assert.deepEqual(f.client.report().point,{x:100,y:100});
+});
+
+
+test('issued interception inputs remain immutable when current native direction changes',()=>{
+ const f=fixture();f.ctx.prediction={at:10000,target:{x:100,y:100},destination:{x:200,y:200},targetSpeed:30,own:{x:0,y:0},ownSpeed:60,reach:20,horizon:1};
+ f.client.tick();const report=f.client.report();assert.equal(report.issuedAt,10000);assert.equal(report.prediction.destination.x,200);
+ report.prediction.destination.x=999;f.ctx.prediction.target.x=500;f.ctx.prediction.destination.x=400;
+ assert.equal(f.client.report().prediction.destination.x,200);assert.equal(f.client.report().prediction.target.x,100);
+});
+
+
+test('interception radius and goal sampling use the same actual centers despite renderer interpolation',()=>{
+ const f=snapshotPorts();Object.assign(f.c.character,{x:0,y:0,real_x:100,real_y:0});
+ f.entity={id:'boss',x:1000,y:0,real_x:200,real_y:0,visible:true,hp:100};
+ f.c.combatDistance=()=>70;f.c.desiredCombatRange=()=>20;
+ const source=fs.readFileSync('characters/shared.js','utf8'),start=source.indexOf('  function combatApproachPoint('),end=source.indexOf('  function resetCombatMovement(',start);
+ vm.runInContext(source.slice(start,end),f.c);
+ const actual=f.c.combatApproachPoint(f.c.get_entity('boss'),20,{x:200,y:0});assert.equal(actual.x,150,'Reach20 plus current native bodygap30');
+ const center={x:300,y:100},goal=f.ports.goal(center,20);
+ assert.ok(Math.abs(Math.hypot(goal.x-center.x,goal.y-center.y)-50)<1e-7,'The goal ring must subtract the same actual target center');
+});
+
+
+test('new approaches aim ten units inside range without changing native readiness',()=>{
+ const f=snapshotPorts();for(const [range,radius] of [[200,190],[36,26],[8,1]]){f.c.character.range=range;assert.equal(f.ports.context().radius,radius);}
+ f.c.character.range=200;f.entity={id:'boss',x:195,y:0,visible:true,hp:100};assert.equal(f.ports.ready(),true,'Native ready does not wait for the ten-unit aim');
+});
+test('a pending precommit route builds range buffer while confirming actual readiness immediately',()=>{
+ const f=fixture();f.clear=false;f.client.tick();f.ready=true;f.buffered=false;
+ assert.equal(f.client.tick(),true);assert.equal(f.owner,f.routes[0].id);assert.equal(f.client.readiness().ready,true);assert.equal(f.client.report().pending,true);
+ f.ready=false;f.now=10300;f.ctx.point={x:130,y:100};f.client.tick();assert.equal(f.routes.length,1,'Useful pending smart route survives range loss');
+ f.ready=true;f.ctx.committed=true;assert.equal(f.client.tick(),false);assert.equal(f.owner,null,'Commit hands off immediately without waiting for buffer');
+ const inner=fixture();inner.client.tick();inner.ready=true;inner.buffered=true;inner.client.tick();assert.equal(inner.owner,null);
+ const initial=fixture();initial.ready=true;initial.buffered=false;initial.client.tick();assert.equal(initial.routes.length,0);
+});
+test('ordinary out-of-range interception uses ten-unit buffer and preserves ready melee spacing',()=>{
+ const source=fs.readFileSync('characters/shared.js','utf8'),start=source.indexOf('  function combatApproachPoint('),end=source.indexOf('  function resetCombatMovement(',start);
+ const c=vm.createContext({character:{x:0,y:0,range:36},desiredCombatRange:()=>34,combatDistance:()=>100,is_in_range:()=>false});vm.runInContext(source.slice(start,end),c);
+ assert.equal(c.combatApproachPoint({x:100,y:0}).x,74);c.is_in_range=()=>true;assert.equal(c.combatApproachPoint({x:100,y:0}).x,66);
+ const a=source.indexOf('  function formationDesiredRange('),b=source.indexOf('  function formationStepSafe(',a);vm.runInContext(source.slice(a,b),c);
+ c.is_in_range=()=>false;assert.equal(c.formationDesiredRange({},null,false,[],10),26);c.is_in_range=()=>true;assert.equal(c.formationDesiredRange({},null,false,[],10),34);
 });

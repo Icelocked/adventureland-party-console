@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- Let an explicitly authorized Franky evacuation cross a door while a living monster still targets the party, preserving Town, loot and ordinary-travel safety checks.
+- Bound the native cold-defense response fault to its intended recovery phase, and observe safe-reload walking coherently so short real movements are not missed by test preflight checks.
+
+- Align native farming-handoff coverage with the explicitly requested catalog farm area and normal weapon ranges, retaining physical arrival and real post-arrival attack checks.
+
+- Declare native gathering skill availability before login in capacity regressions, preventing queued login cooldown updates from racing the test setup while preserving actual inventory-blocking checks.
+
+- Keep native Cave staging responsive during exhaustive terrain searches, preserving player connections and rechecking current safety before the assembly regression.
+
+- Recover interrupted initial party assembly after a route-planning network failure, using fresh stopped acknowledgements before continuing manual travel out of an event. Verify native return response-loss recovery even when a genuine terminal arrival precedes the test fault.
+
+- Stop and revalidate an owned walking segment after an accepted native position correction, preventing stale movement velocity from carrying a return route into blocked terrain. Keep the retained corner-connector fixture aligned with the native socket contract.
+
+- Lead moving combat targets using their native direction and speed plus each fighter's speed and a 10-unit margin inside attack range, reducing short chase steps while preserving terrain safety and fresh whole-party attack confirmation.
+- Keep manual travel in control during events by skipping only the current occurrence, preventing event rejoin loops while preserving future attendance.
+- Hand completed individual approaches back to normal combat, preventing repeated tiny approach/cancel cycles and false movement-failure messages.
+- Prefer directly reachable attack-range positions during individual combat approaches; promptly shrink the approach radius when the planner confirms a disconnected destination, while retaining fresh whole-party readiness checks.
+- Keep native E2E scenarios isolated by restoring ambient monsters and retiring temporary combat monsters correctly; verify moving-target input before interception checks, current native checkpoint snapshots, public state readiness after explicit test restarts, and completed Cave results arriving during a control click.
+
+- Make native event-return fault tests observe the live endpoint promptly, avoiding travel-command expiry during test setup without relaxing recovery assertions.
+
 - Let ranged party members approach their target when another long-range monster is attacking a teammate (#121; thanks to Thefonze74065).
 - Expand native Cave setup and terminal-return coverage, preserve actual saved checkpoint receipts, and retain bounded movement diagnostics.
 

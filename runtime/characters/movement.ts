@@ -1,3 +1,4 @@
+import { observeMovementCorrections } from './movement-correction.ts';
 import { movementError, movementFailureCause, retryableMovementRequest } from './movement-error.ts';
 import { movementRelocation } from './movement-relocation.ts';
 import { isTransition, distance, geometryFingerprint, point, type Point, type PlanResult, type Issue, type Step } from '../navigation/contracts.ts';
@@ -68,6 +69,11 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
       return c.current && c.runtime === j.context.runtime && c.revision === j.context.revision && !host.character.rip;
     } catch { return false; } // A retired runner's guarded parent can no longer be read.
   }
+  const corrections=observeMovementCorrections(host, () => {
+    const j=journey,p=executor.progress(),destination=p.destination;
+    return !!j && current(j) && state.moving && state.found && p.phase==='walking' &&
+      destination?.map===host.character.map && String(destination.in??destination.map)===String(host.character.in??host.character.map);
+  },()=>executor.pause(),ports.now);
   function finish(done: boolean, failure?: unknown, cause?: Record<string, unknown>) {
     const reason = failure === undefined ? undefined : movementError(failure).message;
     cause = movementFailureCause(failure, cause);
@@ -78,7 +84,7 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
     if (done) executor.reset(); else executor.cancel();
     last = {id:j.id,engine:engine(j),version,fingerprint,done,reason,elapsedMs:ports.now()-j.started,
       failureContext:{code: done ? 'arrived' : 'route-failed', character:host.character.name, journeyId:j.id, planner:engine(j), base:{...host.character.base}, ...j.options.owner,...j.failureContext,...cause,origin:position(),destination:point(state),firstIssue:j.firstIssue, relocation:movementRelocation(host.G,position(),state.use_town)},
-      terminalSettlement:j.terminalSettlement,searches:j.searches,retries:j.retries,plannerMs:j.plannerMs,requestMs:j.requestMs,walkingDistance:j.distance,transitions:j.transitions,nativePlanning:planner.report(),planningSchedule:j.scheduling?.report(),progress};
+      nativeCorrections:corrections.report(),terminalSettlement:j.terminalSettlement,searches:j.searches,retries:j.retries,plannerMs:j.plannerMs,requestMs:j.requestMs,walkingDistance:j.distance,transitions:j.transitions,nativePlanning:planner.report(),planningSchedule:j.scheduling?.report(),progress};
     ports.metrics?.(last);
     if (j.fallback || !done) report(j.id, state, outcome(done, reason, cause), j.firstIssue, reason, last.failureContext as Record<string, unknown>);
     state.on_done(done, reason, failure);
@@ -181,6 +187,12 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
     const plot = planner.tick(ports.now());
     if (plot) install(plot, true);
   }
+  function planFailure(j: Journey, result: PlanResult & {mode?: string}, from: Point, destination: Point) {
+    const verified = result.failure === 'unreachable' && result.mode === 'alclient' && result.id === j.id &&
+      result.version === version && result.fingerprint === fingerprint;
+    if (j.options.rejectUnreachableGoal && verified) finish(false, result.error);
+    else fallback(j, {reason:result.error!,from,to:destination});
+  }
   function requestPlan(j: Journey) {
     if (j.pending) return;
     j.pending = true; state.searching = true; j.searches++;
@@ -194,7 +206,10 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
     planning.then(value => {
       if (!current(j)) return;
       const result = value as PlanResult & { mode?: string; error?: string };
-      if (result.error) { fallback(j, { reason: result.error, from, to: destination }); return; }
+      if (result.error) {
+        planFailure(j, result, from, destination);
+        return;
+      }
       if (result.id !== j.id || result.version !== version || result.fingerprint !== fingerprint) throw Error('Planner response identity mismatch');
       if (distance(position(), from) > 1) {
         replanDrift(j);
@@ -421,8 +436,8 @@ export function installPartyMovement(host: MovementHost, ports: MovementPorts) {
     combatHandoff() { finish(false, 'Combat handoff'); },
     nativePlanning: planner.report,
     report: () => journey ? { id: journey.id, owner:journey.options.owner, engine: engine(journey), retries: journey.retries, fingerprint, version, remaining: state.plot.length, nativePlanning: planner.report(),planningSchedule:journey.scheduling?.report(),
-      elapsedMs:ports.now()-journey.started,plannerMs:journey.plannerMs,requestMs:journey.requestMs,progress:executor.progress() } : null,
-    dispose() { finish(false, 'Runtime replaced'); disposed = true; gate.owner = null; if (host.smart_move_logic === scheduler) host.smart_move_logic = native.tick; host.smart_move = native.move; host.stop = native.stop; },
+      elapsedMs:ports.now()-journey.started,plannerMs:journey.plannerMs,requestMs:journey.requestMs,progress:executor.progress(),nativeCorrections:corrections.report() } : null,
+    dispose() { corrections.dispose(); finish(false, 'Runtime replaced'); disposed = true; gate.owner = null; if (host.smart_move_logic === scheduler) host.smart_move_logic = native.tick; host.smart_move = native.move; host.stop = native.stop; },
   };
   host.__partyMovement = service;
   return service;

@@ -333,11 +333,17 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
       return timeout;
     };
     const resolvedEncounter=page.getByRole('dialog').filter({has:page.getByText('Encounter result',{exact:true})});
-    if(await resolvedEncounter.isVisible()){
+    const dismissed:unknown[]=[];
+    await page.addLocatorHandler(resolvedEncounter,async()=>{
+      dismissed.push({control:name,at:Date.now(),text:await resolvedEncounter.innerText(),dungeon:await dungeon()});
       await resolvedEncounter.getByRole('button',{name:'Close',exact:true}).click({timeout:remaining()});
-      await expect(resolvedEncounter).not.toBeVisible({timeout:remaining()});
+    });
+    try {
+      await controls.getByRole('button',{name,exact:true}).click({timeout:remaining()});
+    } finally {
+      await page.removeLocatorHandler(resolvedEncounter);
+      await info.attach('native-cave-control-result-obstructions',{body:JSON.stringify({control:name,dismissed}),contentType:'application/json'});
     }
-    await controls.getByRole('button',{name,exact:true}).click({timeout:remaining()});
   };
   await clickCaveControl('Stop travel');
   await expect.poll(async()=>{
@@ -1340,8 +1346,16 @@ test('Cave assembly regroups displaced completed participants before departure',
   } finally {
     await info.attach('native-cave-entry-shop-setup',{body:JSON.stringify({shop,samples:shopSetupEvidence.slice(-40),elapsedMs:Date.now()-shopSetupStarted}),contentType:'application/json'});
   }
-  const staging=await live.admin(`output=(()=>{
+  const staging=await live.admin(`output=(async()=>{
     const people=['E2EWarrior','E2EPriest'].map(name=>get_player(name)),p=people[0],run=generated_entry(p).record;
+    const started=performance.now(),map=p.map,instance=p.in;
+    let sliceStarted=started,yields=0,maxWorkSliceMs=0;
+    const assertOwnership=()=>{if(people.some(actor=>get_player(actor.name)!==actor||actor.map!==map||actor.in!==instance||actor.rip))throw Error('Native staging participants changed during search');};
+    const yieldToNative=async()=>{
+      maxWorkSliceMs=Math.max(maxWorkSliceMs,performance.now()-sliceStarted);
+      await new Promise(resolve=>setImmediate(resolve));yields++;assertOwnership();sliceStarted=performance.now();
+    };
+    const timing=()=>({elapsedMs:performance.now()-started,yields,maxWorkSliceMs:Math.max(maxWorkSliceMs,performance.now()-sliceStarted)});
     const rooms=run.cave.rooms.filter(r=>r.map===p.map&&['farm','patrol','fight','boss','darkmage'].includes(r.kind)).map(r=>({id:r.id,kind:r.kind,x:r.x,y:r.y}));
     const encounters=run.cave.rooms.filter(r=>r.map===p.map&&r.encounter&&!r.voted&&!r.done).map(r=>({id:r.id,x:r.x,y:r.y,npc:r.npc?{id:r.npc.id,x:r.npc.x,y:r.npc.y}:null}));
     const enemies=Array.from(run.cave.actors).filter(a=>!a.dead&&a.map===p.map&&['enemy','predator'].includes(a.zone_actor?.side)).map(a=>({id:a.id,x:a.x,y:a.y}));
@@ -1351,6 +1365,9 @@ test('Cave assembly regroups displaced completed participants before departure',
       return true;
     };
     const displacement=(origin,distance)=>{
+      // Every candidate segment includes its origin. Reject unsafe origins
+      // before doing the same native collision work for all sixteen angles.
+      if(!pathClear(origin,origin,rooms,420)||!pathClear(origin,origin,encounters,300)||!pathClear(origin,origin,enemies,300))return;
       for(let i=0;i<16;i++){
         const a=i*Math.PI/8,target={x:origin.x+distance*Math.cos(a),y:origin.y+distance*Math.sin(a)};
         if(target.x<geometry.min_x||target.x>geometry.max_x||target.y<geometry.min_y||target.y>geometry.max_y)continue;
@@ -1368,6 +1385,7 @@ test('Cave assembly regroups displaced completed participants before departure',
     const tile=floor.tileSize,grid=floor.grid,seen=new Set(),connected=[{x:p.x,y:p.y,cx:Math.floor(p.x/tile),cy:Math.floor(p.y/tile),parent:-1}];
     seen.add(connected[0].cx+':'+connected[0].cy);
     for(let index=0;index<connected.length;index++){
+      if(performance.now()-sliceStarted>=8)await yieldToNative();
       const node=connected[index];
       for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
         const cx=node.cx+dx,cy=node.cy+dy,key=cx+':'+cy;
@@ -1378,21 +1396,35 @@ test('Cave assembly regroups displaced completed participants before departure',
       }
     }
     for(let index=0;index<connected.length;index++){
+      if(performance.now()-sliceStarted>=8)await yieldToNative();
       const {x,y}=connected[index],target={map:p.map,x,y};
       if(!people.every(actor=>actor.map===p.map&&can_move({map:p.map,x,y,going_x:x,going_y:y,base:actor.base})))continue;
       const offset=displacement(target,160),displaced=displacement(target,85);
       if(offset&&displaced){
         const path=[];for(let cursor=index;cursor>=0;cursor=connected[cursor].parent)path.push({x:connected[cursor].x,y:connected[cursor].y});
-        return {found:true,...target,offset,displaced,rooms,encounters,enemies,nativeFloor,connectivity:{seed:run.seed,floor:floor.level,tile,reachableCells:connected.length,path:path.reverse()},
+        return {found:true,...target,offset,displaced,rooms,encounters,enemies,nativeFloor,timing:timing(),connectivity:{seed:run.seed,floor:floor.level,tile,reachableCells:connected.length,path:path.reverse()},
           before:people.map(actor=>({name:actor.name,x:actor.x,y:actor.y}))};
       }
     }
-    return {found:false,map:p.map,rooms,encounters,enemies,nativeFloor,connectivity:{seed:run.seed,floor:floor.level,tile,reachableCells:connected.length},
+    return {found:false,map:p.map,rooms,encounters,enemies,nativeFloor,timing:timing(),connectivity:{seed:run.seed,floor:floor.level,tile,reachableCells:connected.length},
       before:people.map(actor=>({name:actor.name,x:actor.x,y:actor.y}))};
   })()`);
   await info.attach('declared-native-cave-safe-staging',{body:JSON.stringify(staging),contentType:'application/json'});
   expect(staging.found,'The actual connected native floor must provide both required safe displacements').toBe(true);
-  const stagingDelivery=await live.admin(`output=['E2EWarrior','E2EPriest'].map(name=>{const p=get_player(name);
+  const stagingDelivery=await live.admin(`output=(()=>{
+    const seed=${JSON.stringify({map:staging.map,x:staging.x,y:staging.y,offset:staging.offset,displaced:staging.displaced})};
+    const people=['E2EWarrior','E2EPriest'].map(name=>get_player(name));
+    if(people.some(p=>!p||p.rip||p.map!==seed.map||p.in!==people[0].in))throw Error('Native staging participants unavailable');
+    const run=generated_entry(people[0]).record;
+    const obstacles=[...run.cave.rooms.filter(r=>r.map===seed.map&&['farm','patrol','fight','boss','darkmage'].includes(r.kind)).map(r=>({...r,clearance:420})),
+      ...run.cave.rooms.filter(r=>r.map===seed.map&&r.encounter&&!r.voted&&!r.done).map(r=>({...r,clearance:300})),
+      ...Array.from(run.cave.actors).filter(a=>!a.dead&&a.map===seed.map&&['enemy','predator'].includes(a.zone_actor?.side)).map(a=>({x:a.x,y:a.y,clearance:300}))];
+    for(const target of [seed.offset,seed.displaced]){
+      if(!people.every(p=>can_move({map:seed.map,x:seed.x,y:seed.y,going_x:target.x,going_y:target.y,base:p.base})))throw Error('Native staging collision changed');
+      const samples=Math.max(1,Math.ceil(Math.hypot(target.x-seed.x,target.y-seed.y)/20));
+      for(let j=0;j<=samples;j++)if(obstacles.some(r=>Math.hypot(seed.x+(target.x-seed.x)*j/samples-r.x,seed.y+(target.y-seed.y)*j/samples-r.y)<r.clearance))throw Error('Native staging clearance changed');
+    }
+    return people.map(p=>{const name=p.name;
     if(p.map!==${JSON.stringify(staging.map)})throw Error('Native staging floor changed');
     const context=()=>({map:p.map,in:p.in,generated:G.maps[p.map].generated,info:instances[p.in].info,duel:p.duel,team:p.team,action:p.c});
     const before=JSON.parse(JSON.stringify(context()));
@@ -1400,7 +1432,7 @@ test('Cave assembly regroups displaced completed participants before departure',
     if(p.in!==instance||p.map!==${JSON.stringify(staging.map)})throw Error('Initial native staging changed instance or floor');
     const after=JSON.parse(JSON.stringify(context()));
     if(JSON.stringify(before)!==JSON.stringify(after))throw Error('Initial native staging changed cave action context');
-    return {name,map:p.map,x:p.x,y:p.y,before,after};})`);
+    return {name,map:p.map,x:p.x,y:p.y,before,after};});})()`);
   await info.attach('native-cave-staging-delivery-context',{body:JSON.stringify(stagingDelivery),contentType:'application/json'});
   await expect.poll(async()=>Promise.all(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].run(
     `character.map===${JSON.stringify(staging.map)}&&Math.hypot(character.real_x-(${staging.x}),character.real_y-(${staging.y}))<5`))),

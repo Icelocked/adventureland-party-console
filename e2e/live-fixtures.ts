@@ -1,3 +1,4 @@
+import {waitForLiveRestartState, type RestartStateProbe} from './live-restart-readiness';
 import { test as base, expect, unusedPort, child, environment, stop } from './fixtures';
 import { launchGameClient, type LiveClient } from './live-game-client';
 import { type ChildProcess } from 'node:child_process';
@@ -34,7 +35,7 @@ export type LiveGame = {
   reconnectClient(name: string): Promise<void>;
 };
 
-export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primaryClass: 'warrior' | 'ranger' | 'mage'; extraFighter: 'mage' | null; merchantDefault: string | null; liveHeadless: boolean; recordNativeVideo: boolean; movementMode: 'alclient' | 'shadow'; staleWorkerRealm: string | null; initialPosition: {map: string; x: number; y: number} | null; initialPositions: Record<string,{map:string;x:number;y:number}> | null; initialEventSpawn: string | null; initialMonsterSpawn: string | null; initialConsoleHold: boolean }>({
+export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primaryClass: 'warrior' | 'ranger' | 'mage'; extraFighter: 'mage' | null; merchantDefault: string | null; liveHeadless: boolean; recordNativeVideo: boolean; movementMode: 'alclient' | 'shadow'; staleWorkerRealm: string | null; initialPosition: {map: string; x: number; y: number} | null; initialPositions: Record<string,{map:string;x:number;y:number}> | null; initialEventSpawn: string | null; initialMonsterSpawn: string | null; initialConsoleHold: boolean; initialGatheringReady: boolean }>({
   loadout: ['god', {option:true}],
   primaryClass: ['warrior', {option:true}],
   extraFighter: [null, {option:true}],
@@ -43,17 +44,29 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
   initialPositions: [null, {option:true}],
   initialMonsterSpawn: [null, {option:true}],
   initialConsoleHold: [false, {option:true}],
+  initialGatheringReady: [false, {option:true}],
   initialEventSpawn: [null, {option:true}],
   liveHeadless: [false, {option:true}],
   recordNativeVideo: [process.env.E2E_NATIVE_VIDEO==='1', {option:true}],
   movementMode: ['alclient', {option:true}],
   staleWorkerRealm: [null, {option:true}],
-  live: [async ({ browser, dashboard, loadout, primaryClass, extraFighter, merchantDefault, initialPosition, initialPositions, initialEventSpawn, initialMonsterSpawn, initialConsoleHold, liveHeadless, recordNativeVideo, movementMode, staleWorkerRealm }, use, testInfo) => {
+  live: [async ({ browser, dashboard, loadout, primaryClass, extraFighter, merchantDefault, initialPosition, initialPositions, initialEventSpawn, initialMonsterSpawn, initialConsoleHold, initialGatheringReady, liveHeadless, recordNativeVideo, movementMode, staleWorkerRealm }, use, testInfo) => {
     const directory = path.join(root, '.build/e2e', `live-${randomUUID()}`);
     mkdirSync(directory, { recursive: true });
     const manifest = await game.reset();
     const names=['E2EWarrior','E2EPriest','E2EMerchant',...(extraFighter?['E2EBankBoi']:[])];
     const equipment = await seedLoadout(game.admin, loadout, primaryClass, extraFighter);
+    if(initialGatheringReady){
+      const availability=await game.admin(`output=(async()=>{
+        if(Object.keys(players).length||Object.keys(dc_players).length)throw Error('Gathering availability requires disconnected native clients');
+        const query={owner:data.owner,name:'e2emerchant'},before=await db.collection('character').findOne(query);
+        if(!before)throw Error('Owned gathering merchant missing');
+        const ready=new Date(0),update=await db.collection('character').updateOne(query,{$set:{'info.p.dt.fishing':ready,'info.p.dt.mining':ready}});
+        if(update.matchedCount!==1)throw Error('Gathering availability seed did not match exactly one character');
+        const after=await db.collection('character').findOne(query);
+        return {name:after.info.name,before:before.info.p.dt||{},after:after.info.p.dt};})()`,{owner:manifest.auth.split('-')[0]});
+      await testInfo.attach('declared-native-gathering-ready-before-login',{body:JSON.stringify(availability),contentType:'application/json'});
+    }
     if(initialEventSpawn){const spawn=await nativeEventSpawn(game.admin,initialEventSpawn);initialPosition={...spawn,x:spawn.x+160};
       await testInfo.attach('native-event-catalog-initial-position',{body:JSON.stringify({event:initialEventSpawn,spawn,initialPosition}),contentType:'application/json'});}
     if(initialMonsterSpawn){const spawn=await nativeMonsterInitialPosition(game.admin,initialMonsterSpawn);initialPosition={map:spawn.map,x:spawn.x,y:spawn.y};
@@ -116,6 +129,13 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
         current.on('message', message); current.once('error', failed); current.once('exit', exited);
       });
     }
+    async function publicRestartReady(reason:string):Promise<void> {
+      const observations:RestartStateProbe[]=[];
+      try{await waitForLiveRestartState(live!.url,row=>{
+        observations.push(row);if(observations.length>32)observations.splice(8,1);
+      });}
+      finally{exchanges.push({at:Date.now(),coordinatorRestartReadiness:reason,observations});}
+    }
     try {
       await start();
       await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
@@ -169,9 +189,9 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           else rmSync(file,{force:true});
           exchanges.push({at:Date.now(),hostMaintenanceLease:id,expires});
         },
-        async restartCoordinator() { await stop(coordinator!, true); await start(); },
+        async restartCoordinator() { await stop(coordinator!, true); await start(); await publicRestartReady('explicit restart'); },
         deploymentPaths:{directory,apiUrl:`http://127.0.0.1:${port}`,codeRoots:[path.join(root,'.build/CODE/adventure_land'),path.join(directory,'CODE/adventure_land')]},
-        async restartCoordinatorIdentity(artifactId,hash){identityEnvironment={AL_CONSOLE_ARTIFACT_ID:artifactId,AL_CONSOLE_COORDINATOR_HASH:hash};await stop(coordinator!,true);await start();},
+        async restartCoordinatorIdentity(artifactId,hash){identityEnvironment={AL_CONSOLE_ARTIFACT_ID:artifactId,AL_CONSOLE_COORDINATOR_HASH:hash};await stop(coordinator!,true);await start();await publicRestartReady('identity restart');},
         async restoreHistoricalSettings(restore) {
           await stop(coordinator!, true);
           const journal = path.join(directory, 'state.jsonl');
@@ -200,6 +220,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           for (const [stateKey, value] of Object.entries(restored))
             appendFileSync(journal, JSON.stringify({ [stateKey]: value }) + '\n');
           await start();
+          await publicRestartReady('historical settings restart');
         },
         async reconnectClient(name) {
           if (!clients[name]) throw Error('Unknown owned native client: ' + name);

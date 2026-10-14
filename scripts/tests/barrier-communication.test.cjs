@@ -71,3 +71,19 @@ test('restart recovers a captured communication-only shared-walk failure without
  const restored=initialCommandState({activeConvoy:saved},()=>1000).activeConvoy;
  assert.equal(restored.phase,'communication-hold');assert.equal(restored.recoveryAttempts,0);assert.equal(restored.communicationLegacyRecovered,true);
 });
+
+for(const [label,flags,town,loot,canTown,expected] of [
+ ['owned evacuation door',{purpose:'franky-exit',navigationExempt:true,combatHandoffAllowed:false},false,false,true,true],
+ ['ordinary door',{purpose:'party-travel'},false,false,true,false],
+ ['unexempt exit',{purpose:'franky-exit',combatHandoffAllowed:false},false,false,true,false],
+ ['combat handoff exit',{purpose:'franky-exit',navigationExempt:true,combatHandoffAllowed:true},false,false,true,false],
+ ['other exempt route',{purpose:'party-travel',navigationExempt:true,combatHandoffAllowed:false},false,false,true,false],
+ ['evacuation Town',{purpose:'franky-exit',navigationExempt:true,combatHandoffAllowed:false},true,false,true,false],
+ ['evacuation pending loot',{purpose:'franky-exit',navigationExempt:true,combatHandoffAllowed:false},false,true,true,false],
+ ['evacuation unavailable Town',{purpose:'franky-exit',navigationExempt:true,combatHandoffAllowed:false},true,false,false,false],
+])test('living attacker transition readiness: '+label,async()=>{
+ const f=fixture((count,c,args)=>({ready:args[1].body.ready}));
+ delete f.command.continuousReturn;Object.assign(f.command,flags);
+ f.c.departureCombatPending=()=>true;f.c.eligibleDepartureChests=()=>loot?[{id:'loot'}]:[];f.c.can_use=()=>canTown;
+ assert.equal(await f.c.sharedMovementOptions(f.command).barrier({map:'level2n',x:-416,y:0,transport:!town,town},0,false),expected);
+});

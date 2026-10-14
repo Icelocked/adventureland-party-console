@@ -10,6 +10,9 @@ import type {
 } from "./return-types.ts";
 
 export interface EventSession {
+  /** Exact native realm at an actual coordinator admission, before the first joined report. */
+  authorizedRealm?: string;
+  authorizedAt?: number;
   event: string;
   id: string | null;
   lastLiveAt: number;
@@ -125,6 +128,8 @@ export function createEventObservations(
     const changed = !session.participants.includes(name);
     if (!session.waypoints[name]) Object.assign(session.waypoints, ports.capture([name]));
     session.participationRecorded = true;
+    session.authorizedRealm = ports.statuses()[name]?.server;
+    session.authorizedAt = ports.now();
     if (changed) session.participants.push(name);
     state.sessions[name] = session;
     if (changed || previous !== session) ports.persist();

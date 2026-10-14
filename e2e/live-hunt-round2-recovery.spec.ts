@@ -73,7 +73,7 @@ test.describe('native collateral convoy defense',()=>{
       monster=await live.admin(`output=(()=>{const p=get_player('${W}'),original=G.monsters.targetron;try{
         G.monsters.targetron={...original,hp:1000000,attack:1000,speed:0,charge:0,aggro:0,range:200};
         const m=new_monster(p.in,{type:'targetron',count:1,boundary:[p.x+40,p.y,p.x+41,p.y+1]},{temp:1});
-        target_player(m,get_player('${partyTarget?W:M}'));return {id:m.id,target:m.target,map:m.map,x:m.x,y:m.y,explosion:m.explosion};
+        target_player(m,get_player('${partyTarget?W:M}'));return {id:m.id,type:m.type,instance:p.in,target:m.target,map:m.map,x:m.x,y:m.y,explosion:m.explosion};
       }finally{G.monsters.targetron=original;}})()`);
       await expect.poll(async()=>{const hits=(await live.clients[W].events()).filter((e:any)=>e.event==='hit'&&String(e.data?.hid)===String(monster.id)&&e.data?.id===W&&e.data?.damage>0);return partyTarget?hits.length:hits.filter((e:any)=>e.data.splash===true).length;},{timeout:30_000}).toBeGreaterThan(0);
       holdReady=false;
@@ -83,7 +83,11 @@ test.describe('native collateral convoy defense',()=>{
     }finally{
       holdReady=false;
       await context.unrouteAll({behavior:'ignoreErrors'});
-      await info.attach('native-targetron-collateral-ownership',{body:JSON.stringify({partyTarget,destination,monster,samples,native:await world(live),state:await live.state(),events:await live.clients[W].events()}),contentType:'application/json'});
+      try{
+        await info.attach('native-targetron-collateral-ownership',{body:JSON.stringify({partyTarget,destination,monster,samples,native:await world(live),state:await live.state(),events:await live.clients[W].events()}),contentType:'application/json'});
+      }finally{
+        if(monster)await live.admin(`output=(()=>{const seed=${JSON.stringify(monster)},m=instances[seed.instance]?.monsters?.[seed.id];if(m&&m.type===seed.type&&m.map===seed.map)remove_monster(m,{method:'disappear',nospawn:true});return true;})()`);
+      }
     }
   });
 });

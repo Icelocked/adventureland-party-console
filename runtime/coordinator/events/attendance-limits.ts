@@ -1,3 +1,4 @@
+import type {EventSession} from './observations.ts';
 import { eventLimits, eventPolicy, supportedEvents, type EventFormation } from '../../../dashboard/lib/event-policy.ts';
 
 export interface AttendanceInstance {
@@ -11,7 +12,9 @@ export interface AttendanceInstance {
   deaths: number;
   lastDeathAt: number;
   dead: boolean;
-  ignored?: 'death limit' | 'time limit';
+  ignored?: 'death limit' | 'time limit' | 'manual travel';
+  /** Explicit navigation owns this occurrence's exit, independently of limits. */
+  manualTravel?: boolean;
 }
 export type EventAttendance = Record<string, Record<string, AttendanceInstance>>;
 interface AttendanceState extends EventFormation { eventAttendance: EventAttendance }
@@ -113,5 +116,70 @@ export function observeEventAttendance(state: AttendanceState, report: Attendanc
 export function eventInstanceAllowed(state: AttendanceState, name: string, event: string): boolean {
   const own = state.eventAttendance[name]?.[event];
   const leader = state.eventAttendance[eventPolicy(state, name).source]?.[event];
-  return ![own, leader].some(entry => entry && !entry.ended && !!entry.ignored);
+  return !(own && !own.ended && own.ignored) &&
+    !(leader && !leader.ended && leader.ignored && leader.ignored !== 'manual travel');
+}
+
+type ManualEventSession = Pick<EventSession, 'event' | 'participants' | 'participationRecorded'> &
+  Partial<Pick<EventSession, 'id' | 'authorizedRealm' | 'authorizedAt'>>;
+/** Manual command input is an incomplete wire subset, with unvalidated event hints. */
+interface ManualEventStatus {
+  seenAt:number; server?:string; joinedEvent?:unknown; mapEvent?:unknown;
+  eventFeedConnected?:boolean; eventClockStale?:boolean;
+}
+interface ManualEventState {
+  eventAttendance?: EventAttendance;
+  eventSessions?: Record<string, ManualEventSession | undefined>;
+  statuses: Record<string, ManualEventStatus | undefined>;
+}
+function freshManualStatus(status: ManualEventStatus | undefined, now: number): status is ManualEventStatus & {server:string} {
+  return !!status && !(now - status.seenAt > 10000) && !!status.server;
+}
+function authorizedManualSession(session: ManualEventSession | undefined, name: string): session is ManualEventSession {
+  return session?.participationRecorded === true && session.participants.includes(name);
+}
+function canSeedManualOccurrence(state: ManualEventState, name: string, status: ManualEventStatus,
+  session: ManualEventSession | undefined, now: number): session is ManualEventSession {
+  return authorizedManualSession(session, name) && session.authorizedRealm === status.server &&
+    Number(session.authorizedAt) >= now - 10000 && status.eventFeedConnected !== false && !status.eventClockStale &&
+    !state.eventAttendance?.[name]?.[session.event];
+}
+function seedManualOccurrence(state: ManualEventState, name: string, status: ManualEventStatus & {server:string},
+  session: ManualEventSession | undefined, now: number): void {
+  if (!canSeedManualOccurrence(state, name, status, session, now)) return;
+  const records = (state.eventAttendance ||= {})[name] ||= {};
+  records[session.event] = {id: session.id || null, realm: status.server, lastLiveAt: now, ended: false,
+    elapsedMs: 0, lastObservedAt: now, attending: false, deaths: 0, lastDeathAt: 0, dead: false,
+    ignored: 'manual travel', manualTravel: true};
+}
+function manualOccurrenceParticipating(entry: AttendanceInstance, event: string, status: ManualEventStatus,
+  session: ManualEventSession | undefined, name: string): boolean {
+  const authorized = session?.event === event && authorizedManualSession(session, name);
+  return entry.attending || status.joinedEvent === event || status.mapEvent === event || authorized;
+}
+function skipActorManualOccurrences(state: ManualEventState, name: string, now: number): void {
+  const status = state.statuses[name];
+  if (!freshManualStatus(status, now)) return;
+  const session = state.eventSessions?.[name];
+  seedManualOccurrence(state, name, status, session, now);
+  for (const [event, entry] of Object.entries(state.eventAttendance?.[name] || {})) {
+    if (!entry.ended && entry.realm === status.server && manualOccurrenceParticipating(entry, event, status, session, name)) {
+      entry.manualTravel = true;
+      entry.ignored ||= 'manual travel';
+    }
+  }
+}
+/** Explicit movement skips only this actor's already-owned native occurrence.
+ * The normal attendance observer replaces it when native ID/realm changes.
+ * Never create participation or overwrite a stronger existing limit. */
+export function skipManualEventOccurrences(state: ManualEventState, names: string[], now: number): void {
+  for (const name of names) skipActorManualOccurrences(state, name, now);
+}
+
+/** Acknowledging a filtered selection must not install a competing return. */
+export function manualEventOccurrenceSkipped(
+  state: {eventAttendance?: EventAttendance}, name: string, event: string,
+): boolean {
+  const entry = state.eventAttendance?.[name]?.[event];
+  return !!entry && !entry.ended && (entry.manualTravel === true || entry.ignored === 'manual travel');
 }

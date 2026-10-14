@@ -55,6 +55,10 @@ test('a lost native Hunt preparation response recovers cold defense, loot and th
     expect(deliveredDefense.command.convoyId).toBe(convoyId);
     expect(deliveredDefense.lastFullRequest, 'The latest full native request must prove no installed local convoy before defense').toHaveProperty('convoyNavigation', null);
     expect(encounter, 'The fault must have reached real shared preparation and introduced the native encounter').toBeTruthy();
+    // The genuine defense response completes this fault. Drain its callbacks now;
+    // the rest of the Hunt must use normal client transport, not a fixture proxy.
+    await context.unrouteAll({behavior:'wait'});
+    exchanges.push({at:Date.now(),action:'fault-retired-after-genuine-defense'});
     const cycle = hunt(await live.state()).cycleId;
     await expect.poll(async () => live.admin(`output=(()=>{const m=instances[${JSON.stringify(encounter.map)}]?.monsters[${JSON.stringify(encounter.id)}];return !!m&&m.hp<${encounter.initialHp}})()`),
       { timeout: 30_000, intervals: [100], message: 'Native combat must damage the cold-defense encounter' }).toBe(true);
