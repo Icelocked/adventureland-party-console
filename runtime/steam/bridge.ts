@@ -1,4 +1,4 @@
-import { createSwitcher } from "./switcher.ts";
+import { createSwitcher, type NativeAudioHost } from "./switcher.ts";
 import type { Handoff } from "../roster/handoff.ts";
 import { serverAddress, steamBootstrap, previousSteamBootstrap, steamBridgeVersion } from "./connection.ts";
 import { createRealmChoice } from "./realm-choice.ts";
@@ -51,7 +51,7 @@ export interface BridgeReply {
   steam?: string[];
   primary?: string | null;
 }
-interface NativeHost extends Pick<
+interface NativeHost extends NativeAudioHost, Pick<
   Window,
   | "document"
   | "localStorage"

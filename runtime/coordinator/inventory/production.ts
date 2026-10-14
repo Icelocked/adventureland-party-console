@@ -1,6 +1,6 @@
 import { recordOfferingWait } from './offering-waits.ts';
-import { rememberUpgradeContinuation } from './upgrade-continuation.ts';
-import { offeringRule, isUpgradeOffering, type UpgradeOfferingRule } from '../../upgrade-offerings.ts';
+import { rememberUpgradeContinuation,settleUpgradeContinuation } from './upgrade-continuation.ts';
+import { resolveUpgradeOffering, isUpgradeOffering, type UpgradeOfferingRule } from '../../upgrade-offerings.ts';
 import { itemRuleConflicts, type ConflictState } from "./shared-rules.ts";
 import { requestObject, requestText, type HttpRouter } from '../http/contracts.ts';
 interface UpgradeRule { tiers: number; quantity?: number }
@@ -82,7 +82,7 @@ export function beginProduction(state: State, body: Record<string, unknown>) {
   if (Object.values(state.production.attempts).some(attempt => !attempt.completed)) throw Error('Production recovery pending');
   automaticGuard(state,requestObject(body.automatic));
   offeringGuard(state, body, name, level - 1);
-  if (body.automatic && itemRuleConflicts(state,requestObject(body.item)).length) throw Error("Conflicting automatic rules");
+  if (body.automatic && requestObject(body.automatic).family !== 'manual-upgrade' && itemRuleConflicts(state,requestObject(body.item)).length) throw Error("Conflicting automatic rules");
   rememberUpgradeContinuation(state, body);
   const attempt: ProductionAttempt = {name,level,kind,rules:targets(state,name,level,kind)};
   if (typeof body.requestId === "string") attempt.requestId = body.requestId;
@@ -124,6 +124,7 @@ export function finishProduction(state: State, id: string, success: boolean, log
   attempt.completed = true; attempt.completedAt = Date.now(); attempt.success = success;
   // Keep bounded completed commerce evidence until its paid progress can replay
   // the exact outcome. Receipt pruning bounds these journals with the receipts.
+  settleUpgradeContinuation(state,attempt.journal);
   if (!retainCompletedCommerceJournal(attempt)) delete attempt.journal;
   finishManualOffering(state, attempt);
   if (success && attempt.kind === 'compound' && attempt.level === attempt.automaticCompoundTarget)
@@ -248,8 +249,10 @@ function manualOfferingGuard(state: State, body: Record<string, unknown>, name: 
     throw Error('Manual upgrade request no longer exists or item changed');
 }
 function automaticOfferingGuard(state: State, body: Record<string, unknown>, name: string, level: number): void {
-  if (requestObject(body.automatic).family !== 'upgrade') return;
-  const selected = offeringRule(state.upgradeOfferingRules || [], name, level);
+  const automatic = requestObject(body.automatic);
+  if (!['upgrade','manual-upgrade'].includes(String(automatic.family))) return;
+  if (body.requestId) return; // Explicit one-attempt requests use their own guard.
+  const selected = resolveUpgradeOffering(state.upgradeOfferingRules || [], name, level);
   if (selected?.required && body.offering !== selected.offering) throw Error('Required upgrade offering missing');
   if (body.offering && selected?.offering !== body.offering) throw Error('Upgrade offering rule changed');
 }

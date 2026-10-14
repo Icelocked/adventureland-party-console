@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Apply upgrade offering rules to manual as well as automatic upgrades, collecting batch supplies from the bank and BankBoi before resuming. Preserve upgrade identities and intermediate progress through storage handoffs and restarts; wait for remote inputs before admitting upgrade work and retry interrupted storage checkpoints.
+- Let a peaceful priest round terrain toward the party's recovery mover, preserving combat and monster-clearance checks.
+- Hide irrelevant +0 levels on stand buy orders for items that cannot be upgraded or compounded.
+
 - Let an explicitly authorized Franky evacuation cross a door while a living monster still targets the party, preserving Town, loot and ordinary-travel safety checks.
 - Bound the native cold-defense response fault to its intended recovery phase, and observe safe-reload walking coherently so short real movements are not missed by test preflight checks.
 
@@ -191,6 +195,13 @@ from the commits merged into `main`.
 
 - Fix staged console builds on Linux and macOS by installing isolated dependency
   caches without npm executable symlinks and bypassing older linked caches.
+
+- Add sound-effects and music mute buttons to the in-game Characters bar,
+  reflecting native audio settings and preserving music preferences on CODE reload.
+
+- Compare two-handed weapons against the equipped mainhand and offhand by
+  default, with an offhand checkbox on the equipped side. Remove offhand stats
+  from the proposed loadout and recalculate gained and lost set bonuses.
 
 - Show the deployed artifact hash below the header version without changing
   header sizing or page layout.

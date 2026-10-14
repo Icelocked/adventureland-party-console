@@ -2179,7 +2179,7 @@ export const StandSheet = memo(function StandSheet({
 
                   <div className="relative h-12 w-12 shrink-0">{(item?.sprite || item?.meta?.sprite) && <ItemSprite sprite={(item?.sprite || item?.meta?.sprite)!} />}</div>
 
-                  <span>{item?.name || id} +{level}</span>
+                  <span>{item?.name || id}{item?.upgradeable || item?.compoundable || item?.meta?.upgradeable || item?.meta?.compoundable ? ` +${level}` : ''}</span>
 
                 </button>
 

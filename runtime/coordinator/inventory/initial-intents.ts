@@ -1,3 +1,4 @@
+import {randomUUID} from 'node:crypto';
 import type { createUpgradeCommands } from "./upgrade-commands.ts";
 import type { createStatScrollCommands } from "./stat-scroll-commands.ts";
 import type { createCompoundCommands } from "./compound-commands.ts";
@@ -20,7 +21,7 @@ type SavedItemIntents = { [Key in keyof ItemIntents]?: ItemIntents[Key] | null }
 /** Keep durable improvement and purchase intent; processing services reconcile it with live inventory. */
 export function initialItemIntents(saved: SavedItemIntents): ItemIntents {
   return {
-    upgrades: saved.upgrades || {},
+    upgrades: Object.fromEntries(Object.entries(saved.upgrades || {}).map(([owner,marks]) => [owner,marks?.map(mark => mark.auto || mark.requestId ? mark : {...mark,requestId:mark.passId || randomUUID()})])),
     upgradeOfferingRules: saved.upgradeOfferingRules || [],
     statScrolls: saved.statScrolls || {},
     purchases: saved.purchases || {},

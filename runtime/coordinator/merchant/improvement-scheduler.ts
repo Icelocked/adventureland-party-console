@@ -1,6 +1,6 @@
 import { ruleOwner, sharedMember, itemRuleConflicts } from "../inventory/shared-rules.ts";
 import { pendingProduction, type ProductionState } from '../inventory/production.ts';
-import { sharedCompoundRules, improvementItems, runnableBankUpgrades, planUpgradeStorage, type BankImprovementState } from "./banked-improvements.ts";
+import { sharedCompoundRules, improvementItems, runnableBankUpgrades, localBankUpgrades, planUpgradeStorage, type BankImprovementState } from "./banked-improvements.ts";
 import type { InventoryEntry } from "../contracts/item.ts";
 import type { BankboiInventory, StorageReference } from "../inventory/bankboi-completion.ts";
 import { planCompoundStorage } from "./compound-storage.ts";
@@ -102,7 +102,7 @@ export function createImprovementScheduler(state: SchedulerState, ports: Schedul
       const requests = planUpgradeStorage(state, rules);
       if (requests.length) { (state.withdrawals ||= {})[name] = requests; ports.persist(); }
     }
-    ports.queue([name], "auto upgrade");
+    if (localBankUpgrades(state, rules).length) ports.queue([name], "auto upgrade");
   }
   function sharedCompounds(name: string, status: Status): boolean {
     const inventory = (status.items || []).filter(entry => !entry?.item || !itemRuleConflicts(state,entry.item).length).map(entry => entry && {...entry, craftLocation: "inventory:" + name});

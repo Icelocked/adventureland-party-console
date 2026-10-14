@@ -15,7 +15,7 @@ function homes(bank, workers) {
     if (!result[key]) result[key] = { owner, item: entry.item, limit, room: limit - Number(entry.item.q || 1) };
   };
   Object.entries(bank?.packs || {}).sort(([a], [b]) => a.localeCompare(b)).forEach(([pack, entries]) =>
-    (entries || []).forEach((entry, slot) => { if (pack !== 'items1' || slot < 35) add(entry, 'bank'); }));
+    (entries || []).forEach((entry, slot) => { if (!staging || pack !== 'items1' || slot < 35) add(entry, 'bank'); }));
   Object.values(workers || {}).sort((a, b) => a.name.localeCompare(b.name)).forEach(worker =>
     (worker.items || []).forEach(entry => add(entry, worker.name)));
   return result;
@@ -59,6 +59,14 @@ function unloadPlan(party, worker) {
   });
   return moves;
 }
+// Checkpoint transport failures can resume through the existing durable bank
+// journal. Unknown operation/game errors still require review.
+function retryableStorageError(error) {
+  return /^(bank_unavailable|not_in_bank|interrupted)$/.test(error || '') ||
+    /^bank data did not load:/.test(error || '') ||
+    /Cannot read properties of undefined \(reading 'items1'\)/.test(error || '') ||
+    /^(GET|POST) \/(merchant\/bank-sort\/checkpoint|bankboi\/(checkpoint|complete)) · (network|timeout)(:.*)?$/.test(error || '');
+}
 function servicePlan(party, { includeCoolingDown = false } = {}) {
   // Checkpoints and merchant reservations must retain work while a worker retries.
   // Dispatch uses the default so it never starts a worker before its retry time.
@@ -67,9 +75,7 @@ function servicePlan(party, { includeCoolingDown = false } = {}) {
   const routes = homes(party.bankSnapshot, party.bankbois);
   const workers = Object.values(party.bankbois).sort((a, b) => Number(a.seenAt || 0) - Number(b.seenAt || 0));
   const available = entry => entry.state === 'ready' || entry.state === 'error' &&
-    (/^(bank_unavailable|not_in_bank|interrupted)$/.test(entry.error || '') ||
-      /^bank data did not load:/.test(entry.error || '') ||
-      /Cannot read properties of undefined \(reading 'items1'\)/.test(entry.error || '')) &&
+    retryableStorageError(entry.error) &&
     (includeCoolingDown || Date.now() >= Number(entry.retryAt || 0));
   const reserved = slot => Object.values(party.withdrawals || {}).some(requests =>
     (requests || []).some(request => request.pack === 'items1' && request.slot === slot));

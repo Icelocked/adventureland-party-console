@@ -65,6 +65,21 @@ test('peaceful recovery follower may take a safe wall detour away from priest',(
  r.c.followTerrainRecovery();assert.equal(r.moves.length,1,'direct visible route cannot bypass coverage');
 });
 
+test('peaceful priest follower may round a wall to a warrior recovery mover',()=>{
+ const r=setup(true);Object.assign(r.priest,{x:610,y:-144});Object.assign(r.warrior,{x:681.43,y:-319.04});
+ r.c.groupedCombat={target:r.monster,formationRecovery:{mover:'W'}};
+ r.c.formationMembers=()=>[r.warrior,r.priest];
+ r.c.partyQueueClient={formation:{followPoint:()=>({x:586,y:-120})}};
+ r.c.terrainRecoveryContext=()=>({allowed:true});r.c.can_move_to=()=>false;
+ r.c.terrainRecoverySafe=()=>true;r.c.terrainCoverageStep=()=>false;
+ r.c.followTerrainRecovery();assert.equal(r.moves.length,1);assert.ok(r.moves[0].x<610&&r.moves[0].y>-144);
+ r.c.terrainRecoveryContext=()=>({allowed:false});r.c.followTerrainRecovery();assert.equal(r.moves.length,1,'active combat cannot bypass coverage');
+ r.c.terrainRecoveryContext=()=>({allowed:true});r.c.terrainRecoverySafe=()=>false;
+ r.c.followTerrainRecovery();assert.equal(r.moves.length,1,'monster or terrain clearance still required');
+ r.c.terrainRecoverySafe=()=>true;r.c.can_move_to=()=>true;
+ r.c.followTerrainRecovery();assert.equal(r.moves.length,1,'direct approach cannot bypass coverage');
+});
+
 test('target loss stops only the direct destination owned by combat',()=>{
  const r=setup();const stopped=[];r.c.stop=kind=>{stopped.push(kind);return Promise.resolve();};
  r.c.sendCombatMove(r.monster,{x:160,y:5},'formation-kiting');

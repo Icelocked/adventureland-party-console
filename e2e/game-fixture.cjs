@@ -54,7 +54,7 @@ function createGameFixture(directory) {
       statusSequence: sample, connected: true, map: 'main', in: 'main', server: 'USII',
       ...(name === 'W' && process.env.E2E_MAP_CAPTURE === 'true' ? {map:'zone_abc123_0',in:'zone_abc123_0',x:31,y:47} : {x:0,y:0}), moving: false, rip: false, hp: 1000, max_hp: 1000, mp: 1000, max_mp: 1000,
       gold: 1000000, speed: 50, range: 100, attack: 100, frequency: 1,
-      gameParty: ['W', 'P'], threats: [], conditions: [], slots: name === 'M' && process.env.E2E_MARKET_STAND === 'true' ? {trade1:{slot:1,item:{name:'sword',level:8,b:true,price:1000,q:3},meta:itemMeta('sword')}} : {},
+      gameParty: ['W', 'P'], threats: [], conditions: [], slots: name === 'M' && process.env.E2E_MARKET_STAND === 'true' ? {trade1:{slot:1,item:{name:'sword',level:8,b:true,price:1000,q:3},meta:itemMeta('sword')}} : name === 'M' && process.env.E2E_STAND_BUY_ORDERS === 'true' ? Object.fromEntries(['spidersilk','bkey','helmet','stramulet'].map((id,index)=>['trade'+(index+1),{slot:index+1,item:{name:id,b:true,...(['helmet','stramulet'].includes(id)?{level:id==='stramulet'?2:0}:{}),price:1000,q:1},meta:itemMeta(id)}])) : {},
       monsterHunt: name === 'W' ? { id: 'goo', count: 10, remainingMs: 600000, server: 'USII' } : null,
       navigationState: 'idle', standOpen: name === 'M',
       items: Array.from({ length: 42 }, (_, slot) => (name === 'M' || name === 'W' && process.env.E2E_PLAYER_INVENTORY === 'true') && slot === 0

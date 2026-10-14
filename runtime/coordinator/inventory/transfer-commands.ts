@@ -155,8 +155,10 @@ export function createTransferCommands(state: TransferState, ports: TransferPort
     if (body.upgradeTiers === undefined) return;
     const marks = state.upgrades[name] ||= [];
     const old = marks.find(mark => mark.storage?.pack === body.pack && mark.storage?.slot === body.slot);
-    if (old) old.tiers = Number(body.upgradeTiers);
-    else marks.push({ passId: randomUUID(), slot: -1, item: { ...item }, tiers: Number(body.upgradeTiers), storage: { pack: body.pack, slot: body.slot } });
+    if (old) {
+      old.tiers = Number(body.upgradeTiers);
+      old.requestId ||= old.passId || randomUUID();
+    } else marks.push({ requestId: randomUUID(), slot: -1, item: { ...item }, tiers: Number(body.upgradeTiers), storage: { pack: body.pack, slot: body.slot } });
     ports.persist();
   }
   function updateWithdrawal(pending: Withdrawal[], body: Request & { pack: string; slot: number }, item: Item): void {

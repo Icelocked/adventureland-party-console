@@ -8,7 +8,7 @@ import { ruleOwner } from "../inventory/shared-rules.ts";
 import { routineEnabled } from './routines.ts';
 import { craftProtection } from './craft-reservations.ts';
 import { activeStandSales } from "./stand-reconciliation.ts";
-import { hasWaitingUpgrade, sharedCompoundRules, sharedUpgradeRules, type BankImprovementState } from "./banked-improvements.ts";
+import { localBankUpgrades, sharedCompoundRules, type BankImprovementState } from "./banked-improvements.ts";
 import type { DeconstructionMark } from "./deconstruction.ts";
 import { createMerchantDispatcher, type DispatchPorts } from "./dispatcher.ts";
 import { readyNpcSales } from "./npc-sales.ts";
@@ -98,7 +98,7 @@ function commandInputs(state: DispatchCoordinatorState, ports: CompositionPorts)
   return {
     buyUpgradeBatchSize: state.buyUpgradeBatchSize ?? 1,
     craftProtection: craftProtection(state),
-    bankUpgradeRules: state.merchantAutomations?.["auto upgrade"] === false ? [] : sharedUpgradeRules(state).filter(rule => rule.quantity !== 0 && !hasWaitingUpgrade(state, rule)),
+    bankUpgradeRules: state.merchantAutomations?.["auto upgrade"] === false ? [] : localBankUpgrades(state),
     sharedAutoCompounds: state.merchantAutomations?.["auto compound"] === false ? [] : sharedCompoundRules(state).filter(rule => rule.quantity !== 0),
     bankboiItems: Object.values(state.bankbois || {}).flatMap((worker) => worker.items || []),
     merchant: state.merchantCharacter,

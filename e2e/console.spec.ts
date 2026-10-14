@@ -1,5 +1,7 @@
 import './market-preferences.case';
 import { test, expect } from './fixtures';
+import './gear-comparison.case';
+import './steam-audio.case';
 import './tracktrix-drilldown.case';
 import { createServer } from 'node:http';
 import { mkdirSync, readFileSync } from 'node:fs';
@@ -1589,4 +1591,21 @@ test('log character pills default to all and independently filter live updates a
   await pills.getByRole('button',{name:'P',exact:true}).click();
   await page.setViewportSize({width:1000,height:800});
   await info.attach('log-character-pills',{body:await page.screenshot(),contentType:'image/png'});
+});
+
+test.describe('stand buy order item levels',()=>{
+  test.use({merchantDialogs:true,standBuyOrders:true});
+ test('stand buy orders show levels only for items with levels', async ({page,app},info) => {
+  // Failure inventory: level-less orders show +0; leveled equipment loses +0;
+  // compoundable items lose their requested tier; native rows differ from bids.
+  await page.goto('/');
+  await expect(page.getByRole('heading',{name:'M',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:/^Stand ·/}).click();
+  await expect(page.getByRole('button',{name:'Spider Silk',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'The Bank Key',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Helmet +0',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Amulet of Strength +2',exact:true})).toBeVisible();
+  await info.attach('stand-buy-order-levels',{body:await page.screenshot(),contentType:'image/png'});
+});
+
 });
