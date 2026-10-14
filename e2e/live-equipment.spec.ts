@@ -2,7 +2,8 @@ import { test, expect } from './live-fixtures';
 
 // Failure modes: capacity still admits travel/tool swaps/casts; blocked work
 // advances a cooldown; one mode bypasses the reserve; freeing space never resumes.
-test('merchant gathering waits at capacity without resetting cooldowns',async({live,page},info)=>{
+const capacityTest=test.extend({initialGatheringReady:true});
+capacityTest('merchant gathering waits at capacity without resetting cooldowns',async({live,page},info)=>{
   const name='E2EMerchant';
   for(const mode of ['fishing','mining'])await live.post('/merchant/gather',{mode,enabled:false});
   const standDeadline=Date.now()+90_000;
@@ -27,17 +28,21 @@ test('merchant gathering waits at capacity without resetting cooldowns',async({l
     p.items[10]={name:'rod',level:0};p.items[11]={name:'pickaxe',level:0};
     cache_player_items(p);resend(p,'reopen+cid');return {items:p.items,last:{fishing:p.last.fishing,mining:p.last.mining}};})()`);
   await expect.poll(async()=> (await live.state()).characters[name]?.items?.filter(Boolean).length).toBe(39);
-  await live.restoreHistoricalSettings(async()=>{
-    await live.admin(`output=(()=>{const p=get_player('${name}');p.last.fishing=p.last.mining=new Date(0);return true;})()`);
-    await live.clients[name].frame.evaluate(()=>{
+  // Native timestamps were declared before login. Observe the genuine client
+  // and coordinator agreement; never clear cooldowns while exercising capacity.
+  let availability:any;
+  await expect.poll(async()=>{
+    const [state,client,server]=await Promise.all([live.state(),live.clients[name].frame.evaluate(()=>{
       const game=window as any,root=(document.getElementById('maincode') as HTMLIFrameElement).contentWindow as any;
-      for(const mode of ['fishing','mining']){game.next_skill[mode]=new Date(0);root.__merchantGatheringCooldowns[mode]=0;}
-    });
-    return {gatheringCooldowns:{fishing:0,mining:0}};
-  });
-  // Historical cooldown seeding restarts the master; reconcile its new idle
-  // lifecycle under the same original preparation deadline.
-  await standReady();
+      return {now:Date.now(),next:Object.fromEntries(['fishing','mining'].map(mode=>[mode,Number(new Date(game.next_skill[mode]||0))])),
+        recorded:{...root.__merchantGatheringCooldowns},session:!!root.__merchantGatheringSession,attempt:!!root.__merchantGatheringAttempt};
+    }),live.admin(`output=(()=>{const p=get_player('${name}');return {fishing:p.last.fishing,mining:p.last.mining};})()`)]);
+    availability={coordinator:state.gatheringCooldowns,client,server};
+    return !client.session&&!client.attempt&&['fishing','mining'].every(mode=>
+      Number(new Date(server[mode]))===0&&Number(client.next[mode])<=client.now&&
+      Number(client.recorded[mode]||0)===0&&Number(state.gatheringCooldowns[mode]||0)===0);
+  },{timeout:15000,message:'Declared available native gathering skills must agree before capacity testing'}).toBe(true);
+  await info.attach('native-gathering-initial-availability',{body:JSON.stringify(availability),contentType:'application/json'});
   const before=(await live.state()).gatheringCooldowns;
   await live.post('/merchant/force-stand',{enabled:false});
   for(const mode of ['fishing','mining'])await live.post('/merchant/gather',{mode,enabled:true});

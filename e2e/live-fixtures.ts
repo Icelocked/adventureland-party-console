@@ -35,7 +35,7 @@ export type LiveGame = {
   reconnectClient(name: string): Promise<void>;
 };
 
-export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primaryClass: 'warrior' | 'ranger' | 'mage'; extraFighter: 'mage' | null; merchantDefault: string | null; liveHeadless: boolean; recordNativeVideo: boolean; movementMode: 'alclient' | 'shadow'; staleWorkerRealm: string | null; initialPosition: {map: string; x: number; y: number} | null; initialPositions: Record<string,{map:string;x:number;y:number}> | null; initialEventSpawn: string | null; initialMonsterSpawn: string | null; initialConsoleHold: boolean }>({
+export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primaryClass: 'warrior' | 'ranger' | 'mage'; extraFighter: 'mage' | null; merchantDefault: string | null; liveHeadless: boolean; recordNativeVideo: boolean; movementMode: 'alclient' | 'shadow'; staleWorkerRealm: string | null; initialPosition: {map: string; x: number; y: number} | null; initialPositions: Record<string,{map:string;x:number;y:number}> | null; initialEventSpawn: string | null; initialMonsterSpawn: string | null; initialConsoleHold: boolean; initialGatheringReady: boolean }>({
   loadout: ['god', {option:true}],
   primaryClass: ['warrior', {option:true}],
   extraFighter: [null, {option:true}],
@@ -44,17 +44,29 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
   initialPositions: [null, {option:true}],
   initialMonsterSpawn: [null, {option:true}],
   initialConsoleHold: [false, {option:true}],
+  initialGatheringReady: [false, {option:true}],
   initialEventSpawn: [null, {option:true}],
   liveHeadless: [false, {option:true}],
   recordNativeVideo: [process.env.E2E_NATIVE_VIDEO==='1', {option:true}],
   movementMode: ['alclient', {option:true}],
   staleWorkerRealm: [null, {option:true}],
-  live: [async ({ browser, dashboard, loadout, primaryClass, extraFighter, merchantDefault, initialPosition, initialPositions, initialEventSpawn, initialMonsterSpawn, initialConsoleHold, liveHeadless, recordNativeVideo, movementMode, staleWorkerRealm }, use, testInfo) => {
+  live: [async ({ browser, dashboard, loadout, primaryClass, extraFighter, merchantDefault, initialPosition, initialPositions, initialEventSpawn, initialMonsterSpawn, initialConsoleHold, initialGatheringReady, liveHeadless, recordNativeVideo, movementMode, staleWorkerRealm }, use, testInfo) => {
     const directory = path.join(root, '.build/e2e', `live-${randomUUID()}`);
     mkdirSync(directory, { recursive: true });
     const manifest = await game.reset();
     const names=['E2EWarrior','E2EPriest','E2EMerchant',...(extraFighter?['E2EBankBoi']:[])];
     const equipment = await seedLoadout(game.admin, loadout, primaryClass, extraFighter);
+    if(initialGatheringReady){
+      const availability=await game.admin(`output=(async()=>{
+        if(Object.keys(players).length||Object.keys(dc_players).length)throw Error('Gathering availability requires disconnected native clients');
+        const query={owner:data.owner,name:'e2emerchant'},before=await db.collection('character').findOne(query);
+        if(!before)throw Error('Owned gathering merchant missing');
+        const ready=new Date(0),update=await db.collection('character').updateOne(query,{$set:{'info.p.dt.fishing':ready,'info.p.dt.mining':ready}});
+        if(update.matchedCount!==1)throw Error('Gathering availability seed did not match exactly one character');
+        const after=await db.collection('character').findOne(query);
+        return {name:after.info.name,before:before.info.p.dt||{},after:after.info.p.dt};})()`,{owner:manifest.auth.split('-')[0]});
+      await testInfo.attach('declared-native-gathering-ready-before-login',{body:JSON.stringify(availability),contentType:'application/json'});
+    }
     if(initialEventSpawn){const spawn=await nativeEventSpawn(game.admin,initialEventSpawn);initialPosition={...spawn,x:spawn.x+160};
       await testInfo.attach('native-event-catalog-initial-position',{body:JSON.stringify({event:initialEventSpawn,spawn,initialPosition}),contentType:'application/json'});}
     if(initialMonsterSpawn){const spawn=await nativeMonsterInitialPosition(game.admin,initialMonsterSpawn);initialPosition={map:spawn.map,x:spawn.x,y:spawn.y};

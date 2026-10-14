@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Declare native gathering skill availability before login in capacity regressions, preventing queued login cooldown updates from racing the test setup while preserving actual inventory-blocking checks.
+
 - Keep native Cave staging responsive during exhaustive terrain searches, preserving player connections and rechecking current safety before the assembly regression.
 
 - Recover interrupted initial party assembly after a route-planning network failure, using fresh stopped acknowledgements before continuing manual travel out of an event. Verify native return response-loss recovery even when a genuine terminal arrival precedes the test fault.
