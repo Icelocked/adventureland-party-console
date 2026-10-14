@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Match native manual-travel fault injection to the current assembly journey and command, preventing delayed event requests from causing false recovery-test failures.
+
 - Make native Cave regroup test setup tolerate an optional entry shop with no valid NPC placement, with a reproducible missing-shop layout alongside randomized coverage and unchanged regrouping checks.
 
 - Reconcile BankBoi transfer-row requests at startup and after account changes, clearing stale staging work when the final BankBoi is removed without requiring another bank visit.

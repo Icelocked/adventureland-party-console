@@ -16,6 +16,28 @@ The inventory and corresponding regressions were written before each implementat
 
 ## Validation and artifacts
 
+CI 38609591558 shard 13 exposed a fault-injection race: a late event planner
+request shared the priest's runtime with the new manual convoy. The interceptor
+aborted the old event destination while the coordinator was assembling manual
+travel. Superseded recovery was correctly ignored and manual arrival succeeded,
+but the intended assembly hold was never exercised. The fixture must match the
+request journey to the actual client movement report and the corresponding
+status sample's convoy, epoch, command, revision, runtime and rally destination
+before aborting. A missing or
+superseded owner, old destination, or concurrent second intercepted request must
+pass through. The transport ledger retains unmatched requests and the selected
+movement owner; all-party stopped recovery and real arrival remain mandatory.
+Initial assembly calls generic navigation without a movement `owner` field.
+Match its journey to the real status sample, which captures movement and convoy
+identity together. Hold only an otherwise matching pending planner request for
+at most five seconds while that status arrives; recheck current ownership on
+every observation. A late event destination passes through immediately. An
+ownerless movement report alone never authorizes the injected failure.
+The corrected local run passed both entry points in 5.1 minutes with 70 verified
+evidence files. The faulted case captured exactly one matching assembly request
+and five fresh whole-party stopped holds, followed by native arrival, restart
+persistence and attendance at the next occurrence.
+
 Initial-assembly transport regression failure inventory (before implementation):
 CI 38525662222 shard 13 lost the priest's `/movement-plan` request while the
 party-travel convoy was still assembling. Both attendance exclusions remained
