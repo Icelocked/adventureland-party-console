@@ -53,8 +53,8 @@ jobs:
           if [ -n "$E2E_GREP" ]; then
             npm run test:e2e:live -- --workers=1 --grep "$E2E_GREP"
           elif [ '${{ matrix.shard }}' -le 3 ]; then
-            # Each Cave journey gets an isolated runner, with no unrelated tests queued behind it.
-            cave_filters=('Cave entry closes' 'Cave shared-route pacing' 'Cave assembly regroups')
+            # Cave journey groups use dedicated runners; each test gets a fresh native visit.
+            cave_filters=('Cave entry closes' 'Cave shared-route pacing|Cave completes native rooms' 'Cave assembly regroups')
             npm run test:e2e:live -- --workers=1 --grep "${cave_filters[${{ matrix.shard }}-1]}"
           else
             # Shard the remaining suite independently so every test runs exactly once.

@@ -1263,7 +1263,7 @@ for (const kind of ['upgrade', 'compound']) test(`auto merchant collects twelve 
     await expect.poll(async()=>(await live.state()).autoCompounds?.[merchant]?.find((rule:any)=>rule.name===name)?.quantity).toBe(0);
   } else expect(completed.length).toBe(12);
   await live.restartCoordinator();
-  await expect.poll(async()=>(await live.state()).characters[merchant]?.items?.some((e:any)=>e.item?.name===name&&e.item.level===1)).toBe(true);
+  await expect.poll(async()=>(await live.state()).characters[merchant]?.items?.some((e:any)=>e?.item?.name===name&&e.item.level===1)).toBe(true);
   const afterRestart=await count();
   expect(afterRestart.length).toBe(completed.length);
   expect(afterRestart.filter(item=>item?.level===1).length).toBe(1);

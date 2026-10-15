@@ -1,5 +1,24 @@
 # Testing
 
+## Merchant observation and Cave visit budgets
+
+Run the focused native scenarios matching `auto merchant collects twelve native copies alongside a finite compound rule|merchant gathering waits at capacity|Cave entry closes|Cave completes native rooms`.
+Compound failures legitimately leave null inventory cells before the successful
+item; restart assertions must skip those cells while retaining exact native
+consumption, result counts and the exhausted finite rule. Gathering capacity
+coverage observes the stand return/reconciliation after enabling modes before
+checking the published capacity reason, unchanged cooldowns and no active attempt.
+The dashboard's BLOCKED state alone does not acknowledge client stand completion.
+
+The Cave interface/navigation journey and the native room-completion/stairs
+journey use separate fresh visits. The former retains map rendering, manual
+Stop/resume, farm/boss arrival and duel checks; the latter clears actual native
+required rooms, answers the farewell, exercises lost completion plus real
+displacement, and requires both members to reach the next floor. Neither changes
+the game timer or fabricates room completion. An unexpected ended visit fails
+immediately with its last observed remaining time. Preserve the room-progress,
+farewell, stairs-displacement and native floor-transition artifacts.
+
 ## Native terrain and Cave progress observation
 
 Failure inventory: sparse server `player` packets can miss a brief terrain bend;
@@ -34,7 +53,8 @@ barrier remains pending. Recovery potions/regeneration remain available.
 ## CI parallelism
 
 The full native workflow uses 16 isolated GitHub runners with one Playwright
-worker each. Shards 1–3 run the three named `live-cave.spec.ts` journey groups separately;
+worker each. Shards 1–3 run the named `live-cave.spec.ts` journey groups separately;
+shard 2 includes the fresh floor-completion/stairs visit alongside route pacing.
 shards 4–16 set `E2E_SKIP_CAVE=1` and distribute the remaining live project over
 13 shards. Focused `grep` runs retain one runner and include Cave normally.
 When adding or renaming a Cave scenario, update its workflow filter. Validate

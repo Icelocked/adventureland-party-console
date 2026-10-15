@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Stabilize native merchant regressions around consumed compound ingredients and stand reconciliation. Split Cave interface/navigation coverage from floor completion and displaced-stairs recovery into fresh visits, retaining native combat and floor transitions without extending the game timer.
+
 - Resume travel toward the saved farming spawn when a targetless party has drifted apart. Empty-spawn recovery selects a newly visible eligible monster before reaching the spawn center, retaining independent approach and whole-party attack confirmation.
 - Fix the goldenbat Hunt regression's encounter-setup race at the spawn boundary. Preserve the hawk approach fixture's declared first-monster movement settings while its successors roam, and cover automatic spawn return with native movement and damage evidence.
 
