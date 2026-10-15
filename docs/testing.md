@@ -1,5 +1,16 @@
 # Testing
 
+## Roaming target setup
+
+The queued Goo regression holds its initial monster stationary until all clients
+acknowledge the selected target. It then declares one terrain-valid native movement
+leg at the monster's original speed, observes movement and remaining travel on all
+clients, and releases the party. Native simulation owns displacement and later
+roaming; attack, damage, predictive interception and successor confirmation remain
+unmodified. Retain the declared leg and timestamped client observations in
+`native-sparkbot-follow-result`. Starting random roaming before client setup can
+consume the required movement window and fail before gameplay is exercised.
+
 ## Merchant observation and Cave visit budgets
 
 Run the focused native scenarios matching `auto merchant collects twelve native copies alongside a finite compound rule|merchant gathering waits at capacity|Cave entry closes|Cave completes native rooms`.

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Stabilize the roaming Goo E2E fixture by starting its declared native movement leg after all clients acknowledge target selection, preserving interception, damage and fresh whole-party confirmation checks.
+
 - Stabilize native merchant regressions around consumed compound ingredients and stand reconciliation. Split Cave interface/navigation coverage from floor completion and displaced-stairs recovery into fresh visits, retaining native combat and floor transitions without extending the game timer.
 
 - Resume travel toward the saved farming spawn when a targetless party has drifted apart. Empty-spawn recovery selects a newly visible eligible monster before reaching the spawn center, retaining independent approach and whole-party attack confirmation.
