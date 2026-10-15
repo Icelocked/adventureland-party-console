@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Remove the arbitrary successor spawn-distance requirement from the queued Goo E2E test, retaining actual combat and fresh party confirmation checks. Allow 240 seconds for event-handoff checkpoint returns so communication safety holds can recover on slower CI runners.
+
 - Stabilize the roaming Goo E2E fixture by starting its declared native movement leg after all clients acknowledge target selection, preserving interception, damage and fresh whole-party confirmation checks.
 
 - Stabilize native merchant regressions around consumed compound ingredients and stand reconciliation. Split Cave interface/navigation coverage from floor completion and displaced-stairs recovery into fresh visits, retaining native combat and floor transitions without extending the game timer.
