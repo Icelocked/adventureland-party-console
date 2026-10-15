@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix a lucky-slot E2E timing race by waiting for exact coordinator roll totals after merchant job completion. Document asynchronous fixture timing and evidence requirements in repository guidance.
+
 - Stabilize native terrain and Cave E2E checks: capture Targetron approach positions independently of sparse server updates, and recognize distinct native Cave travel, combat and encounter progress without extending the absolute completion deadline.
 - Declare the native layout for Cave shop-inspection coverage; retain randomized and missing-shop coverage in the separate regroup scenarios.
 

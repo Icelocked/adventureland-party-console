@@ -419,6 +419,18 @@ for(const locked of [false,true]) test(`best-effort lucky restoration preserves 
     await catalog(live,'helmet');
     const second=await live.post('/merchant/order',{buys:[{id:'helmet',quantity:1,level:1}],crafts:[]});
     await finish(second.jobId);
+    // Queue completion and lucky-roll status publication are separate requests.
+    // Require both exact counts in one fresh snapshot, including the locked case.
+    const rollPublication:any[]=[];
+    try{
+      await expect.poll(async()=>{
+        const state=await live.state();
+        const counts=[rolls(state,slot)-rolls(initial,slot),rolls(state,slot+1)-rolls(initial,slot+1)];
+        rollPublication.push({at:Date.now(),counts});
+        if(rollPublication.length>32)rollPublication.splice(1,1);
+        return counts;
+      },{timeout:15_000,message:'Completed native upgrades must publish exact lucky-slot roll totals'}).toEqual(locked?[2,0]:[1,1]);
+    }finally{checkpoints.push({rollPublication});}
     const final=await live.state(),inventory=await economy(live);
     expect(rolls(final,slot)-rolls(initial,slot)).toBe(locked?2:1);
     expect(rolls(final,slot+1)-rolls(initial,slot+1)).toBe(locked?0:1);

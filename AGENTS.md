@@ -27,6 +27,8 @@
 - Never write unit tests after you write code.
 - Highly prefer E2E tests as the sole testing mechanism. Use them to verify complex features work. At the end of E2E tests, produce a verifiable and repeatable artifact.
 - If you must test a system in isolation, first write down all the ways it could fail, then write the code.
+- Treat native action completion, queue removal, client persistence, and coordinator/dashboard telemetry as separate asynchronous milestones. Completing one does not prove the others have arrived. Before asserting asynchronously published state, use a bounded poll for the exact expected values from one fresh snapshot; retain strict counts and ownership checks rather than adding sleeps, widening expectations, or blindly increasing timeouts.
+- When investigating timing failures, compare native receipts, client storage, and later coordinator observations before changing gameplay code. Preserve timestamped observations on failure so delayed publication can be distinguished from lost, duplicated, or misattributed results. Fixture fault injection must target the current operation and must not itself stall unrelated status or movement requests.
 
 Run `npm test` for real-game and console E2E and inspect `.build/e2e-report/` and `.build/e2e-results/`.
 See [the testing guide](docs/testing.md) for setup, artifacts, fixture boundaries, and
