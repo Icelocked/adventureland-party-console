@@ -6,6 +6,14 @@ Run Adventure Land characters in Steam or headless, and manage them from a brows
 
 ![Party Console dashboard showing character status, farming settings, equipment, and merchant controls](docs/images/main-dashboard.png)
 
+## About this fork
+
+This is a fork of [Ryan-Haines/adventureland-party-console](https://github.com/Ryan-Haines/adventureland-party-console), developed on the `adopt/bugfix-1.4` branch. It carries the maintainer's code plus changes backed by an upstream issue; where upstream fixes something the fork also fixed, the fork takes upstream's version.
+
+- [Fork vs upstream ledger](docs/fork/ledger.md): every fork change, its upstream issue and what to do on the tracker.
+- [Fork history](docs/fork/history.md): dated log of merges, filings, comments, reviews and fork fixes.
+- [Maintenance runbook](docs/fork/runbook.md): how to pull upstream, file issues and keep the ledger current.
+
 ## Windows installation
 
 ### Release package (recommended; supports automatic updates)
