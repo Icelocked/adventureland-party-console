@@ -14162,7 +14162,7 @@
       return reject("Franky attendance only permits the Franky monster");
     var huntTravel = huntTravelCommand && huntTravelCommand.purpose === "monster-hunt" &&
       huntTravelCommand.combatHandoffAllowed === true && huntTravelCommand.huntTarget === (target && target.mtype);
-    huntTravel = huntTravel || !!(huntTravelCommand && ['', 'party-travel', 'farm-relocation', 'manual-monster-override'].indexOf(huntTravelCommand.purpose || '')>=0 && huntTravelCommand.combatHandoffAllowed === true);
+    huntTravel = huntTravel || !!(huntTravelCommand && ['', 'party-travel', 'farm-relocation', 'manual-monster-override', 'empty-spawn-recovery'].indexOf(huntTravelCommand.purpose || '')>=0 && huntTravelCommand.combatHandoffAllowed === true);
     if (travelCombatActive() && !huntTravel && !departureTargetEngaged(target)) return reject("travel owns combat");
     if(typeof root!=='undefined' && root.partyLootClient && root.partyLootClient.huntPending() &&
       target && target.type==='monster' && !isAttackingPartyMember(target))return reject("hunt loot pending");
@@ -14399,7 +14399,7 @@
 
   function farmingTravelTarget(command) {
     var huntTravel = command && command.purpose === "monster-hunt" && command.combatHandoffAllowed === true && command.huntTarget;
-    var farmTravel=command && ['', 'party-travel', 'farm-relocation', 'manual-monster-override'].indexOf(command.purpose || '')>=0 && command.combatHandoffAllowed===true;
+    var farmTravel=command && ['', 'party-travel', 'farm-relocation', 'manual-monster-override', 'empty-spawn-recovery'].indexOf(command.purpose || '')>=0 && command.combatHandoffAllowed===true;
     if (travelCombatActive() && !huntTravel && !farmTravel) return null;
     if (command && ["rare-hunt", "phoenix-patrol"].indexOf(command.purpose) >= 0) return null;
     var waypoint = command && command.location;
@@ -14793,9 +14793,13 @@
     return {destination:segment.location,plot:segment.plot,source:"itinerary"};
   }
   function convoyHandoffReachable(target, command) {
+    // Recovery relinquishes travel to the independently routed, all-ready pull
+    // barrier on sight. This authorizes approach, never an immediate attack.
+    if (command && command.purpose === "empty-spawn-recovery")
+      return !!(target && target.visible && !target.dead && target.hp !== 0);
     // Farming keeps smart-route ownership until the leader can attack now.
     // A walkable future approach does not establish group combat clearance.
-    if (command && ['', 'party-travel', 'farm-relocation', 'manual-monster-override'].indexOf(command.purpose || '') >= 0)
+    if (command && ['', 'party-travel', 'farm-relocation', 'manual-monster-override', 'empty-spawn-recovery'].indexOf(command.purpose || '') >= 0)
       return !!(target && !target.dead && target.hp !== 0 && typeof is_in_range === "function" && is_in_range(target));
     return eventCombatReachable(target);
   }
@@ -17076,7 +17080,8 @@
     pollFarmingSpawnRecovery: function () {
       if (typeof unfinishedFight === "function" && unfinishedFight()) return;
       if (typeof rareActive === "function" && rareActive()) return;
-      if (groupedFarming() && groupedCombat && !groupedCovered()) return;
+      // The return convoy owns regrouping; lack of priest coverage must not
+      // strand an otherwise idle party outside its saved farming area.
       if (character.name !== leader || farmingMode === "scatter" || !partyLocation ||
           navigationIntent.cancelled || activeCombatEvent() || joinedEvent ||
           G.maps && G.maps[character.map] && G.maps[character.map].event ||

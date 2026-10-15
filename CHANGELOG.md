@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Resume travel toward the saved farming spawn when a targetless party has drifted apart. Empty-spawn recovery selects a newly visible eligible monster before reaching the spawn center, retaining independent approach and whole-party attack confirmation.
+- Fix the goldenbat Hunt regression's encounter-setup race at the spawn boundary. Preserve the hawk approach fixture's declared first-monster movement settings while its successors roam, and cover automatic spawn return with native movement and damage evidence.
+
 - Fix a lucky-slot E2E timing race by waiting for exact coordinator roll totals after merchant job completion. Document asynchronous fixture timing and evidence requirements in repository guidance.
 
 - Stabilize native terrain and Cave E2E checks: capture Targetron approach positions independently of sparse server updates, and recognize distinct native Cave travel, combat and encounter progress without extending the absolute completion deadline.

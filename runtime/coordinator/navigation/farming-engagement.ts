@@ -33,11 +33,11 @@ function arrivedForCombat(state: SharedState, c: SharedConvoy,
   return contains(c.location, target, 0, radius) && c.participants.every(name => {
     const member = state.statuses[name];
     return member && now - member.seenAt <= 3000 && samePlace(member, target) &&
-      contains(c.location, member, 150, radius);
+      (c.purpose === 'empty-spawn-recovery' || contains(c.location, member, 150, radius));
   });
 }
 function acquiring(c: SharedConvoy, _now: number): boolean {
-  return c.cause !== 'farming-conflict' && ['', 'party-travel', 'farm-relocation', 'manual-monster-override'].includes(c.purpose || '') && c.combatHandoffAllowed && !c.force && !c.farmingEngagement &&
+  return c.cause !== 'farming-conflict' && ['', 'party-travel', 'farm-relocation', 'manual-monster-override', 'empty-spawn-recovery'].includes(c.purpose || '') && c.combatHandoffAllowed && !c.force && !c.farmingEngagement &&
     ['shared-prepare','scheduled','travel'].includes(c.phase);
 }
 function authorized(state: SharedState, c: SharedConvoy, options: Options, body: Record<string,unknown>): boolean {

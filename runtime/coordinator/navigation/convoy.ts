@@ -87,7 +87,7 @@ function townFirst(leader: ConvoyStatus, location: ReturnLocation): boolean {
 }
 
 function allowsEarlyCombat(purpose: string | null | undefined, cause?: string): boolean {
-  return !cause && ["", "party-travel", "farm-relocation", "manual-monster-override"].includes(purpose || "");
+  return !cause && ["", "party-travel", "farm-relocation", "manual-monster-override", "empty-spawn-recovery"].includes(purpose || "");
 }
 
 export function createPartyConvoys(state: ConvoyState, ports: ConvoyPorts) {

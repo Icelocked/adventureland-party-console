@@ -144,7 +144,8 @@ for(const type of ['phoenix','goldenbat','cutebee','hen','rooster','tinyp']) tes
     const afterRare=await world(live);
     expect(afterRare.players[W].xp).toBeGreaterThan(before.players[W].xp);
     const resumedAt=Date.now(),resumedDeadline=resumedAt+90_000;
-    let existingProgress:any=null;
+    let existingProgress:any=null,nextEncounter:any=null;
+    const encounterObservations:any[]=[];
     {
       await expect.poll(async()=>{
         const current=await world(live),state=await live.state(),mission=state.monsterHunt?.missions?.[state.monsterHunt.currentIndex],bounds=mission?.destination?.boundary,p=current.players[W];
@@ -157,14 +158,12 @@ for(const type of ['phoenix','goldenbat','cutebee','hen','rooster','tinyp']) tes
           if(hit){existingProgress={source:'existing-native-progress',huntCycleId:hunt.cycleId,baseline:afterRare.players[W].quest,
             quest:p.quest,hit,death:events.find((event:any)=>event.at>=hit.at&&event.event==='death'&&String(event.data?.id)===String(hit.data.id))};return true;}
         }
-        return Array.isArray(bounds)&&p.map===mission.destination.map&&p.x>=bounds[0]&&p.x<=bounds[2]&&p.y>=bounds[1]&&p.y<=bounds[3];
-      },{timeout:Math.max(1,resumedDeadline-Date.now()),message:'The retained Hunt must produce real native progress or reach its next encounter habitat'}).toBe(true);
-      if(existingProgress){
-        await info.attach('native-rare-followup-existing-progress',{body:JSON.stringify({type,...existingProgress}),contentType:'application/json'});
-      } else {
-        const missionState=await live.state(),destination=missionState.monsterHunt.missions[missionState.monsterHunt.currentIndex].destination;
-        const nextEncounter=await live.admin(`output=(()=>{const p=get_player(${JSON.stringify(W)}),destination=${JSON.stringify(destination)},bounds=destination.boundary;
-          if(!p||p.map!==destination.map||p.x<bounds[0]||p.x>bounds[2]||p.y<bounds[1]||p.y>bounds[3])throw Error('Native fighter left retained Goo mission');
+        if(!Array.isArray(bounds))return false;
+        const destination=mission.destination;
+        // Position checking and encounter declaration share one native tick.
+        // Combat can legitimately cross the habitat edge between HTTP requests.
+        nextEncounter=await live.admin(`output=(()=>{const p=get_player(${JSON.stringify(W)}),destination=${JSON.stringify(destination)},bounds=destination.boundary;
+          if(!p||p.map!==destination.map||p.x<bounds[0]||p.x>bounds[2]||p.y<bounds[1]||p.y>bounds[3])return null;
           const ambient=Object.values(instances[p.in].monsters||{}).filter(m=>m.type==='goo'&&m.hp>0&&m.x>=bounds[0]&&m.x<=bounds[2]&&m.y>=bounds[1]&&m.y<=bounds[3])
             .map(m=>({id:String(m.id),map:m.map,in:m.in,x:m.x,y:m.y,hp:m.hp,distance:Math.hypot(m.x-p.x,m.y-p.y),reachable:can_move({map:p.map,x:p.x,y:p.y,going_x:m.x,going_y:m.y,base:p.base})}));
           const existing=ambient.sort((a,b)=>a.distance-b.distance)[0];
@@ -173,7 +172,14 @@ for(const type of ['phoenix','goldenbat','cutebee','hen','rooster','tinyp']) tes
             if(x<bounds[0]||x>bounds[2]||y<bounds[1]||y>bounds[3]||!can_move({map:p.map,x:p.x,y:p.y,going_x:x,going_y:y,base:p.base}))continue;
             const m=new_monster(p.in,{type:'goo',position:[x,y],radius:0,count:1},{temp:1});m.e2eHunt=true;
             return {id:String(m.id),map:m.map,x:m.x,y:m.y,hp:m.hp,source:'declared-native',ambient,destination};}
-          throw Error('No reachable native encounter point inside retained Goo mission');})()`);
+          return null;})()`);
+        encounterObservations.push({at:Date.now(),position:{map:p.map,x:p.x,y:p.y},quest:p.quest,encounter:nextEncounter});
+        return !!nextEncounter;
+      },{timeout:Math.max(1,resumedDeadline-Date.now()),message:'The retained Hunt must produce real native progress or atomically prepare its next encounter'}).toBe(true);
+      await info.attach('native-rare-followup-observations',{body:JSON.stringify(encounterObservations),contentType:'application/json'});
+      if(existingProgress){
+        await info.attach('native-rare-followup-existing-progress',{body:JSON.stringify({type,...existingProgress}),contentType:'application/json'});
+      } else {
         await info.attach('native-rare-followup-mission-encounter',{body:JSON.stringify({type,nextEncounter}),contentType:'application/json'});
         const missionKill=await killedByParty(live,nextEncounter.id,Math.max(1,Math.min(45_000,resumedDeadline-Date.now())));
         await info.attach('native-rare-followup-mission-kill',{body:JSON.stringify(missionKill),contentType:'application/json'});

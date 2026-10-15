@@ -34,7 +34,7 @@ test(`planned Main hawks recover ranged actors from disconnected approach ring p
   live.consoleDrainLease('native-range-setup');
   await expect.poll(async()=>{const state=await live.state();return fighters.every(name=>state.characters[name]?.consoleMaintenance?.id==='native-range-setup'&&state.characters[name].consoleMaintenance.ready);},{timeout:15000}).toBe(true);
   // Measure each client's actual native-rendered body; a Steam sprite clone is not a headless body.
-  const calibration=await live.admin(`output=(()=>{const original=G.monsters.bigbird;globalThis.__e2eFollowOriginal=original;G.monsters.bigbird={...original,aggro:0,rage:0,stationary:true};const w=get_player('${W}'),point=[[32,0],[0,32],[-32,0],[0,-32]].map(([dx,dy])=>({x:w.x+dx,y:w.y+dy})).find(p=>can_move({...w,going_x:p.x,going_y:p.y}));if(!point)throw Error('No nearby native-clear calibration input');const m=new_monster('main',{__e2eAmbientExempt:true,type:'bigbird',count:1,position:[point.x,point.y],radius:0},{temp:1});__e2eFollowOwnedMonsters.push({id:String(m.id),type:m.type,map:m.map,instance:m.in});m.speed=0;m.moving=false;m.hp=m.max_hp=1000000;m.u=true;m.abs=true;m.cid++;return {id:String(m.id),point};})()`);
+  const calibration=await live.admin(`output=(()=>{const original=G.monsters.bigbird;globalThis.__e2eFollowOriginal=original;G.monsters.bigbird={...original,aggro:0,rage:0,stationary:true,charge:0};const w=get_player('${W}'),point=[[32,0],[0,32],[-32,0],[0,-32]].map(([dx,dy])=>({x:w.x+dx,y:w.y+dy})).find(p=>can_move({...w,going_x:p.x,going_y:p.y}));if(!point)throw Error('No nearby native-clear calibration input');const m=new_monster('main',{__e2eAmbientExempt:true,type:'bigbird',count:1,position:[point.x,point.y],radius:0},{temp:1});__e2eFollowOwnedMonsters.push({id:String(m.id),type:m.type,map:m.map,instance:m.in});m.speed=0;m.moving=false;m.hp=m.max_hp=1000000;m.u=true;m.abs=true;m.cid++;return {id:String(m.id),point};})()`);
   const calibrationBodies:Record<string,any>={};
   try{for(const name of fighters){await expect.poll(()=>live.clients[name].run(`!!get_entity(${JSON.stringify(calibration.id)})`),{timeout:15000}).toBe(true);
     calibrationBodies[name]=await live.clients[name].run(`(()=>{const e=get_entity(${JSON.stringify(calibration.id)}),c=character;return {actor:{name:c.name,x:c.x,y:c.y,real_x:c.real_x,real_y:c.real_y,range:c.range,width:get_width(c),height:get_height(c),vision:c.vision||parent.character.vision},body:{type:e.type,mtype:e.mtype,map:e.map,in:e.in,width:get_width(e),height:get_height(e)},raw:{width:e.width,height:e.height,awidth:e.awidth,aheight:e.aheight,mscale:e.mscale}};})()`);
@@ -52,10 +52,11 @@ test(`planned Main hawks recover ranged actors from disconnected approach ring p
   }finally{await info.attach('native-main-hawk-input-declaration',{body:JSON.stringify({scene,geometryChoices,candidates:candidates.map((r:any)=>r.enemy),declarations}),contentType:'application/json'});}
   const targetPosition=[declaration.target.x,declaration.target.y];
   seed=await live.admin(`output=(()=>{
-   const original=globalThis.__e2eFollowOriginal;G.monsters[${JSON.stringify(monster)}]={...original,aggro:0,rage:0,stationary:true};
+   const original=globalThis.__e2eFollowOriginal;G.monsters[${JSON.stringify(monster)}]={...original,aggro:0,rage:0,stationary:true,charge:0};
    const m=new_monster('main',{__e2eAmbientExempt:true,type:${JSON.stringify(monster)},count:1,position:${JSON.stringify(targetPosition)},radius:0},{temp:1});
    __e2eFollowOwnedMonsters.push({id:String(m.id),type:m.type,map:m.map,instance:m.in});
-   m.speed=0;m.moving=false;
+   // Native stat recalculation must retain this encounter's declared zero speed.
+   m.zone_stats={...G.monsters.bigbird,speed:0};m.speed=0;m.moving=false;
    const observableCombatSeconds=20,partyDps=${JSON.stringify(fighters)}.map(get_player).reduce((sum,p)=>sum+Math.max(1,p.attack)*Math.max(0.1,p.frequency),0);
    m.target=null;m.hp=m.max_hp=Math.ceil(partyDps*observableCombatSeconds);m.u=true;m.abs=true;m.cid++;
    const successors=[];
@@ -109,7 +110,7 @@ test(`planned Main hawks recover ranged actors from disconnected approach ring p
    await info.attach('native-independent-all-ready-before-first-attack',{body:JSON.stringify(firstAttack),contentType:'application/json'});
   }
   {
-   seed.successors=await live.admin(`output=(()=>{G.monsters[${JSON.stringify(monster)}]={...__e2eFollowOriginal,aggro:0,rage:0};const primary=instances.main.monsters[${JSON.stringify(seed.id)}];if(!primary||!(primary.hp>0)||primary.dead)throw Error('Declared primary is no longer alive before successor seeding');const successors=[];for(const dx of [-24,-48]){const radius=40,visions=${JSON.stringify(Object.fromEntries(staging.map((role:any)=>[role.name,role.vision])))},people=${JSON.stringify(fighters)}.map(name=>({name,player:get_player(name),vision:visions[name]}));
+   seed.successors=await live.admin(`output=(()=>{G.monsters[${JSON.stringify(monster)}]={...__e2eFollowOriginal,aggro:0,rage:0,charge:0};const primary=instances.main.monsters[${JSON.stringify(seed.id)}];if(!primary||!(primary.hp>0)||primary.dead)throw Error('Declared primary is no longer alive before successor seeding');const successors=[];for(const dx of [-24,-48]){const radius=40,visions=${JSON.stringify(Object.fromEntries(staging.map((role:any)=>[role.name,role.vision])))},people=${JSON.stringify(fighters)}.map(name=>({name,player:get_player(name),vision:visions[name]}));
     const offsets=[[dx,0],[24,0],[48,0],[72,0],[0,24],[0,-24],[-24,0],[-48,0],[48,24],[48,-24],[72,24],[72,-24],[96,0],[0,48],[0,-48],[-72,0]];
     let checks=0;const candidate=offsets.map(([ox,oy])=>({x:primary.x+ox,y:primary.y+oy})).find(point=>{if(successors.some(entry=>entry.center.x===point.x&&entry.center.y===point.y))return false;
       if(!people.every(({player:p,vision})=>p&&p.map===primary.map&&p.in===primary.in&&Array.isArray(vision)&&Math.abs(point.x-p.x)+radius<vision[0]&&Math.abs(point.y-p.y)+radius<vision[1]))return false;
