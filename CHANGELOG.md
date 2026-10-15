@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Stabilize native terrain and Cave E2E checks: capture Targetron approach positions independently of sparse server updates, and recognize distinct native Cave travel, combat and encounter progress without extending the absolute completion deadline.
+- Declare the native layout for Cave shop-inspection coverage; retain randomized and missing-shop coverage in the separate regroup scenarios.
+
 - Prevent priest healing from cancelling an active Town cast during travel or event recovery. Healing resumes after arrival or interruption; waiting for departure or other party members still permits healing.
 
 - Keep declared Mr. Green and Mr. Pumpkin stats active throughout the native event-switch regression, including native stat recalculation, then restore them during cleanup. This prevents unintended boss movement from turning ranged damage checks into intermittent projectile misses.

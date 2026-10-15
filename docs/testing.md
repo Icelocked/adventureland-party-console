@@ -1,5 +1,23 @@
 # Testing
 
+## Native terrain and Cave progress observation
+
+Failure inventory: sparse server `player` packets can miss a brief terrain bend;
+requested destinations alone do not prove movement. Capture native client positions
+throughout Targetron's approach, retain actual damage and collision-clear owned
+movement assertions, and reject truncated capture. Cave travel may make progress
+without completing a room: count distinct native deaths, first-time 100-unit
+distance improvements toward each destination, and newly encountered/resolved votes.
+Repeated receipts, oscillation and revisiting the same destination must not renew
+quiet time. Observe fresh evidence before checking quiet expiry, including after a
+bounded vote action, but never renew the ten-minute absolute cap. Retain the
+position trace and progress markers with the ordinary native artifacts.
+The shop-inspection journey declares native layout seed `00000000000000000000000000000001`;
+the native generator still owns geometry, NPC placement, movement and votes.
+Random layouts and the explicitly unavailable entry shop remain covered by the
+separate assembly scenarios. An optional shop without placement cannot exercise
+the required item-inspection assertions.
+
 ## Town channel healing
 
 Run the native cases matching `Town executes a real cast|Halloween mrgreen stages`.

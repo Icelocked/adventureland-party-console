@@ -48,6 +48,21 @@ test('warrior recovers a blocked Targetron approach in the reported UHills layou
     target_player(m,get_player('${P}'));return {id:String(m.id),map:m.map,x:m.x,y:m.y,target:m.target};
   }catch(error){G.monsters.targetron=original;delete globalThis.__e2eWarriorTargetronOriginal;throw error;}})()`);
   const samples:any[]=[];
+  // Observe actual native positions independently of sparse status packets and
+  // Node polling latency. Never infer arrival from a requested destination.
+  await live.clients[W].frame.evaluate(()=>{
+    const game=window as any;
+    const capture={samples:[] as any[],overflow:false,frame:0};
+    game.__e2eTargetronPositions=capture;
+    const sample=()=>{
+      const c=game.character,last=capture.samples.at(-1);
+      if(c&&(!last||last.map!==c.map||Math.hypot(c.real_x-last.x,c.real_y-last.y)>=1)){
+        if(capture.samples.length>=12000)capture.overflow=true;
+        else capture.samples.push({at:Date.now(),map:c.map,x:c.real_x,y:c.real_y});
+      }
+      capture.frame=requestAnimationFrame(sample);
+    };sample();
+  });
   try{
     await expect.poll(async()=>(await live.clients[P].events()).some((event:any)=>event.event==='hit'&&
       String(event.data?.hid)===seed.id&&event.data?.id===P&&event.data?.damage>0),
@@ -75,11 +90,19 @@ test('warrior recovers a blocked Targetron approach in the reported UHills layou
     const dx=seed.x-geometry.origin.x,dy=seed.y-geometry.origin.y,length=Math.hypot(dx,dy);
     const nativeEvents=await live.clients[W].events(),firstDamage=nativeEvents.find(event=>event.event==='hit'&&String(event.data?.id)===seed.id&&event.data?.hid===W&&event.data?.source!=='taunt'&&event.data?.damage>1);
     expect(firstDamage,'The native bend window must end at the actual first attack damage receipt').toBeTruthy();
-    const nativePath=nativeEvents.filter(event=>event.event==='player'&&event.data?.id===W&&event.data?.map===geometry.map&&event.at>=samples[0].at&&event.at<=firstDamage!.at&&Number.isFinite(event.data?.x)&&Number.isFinite(event.data?.y));
-    expect(nativePath.some(event=>Math.abs(dx*(event.data.y-geometry.origin.y)-dy*(event.data.x-geometry.origin.x))/length>20),
+    const capture=await live.clients[W].frame.evaluate(()=>(window as any).__e2eTargetronPositions);
+    expect(capture.overflow,'Native position capture must remain complete').toBe(false);
+    const nativePath=capture.samples.filter((p:any)=>p.map===geometry.map&&p.at<=firstDamage!.at&&Number.isFinite(p.x)&&Number.isFinite(p.y));
+    expect(nativePath.some((p:any)=>Math.abs(dx*(p.y-geometry.origin.y)-dy*(p.x-geometry.origin.x))/length>20),
       'Actual native movement must bend around the originally blocked direct bearing').toBe(true);
     expect(await live.clients[W].run('character.rip')).toBeFalsy();
   }finally{
+    const capture=await live.clients[W].frame.evaluate(()=>{
+      const game=window as any,capture=game.__e2eTargetronPositions;
+      if(capture)cancelAnimationFrame(capture.frame);
+      delete game.__e2eTargetronPositions;return capture;
+    });
+    await info.attach('targetron-native-position-trace',{body:JSON.stringify(capture),contentType:'application/json'});
     await live.clients[W].run('parent.__e2eObserveMoves=false');
     try{
       await evidence(live,info,'targetron-native-terrain-combat-recovery',{geometry,seed,samples,

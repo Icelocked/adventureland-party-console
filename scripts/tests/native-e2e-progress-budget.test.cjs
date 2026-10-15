@@ -19,3 +19,15 @@ test('native progress never bypasses the absolute completion cap',()=>{
  for(now=100000;now<600000;now+=100000){b.observe(['choice:'+now]);b.check();}
  assert.throws(()=>{b.observe(['choice:600000']);b.check();},/absolute completion budget/);
 });
+test('fresh evidence returned across quiet expiry is credited before checking quiet time',()=>{
+ let now=0;const b=createNativeProgressBudget(()=>now,300000,600000);
+ b.observe(['room:boss']);now=304679;
+ b.observe(['room:boss','choice:new-native-vote']);
+ assert.equal(b.snapshot().lastProgressAt,304679);
+ now=604679;assert.throws(()=>b.observe(['choice:another']),/absolute completion budget/);
+});
+test('late duplicate evidence cannot revive an idle journey',()=>{
+ let now=0;const b=createNativeProgressBudget(()=>now,300000,600000);
+ b.observe(['death:123']);now=304679;
+ assert.throws(()=>b.observe(['death:123']),/no new native progress/);
+});

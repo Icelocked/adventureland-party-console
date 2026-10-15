@@ -33,6 +33,17 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   await expect(settings).toBeVisible();
   const entryResponses:any[]=[];
   let entryAccepted=false;
+  // This journey asserts shop item inspection, so declare its native layout
+  // input rather than depending on an optional merchant having space to spawn.
+  // Randomized layouts and missing-shop behavior remain in the assembly cases.
+  await live.admin(`globalThis.__entryRandomBytes=crypto.randomBytes;
+    crypto.randomBytes=function(size,...args){
+      if(size===16&&!args.length&&new Error().stack.includes('open_generated_zone')){
+        crypto.randomBytes=globalThis.__entryRandomBytes;
+        return Buffer.from('00000000000000000000000000000001','hex');
+      }
+      return globalThis.__entryRandomBytes.call(this,size,...args);
+    };output=true;`);
   try{
     await expect.poll(async()=>{
       const view=await dungeon();
@@ -57,8 +68,13 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
       return body.state.phase==='active';
     },{timeout:90000,message:'A real UI entry must be accepted once and activate the native Cave'}).toBe(true);
   }finally{
+    await live.admin('crypto.randomBytes=globalThis.__entryRandomBytes;delete globalThis.__entryRandomBytes;output=true');
     await info.attach('native-cave-entry-responses',{body:JSON.stringify(entryResponses),contentType:'application/json'});
   }
+  const entryLayout=await live.admin(`output=(()=>{const run=generated_entry(get_player('E2EWarrior')).record,shop=run.cave.rooms.find(r=>r.id==='0:shop');
+    return{run:run.key,seed:run.seed,shop:shop&&{id:shop.id,x:shop.x,y:shop.y,bounds:shop.bounds,npc:shop.npc?.id}};})()`);
+  await info.attach('native-cave-entry-layout',{body:JSON.stringify(entryLayout),contentType:'application/json'});
+  expect(entryLayout.seed).toBe('00000000000000000000000000000001');
   await info.attach('native-cave-entry', { body: JSON.stringify(await dungeon()), contentType: 'application/json' });
   await expect(settings).not.toBeVisible();
   const controls = page.getByRole('region', { name: 'Cave of Many Dreams controls' });
@@ -948,11 +964,13 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
   const requiredPlanning:any[]=[];
   const cpuProfile=nativePlannerCpuProfile(live.clients.E2EWarrior.frame);
   const requiredBudget=createNativeProgressBudget(Date.now,300_000,600_000);
+  const requiredStartedAt=Date.now(),nativeMilestones=new Set<string>();
+  const nearestDestination=new Map<string,number>();
+  requiredBudget.observe([]);
   let requiredCompleted=false;
   let requiredProbeStarted=0,requiredProbeId="",requiredProbes=0;
   try{
   await expect.poll(async()=>{
-    requiredBudget.check();
     const v=await dungeon();
     const probeCommand=v.state.commands.E2EWarrior,probeTravel=v.members.find((m:any)=>m.name==='E2EWarrior')?.observation?.travel;
     const pendingOwned=v.state.travel?.stage==='travelling'&&probeCommand?.action==='move'&&
@@ -986,16 +1004,38 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
           geometry:m.observation.travel.route?.identity}}))});
     if(v.state.run!==cave.run || v.members.length!==2 ||
         !v.members.every((m:any)=>m.fresh && m.observation?.alive && m.observation?.cave?.run===cave.run &&
-          m.observation.cave.floor===cave.floor && Array.isArray(m.observation.cave.points)))return false;
+          m.observation.cave.floor===cave.floor && Array.isArray(m.observation.cave.points))){requiredBudget.check();return false;}
     const c=v.members[0].observation.cave;
     const markers=c.points.filter((p:any)=>p.required&&p.done&&v.members.every((m:any)=>
       m.observation.cave.points.some((other:any)=>other.id===p.id&&other.required&&other.done))).map((p:any)=>'room:'+p.id);
     if(c.choice?.resolved&&v.members.every((m:any)=>{
       const choice=m.observation.cave.choice;return choice?.id===c.choice.id&&choice.resolved&&choice.votes?.[m.name]!=null;
     }))markers.push('choice:'+c.choice.id);
-    requiredBudget.observe(markers);
+    // Native receipts and positions, never route distance counters (which can
+    // grow while looping). Each destination's closest 100-unit band counts once.
+    const nativeEvents=await live.clients.E2EWarrior.events();
+    for(const event of nativeEvents){
+      if(event.at>=requiredStartedAt&&event.event==='death'&&event.data?.death===true&&
+          !v.members.some((m:any)=>m.name===String(event.data.id)))nativeMilestones.add('death:'+event.data.id);
+    }
+    const target=v.state.travel?.target;
+    if(target){
+      const positions=await Promise.all(v.members.map((m:any)=>live.clients[m.name].snapshot()));
+      for(const p of positions){
+        if(p.map!==target.map||!Number.isFinite(p.x)||!Number.isFinite(p.y))continue;
+        const key=target.id+':'+p.name,band=Math.floor(Math.hypot(p.x-target.x,p.y-target.y)/100);
+        const best=nearestDestination.get(key);
+        if(best===undefined||band<best){
+          nearestDestination.set(key,band);
+          if(best!==undefined)nativeMilestones.add('approach:'+key+':'+band);
+        }
+      }
+    }
+    if(c.choice)nativeMilestones.add('encounter:'+c.choice.id);
+    requiredBudget.observe([...markers,...nativeMilestones]);
     if(c.choice&&!c.choice.resolved){
       await answerNativeChoice(c.choice,c.floor);
+      requiredBudget.observe([...markers,...nativeMilestones,'choice:'+c.choice.id]);
       return false;
     }
     const required=c.points.find((p:any)=>p.required&&!p.done&&p.map.endsWith('_0'));
@@ -1005,7 +1045,7 @@ test('Cave entry closes settings, shows native choices and keeps follower maps a
     if(current!==required.id)await acceptRoom(required,true);
     return false;
   // Long native routes may progress across the old total five-minute boundary.
-  // Only new authoritative completions renew quiet time; the total is bounded.
+  // Only distinct native milestones renew quiet time; the total is bounded.
   },{timeout:600_000,message:'Required rooms must finish through native combat and votes'}).toBe(true);
   requiredCompleted=true;
   }finally{
