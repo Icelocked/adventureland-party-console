@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Find giveaway hosts through the game's merchant directory when they are not in sight, walk to their stand and join, instead of failing at the market; report hosts on another realm, without an open stand, or inside the bank, and skip discovered giveaways inside the bank (#129). Expire queued giveaway jobs at the giveaway's real remaining time rather than two minutes after a marketplace observation, log a warning when one expires unattempted, and release its claim so a still-running giveaway is queued again.
 - Apply upgrade offering rules to manual as well as automatic upgrades, collecting batch supplies from the bank and BankBoi before resuming. Preserve upgrade identities and intermediate progress through storage handoffs and restarts; wait for remote inputs before admitting upgrade work and retry interrupted storage checkpoints.
 - Let a peaceful priest round terrain toward the party's recovery mover, preserving combat and monster-clearance checks.
 - Hide irrelevant +0 levels on stand buy orders for items that cannot be upgraded or compounded.

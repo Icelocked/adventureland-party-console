@@ -8678,21 +8678,77 @@
           (!command.expectedItem || (item.name === command.expectedItem.name && Number(item.level || 0) === Number(command.expectedItem.level || 0)));
       });
     }
-    try {
-      if (command.realm && command.realm.indexOf("PVP") >= 0) throw new Error("Automatic giveaway travel excludes PVP");
-      if (command.expiresAt && Date.now() >= command.expiresAt) throw new Error("Giveaway observation expired");
-      if (command.realm && currentRealm() !== command.realm) await changeRealm(command.realm);
-      if (character.stand) await close_stand();
-      var destination = command.location && command.location.map ? command.location : merchantMarketLocation;
-      await smart_move(destination);
-      var deadline = Date.now() + 60000, seller = null, slots = [];
+    // The game refuses join_giveaway while either the joiner or the host is inside the bank.
+    function bankMap(map) { return /^bank/.test(String(map || "")); }
+    function realmKey(value) { return String(value || "").replace(/^SR_/, "").replace(/\s+/g, ""); }
+    // The game's merchant directory lists every open merchant stand at its last server
+    // sync, so it says where to walk when the host is not where we expected.
+    async function directoryStand() {
+      var data;
+      try {
+        data = await new Promise(function (resolve, reject) {
+          (parent.$ || $).ajax({ method: "POST", url: "/api/pull_merchants", contentType: "application/json; charset=utf-8",
+            dataType: "json", data: "{}", timeout: 10000 })
+            .done(resolve)
+            .fail(function (_request, status, error) { reject(new Error(String(error || status))); });
+        });
+      } catch (error) {
+        activity.push({ level: "info", message: "Merchant directory unavailable", details: String(error.message || error) });
+        return null;
+      }
+      var wanted = String(command.seller).toLowerCase(), matches = [];
+      ((data && data.infs) || []).forEach(function (info) {
+        if (!info || info.type !== "merchants" || !Array.isArray(info.chars)) return;
+        info.chars.forEach(function (entry) {
+          if (entry && String(entry.name).toLowerCase() === wanted) matches.push(entry);
+        });
+      });
+      var here = matches.filter(function (entry) { return realmKey(entry.server) === realmKey(currentRealm()); })[0];
+      if (here) return { map: here.map, x: Number(here.x), y: Number(here.y) };
+      return matches.length ? { elsewhere: realmKey(matches[0].server) } : { missing: true };
+    }
+    function standDestination(stand) {
+      if (stand && stand.elsewhere)
+        throw new Error(command.seller + "'s stand is on " + stand.elsewhere + ", not " + realmKey(currentRealm()));
+      if (stand && bankMap(stand.map))
+        throw new Error(command.seller + " is inside the bank, where giveaways cannot be joined");
+      return stand && stand.map ? stand : null;
+    }
+    async function awaitSeller(milliseconds) {
+      var deadline = Date.now() + milliseconds, seller = null, slots = [];
       while (Date.now() < deadline && !slots.length) {
         seller = get_player(command.seller);
         slots = activeGiveaways(seller);
         if (seller && !slots.length && command.rid) break;
         if (!slots.length) await sleep(500);
       }
-      if (!seller) throw new Error(command.seller + " was not visible at the market");
+      return { seller: seller, slots: slots };
+    }
+    try {
+      if (command.realm && command.realm.indexOf("PVP") >= 0) throw new Error("Automatic giveaway travel excludes PVP");
+      if (command.expiresAt && Date.now() >= command.expiresAt) throw new Error("Giveaway observation expired");
+      if (command.realm && currentRealm() !== command.realm) await changeRealm(command.realm);
+      if (character.stand) await close_stand();
+      // A manual search has no location; an observed location inside the bank cannot be joined.
+      var observed = command.location && command.location.map && !bankMap(command.location.map) ? command.location : null;
+      var stand = observed ? null : await directoryStand();
+      var destination = observed || standDestination(stand) || merchantMarketLocation;
+      await smart_move(destination);
+      var found = await awaitSeller(destination === merchantMarketLocation ? 60000 : 20000);
+      if (!found.seller && !stand) {
+        // The host moved or reopened elsewhere since it was observed.
+        stand = await directoryStand();
+        var moved = standDestination(stand);
+        if (moved && (moved.map !== character.map || Math.hypot(moved.x - character.x, moved.y - character.y) > 200)) {
+          await smart_move(moved);
+          found = await awaitSeller(30000);
+        }
+      }
+      var seller = found.seller, slots = found.slots;
+      if (!seller) throw new Error(stand && stand.missing
+        ? command.seller + " has no open merchant stand on " + realmKey(currentRealm()) + " and was not visible" +
+          (destination === merchantMarketLocation ? " at the market" : "")
+        : command.seller + " was not visible at their stand");
       if (!slots.length) throw new Error("No active giveaway was found for " + command.seller);
       if (Math.hypot(Number(character.x) - Number(seller.x), Number(character.y) - Number(seller.y)) > 350)
         await smart_move({ map: character.map, x: Number(seller.x), y: Number(seller.y) });
