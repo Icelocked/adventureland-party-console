@@ -36,6 +36,7 @@ export interface EventRecovery extends ReturnOwner {
   exited?: string[];
   exitSuspended?: boolean;
   exitConvoyId?: string;
+  exitTownFallback?: { cycleId: string; participants: string[] };
   anniversaryRound?: string;
 }
 export type AnniversaryReturnCycle = AnniversaryCycle;
@@ -45,6 +46,9 @@ export interface EventReturnState {
   deferred: Record<string, { cycleId: string }>;
 }
 export interface ReturnStatus {
+  in?: string | number;
+  server?: string;
+  lastCommandId?: number;
   x?: number;
   y?: number;
   map?: string;
@@ -53,9 +57,20 @@ export interface ReturnStatus {
   rip?: boolean;
   goobrawlCombat?: boolean;
   serverLiveEvents?: { name: string }[];
+  /** Local-wall-clock native spawn deadlines; these are attendance, not liveness. */
+  serverStagingEvents?: { name: string; spawnAt: number; spawnId?: number }[];
+  slendermanSearchExhausted?: boolean;
+  eventFeedConnected?: boolean;
+  eventClockStale?: boolean;
   eventRecovery?: { cycleId: string; phase: string };
 }
 export interface ReturnConvoy {
+  retryExhausted?: boolean;
+  walkingEvent?: string;
+  routeServer?: string;
+  failureCode?: string;
+  townFirst?: boolean;
+  disableTown?: boolean;
   merchantInterruption?: unknown;
   id: string;
   phase: string;
@@ -66,6 +81,7 @@ export interface ReturnConvoy {
   walkingParents?: Record<string, { revision: number; parentId?: number; command?: { cycleId?: string } }>;
 }
 export interface CommandView {
+  id?: number;
   convoyId?: string;
   type: string;
   cycleId?: string;

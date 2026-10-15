@@ -4,14 +4,5 @@ export function adaptLegacyRuntime(source: string): string {
   const api = "    isOccupied: function () {";
   if (!source.includes(snapshot) || !source.includes(api))
     throw new Error("Shared runtime integration points changed; refusing to publish");
-  return source
-    .replace(snapshot, snapshot + "\n      actualParty: character.party || null,")
-    .replace(
-      api,
-      `    canReload: function () {
-      return !busy && !banking && !stocking && !upgrading && !anniversaryBusy &&
-        !root.__merchantActiveJob;
-    },
-` + api,
-    );
+  return source.replace(snapshot, snapshot + "\n      actualParty: character.party || null,");
 }

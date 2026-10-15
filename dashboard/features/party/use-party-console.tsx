@@ -417,6 +417,7 @@ export function usePartyConsole() {
       | "buy-copy"
       | "compound-mark"
       | "auto-compound-mark"
+      | "exchange"
       | "auto-exchange"
       | "merchant-weapon"
       | "gold-target",

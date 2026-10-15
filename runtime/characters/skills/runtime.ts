@@ -1,5 +1,5 @@
 import type { CombatRoot, Target } from '../roles/types.ts';
-import { monsterAttackBlock } from '../roles/monster-attack-policy.ts';
+import { effectiveAttackDamageType, monsterAttackBlock } from '../roles/monster-attack-policy.ts';
 import { createSkillEngine } from './engine.ts';
 import { decision, type Actor, type Combatant, type CombatContext, type SkillDefinition, type SkillDecision, type SkillId, type SkillWorld } from './types.ts';
 import { incomingDps } from './damage.ts';
@@ -28,7 +28,9 @@ export function installSkillRuntime(root: CombatRoot) {
   const shared = root.sharedRoutine;
   const projectiles = createProjectileTracker(world);
   function world(): SkillWorld {
-    const actor: Actor = character;
+    // Normalize the local skill world, never mutate the native player object.
+    // Offensive skill definitions retain their own damage_type precedence.
+    const actor: Actor = { ...character, damage_type: effectiveAttackDamageType(character, typeof G === 'undefined' ? undefined : G) };
     const context: CombatContext = shared.combatContext?.() || {
       leader: '', allies: [], monsters: [], mode: 'blocked', event: null, observedAt: 0,
     };
@@ -83,6 +85,11 @@ export function installSkillRuntime(root: CombatRoot) {
   const engine = createSkillEngine({
     world,
     cast:castSkill,
+    publishAfterCast: d => {
+      const skills: Partial<Record<SkillId, SkillDefinition>> = G.skills;
+      return !!skills[d.skill]?.hostile && d.targets.length > 0 &&
+        d.targets.every(t => shared.independentPullActive?.(t as Target));
+    },
     evidence: (t, state, action) => shared.queueEvidence?.(t as Target, state, action) || null,
     diagnostic: d => { if (root.partyCombatState) root.partyCombatState.skill = d; },
   });

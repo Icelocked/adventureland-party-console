@@ -9,7 +9,7 @@ function fixture(){
   now:()=>100,activeNames:()=>[],enabled:()=>false,intent:()=>intent,escapeOwns:()=>false,rareControl:()=>null,
   convoySignal:(current,name)=>({current,name}),waypoint:()=>waypoint,resolveArea:(catalog,focus,point)=>({catalog,focus,point}),
   rareEncounter:()=>null,huntOwns:hunt=>!!hunt?.turnIn,mapSubscriberCount:()=>0,
-  stackHomes:(bank,bankbois)=>({bank,bankbois}),groupedCombat:()=>null,selectedEvents:current=>current.selection,
+  stackHomes:(bank,bankbois)=>({bank,bankbois}),groupedCombat:()=>null,selectedEvents:current=>current.selection||[],
   anniversary:()=>null,rareOwns:()=>false,
  });
  return {state,api,setIntent:value=>intent=value,setWaypoint:value=>waypoint=value};
@@ -50,4 +50,11 @@ test('combat-only heartbeat does not deliver or decorate pending navigation comm
  assert.equal(response.convoySignal.current,state);assert.equal(response.convoySignal.name,'P');
  assert.equal(state.commands.P,command);assert.equal(command.navigationRevision,undefined);
  assert.equal(Object.hasOwn(response,'command'),false);
+});
+
+test('retained deferred checkpoint does not publish its retired exit cycle in heartbeat',()=>{
+ const f=fixture();f.state.deferredEventReturns={P:{cycleId:'old',phase:'awaiting-event-admission',checkpoint:{map:'uhills',x:1,y:2}},W:{cycleId:'peer',phase:'returning-to-checkpoint'}};
+ assert.equal(f.api.response('P').eventReturnCycleId,null);assert.equal(f.api.response('W').eventReturnCycleId,'peer');
+ f.state.eventReturn={cycleId:'current',participants:['P']};assert.equal(f.api.response('P').eventReturnCycleId,'current');
+ f.state.eventReturn=null;f.state.deferredEventReturns.P.phase='returning-to-town';assert.equal(f.api.response('P').eventReturnCycleId,'old');
 });

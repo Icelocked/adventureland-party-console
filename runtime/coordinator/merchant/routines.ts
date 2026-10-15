@@ -1,7 +1,7 @@
 /** User-facing priorities are independent of the executor transport. */
 export interface RoutineJob { reason: string; manual?: boolean; bidItemId?: string; routine?: string; order?: unknown; autoExchangeKeys?: string[] }
 const purchases = new Set(['stand purchases', 'stand bid purchases', 'ALData marketplace purchases', 'Ponty purchases']);
-const aliases: Record<string, string> = {'stand search': 'manual marketplace purchases', 'marked items': 'party collection', 'npc sale pickup': 'npc sales', 'auto npc sale pickup': 'auto npc sales', 'upgrades and compounds': 'manual upgrades'};
+const aliases: Record<string, string> = {'exchange pickup': 'manual exchange', 'stand search': 'manual marketplace purchases', 'marked items': 'party collection', 'npc sale pickup': 'npc sales', 'auto npc sale pickup': 'auto npc sales', 'upgrades and compounds': 'manual upgrades'};
 function purchaseRoutine(job: RoutineJob): string {
   return job.manual === true || (!job.bidItemId && job.reason !== 'stand bid purchases') ? 'manual marketplace purchases' : 'stand bid purchases';
 }
@@ -9,6 +9,7 @@ function exchangeRoutine(job: RoutineJob): string {
   return job.autoExchangeKeys?.length ? 'automatic exchange' : 'manual exchange';
 }
 export function routineFor(job: RoutineJob): string {
+  if (job.reason === 'bank collection') return 'party collection';
   if (job.reason === 'exchange') return exchangeRoutine(job);
   if (job.routine) return job.routine;
   if (purchases.has(job.reason)) return purchaseRoutine(job);

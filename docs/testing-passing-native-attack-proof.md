@@ -1,0 +1,7 @@
+# Passing encounters follow actual native selection
+
+Failure inventory before edits: native755 shard11 seeded Goo493131px ahead, but both walking fighters already selected and acknowledged ambient Goo39. Warrior was moving under convoy:travelling with candidate39/attacking at1791822895795; real hit39 damage9955/killtrue arrived2896822; next native sample remained moving and selected43. Requiring arbitrary seeded493 priority failed despite valid passing combat. The earlier deferred nomination Set could wrongly accept later farming and must not be used.
+
+Use Socket.IO native outgoing observation to capture each actual attack issuance with actor, map/instance/realm, physical movement, convoy ownership and exact passing nomination. Match each real native hit to that actor latest actual attack issuance before the hit; a newer farming attack cannot borrow an old nomination. Require exact same selected ID in native death and server absence. Keep the real seed and preserve the original45s bound, actual Armadillo quest completion, return passing combat and Daisy reward assertions. Default exact-ID kill checks remain unchanged.
+
+No attack, kill, movement or packet is manufactured or replayed. Outgoing observation forwards nothing and replaces no native method. Retain seed/selected identity, attack issuance/motion and actual hit/death as artifact evidence. Missing outgoing observer, nonmoving, different candidate/actor, or nonconvoy ownership cannot satisfy passing combat.

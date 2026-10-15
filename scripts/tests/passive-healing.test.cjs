@@ -5,6 +5,10 @@ const vm = require('node:vm');
 const source = fs.readFileSync(require('node:path').join(__dirname, '../../characters/shared.js'), 'utf8');
 const code = source.slice(source.indexOf('  async function regenerateHpOrMp('), source.indexOf('  async function energizeLowestMana('));
 const settle = () => new Promise(resolve => setImmediate(resolve));
+// Town failure inventory: passive top-offs or role/party healing cancel the
+// native channel; its acknowledgement can lag the owned movement transition;
+// suppressing all recovery would also disable safe regeneration; a stale hold
+// must not prevent healing after Town completes or is interrupted.
 function fixture() {
   const calls = [], entities = {};
   const character = { name: 'Priest', ctype: 'priest', map: 'main', hp: 100, max_hp: 100, mp: 100, max_mp: 100 };
@@ -26,6 +30,23 @@ function fixture() {
     const member = { name, hp, max_hp: 100, map: 'main', ...extra };
     r.partyPositions.push(member); entities[name] = member; return member;
   } };
+}
+
+for (const phase of ['native channel', 'owned transition']) {
+  test('Town protects healing until ' + phase + ' clears, without blocking regeneration', async () => {
+    const t = fixture(); t.r.convoyTraveling = true;
+    t.r.character.mp = 70; t.add('Warrior', 95);
+    if (phase === 'native channel') t.r.character.c = { town: { ms: 3000 } };
+    else t.r.movement = { townCasting: () => true };
+    t.r.passiveRegenerationTick(); await settle();
+    assert.deepEqual(t.calls, [['skill', 'regen_mp']]);
+    t.calls.length = 0; t.r.partyPositions[0].hp = 30; t.add('Mage', 40);
+    assert.equal(await t.r.healPartyBelow(.9), false);
+    assert.deepEqual(t.calls, []);
+    t.r.character.c = {}; t.r.movement = { townCasting: () => false };
+    assert.equal(await t.r.healPartyBelow(.9), true);
+    assert.deepEqual(t.calls, [['skill', 'partyheal']]);
+  });
 }
 
 for (const flag of ['anniversaryStaging', 'anniversaryBusy', 'convoyTraveling', 'eventTraveling', 'followingLeader', 'partyTownActive'])

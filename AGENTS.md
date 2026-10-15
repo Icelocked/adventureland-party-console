@@ -12,6 +12,8 @@
 - Read [the coordinator README](runtime/coordinator/README.md) before changing coordinator behavior or build/deployment wiring. It maps domains and documents manual validation and activation.
 - Edit maintained TypeScript under `runtime/coordinator/`; do not edit generated `.build/runtime/coordinator-*.cjs` bundles or the installed caracAL launcher. The launcher template lives under `tools/caracal/`.
 - Building and activating are different operations. Follow the README's supported restart workflow; do not claim a build has reloaded the live coordinator without verifying it. Preserve current character assets when deploying coordinator-only changes.
+- After every code or UI change, always produce a completed immutable console artifact before finishing the task. An existing background build may satisfy this requirement, but wait for completion and verify that the candidate contains the final changes; pushing commits or starting a build alone is insufficient.
+- Do not deploy or activate an artifact, or restart the running console, unless the user explicitly instructs you to do so for that action. By default, leave the completed candidate staged for the user to load through the Party Console. Report the staged artifact and distinguish it from the active build.
 
 # Game TypeScript types
 
@@ -25,6 +27,8 @@
 - Never write unit tests after you write code.
 - Highly prefer E2E tests as the sole testing mechanism. Use them to verify complex features work. At the end of E2E tests, produce a verifiable and repeatable artifact.
 - If you must test a system in isolation, first write down all the ways it could fail, then write the code.
+- Treat native action completion, queue removal, client persistence, and coordinator/dashboard telemetry as separate asynchronous milestones. Completing one does not prove the others have arrived. Before asserting asynchronously published state, use a bounded poll for the exact expected values from one fresh snapshot; retain strict counts and ownership checks rather than adding sleeps, widening expectations, or blindly increasing timeouts.
+- When investigating timing failures, compare native receipts, client storage, and later coordinator observations before changing gameplay code. Preserve timestamped observations on failure so delayed publication can be distinguished from lost, duplicated, or misattributed results. Fixture fault injection must target the current operation and must not itself stall unrelated status or movement requests.
 
 Run `npm test` for real-game and console E2E and inspect `.build/e2e-report/` and `.build/e2e-results/`.
 See [the testing guide](docs/testing.md) for setup, artifacts, fixture boundaries, and

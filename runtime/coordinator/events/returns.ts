@@ -45,6 +45,24 @@ export function createEventReturns(state: EventReturnState, ports: EventReturnPo
         ports.clearCommand(name);
     }
   }
+  function clearOrphanRecoveryCommands(): void {
+    // Commands are shared across profiles; inspect only this service's members.
+    const members = new Set(ports.activeNames());
+    const deferredCycles = new Set(Object.values(state.deferred).map(recovery => recovery.cycleId));
+    let changed = false;
+    for (const [name, command] of Object.entries(ports.commands())) {
+      if (!members.has(name) || !command ||
+          !["event-return-town", "event-resume-travel"].includes(command.type) ||
+          typeof command.cycleId !== "string" || !command.cycleId ||
+          retainedRecoveryCycle(command.cycleId, deferredCycles)) continue;
+      ports.clearCommand(name);
+      changed = true;
+    }
+    if (changed) ports.persist();
+  }
+  function retainedRecoveryCycle(cycleId: string, deferredCycles: Set<string>): boolean {
+    return cycleId === state.current?.cycleId || cycleId === ports.anniversary()?.id || deferredCycles.has(cycleId);
+  }
   function cancelPrematureGoobrawlReturn(): boolean {
     const recovery = state.current;
     if (!recovery || recovery.event !== "goobrawl" || !goobrawlStillFighting(ports)) return false;
@@ -57,7 +75,8 @@ export function createEventReturns(state: EventReturnState, ports: EventReturnPo
     return true;
   }
 
-  function recentReturn(event: string): boolean {
+  function recentReturn(event: string, forced: boolean): boolean {
+    if (forced) return false;
     if (state.last?.event !== event || ports.now() - state.last.finishedAt >= 60_000) return false;
     return !ports
       .activeNames()
@@ -75,17 +94,37 @@ export function createEventReturns(state: EventReturnState, ports: EventReturnPo
   }
 
   function startFrankyExitConvoy(recovery: EventRecovery): boolean {
-    if (recovery.event !== "franky" || recovery.exitSuspended) return false;
+    if (!frankyExitOwned(recovery)) return false;
     const existing = ports.convoy();
     if (existing) {
       if (existing.id !== recovery.exitConvoyId || existing.phase !== "failed") return false;
+      if (existing.failureCode === 'owner-lost') return false;
+      captureFailedExitTown(recovery, existing);
       ports.cancelConvoy();
     }
     const participants = exitParticipants(recovery);
     if (!participants.length || !ports.startExit(participants)) return false;
-    recovery.exitConvoyId = ports.convoy()?.id;
+    const next = ports.convoy();
+    applyExitTownFallback(recovery, next, participants);
+    recovery.exitConvoyId = next?.id;
     ports.persist();
     return true;
+  }
+  function frankyExitOwned(recovery: EventRecovery): boolean {
+    return state.current === recovery && recovery.event === 'franky' && !recovery.exitSuspended;
+  }
+  function captureFailedExitTown(recovery: EventRecovery, existing: ReturnConvoy): void {
+    if (existing.purpose === 'franky-exit' &&
+        ['town-unavailable','town-interrupted'].includes(existing.failureCode || '') &&
+        existing.participants.every(name => recovery.pending.includes(name)))
+      recovery.exitTownFallback = { cycleId: recovery.cycleId, participants: [...existing.participants] };
+  }
+  function applyExitTownFallback(recovery: EventRecovery, next: ReturnConvoy | null, participants: string[]): void {
+    const fallback = recovery.exitTownFallback;
+    if (next?.purpose === 'franky-exit' && fallback?.cycleId === recovery.cycleId &&
+        participants.every(name => fallback.participants.includes(name))) {
+      next.townFirst = false; next.disableTown = true;
+    }
   }
 
   function issueInitialTown(name: string, recovery: EventRecovery): void {
@@ -128,14 +167,38 @@ export function createEventReturns(state: EventReturnState, ports: EventReturnPo
     return !forced && event === "goobrawl" && goobrawlStillFighting(ports);
   }
 
+  function extendForcedReturn(current: EventRecovery, session?: { participants?: string[]; waypoints?: Waypoints } | null): void {
+    const joining = participantsFor(current.event, session?.participants, true)
+      .filter(name => !current.participants.includes(name));
+    if (!joining.length) return;
+    const captured = session?.waypoints || ports.capture(joining);
+    current.waypoints ||= {};
+    for (const name of joining) {
+      if (captured[name]) current.waypoints[name] = captured[name];
+      current.participants.push(name);
+      current.pending.push(name);
+    }
+    // A later heartbeat can exhaust another member after checkpoint travel
+    // was dispatched. Their Town exit must precede redispatch.
+    current.returnDispatchedAt = null;
+    for (const name of joining) issueInitialTown(name, current);
+    ports.persist();
+  }
+
+  function reuseReturn(current: EventRecovery, event: string,
+    session: { participants?: string[]; waypoints?: Waypoints } | null | undefined, forced: boolean): EventRecovery {
+    if (forced && current.event === event) extendForcedReturn(current, session);
+    return current;
+  }
+
   function begin(
     event: string,
     session?: { participants?: string[]; waypoints?: Waypoints } | null,
     forced = false,
   ): EventRecovery | null {
     if (waitingForCombat(event, forced)) return null;
-    if (state.current) return state.current;
-    if (recentReturn(event)) return null;
+    if (state.current) return reuseReturn(state.current, event, session, forced);
+    if (recentReturn(event, forced)) return null;
     const participants = participantsFor(event, session?.participants, forced);
     if (!participants.length) return null;
     const recovery = newRecovery(event, participants, session?.waypoints);
@@ -149,6 +212,7 @@ export function createEventReturns(state: EventReturnState, ports: EventReturnPo
   }
 
   function complete(recovery: EventRecovery): void {
+    clearRecoveryCommands(recovery);
     state.last = { event: recovery.event, finishedAt: ports.now() };
     const cycle = ports.anniversary();
     if (cycle && (cycle.combatEvent === recovery.event || recovery.anniversaryRound === cycle.id))
@@ -232,6 +296,7 @@ export function createEventReturns(state: EventReturnState, ports: EventReturnPo
   }
 
   function reconcile(): void {
+    clearOrphanRecoveryCommands();
     if (cancelPrematureGoobrawlReturn()) return;
     const cycle = ports.anniversary();
     if (!state.current && lostCombatHandoff(cycle, ports))
@@ -261,8 +326,30 @@ export function createEventReturns(state: EventReturnState, ports: EventReturnPo
 
   function restoreCommands(recovery: EventRecovery): void {
     for (const name of recovery.pending) {
-      if (ports.activeNames().includes(name) && !ports.commands()[name]) ports.town(name, recovery);
+      if (!ports.activeNames().includes(name)) continue;
+      if (!ports.commands()[name] || consumedIdleExit(name, recovery)) ports.town(name, recovery);
     }
+  }
+
+  function consumedIdleExit(name: string, recovery: EventRecovery): boolean {
+    const command = ports.commands()[name], status = ports.statuses()[name];
+    if (command?.type !== "event-return-town" || command.cycleId !== recovery.cycleId) return false;
+    if (!idleExitConsumed(status, command.id)) return false;
+    if (!savedExitRevision(name, recovery)) return false;
+    const convoy = ports.convoy();
+    return !convoy?.participants.includes(name) || ["complete", "failed"].includes(convoy.phase);
+  }
+
+  function savedExitRevision(name: string, recovery: EventRecovery): boolean {
+    const saved = recovery.waypoints?.[name];
+    return !!saved && ports.capture([name])[name]?.revision === saved.revision;
+  }
+
+  function idleExitConsumed(status: ReturnType<EventReturnPorts["statuses"]>[string], commandId: number | undefined): boolean {
+    if (!status || status.rip || status.eventRecovery?.phase !== "idle") return false;
+    const seen = Number(status.seenAt), last = Number(status.lastCommandId);
+    return Number.isFinite(seen) && seen >= ports.now() - 3000 && seen <= ports.now() + 1000 &&
+      Number.isFinite(commandId) && Number.isFinite(last) && last >= Number(commandId);
   }
 
   return {

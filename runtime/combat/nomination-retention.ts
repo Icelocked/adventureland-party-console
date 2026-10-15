@@ -1,8 +1,9 @@
 import type {Fight,Member,Target} from './grouped.ts';
+import {targetIdentity} from './lost-target.ts';
 export interface Retention extends Target {eligible:boolean;reason?:string;at:number}
 
 /** Absence needs every member's fresh observation; positive party sight wins. */
-export function retainNominations(queue:Fight[],members:Member[],now:number):Fight[] {
+export function retainNominations(queue:Fight[],members:Member[],now:number,selected?:Target|null):Fight[] {
   const fresh=(m:Member)=>!!m.status && now-m.status.seenAt<=3000;
   if(members.some(m=>fresh(m)&&m.status!.groupedCombat?.retentionPaused))return [];
   return queue.filter(t=>t.state==='planned').flatMap(t=>{
@@ -13,6 +14,9 @@ export function retainNominations(queue:Fight[],members:Member[],now:number):Fig
     const positive=votes.filter(v=>v?.eligible).sort((a,b)=>b!.at-a!.at)[0];
     if(positive)return [{...t,...positive}];
     if(votes.some(v=>v&&v.reason!=='not visible'))return [];
+    // The active approach already owns this last known position. Only a local
+    // absence search (or explicit invalidation above) may retire its selection.
+    if(selected && targetIdentity(t)===targetIdentity(selected))return [t];
     if(votes.every(Boolean))return [];
     // Legacy clients cannot establish retention; upgraded missing observers hold it.
     return members.some(m=>m.status?.groupedCombat?.retentions)?[t]:[];

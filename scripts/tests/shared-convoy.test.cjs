@@ -5,6 +5,21 @@ const {publishSharedRoute,sharedRoute}=require('../../runtime/coordinator/naviga
 const legacy=require('../convoy-navigation.cjs');
 const engine=()=>createSharedConvoyNavigation(legacy);
 const copy=x=>JSON.parse(JSON.stringify(x));
+test('same-boss coordinate changes preserve cross-map progress until destination arrival',()=>{
+ const {movingEventDestination}=require('../../runtime/coordinator/navigation/event-pursuit.ts');
+ const {p}=travellingParty(),c=p.activeConvoy,now=22000;
+ Object.assign(c,{purpose:'shared-walk',walkingActivity:'event',walkingEvent:'mrpumpkin',routeServer:'USII',sharedStartedAt:1000,
+  location:{map:'halloween',in:'halloween',x:0,y:0},walkingParents:{},runtimes:{}});
+ p.navigationIntents={};
+ for(const name of c.participants){c.walkingParents[name]={revision:0};c.runtimes[name]=name;p.navigationIntents[name]={revision:0};
+  Object.assign(p.statuses[name],{seenAt:now,joinedEvent:'mrpumpkin',in:'main'});}
+ Object.assign(p.statuses.P,{map:'halloween',in:'halloween',eventCombatSighting:{id:'boss-1',mtype:'mrpumpkin',map:'halloween',in:'halloween',x:500,y:500,observedAt:now}});
+ const owned=c;assert.equal(movingEventDestination(p,c,now),null);assert.equal(p.activeConvoy,owned);assert.equal(c.phase,'travel');
+ for(const s of Object.values(p.statuses))Object.assign(s,{map:'halloween',in:'halloween'});
+ assert.deepEqual(movingEventDestination(p,c,now),{map:'halloween',in:'halloween',x:500,y:500});
+ p.statuses.P.eventCombatSighting.observedAt=now-3001;assert.equal(movingEventDestination(p,c,now),null);
+ p.statuses.P.eventCombatSighting.observedAt=now;p.navigationIntents.L.cancelled=true;assert.equal(movingEventDestination(p,c,now),null);
+});
 
 function mismatchedParty(){
  const p=party(),e=engine();e.step(p,1000);
@@ -478,6 +493,28 @@ test('failure context changes only diagnostics, retaining the original failure a
   if(enabled){assert.equal(failure[2].body.details.failureContext.phase,phase);assert.equal(failure[2].body.details.failureContext.signal.state,'identity mismatch');assert.equal(logs.filter(m=>/^Convoy (context|signal):/.test(m)).length,2);}
   await r.cancel();await started.promise;
   const body=copy(failure[2].body);delete body.details.failureContext;
+  // Each run has independent monotonic-clock samples; retain all identities,
+  // counts and failure details while comparing elapsed measurements separately.
+  const metrics=body.details.movement.nativePlanning;
+  for(const record of [metrics,metrics.intervals])for(const key of ['totalMs','maxMs','minMs','meanMs']){
+   if(!(key in record))continue;
+   assert.ok(Number.isFinite(record[key])&&record[key]>=0,key+' must be a valid elapsed measurement');
+   record[key]=0;
+  }
+  const schedule=body.details.movement.planningSchedule;
+  assert.ok(schedule,'movement must retain planning schedule diagnostics');
+  for(const phase of ['scheduler','plan']){
+   const record=schedule[phase];
+   assert.deepEqual(Object.keys(record).sort(),['calls','elapsedMs','intervals']);
+   assert.ok(Number.isSafeInteger(record.calls)&&record.calls>=0,phase+' calls must remain valid');
+   assert.deepEqual(Object.keys(record.intervals).sort(),['maxMs','meanMs','minMs']);
+   const {minMs,maxMs,meanMs}=record.intervals;
+   assert.ok(minMs<=meanMs+1e-8&&meanMs<=maxMs+1e-8,phase+' intervals must be ordered');
+   for(const [sample,keys] of [[record,['elapsedMs']],[record.intervals,['minMs','maxMs','meanMs']]])for(const key of keys){
+    assert.ok(Number.isFinite(sample[key])&&sample[key]>=0,phase+'.'+key+' must be a valid elapsed measurement');
+    sample[key]=0;
+   }
+  }
   runs.push({body,requests:r.calls.filter(c=>c[0]==='request').map(c=>c[1]),moves:r.moves(),searches:r.searches});
  }
  assert.deepEqual(runs[1],runs[0]);
@@ -520,6 +557,22 @@ test('paused leader retains the issued waypoint and regroups using native fallba
  assert.equal(sharedRoute(p.activeConvoy).source,'search');assert.equal(sharedRoute(p.activeConvoy).plot.at(-1).x,120);
  await r.cancel();await second.promise;
 });
+test('owned return reevaluates Town only when a forbidden cached route becomes eligible',async()=>{
+ for(const [cachedTown,disabled,source] of [[false,true,'remainder'],[true,false,'remainder'],[false,false,'search'],[undefined,false,'remainder']]){
+  const p=party(),e=engine();Object.assign(p.activeConvoy,{continuousReturn:1,disableTown:disabled});e.step(p,1000);
+  const r=client('L',p,{plan:body=>({...body,ms:0,plot:body.town?[{map:'main',x:0,y:0,town:true},{map:'main',x:120,y:0}]:[{map:'main',x:120,y:0}]})});
+  r.context.__partySharedRouteRemainder={id:p.activeConvoy.id,revision:p.commands.L.navigationRevision,
+   runtimeId:'L',destinationKey:JSON.stringify(p.activeConvoy.location),destination:p.activeConvoy.location,
+   origin:{map:'main',x:0,y:0},server:'USI',geometry:r.context.movement.identity,transporting:false,
+   townAllowed:cachedTown,plot:[{map:'main',x:120,y:0}]};
+  const started=await r.start(p.commands.L);await r.ready();
+  const route=sharedRoute(p.activeConvoy);assert.equal(route.source,source);
+  assert.equal(route.plot.some(point=>point.town),source==='search','eligible fresh search must select actual Town candidate');
+  assert.equal(r.searches,0,'validated candidate comparison must not start native fallback');
+  await r.cancel();await started.promise;
+ }
+});
+
 test('transport and Town waypoints remain native operations on an imported route',async()=>{
  const p=party(),e=engine();p.activeConvoy.location={map:'cave',x:120,y:0};e.step(p,1000);
  const r=client('F',p);r.context.G.maps.main.doors=[[0,0,0,0,'cave',0,0]];

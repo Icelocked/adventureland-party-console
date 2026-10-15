@@ -1,0 +1,5 @@
+# Ordinary combat range recovery
+
+Failure inventory before implementation: native run 38472798809, shard 4, preserves cargo and unsent collection marks, but records no further hit for 15 seconds. Goo 490 remains alive with 6.89 million HP; only 194 native events exist, ruling out event-log rollover. Actual dashes move toward the goo, then ordinary walking moves away. Runner movement gives `kiteIfNeeded` priority; only event bosses receive an out-of-range approach first. Ordinary orbit or outward fallback can therefore retain movement while the selected attacker is outside native attack range.
+
+Preserve secondary-attacker clearance and terrain validation, normal in-range kiting, and defensive fallback when approach is blocked. The regression must fail before the change for an ordinary out-of-range attacker where only outward kite fallback is available but a safe direct inward approach exists. Verify that an unsafe inward approach still yields to validated escape. The native held-cost case remains the acceptance proof with its unchanged 15-second hit deadline and actual cargo conservation.

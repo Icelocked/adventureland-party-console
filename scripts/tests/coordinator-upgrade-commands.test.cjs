@@ -6,9 +6,12 @@ function fixture(){const state={upgrades:{},autoUpgradeMarks:{},goldTargets:{},s
  return {state,calls,send:body=>service.handle({character:'F',...body})};}
 test('upgrade intent retains starting item and distinguishes equipped slots',()=>{
  const f=fixture(),item={name:'cap',level:7};f.send({type:'upgrade-mark',item,slot:2,tiers:1});f.send({type:'upgrade-mark',item,slot:'helmet',equipped:true,tiers:1});
- assert.deepEqual(f.state.upgrades.F,[{slot:2,item,tiers:1},{slot:'helmet',item,equipped:true,tiers:1}]);
+ const ids=f.state.upgrades.F.map(mark=>mark.requestId);
+ assert.ok(ids.every(id=>typeof id==='string' && id.length>0));
+ assert.notEqual(ids[0],ids[1]);
+ assert.deepEqual(f.state.upgrades.F.map(({requestId,...mark})=>mark),[{slot:2,item,tiers:1},{slot:'helmet',item,equipped:true,tiers:1}]);
  assert.equal(f.send({type:'upgrade-mark',item,slot:2,tiers:7}).status,400);assert.equal(f.state.upgrades.F[0].tiers,1);
- f.send({type:'upgrade-mark',item,slot:2,remove:true});assert.equal(f.state.upgrades.F.length,1);
+ f.send({type:'upgrade-mark',item,slot:2,remove:true});assert.equal(f.state.upgrades.F.length,1);assert.equal(f.state.upgrades.F[0].requestId,ids[1]);
  assert.equal(f.send({type:'upgrade-mark',item,slot:'helmet',tiers:1}),undefined);
 });
 test('automatic mark is idempotent for the matching target without removing manual intent',()=>{

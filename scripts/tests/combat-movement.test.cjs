@@ -275,11 +275,13 @@ function geometry(range = 120) {
   let now = 1000;
   const c = vm.createContext({ character: { name: 'Us', map: 'main', x: range - 5, y: 0,
     range, speed: 60, hp: 100, max_hp: 100 }, parent: { entities: { m: target } },
-    kiteState: { targetId: null }, formationFrame: null, formationPerformance: { collisionChecks: 0 },
+    movement:{report:()=>null},kiteState: { targetId: null }, formationFrame: null, formationPerformance: { collisionChecks: 0 },
+    runtimeCurrent: () => true, joinedEvent: null,
     can_move_to: () => true, is_in_range: () => true,
     move: (x, y) => { moves.push({ x, y }); return new Promise(() => {}); },
     Date: class extends Date { static now() { return now; } },
   }); c.root = c;
+  vm.runInContext(require('./helpers/named-function.cjs').namedFunction(shared,'independentApproachOwnsJourney'),c);
   vm.runInContext(shared.slice(shared.indexOf('  function desiredCombatRange('), shared.indexOf('  root.sharedRoutine = {')), c);
   return { c, target, moves, now: value => now = value };
 }
@@ -477,6 +479,7 @@ test('eligible passing and active attacks share priority without passing movemen
     r.c.partyQueueClient.preparePassing=()=>true; // Admission is covered by passing-admission tests.
     const passing={...r.target,id:'passing',mtype:'bee'};const hit=[];
     r.routine.getPassingTarget=()=>passing;
+    r.routine.allowsPassingTarget=target=>target===passing;
     r.routine.monsterPriority=target=>target.id==='passing'?passivePriority:50;
     r.routine.beginPassingAttack=()=>{};
     r.c.attack=target=>{hit.push(target.id);return new Promise(()=>{});};
@@ -577,4 +580,25 @@ test(ctype+' Franky attendance suppresses farming/passing targets and ordinary m
     active=false;r.c.partyRoleRunner.wake();await flush();
     assert.equal(exitSelection,r.target,'exit defense takes ownership');
   } finally {r.c.partyRoleRunner.stop();}
+});
+
+
+test('ordinary out-of-range attacker closes range before outward kite fallback', async () => {
+  const {c,target,moves}=geometry(179);
+  c.character.x=235;c.is_in_range=()=>false;
+  // Only a narrow east/west corridor: orbit arcs collide, but inward approach is clear.
+  c.can_move_to=(_x,y)=>Math.abs(y)<1;
+  assert.equal(await c.kiteIfNeeded(target),true);
+  assert.ok(moves.at(-1).x<235,'out-of-range selected attacker must be approached');
+  assert.equal(c.partyCombatPosition.mode,'approaching');
+});
+
+test('ordinary out-of-range approach retains secondary attacker clearance', async () => {
+  const {c,target,moves}=geometry(179);
+  c.character.x=235;c.is_in_range=()=>false;
+  c.can_move_to=(_x,y)=>Math.abs(y)<1;
+  c.parent.entities.add={id:'add',type:'monster',visible:true,x:200,y:0,target:'Us',range:40};
+  assert.equal(await c.kiteIfNeeded(target),true);
+  assert.ok(moves.at(-1).x>235,'unsafe inward approach must retain validated escape');
+  assert.equal(c.partyCombatPosition.mode,'escaping');
 });

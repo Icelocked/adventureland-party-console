@@ -500,16 +500,23 @@ export function createDungeons(party: DungeonParty, ports: Ports) {
     return d.travel?.stage === 'travelling' && sample && sample.id === d.commands[leader]?.id ? sample.route : undefined;
   }
   function formationReady(d: DungeonState, name: string) {
+    // Completed-route recovery has a different start point for each displaced
+    // actor. It retains whole-party combat readiness, not old route progress.
+    if (d.commands[name]?.independent) return true;
     if (!d.travel || d.travel.stage === 'assembling') return true;
     const leader = party.statuses[d.participants[0]], actor = party.statuses[name];
     if (!leader || !actor) return false;
-    const samples = d.participants.filter(n => observation(n)?.action?.id !== d.commands[n]?.id || observation(n)?.action?.status !== 'complete')
-      .map(n => observation(n)?.travel?.id === d.commands[n]?.id && observation(n)?.travel?.prepared ? observation(n)!.travel!.distance : undefined);
+    const samples = pendingTravelDistances(d);
     if (samples.some(s => s === undefined)) return false;
-    const own = observation(name)?.travel?.distance || 0;
+    const own = travelledDistance(name);
     // Distance along the walking route is monotonic, including bends. Euclidean
     // distance to the goal can reverse in corridors and deadlock the party.
     return !samples.length || own <= Math.min(...samples.map(s => s ?? 0))+100;
+  }
+  function travelledDistance(name: string) { return observation(name)?.travel?.distance || 0; }
+  function pendingTravelDistances(d: DungeonState) {
+    return d.participants.filter(n => observation(n)?.action?.id !== d.commands[n]?.id || observation(n)?.action?.status !== 'complete')
+      .map(n => observation(n)?.travel?.id === d.commands[n]?.id && observation(n)?.travel?.prepared ? observation(n)!.travel!.distance : undefined);
   }
   function readyToMove(name: string) {
     const o = observation(name);

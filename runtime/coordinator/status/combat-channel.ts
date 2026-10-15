@@ -1,3 +1,4 @@
+import type {IndependentConfirmation} from '../../combat/independent-approach.ts';
 const semanticGrant=(grant:{expiresAt:number}|undefined)=>grant ? {...grant,expiresAt:undefined} : undefined;
 import type { HttpResponse } from "../http/contracts.ts";
 /** Long polling is separate from full inventory/status ingestion. One waiter per character. */
@@ -16,21 +17,25 @@ export function createCombatChannel(response: (name: string, mode?: "combat") =>
       travelCombat?: unknown;
       rareControl?: unknown;
       serverNow?: number;
+      consoleMaintenance?: {id:string;expires:number;mode?:'draining'} | null;
       combatResetByCharacter?: Record<string, number>;
     };
     const control = {
+      consoleMaintenance: full.consoleMaintenance,
       passingEncounters:full.passingEncounters,
       passingControl:full.passingControl,
       rareControl: full.rareControl,
       convoySignal: full.convoySignal || null,
       combatRecovery: full.combatRecovery,
       travelCombat: full.travelCombat,
-      combatResetAt: full.combatResetByCharacter?.[name] || 0,
+      combatResetAt: combatResetAt(full.combatResetByCharacter,name),
 
     };
-    const revisionControl = {...control, convoySignal: control.convoySignal && {...control.convoySignal, validUntil: undefined}};
+    const revisionControl = {...control, consoleMaintenance: control.consoleMaintenance && {...control.consoleMaintenance,expires:undefined}, convoySignal: control.convoySignal && {...control.convoySignal, validUntil: undefined}};
     const group = full?.groupedCombat as {
       queueRevision?: string;
+      independentApproach?:boolean;
+      independentConfirmation?:Pick<IndependentConfirmation,'id'>;
       pairRevision?:string; successorGrant?:{expiresAt:number};
       selection?: string;
       committed?: boolean;
@@ -52,6 +57,7 @@ export function createCombatChannel(response: (name: string, mode?: "combat") =>
         group.queueRevision, group.pairRevision, semanticGrant(group.successorGrant),
         group.selection,
         group.committed,
+        group.independentApproach,group.independentConfirmation?.id,
         group.pursuit?.revoking,
         group.formationRecovery,
         position,
@@ -80,3 +86,5 @@ export function createCombatChannel(response: (name: string, mode?: "combat") =>
   }
   return { snapshot, flush, wait };
 }
+
+function combatResetAt(resets:Record<string,number>|undefined,name:string):number {return resets?.[name] || 0;}

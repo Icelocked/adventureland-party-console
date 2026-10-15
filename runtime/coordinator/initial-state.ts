@@ -82,12 +82,13 @@ export function createInitialCoordinatorState<Merchant extends string | null = s
     merchantDeliveries: persistedSettings.merchantDeliveries || {},
     ...initialMerchantSales(persistedSettings, ports.now),
     merchantJobBlocks: {} as Record<string, ResourceBlock>,
-    standBids: Object.fromEntries(Object.entries(persistedSettings.standBids || {}).map(([id, bid]) => [id, { useStandSlot: false, acceptHigherLevels: true, ...bid }])),
+    standBids: initialStandBids(persistedSettings),
     nativeStand: persistedSettings.nativeStand || { sequence: 0, offers: {}, problems: {} },
     autoStandBuys: persistedSettings.autoStandBuys === true,
     autoBlacklistMerchants: persistedSettings.autoBlacklistMerchants !== false,
     standPriceHistory: persistedSettings.standPriceHistory || {},
     merchantBlacklist: persistedSettings.merchantBlacklist || {},
+    marketIgnoredItems: persistedSettings.marketIgnoredItems || [],
     ...initialItemIntents(persistedSettings),
     ...initialCommandState(persistedSettings, ports.now),
     ...initialPartySelection(persistedSettings),
@@ -120,4 +121,9 @@ function dashboardPreferences(saved: Record<string, unknown>) {
 function sharedSettings(settings: Record<string, unknown>) {
   return { production: (settings.production || {attempts:{}}) as import("./inventory/production.ts").ProductionState,
     merchantRules: (settings.merchantRules || null) as import("./inventory/shared-rules.ts").SharedRules | null };
+}
+
+function initialStandBids(settings: Settings) {
+  return Object.fromEntries(Object.entries(settings.standBids || {}).map(([id,bid]) =>
+    [id,{useStandSlot:false,acceptHigherLevels:true,...bid}]));
 }

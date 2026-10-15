@@ -2,17 +2,24 @@ import { test, expect } from './live-fixtures';
 
 const merchant = 'E2EMerchant';
 
-test('lucky slot recovery preserves a changed potion stack using native inventory swaps', async ({live},info) => {
-  // Failure modes: potion use changes the displaced quantity and blocks restore;
-  // an unrelated replacement is adopted; recovery duplicates or loses stock;
-  // a completed historical upgrade is issued again instead of only restored.
+test('lucky slot recovery retires ambiguous restoration and preserves provable native swaps', async ({live},info) => {
+  // Failure modes: ambiguous restoration blocks later work or swaps unrelated
+  // stock; valid potion quantity recovery loses items; replay repeats a native
+  // swap or reissues the completed upgrade.
   await live.admin(`output=(()=>{const p=get_player('${merchant}');p.items[20]={name:'hpot1',q:4};p.items[21]={name:'helmet',level:1};cache_player_items(p);resend(p,'reopen+cid');return p.items.slice(20,22);})()`);
   await expect.poll(async()=>(await live.clients[merchant].snapshot()).items[20]?.q).toBe(4);
   const journal={from:20,to:21,item:{name:'helmet',level:0},displaced:{name:'hpot1',q:5},phase:'running'};
   await info.attach('declared-lucky-recovery-history',{body:JSON.stringify(journal),contentType:'application/json'});
-  const recovered=await live.clients[merchant].run(`(async()=>{let journal=${JSON.stringify(journal)};const service=createPartyLuckyUpgrade({item:i=>character.items[i]&&JSON.parse(JSON.stringify(character.items[i]))||null,busy:()=>!!(character.q&&(character.q.upgrade||character.q.compound)),swap:(a,b)=>swap(a,b),read:()=>journal,write:j=>{journal=j;},sleep:ms=>new Promise(r=>setTimeout(r,ms)),now:Date.now,current:()=>true,log:()=>{}});const original=JSON.parse(JSON.stringify(journal));journal.displaced={name:'mpot1',q:5};let rejected;try{await service.recover();}catch(error){rejected=error.message;}const untouched=JSON.parse(JSON.stringify(character.items.slice(20,22)));journal=original;await service.recover();journal={...original,phase:"restoring",result:{name:"helmet",level:1}};await service.recover();return {rejected,untouched,journal,items:character.items.slice(20,22)};})()`);
-  expect(recovered.rejected).toContain('displaced item changed');
+  const recovered=await live.clients[merchant].run(`(async()=>{let journal=${JSON.stringify(journal)};const warnings=[],swaps=[],attempts=[];const service=createPartyLuckyUpgrade({item:i=>character.items[i]&&JSON.parse(JSON.stringify(character.items[i]))||null,busy:()=>!!(character.q&&(character.q.upgrade||character.q.compound)),swap:(a,b)=>{swaps.push([a,b]);return swap(a,b);},read:()=>journal,write:j=>{journal=j;},sleep:ms=>new Promise(r=>setTimeout(r,ms)),now:Date.now,current:()=>true,log:slot=>attempts.push(slot),warn:(reason,entry)=>warnings.push({reason,entry})});const original=JSON.parse(JSON.stringify(journal));journal.displaced={name:'mpot1',q:5};let rejected;try{await service.recover();}catch(error){rejected=error.message;}const untouched=JSON.parse(JSON.stringify(character.items.slice(20,22)));const abandoned=journal;await service.recover();const repeated={journal,items:JSON.parse(JSON.stringify(character.items.slice(20,22))),swaps:swaps.slice(),attempts:attempts.slice()};journal=original;await service.recover();journal={...original,phase:"restoring",result:{name:"helmet",level:1}};await service.recover();return {rejected,untouched,abandoned,repeated,warnings,swaps,attempts,journal,items:character.items.slice(20,22)};})()`);
+  expect(recovered.rejected).toBeUndefined();
+  expect(recovered.abandoned).toBeNull();
+  expect(recovered.warnings).toHaveLength(1);
+  expect(recovered.warnings[0].reason).toContain('displaced item changed');
+  expect(recovered.warnings[0].entry.displaced).toEqual({name:'mpot1',q:5});
   expect(recovered.untouched).toEqual([{name:'hpot1',q:4},{name:'helmet',level:1}]);
+  expect(recovered.repeated).toEqual({journal:null,items:recovered.untouched,swaps:[],attempts:[]});
+  expect(recovered.swaps).toEqual([[20,21]]);
+  expect(recovered.attempts).toEqual([]);
   expect(recovered.journal).toBeNull();
   expect(recovered.items).toEqual([{name:'helmet',level:1},{name:'hpot1',q:4}]);
   await info.attach('lucky-recovery-native-result',{body:JSON.stringify({recovered,events:await live.clients[merchant].events()}),contentType:'application/json'});
@@ -22,6 +29,15 @@ test('Hunt blacklist full catalog scrolls and sprites select their own monster',
   // Failure modes: absolute sprites cover the modal and intercept other rows;
   // a large native catalog cannot scroll; sprite and text clicks select different
   // monsters; the one-monster console fixture hides those layout failures.
+  // Native catalog preparation follows the first successful heartbeat.
+  let catalog: Array<{id:string}> = [];
+  await expect.poll(async () => {
+    catalog = (await live.state(true)).monsterChoices || [];
+    return catalog.length;
+  }, { timeout: 90_000 }).toBeGreaterThan(30);
+  await info.attach('native-blacklist-catalog-ready', {
+    body: JSON.stringify({monsterIds: catalog.map(monster => monster.id)}), contentType: 'application/json',
+  });
   await page.goto(live.url);
   const warrior=page.locator('article').filter({has:page.getByRole('heading',{name:'E2EWarrior',exact:true})});
   await warrior.getByRole('button',{name:'Farming settings',exact:true}).click();
@@ -71,6 +87,27 @@ test.describe('stale merchant recovery', () => {
       merchantCurrent: { id: 'held-bank-job', target: merchant, reason: 'manual bank exchange', phase: 'assigned', startedAt: Date.now() },
     }));
     if (localJournal) {
+      // This is persisted historical input, so activate genuine native CODE to
+      // load it. The active runtime deliberately owns its cached journal rather
+      // than adopting asynchronous storage echoes as a new production attempt.
+      let previousRuntime: string | undefined;
+      await expect.poll(async () => {
+        const status = (await live.state()).characters[merchant];
+        if (!status?.dashboardRuntime || Date.now() - status.seenAt > 3000) return false;
+        previousRuntime = status.dashboardRuntime;
+        return true;
+      }, { timeout: 60_000 }).toBe(true);
+      const activatedAt = Date.now();
+      await live.clients[merchant].frame.evaluate(() => {
+        const game = window as any;
+        const runner = (document.getElementById('maincode') as HTMLIFrameElement).contentWindow as any;
+        game.start_runner('maincode', `$.getScript(${JSON.stringify(runner.__partyServer + '/CODE/adventure_land/universal-loader.js')});`);
+      });
+      await expect.poll(async () => {
+        const status = (await live.state()).characters[merchant];
+        return !!status?.dashboardRuntime && status.dashboardRuntime !== previousRuntime &&
+          status.seenAt >= activatedAt;
+      }, { timeout: 60_000 }).toBe(true);
       await expect.poll(() => live.clients[merchant].run(`localStorage.getItem('party-production:'+character.name)`)).toBeNull();
       await expect.poll(async () => (await live.clients[merchant].snapshot()).map, { timeout: 90_000 }).toBe('bank');
     } else {

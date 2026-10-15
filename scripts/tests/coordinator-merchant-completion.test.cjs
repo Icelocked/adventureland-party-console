@@ -2,6 +2,13 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {createMerchantCompletionRoute}=require('../../runtime/coordinator/http/merchant-completion.ts');
 const {fixture}=require('./helpers/coordinator-completion.cjs');
 
+test('unresolved upgrade ambiguity installs an inventory recovery block rather than immediate retry',()=>{
+ const f=fixture({job:{reason:'manual upgrades'}});
+ createMerchantCompletionRoute(f.state,f.ports)({body:{jobId:'job',success:false,error:'Upgrade inventory recovery ambiguous: sword +0 to +1; original slot 7; candidates 10, 11'}},f.response);
+ assert.equal(typeof f.state.merchantJobBlocks['F\nmanual upgrades']?.upgradeRecoverySignature,'string');
+ assert.equal(f.state.merchantQueue.length,0);
+});
+
 
 test('upgrade and compound communication failures preserve work with escalating durable delays',()=>{
  const {createCompletionRetries}=require('../../runtime/coordinator/merchant/completion-retries.ts');

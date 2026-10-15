@@ -32,6 +32,15 @@ test('destructive rule conflicts pause automatic upgrades without hiding the rul
  assert.deepEqual(itemRuleConflicts(s,item),['Processing','NPC sale']);reconcileCoordinatorUpgradeMarks(s,'F',{items:[entry]});assert.deepEqual(s.upgrades.F,[]);
  s.autoUpgradeMarks.M['cap@+0'].quantity=0;assert.deepEqual(itemRuleConflicts(s,item),[]);
 });
+// Failure inventory: adding manual-upgrade metadata must not bypass compound
+// conflict authorization; rejection must leave no admitted production receipt.
+test('automatic compound authorization retains destructive rule conflict protection',()=>{
+ const s=fixture(),input={name:'stramulet',level:0};
+ s.autoCompounds.M=[{name:input.name,targetTier:1,quantity:1}];
+ s.autoNpcSales[automaticCommerceRuleKey(input)]={item:input};migrateSharedRules(s,['F']);
+ assert.throws(()=>beginProduction(s,{id:'compound-conflict',kind:'compound',item:input,automatic:{family:'compound',key:input.name}}),/Conflicting automatic rules/);
+ assert.deepEqual(s.production.attempts,{});
+});
 test('auto processing contributes to the same collection slots and threshold',()=>{
  const s=fixture();migrateSharedRules(s,['F']);Object.assign(s,{itemCollectionThreshold:5,statuses:{M:{map:'main',server:'US I',x:0,y:0,seenAt:100},F:{map:'main',server:'US I',x:2000,y:0,seenAt:100,items:[entry]}}});s.upgrades.F=[{...entry,auto:true,tiers:1}];
  assert.equal(coordinatorCollectionSlots(s,'F'),1);assert.equal(coordinatorCollectionReady(s,{target:'F',reason:'auto upgrade'},()=>100),false);

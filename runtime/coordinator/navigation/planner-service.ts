@@ -1,4 +1,5 @@
 import { Worker } from 'node:worker_threads';
+import {UnreachableGoalError} from './planner-error.ts';
 import { geometryFingerprint, type GameData, type PlanRequest, type PlanResult } from '../../navigation/contracts.ts';
 interface Pending { resolve(result: PlanResult): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }
 interface Instance { worker: Worker; version: number; fingerprint: string; key: string; ready: Promise<void>; pending: Map<string, Pending>; used: number }
@@ -26,7 +27,10 @@ export function createPlannerService(workerFile: string) {
         const p = instance.pending.get(message.id);
         if (!p) return;
         instance.pending.delete(message.id); clearTimeout(p.timer);
-        if (message.error) p.reject(Error(message.error)); else p.resolve(message);
+        if (message.error) {
+          const verified = message.failure === 'unreachable' && message.version === instance.version && message.fingerprint === instance.fingerprint;
+          p.reject(verified ? new UnreachableGoalError(message.error, message) : Error(message.error));
+        } else p.resolve(message);
       });
       worker.once('error', error => { clearTimeout(timer); reject(error); retire(instance, error.message); });
       worker.once('exit', () => { clearTimeout(timer); reject(Error('Planner worker exited')); retire(instance, 'Planner worker exited'); });

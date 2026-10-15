@@ -81,7 +81,7 @@ test('bank auto-stand protects locked, conflicting, and crafting stock and waits
  const f=fixture(), pants={name:'frankypants',level:0},key=automaticCommerceRuleKey(pants);
  f.state.autoStandMarks[key]={price:936000};
  f.state.bankSnapshot={packs:{items0:[{slot:0,item:{...pants,l:'l'}},{slot:1,item:pants}]}};
- f.state.withdrawals={M:[{pack:'items1',slot:0,item:{name:'coat'}}]};
+ f.state.withdrawals={M:[{pack:'items0',slot:1,item:pants}]};
  assert.equal(f.service.reconcile({name:'M',items:[]}),false);
  f.state.withdrawals.M=[];f.state.merchantCurrent={reason:'manual bank exchange'};
  assert.equal(f.service.reconcile({name:'M',items:[]}),false);

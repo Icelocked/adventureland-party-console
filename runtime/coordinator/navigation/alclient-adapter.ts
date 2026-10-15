@@ -1,4 +1,5 @@
 import * as pathfinder from 'alpathfinder';
+import {UnreachableGoalError} from './planner-error.ts';
 import type { GData, MapKey } from 'typed-adventureland';
 import type { GameData, PlanRequest, Step } from '../../navigation/contracts.ts';
 /** Adapted from earthiverse/ALClient (MIT), Pathfinder.ts at
@@ -7,6 +8,7 @@ import type { GameData, PlanRequest, Step } from '../../navigation/contracts.ts'
  * Only prepare/getPath are needed. No cheat edges; no Character/socket client.
  */
 let preparedGame: GameData;
+let preparedMaps = new Set<string>();
 // Route-cost estimate only; actual movement and town authorization are separate.
 const PLANNER_SPEED = 200;
 // alpathfinder 0.6 exposes cost speed and avoidMaps, but no Town prohibition.
@@ -20,11 +22,12 @@ export function prepare(g: GameData): void {
   for (const map of Object.keys(g.npcs.transporter?.places || {})) maps.add(map);
   for (const map of ['abtesting', 'goobrawl', 'jail']) maps.add(map);
   pathfinder.prepare(g as unknown as GData, Object.keys(g.maps).filter(m => !maps.has(m)) as MapKey[]);
+  preparedMaps = new Set([...maps].filter(map => !!g.maps[map] && typeof g.geometry === 'object' && g.geometry !== null && Object.hasOwn(g.geometry,map)));
 }
 export function getPath(request: PlanRequest): Step[] {
   const { from, to } = request;
   const raw = request.avoidLeave ? withoutLeave(request) : findPath(from, to, request.town);
-  if (!raw?.length) throw Error('ALClient found no route');
+  if (!raw?.length) noRoute(request);
   if (!request.town && raw.some(p => p.method === 'town')) throw Error('ALClient found no route without Town');
   const plot: Step[] = transporterApproaches(raw, from, request.town).map(p => ({ map: p.map, x: p.x, y: p.y, method: p.method,
     ...(p.method === 'town' ? { town: true } : {}),
@@ -32,6 +35,15 @@ export function getPath(request: PlanRequest): Step[] {
     ...(p.key ? { key: p.key } : {}) }));
   if (plot[0].map !== from.map || plot[0].x !== from.x || plot[0].y !== from.y) plot.unshift({ ...from });
   return plot;
+}
+
+function noRoute(request: PlanRequest): never {
+  if (preparedContext(request.from) && preparedContext(request.to)) throw new UnreachableGoalError('ALClient found no route');
+  throw Error('ALClient found no route with unprepared map or instance geometry');
+}
+
+function preparedContext(point: Step): boolean {
+  return preparedMaps.has(point.map) && (point.in === undefined || String(point.in) === point.map);
 }
 
 function findPath(from: Step, to: Step, town: boolean, avoidLeave = false): pathfinder.PathNode[] | null {

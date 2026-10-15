@@ -21,28 +21,27 @@ for (const {restart, lateTransport} of [{restart:false,lateTransport:false},{res
     await expect.poll(() => live.clients[P].run('character.items[10]?.name')).toBe('iceskates');
     const equipReceipt = await live.clients[P].run('(async()=>({result:await equip(10),shoes:character.slots.shoes,speed:character.speed}))()');
     await expect.poll(() => live.admin(`output=get_player(${JSON.stringify(P)}).slots.shoes?.name`)).toBe('iceskates');
-    const equipmentStats = await live.admin(`output=(()=>{const p=get_player(${JSON.stringify(P)});return {shoes:p.slots.shoes,speed:p.speed,hp:p.hp,max_hp:p.max_hp}})()`);
-    expect(equipmentStats.speed).toBeLessThanOrEqual(40);
-    expect(equipmentStats.speed).toBeGreaterThan(0);
+    const equipmentStats = await live.admin(`output=(()=>{const p=get_player(${JSON.stringify(P)}),warcry=p.s.warcry||null,definition=G.conditions.warcry;
+      const active=!!warcry&&Number(warcry.ms)>0;
+      if(active&&(!Number.isFinite(definition?.speed)||definition.speed<0))throw Error('Unknown native War Cry speed definition');
+      return {shoes:p.slots.shoes,speed:p.speed,hp:p.hp,max_hp:p.max_hp,warcry,warcryDefinition:definition,
+        baselineSpeed:p.speed-(active?definition.speed:0)}})()`);
+    expect(equipmentStats.baselineSpeed).toBeLessThanOrEqual(40);
+    expect(equipmentStats.baselineSpeed).toBeGreaterThan(0);
     await info.attach('town-native-iceskates-equipment', { body: JSON.stringify({ equipmentSeed, equipReceipt, equipmentStats,
-      rationale: 'Native Ice Skates extend the obstacle detour beyond30s; the pinned2561-unit full walk at40speed takes about64s, under120s absolute bound.' }), contentType: 'application/json' });
+      rationale: 'Native Ice Skates have baseline speed <=40; subtract only an active native War Cry speed bonus for this equipment assertion. Retain actual speed and buff definition: maintained War Cry can temporarily accelerate the real walk. The pinned2561-unit full walk at40speed takes about64s, under120s absolute bound.' }), contentType: 'application/json' });
     const candidates = zones((await live.state(true)).monsterChoices, ['bee']).filter(area => area.map === 'main');
     // Native 15555 Bee boundary [448,694,592,812] contains the incident's
     // Main(520,710) origin. Returning on foot must detour southeast first.
     const destination = candidates.find(area => contains(area, { map: 'main', x: 520, y: 710 }, 0));
     expect(destination).toBeTruthy();
     if (!destination) throw new Error('Pinned native Bee incident area is unavailable');
-    // Reach this region with real native navigation before assigning the
-    // initially completed quests. This scenario covers return recovery, not kills.
-    for (const character of fighters) await live.post('/command', {
-      character, type: 'character-travel', location: { map: 'main', x: 520, y: 710 }, label: 'Native Town recovery incident origin',
-    });
-    await expect.poll(async () => {
-      const current = await world(live);
-      return fighters.every(name => !current[name].quest && contains(destination, current[name], 0));
-    }, { timeout: 150_000, message: 'Both native fighters must reach the incident Bee region before quest setup' }).toBe(true);
     // This scenario injects one follower cast interruption. Ambient Bee attacks
     // must not independently interrupt the leader's prerequisite successful cast.
+    // CI failure inventory: the first fighter genuinely arrives, then Bee aggro
+    // causes native kiting outside the region before the slower fighter arrives.
+    // Declare peaceful initial Bees before travel, rather than after a rendezvous
+    // that incidental combat can prevent. Keep actual walking/arrival assertions.
     const peacefulBees = await live.admin(`output=(()=>{
       const original=globalThis.__e2eHuntRareOriginal||={};
       original.bee||=JSON.parse(JSON.stringify(G.monsters.bee));
@@ -53,6 +52,15 @@ for (const {restart, lateTransport} of [{restart:false,lateTransport:false},{res
       return {original:original.bee,monsters:before};
     })()`);
     await info.attach('town-initial-peaceful-bees', {body:JSON.stringify(peacefulBees),contentType:'application/json'});
+    // Reach this region with real native navigation before assigning the
+    // initially completed quests. This scenario covers return recovery, not kills.
+    for (const character of fighters) await live.post('/command', {
+      character, type: 'character-travel', location: { map: 'main', x: 520, y: 710 }, label: 'Native Town recovery incident origin',
+    });
+    await expect.poll(async () => {
+      const current = await world(live);
+      return fighters.every(name => !current[name].quest && contains(destination, current[name], 0));
+    }, { timeout: 150_000, message: 'Both native fighters must reach the incident Bee region before quest setup' }).toBe(true);
     await party(live);
     await live.post('/hunt-settings', { character: W, preferredSpawns: { bee: JSON.stringify([destination.map, destination.x, destination.y]) } });
     await quests(live, info, { [W]: { id: 'bee', count: 0 }, [P]: { id: 'bee', count: 0 } });
@@ -65,13 +73,14 @@ for (const {restart, lateTransport} of [{restart:false,lateTransport:false},{res
     // actually arrives. Preserve every packet and bound this transport fault.
     await live.clients[P].run(`(() => {
       const socket = parent.socket, emit = socket.emit;
-      const fault = globalThis.__e2eTownFault = { delayed: false, released: false, events: [] };
+      const fault = globalThis.__e2eTownFault = { delayed: false, released: false, events: [], generation:globalThis.__partyRuntimeGeneration };
+      const origin={map:character.map,x:character.real_x,y:character.real_y};
       const pending = [];
       let timer;
       fault.release = reason => {
         if (fault.released) return;
         fault.armed = reason === 'authoritative-leader-town-arrival';
-        fault.released = true; clearTimeout(timer);
+        fault.released = true; clearTimeout(timer);clearInterval(fault.overlapTimer);
         for (const packet of pending.splice(0)) {
           fault.events.push({ event: 'town-request-forwarded', reason, at: Date.now() });
           emit.apply(socket, packet);
@@ -97,7 +106,34 @@ for (const {restart, lateTransport} of [{restart:false,lateTransport:false},{res
         fault.events.push({event:'native-stop-town',...fault.interruption});
       };
       socket.on('player', onPlayer);
-      fault.restore = () => { fault.release('fixture-cleanup'); socket.off('player', onPlayer); socket.emit = emit; };
+      if(${JSON.stringify(lateTransport)})fault.overlapTimer=setInterval(()=>{
+        if(fault.released || !fault.delayed || pending.length!==1 || globalThis.__partyRuntimeGeneration!==fault.generation || !socket.connected)return;
+        const primary=parent.parent;
+        if(primary.character?.name!==${JSON.stringify(W)})return;
+        const leaderCode=primary.document.getElementById('maincode')?.contentWindow;
+        const leaderInterruption=leaderCode?.__e2eLeaderTownFault?.interruption;
+        if(!leaderInterruption)return;
+        const service=globalThis.__partyMovement,journey=service?.report(),owner=journey?.owner;
+        const convoy=sharedRoutine.combatTraceSnapshot(),revision=globalThis.__partyNavigationIntent?.revision;
+        if(!journey || !owner || !service.state.moving || service.state.use_town!==false ||
+            service.state.map!=='main' || Math.hypot(service.state.x,service.state.y)>1 ||
+            !character.moving || character.c?.town || parent.transporting || convoy.cancelled ||
+            !['assembling','travelling'].includes(convoy.convoyPhase) || owner.convoyId!==convoy.convoy ||
+            owner.epoch!==convoy.convoyEpoch || owner.navigationRevision!==revision || !Number.isFinite(owner.commandId))return;
+        const runtime=sharedRoutine.queueReport().combatSelection.runtimeId;
+        if(!journey.id.startsWith(character.name+':'+runtime+':'))return;
+        const packets=parent.__e2eEvents||[];let packet;
+        for(let index=packets.length-1;index>=0;index--){const candidate=packets[index],data=candidate.data;
+          if(candidate.event==='player' && Number.isFinite(data?.x) && Number.isFinite(data?.y) && data.map===origin.map){packet=candidate;break;}}
+        const position=packet?.data;
+        if(!position?.moving || Date.now()-packet.at>2000 || Math.hypot(position.x-origin.x,position.y-origin.y)<=80)return;
+        fault.walkingOverlap={at:Date.now(),generation:fault.generation,runtime,origin,
+          position:{map:position.map,x:position.x,y:position.y,moving:position.moving},playerAt:packet.at,
+          owner:{...owner},journeyId:journey.id,phase:convoy.convoyPhase,leaderInterruption:{...leaderInterruption},queued:pending.length};
+        fault.events.push({event:'native-walking-overlap',...fault.walkingOverlap});
+        fault.release('late-walking-transport');
+      },50);
+      fault.restore = () => { clearInterval(fault.overlapTimer);fault.release('fixture-cleanup'); socket.off('player', onPlayer); socket.emit = emit; };
       return true;
     })()`);
     const plans: unknown[] = [];
@@ -150,15 +186,15 @@ for (const {restart, lateTransport} of [{restart:false,lateTransport:false},{res
       if (lateTransport) {
         // Both initially remain outside Town. Release the original follower
         // packet only once interrupted-cast recovery has genuinely begun walking.
-        await expect.poll(async()=>{
-          const current=await world(live), s=await live.state();
-          return !!s.activeConvoy?.returnTown?.walking &&
-            Math.hypot(current[P].x-before[P].x,current[P].y-before[P].y)>80 &&
-            await live.clients[W].run('!!globalThis.__e2eLeaderTownFault.interruption') &&
-            await live.clients[P].run('!!character.moving && globalThis.__e2eTownFault.delayed && !globalThis.__e2eTownFault.released');
-        },{timeout:60_000,intervals:[100,250],message:'The delayed packet must outlive the interrupted Town round and overlap actual recovery walking'}).toBe(true);
-        const walking=await world(live), recovery= (await live.state()).activeConvoy, releaseAt=Date.now();
-        await live.clients[P].run("globalThis.__e2eTownFault.release('late-walking-transport')");
+        await expect.poll(()=>live.clients[P].run('!!globalThis.__e2eTownFault.walkingOverlap'),
+          {timeout:60_000,intervals:[100,250],message:'The delayed packet must outlive the interrupted Town round and overlap actual recovery walking'}).toBe(true);
+        const overlap=await live.clients[P].run('globalThis.__e2eTownFault.walkingOverlap');
+        expect(overlap.position.moving).toBe(true);expect(overlap.queued).toBe(1);
+        expect(Math.hypot(overlap.position.x-overlap.origin.x,overlap.position.y-overlap.origin.y)).toBeGreaterThan(80);
+        expect(overlap.leaderInterruption).toBeTruthy();
+        const walking=await world(live), recovery=(await live.state()).activeConvoy,releaseAt=overlap.at;
+        expect(recovery?.returnTown?.walking).toBe(true);
+        expect(recovery?.id).toBe(overlap.owner.convoyId);
         await expect.poll(async()=>{
           const current=await world(live);
           return Math.hypot(current[P].x,current[P].y)<90 && Math.hypot(current[W].x,current[W].y)>250;
@@ -172,7 +208,7 @@ for (const {restart, lateTransport} of [{restart:false,lateTransport:false},{res
         const staleOrigins=(finalState.combatLogs?.[W]||[]).filter((entry:any)=>
           entry.at>=releaseAt && /Leader moved from planning origin/.test(entry.details?.reason||entry.message));
         expect(staleOrigins,'Recovery must not repeatedly prepare from an unreached Town rally').toEqual([]);
-        await artifact(live,info,'late-native-town-walking-recovery',{before,walking,recovery,transported,plans,planResponses});
+        await artifact(live,info,'late-native-town-walking-recovery',{before,overlap,walking,recovery,transported,plans,planResponses});
         return;
       }
       await expect.poll(async () => {

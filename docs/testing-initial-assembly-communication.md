@@ -1,0 +1,11 @@
+# Initial assembly planner communication recovery
+
+Failure inventory before implementation: full 3839 manual /travel returned HTTP200 and marked both current occurrences skipped. Priest then timed out requesting its real rendezvous route. Its exact communication-hold report could not enter existing coordinator recovery because initial legacy assembly had not yet initialized `c.runtimes`. Warrior reached Main but Priest remained Halloween; the assembly failed phase-pending. No event rejoin or jail occurred.
+
+Recognize only exact current initial assembly command/epoch/navigation revision and expected current native runtime, with a fresh living same-realm observation. Reject absent/foreign runtime, command, revision, cancelled/manual replacement, stale/future reports, and unrelated operations. Reuse the existing shared-hold acknowledgements and five-second stable fresh window; do not retry native movement directly, extend budgets, or modify occurrence suppression. Existing initialized-route matching must remain unchanged.
+
+Validation: maintained composition reproduced the missing recovery before source changes (13 negative cases passed; the positive case failed). After the narrow correction, all 52 convoy-communication cases pass, runtime TypeScript and scoped lint pass. Stale observations still enter the existing freshness hold; they cannot qualify the new exact-report path or satisfy the later fresh stable window.
+
+The correction is local to communication detection before initial route runtime binding. `reportMatches` and initialized-route permissions are unchanged. The separate initial matching in return-town remains unchanged because it does not authorize this communication transition.
+
+Native validation reproduced the original `Assembly timed out: E2EPriest: phase-pending` after exactly one intercepted planning request, with zero recovery holds. The corrected native case recorded one dropped request, five fresh matching stopped holds, actual Main arrival, restart persistence and attendance at the next occurrence. Both manual variants and both Pumpkin return variants passed together in 12.1 minutes with 173 verified evidence files. The final cleanup releases follower inheritance before clearing its independently declared event selection.

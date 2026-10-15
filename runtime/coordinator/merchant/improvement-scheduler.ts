@@ -1,6 +1,6 @@
 import { ruleOwner, sharedMember, itemRuleConflicts } from "../inventory/shared-rules.ts";
 import { pendingProduction, type ProductionState } from '../inventory/production.ts';
-import { sharedCompoundRules, improvementItems, runnableBankUpgrades, planUpgradeStorage, type BankImprovementState } from "./banked-improvements.ts";
+import { sharedCompoundRules, improvementItems, runnableBankUpgrades, localBankUpgrades, planUpgradeStorage, type BankImprovementState } from "./banked-improvements.ts";
 import type { InventoryEntry } from "../contracts/item.ts";
 import type { BankboiInventory, StorageReference } from "../inventory/bankboi-completion.ts";
 import { planCompoundStorage } from "./compound-storage.ts";
@@ -52,6 +52,11 @@ interface Status {
   items?: (InventoryEntry | null)[];
 }
 
+/** The native withdrawal runner reserves three inventory slots. */
+function canReceiveCompoundInputs(status: Status): boolean {
+  return (status.items || []).filter(entry => !entry?.item).length > 3;
+}
+
 /** Translate inventory evaluations into durable rules and serialized merchant work. */
 export function createImprovementScheduler(state: SchedulerState, ports: SchedulerPorts) {
   let reservationError = "";
@@ -97,7 +102,7 @@ export function createImprovementScheduler(state: SchedulerState, ports: Schedul
       const requests = planUpgradeStorage(state, rules);
       if (requests.length) { (state.withdrawals ||= {})[name] = requests; ports.persist(); }
     }
-    ports.queue([name], "auto upgrade");
+    if (localBankUpgrades(state, rules).length) ports.queue([name], "auto upgrade");
   }
   function sharedCompounds(name: string, status: Status): boolean {
     const inventory = (status.items || []).filter(entry => !entry?.item || !itemRuleConflicts(state,entry.item).length).map(entry => entry && {...entry, craftLocation: "inventory:" + name});
@@ -116,8 +121,10 @@ export function createImprovementScheduler(state: SchedulerState, ports: Schedul
     });
     const rules = evaluateAutoCompounds(sharedCompoundRules(state), improvementItems(state)).remaining;
     const result = evaluateAutoCompounds(rules, local.concat(workers.flatMap(worker => worker.items || [])));
-    stageCompound(name, result.remaining, local, workers);
-    return result.runnable || compoundStorageLeftovers(rules, local.slice(0, inventory.length),
+    const carried = local.slice(0, inventory.length);
+    const receivesInputs = canReceiveCompoundInputs(status);
+    if (receivesInputs) stageCompound(name, result.remaining, local, workers);
+    return evaluateAutoCompounds(rules, carried).runnable || (receivesInputs && evaluateAutoCompounds(rules, local).runnable) || compoundStorageLeftovers(rules, carried,
       local.concat(workers.flatMap(worker => worker.items || []))).length > 0;
   }
   function compound(name: string, status: Status | null | undefined): boolean {

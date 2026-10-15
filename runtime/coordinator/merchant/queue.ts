@@ -10,6 +10,7 @@ export interface MerchantJob extends PrioritizedJob {
 }
 
 export interface ResourceBlock {
+  upgradeRecoverySignature?: string;
   capacitySignature?: string;
   bankGold?: number;
   merchantGold?: number;
@@ -23,6 +24,7 @@ interface QueueState {
 }
 
 interface QueuePorts {
+  upgradeRecoverySignature?(name: string): string;
   collectionReady?(job: PrioritizedJob): boolean;
   enabled?(reason: string): boolean;
   merchant(): string | null;
@@ -48,6 +50,8 @@ export function createMerchantQueue(state: QueueState, ports: QueuePorts) {
   let lastStandAttempt: string | undefined;
   let changed = false;
   function resourcesUnchanged(name: string, block: ResourceBlock): boolean {
+    if (block.upgradeRecoverySignature !== undefined)
+      return !ports.upgradeRecoverySignature || ports.upgradeRecoverySignature(name) === block.upgradeRecoverySignature;
     if (block.capacitySignature !== undefined)
       return ports.capacitySignature(name) === block.capacitySignature;
     const gold = ports.gold();
@@ -70,9 +74,10 @@ export function createMerchantQueue(state: QueueState, ports: QueuePorts) {
     return false;
   }
 
-  const separateRoutines = new Set(['deliveries', 'manual upgrades', 'auto upgrade', 'manual compounds', 'auto compound', 'manual buying', 'npc sale pickup', 'auto npc sale pickup', 'npc sales', 'auto npc sales']);
+  const separateRoutines = new Set(['exchange pickup', 'deliveries', 'manual upgrades', 'auto upgrade', 'manual compounds', 'auto compound', 'manual buying', 'npc sale pickup', 'auto npc sale pickup', 'npc sales', 'auto npc sales']);
   function sameWork(job: MerchantJob | null, name: string, reason: string): boolean {
     if (!job || job.target !== name) return false;
+    if (name === ports.merchant() && ['withdrawals','bank collection'].includes(reason) && ['withdrawals','bank collection'].includes(job.reason)) return true;
     if (name === ports.merchant() || separateRoutines.has(reason) || separateRoutines.has(job.reason)) return job.reason === reason;
     return true;
   }
@@ -91,16 +96,22 @@ export function createMerchantQueue(state: QueueState, ports: QueuePorts) {
     });
   }
 
+  function canEnqueue(name:string,reason:string):boolean {
+    if (isItemCollection(reason) && ports.collectionReady?.({target:name,reason}) === false) return false;
+    if (ports.enabled?.(reason) === false) return false;
+    return !blocked(name,reason) && !sameWork(state.current,name,reason);
+  }
   function enqueue(name: string, reason: string): void {
     reason = pickupReason(reason, name, ports.merchant());
-    if (isItemCollection(reason) && ports.collectionReady?.({target:name,reason}) === false) return;
-    if (ports.enabled?.(reason) === false) return;
-    if (blocked(name, reason) || sameWork(state.current, name, reason)) return;
+    if (!canEnqueue(name,reason)) return;
     const index = state.queue.findIndex((job) => sameWork(job, name, reason));
     if (index < 0) {
       state.queue.push(
         ports.stamp({ id: ports.nextId(), target: name, reason, queuedAt: ports.now() }),
       );
+      changed = true;
+    } else if (name === ports.merchant() && ['withdrawals','bank collection'].includes(reason) && state.queue[index].reason !== reason) {
+      state.queue[index] = ports.stamp({...state.queue[index],reason,routine:undefined});
       changed = true;
     } else if (name !== ports.merchant()) promote(index, reason);
   }

@@ -1,0 +1,3 @@
+# Native gathering reason sampling inventory
+
+ed49 focus38311203187 capacity scenario reaches actual39occupied and dashboardtwoBLOCKED but15sCDPpoll repeatedlyreads 'status update'. NativegatheringBlockReason prioritizes transientheartbeat busy overcapacity, so sparseevaluation can aliasstatusphase. Do not acceptotherreasons or infernativecapacity frombagcount. Existing15sverification may install bounded100ms passive sampler of actual __merchantGatheringBlockedReason; stillrequire recordedexactinventorycapacity. No fakefield,clock ordispatch/castchanges. Bound160records,autoclear15s andfinallyclear; retainartifactactualreasons evenfailure. Existingcooldown/cast/freecell/nativeitemassertions unchanged.

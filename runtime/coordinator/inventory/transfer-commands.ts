@@ -5,6 +5,7 @@ import type { Item, InventoryEntry } from "../contracts/item.ts";
 import type { CommandOutcome } from "../navigation/manual-commands.ts";
 import type { MerchantCommand } from "../merchant/work.ts";
 import { guardBankWithdrawal } from "./withdrawal-bank-guard.ts";
+import { merchantWeaponCompatible } from './merchant-item-commands.ts';
 
 interface Delivery extends DeliveryRequest {
   slot: number;
@@ -18,7 +19,7 @@ interface Withdrawal {
   item?: Item | null;
 }
 type TransferState = Parameters<typeof guardBankWithdrawal>[0] & {
-  statuses?: Record<string, import("../contracts/position.ts").ObservedPosition | undefined>;
+  statuses?: Record<string, (import("../contracts/position.ts").ObservedPosition & {items?: (InventoryEntry | null)[]}) | undefined>;
   merchantCharacter: string | null;
   merchantWeapon: { item?: Item } | null;
   merchantDeliveries: Record<string, Delivery[] | undefined>;
@@ -49,8 +50,20 @@ function removingWithdrawal(body: Request, pending: Withdrawal[], item: Item): b
     JSON.stringify(entry) === JSON.stringify({ pack: body.pack, slot: body.slot, item }));
 }
 export function createTransferCommands(state: TransferState, ports: TransferPorts) {
+  function rememberManualWeapon(body: Request, name: string, item: Item): void {
+    if (name !== state.merchantCharacter) return;
+    // Dashboard Equip sends an item fingerprint; native equip resolves its live
+    // inventory position. An explicit slot, when supplied, still must match.
+    const entry = state.statuses?.[name]?.items?.find(candidate => candidate?.item &&
+      (body.slot === undefined || candidate.slot === body.slot) && ports.sameItem(candidate.item, item));
+    if (!entry?.meta?.definition || typeof entry.slot !== 'number' || !merchantWeaponCompatible(entry.meta.definition)) return;
+    state.merchantWeapon = {item};
+    ports.removeReservations(name, entry.slot, item);
+    ports.persist();
+  }
   function equip(body: Request, name: string, item: Item): CommandOutcome {
     if (body.type === "equip") {
+      rememberManualWeapon(body, name, item);
       state.commands[name] = { id: ports.nextCommand(), type: "equip", item };
       return null;
     }
@@ -142,8 +155,10 @@ export function createTransferCommands(state: TransferState, ports: TransferPort
     if (body.upgradeTiers === undefined) return;
     const marks = state.upgrades[name] ||= [];
     const old = marks.find(mark => mark.storage?.pack === body.pack && mark.storage?.slot === body.slot);
-    if (old) old.tiers = Number(body.upgradeTiers);
-    else marks.push({ passId: randomUUID(), slot: -1, item: { ...item }, tiers: Number(body.upgradeTiers), storage: { pack: body.pack, slot: body.slot } });
+    if (old) {
+      old.tiers = Number(body.upgradeTiers);
+      old.requestId ||= old.passId || randomUUID();
+    } else marks.push({ requestId: randomUUID(), slot: -1, item: { ...item }, tiers: Number(body.upgradeTiers), storage: { pack: body.pack, slot: body.slot } });
     ports.persist();
   }
   function updateWithdrawal(pending: Withdrawal[], body: Request & { pack: string; slot: number }, item: Item): void {

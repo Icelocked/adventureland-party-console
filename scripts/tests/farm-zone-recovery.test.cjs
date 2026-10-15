@@ -6,7 +6,7 @@ function movement() {
  let now=10000,calls=0,stops=0,resolve;
  const target={id:'bee',x:0,y:200,map:'main'},character={name:'W',map:'main',x:0,y:0,speed:60};
  const c=vm.createContext({character,parent:{entities:{}},partyLocation:{id:'a',map:'main',x:0,y:200,shapes:[{boundary:[-50,150,50,250]}]},
-  runtimeCurrent:()=>true,sharedRoutine:{isOccupied:()=>false},activeCombatEvent:()=>false,joinedEvent:null,
+  runtimeCurrent:()=>true,sharedRoutine:{isOccupied:()=>false},activeCombatEvent:()=>false,joinedEvent:null,anniversaryStaging:false,anniversaryBusy:false,
   groupedFarming:()=>false,requestGroupApproach:()=>false,
   navigationIntent:{revision:1},Date:{now:()=>now},is_in_range:()=>false,combatDistance:()=>200,lastAttackAt:0,
   partyConvoyActive:false,convoyTraveling:null,farmTravelPaused:false,can_walk:()=>true,can_move:()=>true,can_move_to:()=>false,safeCombatPoint:()=>true,formationBody:()=>({}),recoverFormationCorner:()=>false,
@@ -19,6 +19,31 @@ test('blocked unengaged target starts only one route and times out with a target
  const r=movement();assert.equal(r.c.recoverFarmApproach(r.target),false);r.now(11600);
  assert.equal(r.c.recoverFarmApproach(r.target),true);r.now(14600);r.c.recoverFarmApproach(r.target);assert.equal(r.calls(),1);
  r.now(44601);r.c.recoverFarmApproach(r.target);assert.equal(r.stops(),1);assert.ok(r.c.farmApproach.failed.bee>44601);
+});
+
+test('exhausted local candidates relinquish to the certified formation approach without moving',()=>{
+ const r=movement();const moves=[];
+ r.c.partyQueueClient={formation:{approachStatus:()=> 'planning'}};
+ r.c.move=(x,y)=>{moves.push({x,y});return Promise.resolve();};
+ assert.equal(r.c.recoverFarmApproach(r.target),false,'legitimate initial approach remains available');
+ r.now(11600);
+ assert.equal(r.c.recoverFarmApproach(r.target),false,'no safe candidate must not hold formation for three seconds');
+ assert.deepEqual(moves,[]);assert.equal(r.calls(),0,'no independent route replaces certified formation');
+ assert.equal(r.c.farmApproach.local.point,null);
+});
+
+test('a certified local candidate keeps its existing attempt window',()=>{
+ const r=movement();const moves=[];
+ r.c.partyQueueClient={formation:{approachStatus:()=> 'planning'}};
+ r.c.move=(x,y)=>{moves.push({x,y});return Promise.resolve();};
+ r.c.can_move_to=(x,y)=>x>1;
+ assert.equal(r.c.recoverFarmApproach(r.target),false);
+ r.now(11600);assert.equal(r.c.recoverFarmApproach(r.target),true);
+ assert.equal(moves.length,1);assert.ok(moves[0].x>1);assert.equal(r.calls(),0);
+ r.now(12000);assert.equal(r.c.recoverFarmApproach(r.target),true);
+ assert.equal(moves.length,2);assert.equal(r.calls(),0);
+ r.now(14601);assert.equal(r.c.recoverFarmApproach(r.target),false,'a real local attempt remains bounded to three seconds');
+ assert.equal(moves.length,2);assert.equal(r.calls(),0,'certified formation retains routing ownership');
 });
 test('aggro suppresses path search; a replacement navigation owner is never stopped',()=>{
  const r=movement();r.c.recoverFarmApproach(r.target);r.now(11600);
@@ -183,7 +208,9 @@ test('convoy announced before local command blocks independent zone searching',(
 });
 test('Escape release installs convoy ownership before its first asynchronous stop',async()=>{
  const r=movement();r.c.state={partyConvoyActive:true,escape:null};r.c.partyConvoyActive=false;
+ vm.runInContext(require('./helpers/named-function.cjs').namedFunction(shared,'convoyActivityFromStatus'),r.c);
  r.c.applyEscape=async()=>{assert.equal(r.c.recoverFarmApproach(null),true);assert.equal(r.calls(),0);};
+ vm.runInContext(shared.slice(shared.indexOf('  async function applyEventReturnOwner('),shared.indexOf('  async function merchantSendMail(')),r.c);
  const start=shared.indexOf('      // Install the new convoy barrier');
  const end=shared.indexOf('      await applyNavigationIntent',start);
  await vm.runInContext('(async()=>{'+shared.slice(start,end)+'})()',r.c);
@@ -224,4 +251,13 @@ test('a pending conflict is cancelled if monsters reappear before departure',()=
  const t=controlFixture();t.party.statuses.W.farmAreaEvidence=[{key:'kill',actor:'Other',mtype:'bee',map:'main',x:50,y:50,at:t.now(),kill:true}];
  t.party.statuses.W.map='main';t.party.statuses.W.groupedCombat.currentAttackers=[{id:'enemy',map:'main',target:'W',hp:100}];
  t.c.farmAreaTick();assert.ok(t.party.farmAreaState.pending);t.party.statuses.P.farmCompetition.monsters.bee=1;t.advance();t.c.farmAreaTick();assert.equal(t.party.farmAreaState.pending,null);assert.equal(t.starts.length,0);
+});
+
+test('retained backend event exit after CODE turnover prevents empty-zone farming until cycle retires',()=>{
+ const r=movement();r.c.partyLocation.map='winterland';r.c.eventReturnPending=false;r.c.__partyEventRecoveryCycleId='event-1';
+ vm.runInContext(require('./helpers/named-function.cjs').namedFunction(shared,'eventExitOwnsMovement'),r.c);
+ for(let i=0;i<20;i++){r.now(13000+i*1000);assert.equal(r.c.recoverFarmApproach(null),true);}
+ assert.equal(r.calls(),0);assert.equal(r.stops(),0);
+ r.c.__partyEventRecoveryCycleId=null;r.now(40000);r.c.recoverFarmApproach(null);
+ assert.equal(r.calls(),1,'native farming continuation resumes after actual cycle retirement');
 });

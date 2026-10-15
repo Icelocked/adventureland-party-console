@@ -30,6 +30,7 @@ export interface SharedCombat {
   queueEvidence?(target: Target, state: 'pending' | 'engaged' | 'rejected', action?: string): string | null;
   equipmentTarget?(): { id: string; mtype?: string } | null;
   getRareTarget?: TargetGetter;
+  getPriorityEventTarget?: TargetGetter;
   rareAttackAllowed?(target: Target, skill: string): boolean;
   pollRareHunting?(): boolean;
   describeAttackRange?(target: Target): RangeSample | null;
@@ -39,6 +40,7 @@ export interface SharedCombat {
   getScatterBreakTarget: TargetGetter;
   getEngagedTarget: TargetGetter;
   getEventTarget: TargetGetter;
+  escapeOwnsRevival?(): boolean;
   sharedTargetId?(): string | null;
   frankyCombatActive?(): boolean;
   frankyMovementTick?(target: Target | null): boolean;
@@ -64,6 +66,7 @@ export interface SharedCombat {
   monsterPriority?(this: void, target: Target): number;
   isCurrentPartyTarget(target: Target): boolean;
   allowsTarget(target: Target): boolean;
+  allowsPassingTarget(target: Target): boolean;
   emergencyWarriorStomp(): Promise<boolean>;
   dashToward(target: Target): Promise<boolean>;
   isAttackingPartyMember(target: Target): boolean;
@@ -79,10 +82,12 @@ export interface SharedCombat {
   getCloserHuntTarget?(current: Target): Target | null;
   returnCombatActive?(): boolean;
   getWalkingPassiveTarget?(): Target | null;
+  getPassingTarget?(): Target | null;
   returnDefenseTarget?(): Target | null;
   returnAttacker?(target: Target): boolean;
   returnMovementTick?(): void;
   groupedMovement?(): boolean;
+  independentPullActive?(target: Target): boolean;
   groupedAttackAllowed?(target: Target): boolean;
   followLeaderIfFar(distance: number): Promise<unknown>;
   basicAttackReserved(): boolean;
@@ -117,6 +122,8 @@ export interface CombatState {
   skippedAttack?: string | null;
 }
 export interface RoleRunner {
+  hasStartedTarget(id:string):boolean;
+  engagedTargetId():string|null;
   advanceTarget(): void;
   resetTargeting():void;
   isKnownDead(id: string): boolean;
@@ -127,6 +134,7 @@ export interface RoleRunner {
   stop(): void;
 }
 export interface CombatRoot {
+  __partyConsoleMaintenance?: {id: string; expires: number; mode?: 'draining'} | null;
   partyPorcupineEquipment?: ReturnType<typeof import("./porcupine-equipment.ts").createPorcupineEquipment>;
   sharedRoutine: SharedCombat;
   partyRoleRunner?: RoleRunner;

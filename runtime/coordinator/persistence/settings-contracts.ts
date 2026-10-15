@@ -12,6 +12,7 @@ export interface SavedServiceSettings {
   merchantDeliveries?: Parameters<typeof createTransferCommands>[0]["merchantDeliveries"] | null;
   standBids?: Record<string, StandBid> | null;
   standPriceHistory?: Record<string, PriceHistory> | null;
+  marketIgnoredItems?: import("../../market-preferences.ts").MarketIgnoredItem[] | null;
   merchantBlacklist?: Record<string, MerchantBlock> | null;
   restockPolicies?: Parameters<typeof createRestockRoute>[0]["restockPolicies"] | null;
 }

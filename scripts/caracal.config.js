@@ -4,7 +4,7 @@ module.exports = {
   session: "",
   cull_versions: true,
   enable_TYPECODE: false,
-  watch_CODE: true,
+  watch_CODE: false,
   log_level: "info",
   log_sinks: [["node", "./standalones/LogPrinter.js"]],
   web_app: {

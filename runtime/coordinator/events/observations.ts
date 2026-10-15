@@ -1,3 +1,5 @@
+import type { MonsterEntity } from "typed-adventureland";
+import type { CombatReference } from "../status/scatter.ts";
 import type {
   AnniversaryReturnCycle,
   EventRecovery,
@@ -8,6 +10,9 @@ import type {
 } from "./return-types.ts";
 
 export interface EventSession {
+  /** Exact native realm at an actual coordinator admission, before the first joined report. */
+  authorizedRealm?: string;
+  authorizedAt?: number;
   event: string;
   id: string | null;
   lastLiveAt: number;
@@ -16,6 +21,9 @@ export interface EventSession {
   participants: string[];
   participationRecorded?: boolean;
   returnRoutes?: Record<string, ReturnRoute> | null;
+  stagingSpawnAt?: number;
+  stagingSpawnId?: number;
+  wasLive?: boolean;
 }
 
 export interface DeferredRecovery {
@@ -40,11 +48,17 @@ interface EventObservationState {
 }
 
 interface EventReport extends ReturnStatus {
+  /** Native target wire inherits its report context when coordinates omit it.
+   * IDs/types may describe newer game entities than the upstream catalog. */
+  target?: (CombatReference & Partial<Pick<MonsterEntity, "hp">> &
+    {type?: string; map?: string; in?: string | number; server?: string}) | null;
+  in?: string | number;
+  server?: string;
   name: string;
   x?: number;
   y?: number;
   joinedEvent?: string;
-  serverLiveEvents?: { name: string; id?: string }[];
+  serverLiveEvents?: { name: string; id?: string | null }[];
 }
 
 interface EventObservationPorts {
@@ -63,6 +77,8 @@ interface EventObservationPorts {
   location(recovery: EventRecovery, name: string): ReturnLocation | null;
   intent(name: string): { revision: number; cancelled?: boolean };
   hasCommand(name: string): boolean;
+  retireDeferredCommand?(name: string, cycleId: string): void;
+  retireDeferredWalk?(name: string, cycleId: string): void;
   command(name: string, command: Record<string, unknown>): void;
   nextCommand(): number;
   releaseAnniversary?(cycle: AnniversaryReturnCycle): unknown;
@@ -81,7 +97,7 @@ export function createEventObservations(
   }
 
   function liveSession(
-    report: { name: string; id?: string },
+    report: { name: string; id?: string | null },
     previous?: EventSession,
   ): EventSession {
     return {
@@ -91,6 +107,7 @@ export function createEventObservations(
       ...sessionSnapshot(previous),
       participants: previous?.participants || [],
       participationRecorded: previous?.participationRecorded ?? true,
+      wasLive: true,
     };
   }
 
@@ -111,16 +128,62 @@ export function createEventObservations(
     const changed = !session.participants.includes(name);
     if (!session.waypoints[name]) Object.assign(session.waypoints, ports.capture([name]));
     session.participationRecorded = true;
+    session.authorizedRealm = ports.statuses()[name]?.server;
+    session.authorizedAt = ports.now();
     if (changed) session.participants.push(name);
     state.sessions[name] = session;
     if (changed || previous !== session) ports.persist();
   }
-  function reportLive(name: string, report: { name: string; id?: string }): void {
+  function reportLive(name: string, report: { name: string; id?: string | null }): void {
     if (!ports.enabled(name, report.name)) return;
     const existing = state.sessions[name];
     const previous = existing?.event === report.name ? existing : undefined;
     state.sessions[name] = liveSession(report, previous);
     if (!previous) ports.persist();
+  }
+
+  type StagingReport = NonNullable<EventReport["serverStagingEvents"]>[number];
+  function ownsPrejoinStaging(name: string, event: string): boolean {
+    const session=state.sessions[name];
+    return !!session && session.event===event && !session.wasLive && session.participationRecorded===true &&
+      session.participants.includes(name);
+  }
+  function authorizedPrejoinStaging(body: EventReport, event: string): boolean {
+    const status=ports.statuses()[body.name];
+    return ownsPrejoinStaging(body.name,event) && !body.rip && !ports.intent(body.name).cancelled &&
+      freshDeferredFighter(status) && liveFeedReady(status) && typeof body.server==='string' &&
+      body.server.length>0 && body.server===status.server;
+  }
+  function validStaging(body: EventReport, report: StagingReport): boolean {
+    return (body.joinedEvent === report.name || authorizedPrejoinStaging(body,report.name)) && ["mrgreen", "mrpumpkin"].includes(report.name) &&
+      ports.enabled(body.name, report.name) && Number.isFinite(report.spawnAt) &&
+      report.spawnAt >= ports.now() - 120000 && report.spawnAt <= ports.now() + 60000;
+  }
+  function sameStagingRound(previous: EventSession | undefined, report: StagingReport): boolean {
+    if (!previous) return true;
+    if (previous.wasLive) return false;
+    if (previous.stagingSpawnId === undefined) return true;
+    return previous.stagingSpawnId === (report.spawnId ?? report.spawnAt);
+  }
+  function stagingSession(previous: EventSession | undefined, report: StagingReport): EventSession {
+    const prior: EventSession = previous || { event: report.name, id: null,
+      lastLiveAt: ports.now(), ...sessionSnapshot(undefined), participants: [], participationRecorded: false };
+    return { ...prior, stagingSpawnAt: prior.stagingSpawnAt ?? report.spawnAt,
+      stagingSpawnId: prior.stagingSpawnId ?? report.spawnId ?? report.spawnAt };
+  }
+  function applyStaging(name: string, report: StagingReport): void {
+    const existing = state.sessions[name];
+    const previous = existing?.event === report.name ? existing : undefined;
+    if (!sameStagingRound(previous, report)) return;
+    state.sessions[name] = stagingSession(previous, report);
+    if (!previous || previous.stagingSpawnAt === undefined) ports.persist();
+  }
+  function reportStaging(body: EventReport): void {
+    if (body.eventFeedConnected === false || body.eventClockStale) return;
+    for (const report of body.serverStagingEvents || []) {
+      if (!validStaging(body, report)) continue;
+      applyStaging(body.name, report);
+    }
   }
 
   function endKiss(cycle: AnniversaryReturnCycle, name: string, id: string): void {
@@ -131,6 +194,7 @@ export function createEventObservations(
     return ports.now() <= cycle.endsAt && !!(cycle.combatHandoffAt || cycle.combatPendingEvent);
   }
   function anniversaryPermission(name: string, operation?: { id: string; phase: string }) {
+    if (!ports.enabled(name, "anniversary")) return { allowed: false, reason: "anniversary disabled or instance exhausted" };
     const cycle = state.anniversary.eventCycle;
     if (name === ports.merchant()) return { allowed: true };
     if (!cycle) return { allowed: true };
@@ -188,8 +252,41 @@ export function createEventObservations(
     participate(name, event);
     if (cycle?.combatEvent === event && cycle.waypoints)
       state.sessions[name]!.waypoints = cycle.waypoints;
+    transferDeferredParty(name, event);
     ports.persist();
     return { allowed: true };
+  }
+  function transferDeferredCheckpoint(name: string): void {
+    const recovery = state.deferred[name];
+    if (!recovery) return;
+    ports.retireDeferredWalk?.(name, recovery.cycleId);
+    const intent = ports.intent(name), session = state.sessions[name]!;
+    if (recovery.checkpoint && recovery.navigationRevision === intent.revision && !intent.cancelled)
+      session.waypoints = {...session.waypoints, [name]: {revision:intent.revision, location:{...recovery.checkpoint}}};
+    ports.retireDeferredCommand?.(name, recovery.cycleId);
+    delete state.deferred[name];
+  }
+  function transferDeferredParty(name: string, event: string): void {
+    const cycleId = state.deferred[name]?.cycleId;
+    const followers = cycleId ? ports.activeNames().filter(member =>
+      member !== name && canTransferDeferredFighter(member, cycleId, event)) : [];
+    // Admission, not a global boss sighting, hands the original return party
+    // to combat. Blocked followers cannot independently request permission.
+    transferDeferredCheckpoint(name);
+    for (const member of followers) {
+      participate(member, event);
+      transferDeferredCheckpoint(member);
+    }
+  }
+  function canTransferDeferredFighter(name: string, cycleId: string, event: string): boolean {
+    const deferred = state.deferred[name], intent = ports.intent(name);
+    if (!deferred || deferred.cycleId !== cycleId || name === ports.merchant() ||
+        !ports.enabled(name, event) || intent.cancelled || deferred.navigationRevision !== intent.revision) return false;
+    return freshDeferredFighter(ports.statuses()[name]);
+  }
+  function freshDeferredFighter(report: ReturnStatus | undefined): boolean {
+    const at = Number(report?.seenAt);
+    return !!report && !report.rip && Number.isFinite(at) && ports.now()-at<=3000 && at<=ports.now()+500;
   }
 
   function reportAnniversaryHandoff(body: EventReport): void {
@@ -225,8 +322,65 @@ export function createEventObservations(
       .some(
         (name) =>
           ports.enabled(name, event) &&
+          !(event === "slenderman" && ports.statuses()[name]?.slendermanSearchExhausted) &&
           ports.statuses()[name]?.serverLiveEvents?.some((entry) => entry && entry.name === event),
       );
+  }
+
+  function liveFeedReady(report: ReturnStatus | undefined): report is ReturnStatus {
+    const at = Number(report?.seenAt);
+    return !!report && Number.isFinite(at) && ports.now() - at <= 10000 && at <= ports.now() + 500 &&
+      report.eventFeedConnected !== false && !report.eventClockStale;
+  }
+
+  function nextLiveEvent(name: string, returningFrom: string): string | null {
+    const report = ports.statuses()[name];
+    if (!liveFeedReady(report) || ports.intent(name).cancelled) return null;
+    return report.serverLiveEvents?.find(entry => entry.name !== returningFrom &&
+      ports.enabled(name, entry.name) && rawLive(entry.name) &&
+      !(entry.name === 'slenderman' && report.slendermanSearchExhausted))?.name || null;
+  }
+
+  function carryCheckpoint(name: string, event: string, previous: EventSession): void {
+    const waypoint = previous.waypoints[name];
+    const intent = ports.intent(name);
+    if (!waypoint || waypoint.revision !== intent.revision || intent.cancelled) return;
+    const target = state.sessions[name]?.event === event ? state.sessions[name] : liveSession({name: event});
+    target.waypoints[name] = {
+      revision: waypoint.revision,
+      location: waypoint.location && {...waypoint.location},
+    };
+    state.sessions[name] = target;
+  }
+
+  function releaseLiveMembers(): void {
+    const recovery = state.current;
+    if (!recovery) return;
+    const released = recovery.participants.filter(name => nextLiveEvent(name, recovery.event));
+    if (!released.length) return;
+    for (const name of released) {
+      // Retain the checkpoint until normal event authorization adopts it.
+      // Merely observing a live boss must not manufacture participation.
+      state.deferred[name] = {
+        event: recovery.event,
+        cycleId: recovery.cycleId,
+        checkpoint: ports.location(recovery, name),
+        navigationRevision: ports.intent(name).revision,
+        deferredAt: ports.now(),
+        phase: 'awaiting-event-handoff',
+      };
+      ports.retireDeferredWalk?.(name, recovery.cycleId);
+      ports.retireDeferredCommand?.(name, recovery.cycleId);
+      if (recovery.returnRoutes) delete recovery.returnRoutes[name];
+    }
+    recovery.participants = recovery.participants.filter(name => !released.includes(name));
+    recovery.pending = recovery.pending.filter(name => !released.includes(name));
+    if (!recovery.participants.length) {
+      recovery.returnRoutes = null;
+      recovery.returnDispatchedAt = null;
+    }
+    ports.persist();
+    ports.finishIfReady();
   }
 
   function ended(name: string, session: EventSession): boolean {
@@ -236,7 +390,13 @@ export function createEventObservations(
         .filter((entry) => entry?.event === session.event)
         .map((entry) => Number(entry.lastLiveAt) || 0),
     );
+    // Persisted staging owns its immutable deadline across coordinator restarts
+    // and temporary report gaps. A stale report must not retire it early.
+    const staging = Object.entries(state.sessions).some(([member, entry]) =>
+      entry.event === session.event && !entry.wasLive && ports.enabled(member, entry.event) &&
+      Number.isFinite(entry.stagingSpawnAt) && ports.now() <= Number(entry.stagingSpawnAt) + 120000);
     return (
+      !staging &&
       !rawLive(session.event) &&
       !(session.event === "goobrawl" && ports.goobrawlStillFighting()) &&
       ports.now() - latest >= 10000
@@ -249,7 +409,13 @@ export function createEventObservations(
     const sessions = Object.values(state.sessions).filter(
       (entry) => entry?.event === session.event,
     );
-    const participants = [...new Set(sessions.flatMap((entry) => entry.participants))];
+    const participants = [...new Set(sessions.flatMap((entry) => entry.participants))].filter(name => {
+      const event = nextLiveEvent(name, session.event);
+      if (!event) return true;
+      const previous = sessions.find(entry => entry.participants.includes(name))!;
+      carryCheckpoint(name, event, previous);
+      return false;
+    });
     if (participants.length) ports.begin(session.event, { ...session, participants });
     clearEndedSessions(session.event);
     ports.persist();
@@ -293,9 +459,32 @@ export function createEventObservations(
     return intent.revision;
   }
 
+  function awaitingRetiredSameEvent(name: string, recovery: DeferredRecovery): boolean {
+    const report=ports.statuses()[name], intent=ports.intent(name);
+    if(state.current || intent.cancelled || recovery.navigationRevision!==intent.revision ||
+      !freshDeferredFighter(report) || !liveFeedReady(report) || !ports.enabled(name,recovery.event))return false;
+    return !!report?.serverLiveEvents?.some(entry=>entry.name===recovery.event &&
+      !(entry.name==='slenderman' && report.slendermanSearchExhausted));
+  }
+  function awaitEventAdmission(recovery: DeferredRecovery): void {
+    if(recovery.phase==="awaiting-event-admission")return;
+    recovery.phase="awaiting-event-admission";ports.persist();
+  }
+  function retireOldDeferredContinuation(name: string, cycleId: string): void {
+    // Actual authorization adopts the checkpoint and records participation.
+    // These hooks reject unrelated commands, walks and renewed navigation.
+    ports.retireDeferredWalk?.(name,cycleId);
+    ports.retireDeferredCommand?.(name,cycleId);
+  }
   function resumeDeferred(body: EventReport): void {
     const recovery = state.deferred[body.name];
-    if (!recovery || ports.hasCommand(body.name)) return;
+    if (!recovery) return;
+    if(awaitingRetiredSameEvent(body.name,recovery)){
+      retireOldDeferredContinuation(body.name,recovery.cycleId);
+      awaitEventAdmission(recovery);
+      return;
+    }
+    if (ports.hasCommand(body.name) || nextLiveEvent(body.name, recovery.event)) return;
     const atTown = body.map === "main" && Math.hypot(Number(body.x), Number(body.y)) <= 90;
     const revision = invalidateCheckpoint(recovery, body.name);
     if (atTown && !recovery.checkpoint) delete state.deferred[body.name];
@@ -325,15 +514,53 @@ export function createEventObservations(
     ports.persist();
   }
 
+  function nativeHalloweenTarget(body: EventReport): string | undefined {
+    const target = body.target;
+    if (!target || target.type !== "monster" || !target.id || !(Number(target.hp) > 0)) return;
+    if (!localTarget(body)) return;
+    return ["mrgreen", "mrpumpkin", "slenderman"].includes(target.mtype || "") ? target.mtype : undefined;
+  }
+
+  function localTarget(body: EventReport): boolean {
+    const target = body.target!;
+    return (target.map === undefined || target.map === body.map) &&
+      (target.in === undefined || String(target.in) === String(body.in ?? body.map)) &&
+      (target.server === undefined || target.server === body.server);
+  }
+
+  function matchingNativeContext(body: EventReport, status: ReturnStatus): boolean {
+    return typeof body.map === "string" && body.map === status.map &&
+      typeof body.server === "string" && body.server === status.server &&
+      String(body.in ?? body.map) === String(status.in ?? status.map);
+  }
+
+  function assistedReportReady(body: EventReport): boolean {
+    const status = ports.statuses()[body.name];
+    return liveFeedReady(status) && !ports.intent(body.name).cancelled && !body.rip &&
+      !body.eventClockStale && body.eventFeedConnected !== false && matchingNativeContext(body, status);
+  }
+
+  function observedParticipation(body: EventReport, reports: {name: string}[]): string | undefined {
+    if (body.joinedEvent || body.mapEvent) return body.joinedEvent || body.mapEvent;
+    if (!assistedReportReady(body)) return;
+    const event = nativeHalloweenTarget(body);
+    // A following fighter can assist a real boss without the join flag. Its
+    // actual living target establishes attendance; a global sighting cannot.
+    return event && reports.some(report => report.name === event) ? event : undefined;
+  }
+
   function observe(body: EventReport): void {
     const reports = Array.isArray(body.serverLiveEvents)
       ? body.serverLiveEvents.filter((entry) => entry && typeof entry.name === "string")
       : [];
-    if (ports.enabled(body.name)) for (const report of reports) reportLive(body.name, report);
-    const participating = body.joinedEvent || body.mapEvent;
+    if (ports.enabled(body.name)) for (const report of reports)
+      if (!(report.name === "slenderman" && body.slendermanSearchExhausted)) reportLive(body.name, report);
+    reportStaging(body);
+    const participating = observedParticipation(body, reports);
     if (participating && ports.enabled(body.name, participating))
       participate(body.name, participating);
     reportAnniversaryHandoff(body);
+    releaseLiveMembers();
     beginEndedReturn();
     deferStaleMembers();
     resumeDeferred(body);

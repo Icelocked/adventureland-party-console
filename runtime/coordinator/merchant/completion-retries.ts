@@ -2,6 +2,7 @@ import { buyUpgradeOrder, commerceRouteFailure, commerceRetryDelay } from './com
 import { requestText } from "../http/contracts.ts";
 import { communicationReason } from '../navigation/communication-failure.ts';
 import { failNpcSales } from "./npc-sales.ts";
+import {upgradeRecoverySignature} from './upgrade-recovery.ts';
 import type {
   CompletionState,
   CompletionPorts,
@@ -109,7 +110,27 @@ function retryIncrement(decision: RetryDecision): number {
   return decision.movementOwned || decision.storageYield || decision.anniversaryYield || decision.rendezvous ? 0 : 1;
 }
 
+function uncertainUpgrade(error: unknown): boolean {
+  return /upgrade.*uncertain|uncertain.*upgrade/i.test(requestText(error || ''));
+}
+
+function completionLevel(body: CompletionReport, decision: RetryDecision): string {
+  if (!body.success && uncertainUpgrade(body.error)) return 'error';
+  return decision.interruptedCommerce || decision.retry ? 'info' : body.success ? 'success' : 'error';
+}
+
 export function createCompletionRetries(state: CompletionState, ports: CompletionPorts) {
+  function upgradeRecoveryBlock(job: CompletionJob, body: CompletionReport): boolean {
+    if (!body.success && /^(?:Upgrade inventory recovery ambiguous:|Automatic upgrade survivor is ambiguous)/.test(requestText(body.error))) {
+      state.merchantJobBlocks[job.target + "\n" + job.reason] = {
+        error: requestText(body.error),
+        upgradeRecoverySignature: upgradeRecoverySignature(state.upgrades[String(job.target)] || [],state.statuses[String(state.merchantCharacter)]?.items || []),
+      };
+      ports.log("Upgrade recovery paused; waiting for matching inventory or upgrade intent to change", "error", body.error);
+      return true;
+    }
+    return false;
+  }
   function resourceBlock(job: CompletionJob, body: CompletionReport): void {
     const error = requestText(body.error || ""),
       capacity = !transientUpgradeInput(error) && /^(bank_full|inventory_full|no_space)$|^Couldn't use lucky slot:/i.test(error);
@@ -155,21 +176,20 @@ export function createCompletionRetries(state: CompletionState, ports: Completio
     }
   }
   function decide(job: CompletionJob, body: CompletionReport): RetryDecision {
+    upgradeRecoveryBlock(job, body);
     resourceBlock(job, body);
     const decision = classify(job, body);
     if (!body.success && buyUpgradeOrder(job)) job.lastError = requestText(body.error);
     if (decision.movement) job.lastMovementError = requestText(body.error);
     npcSales(job, body);
-    const level =
-      decision.interruptedCommerce || decision.retry ? "info" : body.success ? "success" : "error";
-    ports.log(completionMessage(job.target, body, decision), level, body.error);
+    ports.log(completionMessage(job.target, body, decision), completionLevel(body, decision), body.error);
     return decision;
   }
   function enqueue(job: CompletionJob, decision: RetryDecision): void {
     if (!decision.retry) return;
     const retry: CompletionJob = {
       ...job,
-      id: decision.movementOwned ? job.id : "merchant-" + ports.now() + "-" + ports.nextCommand(),
+      id: retryIdentity(job,decision),
       resumedFrom: job.id,
       retryCount: (Number(job.retryCount) || 0) + retryIncrement(decision),
       rendezvousRetryCount: (Number(job.rendezvousRetryCount) || 0) + (decision.rendezvous ? 1 : 0),
@@ -188,8 +208,22 @@ export function createCompletionRetries(state: CompletionState, ports: Completio
     delete retry.checkpointAt;
     delete retry.handoff;
     delete retry.itemMarksCleared;
-    if (!state.merchantQueue.some(queued => queued.id === retry.id)) state.merchantQueue.unshift(ports.stamp(retry));
+    if (!state.merchantQueue.some(queued => queued.id === retry.id)) {
+      state.merchantQueue.unshift(ports.stamp(retry));
+      logOrderRetry(retry);
+    }
     logLuckRetry(job);
+  }
+  function retryIdentity(job:CompletionJob,decision:RetryDecision):string {
+    return decision.movementOwned || decision.storageYield ? job.id : "merchant-" + ports.now() + "-" + ports.nextCommand();
+  }
+  function logOrderRetry(retry: CompletionJob): void {
+    if (retry.reason !== 'merchant commerce') return;
+    const retryAt = Number(retry.retryAt) || ports.now();
+    const retryAtUTC = new Date(retryAt).toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, ' UTC');
+    ports.log('Retrying order at ' + retryAtUTC, uncertainUpgrade(retry.lastError) ? 'error' : 'info', {
+      jobId: retry.id, resumedFrom: retry.resumedFrom, retryAt, retryAtUTC, error: retry.lastError || null,
+    });
   }
   function logLuckRetry(job: CompletionJob): void {
     if (job.reason === "merchant luck")

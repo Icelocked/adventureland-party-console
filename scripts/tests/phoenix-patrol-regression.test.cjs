@@ -236,7 +236,7 @@ test('fast report interrupts convoy and actual client nomination produces a sele
  const res={status(){return this;},json(v){this.body=v;return this;}};
  ingest.handle('M',{combatSelection:{runtimeId:'M'},rareObservation:{at:r.time(),runtimeId:'M',map:'main',in:'main',server:'USII',x:0,y:0,sightings:[target]}},res);
  assert.equal(r.party.activeConvoy,null);assert.equal(res.body.rareControl.target.id,target.id);assert.equal(res.body.convoySignal,null);
- const c=vm.createContext({parent:{entities:{p:target}},character:{name:'M',map:'main',in:'main'},leader:'W',root:{},partyConvoyActive:false,
+ const c=require('./helpers/shared-context.cjs').createSharedContext({parent:{entities:{p:target}},character:{name:'M',map:'main',in:'main'},leader:'W',root:{},partyConvoyActive:false,
   navigationIntent:{},groupedFarming:()=>true,selectFarmCandidates:t=>t,isPassingEncounter:()=>false,passiveHunting:{rules:{}},passiveRareHunts:{},monsterFocus:['phoenix'],
   groupedEntityReport:e=>({...e,priority:100}),monsterPriority:()=>100,isExternallyClaimedMonster:()=>false,farmApproach:{failed:{}},reunionRealm:()=> 'USII',get_entity:()=>target});
  vm.runInContext(require('./helpers/named-function.cjs').namedFunction(source, 'passiveLevelAllowed'), c);
@@ -338,6 +338,8 @@ for(const mode of ['default','scatter'])for(const stage of ['mission-travel','re
  for(const s of Object.values(r.party.statuses))s.farmingMonsterType='minimush';
  observeScatter(r.party,['W','M','P'],r.party.statuses,r.party.statuses.W,[],r.time(),r.controller().owns());
  const selected=coordinatorGroupedSnapshot(r.party,ports);assert.equal(selected.target.id,'rare');
+ assert.ok(r.party.groupedCombat.queueRevision,'selected production queue provides the native acknowledgement identity');
+ for(const s of Object.values(r.party.statuses))s.groupedCombat.queueAck=r.party.groupedCombat.queueRevision;
  r.controller().tick();r.advance(10001);r.controller().report('W',r.party.statuses.W);r.controller().tick();
  assert.equal(r.controller().encounter(),true,'selected rare must not hit the ten-second handoff timeout');
 });

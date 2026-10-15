@@ -86,7 +86,7 @@ export function createCoordinatorCharacterServices(input: CharacterServicesInput
   const code = createCharacterCode({
     clock: input.clock,
     log: input.log,
-    enabled: !!input.configuration.watch_CODE,
+    enabled: !!input.configuration.watch_CODE && !process.env.AL_CONSOLE_ARTIFACT,
     digest: (files) => coordinatorCodeDigest(files, input.code),
     reload: (worker, generation) => input.code.reload(worker, generation),
     stop: (block, reason) => input.code.stop(block, reason),

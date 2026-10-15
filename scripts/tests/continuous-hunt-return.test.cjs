@@ -14,7 +14,7 @@ const copy=x=>JSON.parse(JSON.stringify(x));
 for(const map of ['mansion','winterland'])for(const disableTown of [false,true])test('three managed runners return from '+map+' to Daisy on one itinerary; disableTown='+disableTown,async()=>{
  let now=1000;const names=['L','F','P'],errors=[],requests=[],barrierCalls=[];
  const p={nextCommandId:10,commands:{},navigationIntents:{},combatLogs:{},eventReturn:null,
-  statuses:Object.fromEntries(names.map(n=>[n,{name:n,seenAt:now,hp:100,map,x:1000,y:0,speed:57,server:'USII',huntReturnProtocol:2,returnTownReady:true,convoyProtocol:4,groupedCombat:{currentAttackersAt:1000,currentAttackers:[]},combatSelection:{runtimeId:n}}])),
+  statuses:Object.fromEntries(names.map(n=>[n,{name:n,seenAt:now,hp:100,map,x:1000,y:0,speed:57,server:'USII',huntReturnProtocol:2,returnTownReady:!disableTown,convoyProtocol:4,groupedCombat:{currentAttackersAt:1000,currentAttackers:[]},combatSelection:{runtimeId:n}}])),
   activeConvoy:{id:'return',epoch:1,routeProtocol:4,phase:'assemble',leader:'L',participants:names,completed:[],slowestSpeed:57,
    rally:{map,x:1000,y:0},location:{map:'main',x:120,y:0},purpose:'monster-hunt',returnRouting:true,nonPreemptible:true,disableTown,combatHandoffAllowed:false}};
  const engine=createSharedConvoyNavigation(legacy);engine.step(p,now);
@@ -26,6 +26,7 @@ for(const map of ['mansion','winterland'])for(const disableTown of [false,true])
   const r=runtime({plan:async b=>{await settle();requests.push([n,b.town]);return {...b,ms:1,plot:b.from.map==='main'?[{map:'main',x:120,y:0}]:[
    {map,x:0,y:0,...(b.town?{town:true}:{})},{map:'main',x:0,y:0,transport:true,s:0},{map:'main',x:120,y:0}]};}});
   const c=r.context;c.character.name=n;c.character.map=map;c.character.x=1000;c.convoyRuntimeId=n;
+  c.can_use=skill=>skill==='use_town'?!disableTown:true;
   c.currentPartyList=()=>names;c.isPassingEncounter=()=>false;
   c.get_entity=()=>({id:'passing-armadillo',type:'monster',mtype:'armadillo',target:n});
   c.groupedEntityReport=t=>t;c.joinedEvent=false;c.eventTargetTypes=[];
@@ -66,8 +67,8 @@ for(const map of ['mansion','winterland'])for(const disableTown of [false,true])
  }
  assert.deepEqual(errors,[]);assert.equal(p.activeConvoy,null,'complete only after every arrival');
  await Promise.all(starts.map(s=>s.promise));
- assert.equal(convoy.routeVersion,disableTown?2:1);assert.equal(convoy.epoch,disableTown?2:1);
- if(!disableTown)assert.equal(p.nextCommandId,13,'no per-leg command replacements');
+ assert.equal(convoy.routeVersion,1);assert.equal(convoy.epoch,1);
+ assert.equal(p.nextCommandId,13,'stable Town availability requires no per-leg command replacements');
  assert.equal(requests[0][0],'L');assert.equal(requests[0][1],false);
  assert.ok(disableTown || requests.some(([name,town])=>name==='L' && town),'safe return considers Town');
  for(const r of runners){assert.equal(r.context.character.map,'main');assert.equal(r.context.character.x,120);

@@ -1,7 +1,8 @@
-import { createRealmSwitch } from "./realm-switch.ts";
+import { createRealmSwitch, type RealmOperation } from "./realm-switch.ts";
 
 type RealmPorts = Parameters<typeof createRealmSwitch>[0];
 interface RealmState {
+  realmSwitch?: RealmOperation | null;
   commands: Record<string, Parameters<RealmPorts["command"]>[1] | { type: string } | undefined>;
   steamMembers: string[];
   nextCommandId: number;
@@ -14,20 +15,28 @@ type CompositionPorts = Pick<
   | "now"
   | "sleep"
   | "pauseMerchant"
+  | "retireConvoys"
   | "native"
   | "block"
   | "stop"
   | "persist"
   | "label"
   | "dispatchMerchant"
+  | "start"
+  | "characterHome"
+  | "characterType"
+  | "connectionCount"
+  | "refresh"
 >;
 
 /** Realm transitions share command sequencing and always observe current coordinator state. */
 export function createCoordinatorRealmSwitch(state: RealmState, ports: CompositionPorts) {
   return createRealmSwitch({
     now: () => ports.now(),
+    ownsOperation: (operation) => state.realmSwitch === operation,
     sleep: (ms) => ports.sleep(ms),
     pauseMerchant: () => ports.pauseMerchant(),
+    retireConvoys: (participants) => ports.retireConvoys?.(participants),
     clearCommand: (name) => {
       delete state.commands[name];
     },
@@ -47,5 +56,10 @@ export function createCoordinatorRealmSwitch(state: RealmState, ports: Compositi
     label: (realm) => ports.label(realm),
     leader: () => state.leader,
     dispatchMerchant: () => ports.dispatchMerchant(),
+    start: (name) => ports.start(name),
+    characterHome: (name) => ports.characterHome(name),
+    characterType:(name)=>ports.characterType?.(name) || null,
+    connectionCount: () => ports.connectionCount(),
+    refresh: () => ports.refresh(),
   });
 }

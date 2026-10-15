@@ -3,7 +3,7 @@ const {coordinatorMerchantPriority: priority, coordinatorPrioritizedBids: bids,
   coordinatorMerchantTransferBlocked: blocked, coordinatorMerchantCapacitySignature: signature} = require('../../runtime/coordinator/merchant/job-policy.ts');
 
 function state() {
-  return {merchantCharacter: 'M', merchantRoutinePriorities: {'manual bank exchange': 20, 'stand bid purchases': 40},
+  return {bankbois: {B:{name:'B'}}, merchantCharacter: 'M', merchantRoutinePriorities: {'manual bank exchange': 20, 'stand bid purchases': 40},
     standBids: {first: {priorityOverride: 80}, second: {priorityOverride: 80}, last: {}},
     withdrawals: {M: [{pack: 'items1', slot: 35}]}, bankSnapshot: {packs: {items1: {35: {name: 'leather'}}}},
     statuses: {M: {items: [{name: 'occupied'}, null, null, null]}, P: {items: []}}};

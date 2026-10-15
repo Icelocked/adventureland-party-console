@@ -1,0 +1,149 @@
+import {test,expect} from './live-fixtures';
+
+const merchant='E2EMerchant',storage='E2EBankBoi';
+test.use({liveHeadless:true});
+test('BankBoi compound inputs admit merchant work only after native bank delivery',async({live},info)=>{
+  test.setTimeout(360_000);
+  await live.post('/steam/action',{character:merchant,action:'logout'});
+  await expect.poll(async()=>!(await live.state()).activeSlots.some((slot:any)=>slot.character===merchant),{timeout:90_000}).toBe(true);
+  await expect.poll(async()=>{const op=(await live.state()).steamSwitch;return !op||op.phase==='complete';},{timeout:90_000}).toBe(true);
+  await live.post('/slots/1/spawn',{character:merchant});
+  await expect.poll(async()=>{const c=(await live.state()).characters[merchant];return c?.runtime==='headless'&&Date.now()-c.seenAt<3000;},{timeout:90_000}).toBe(true);
+  await live.admin(`output=(async()=>{const c=await db.collection('character').findOne({'info.name':'${storage}'});
+    c.info.items=[{name:'stramulet',level:0},{name:'stramulet',level:0},{name:'stramulet',level:0}];
+    await db.collection('character').replaceOne({_id:c._id},c);return true;})()`);
+  const observations:any[]=[];
+  let sawRemote=false,native:any;
+  try{
+    await live.restoreHistoricalSettings(()=>({bankbois:{[storage]:{name:storage,state:'ready',items:[0,1,2].map(slot=>({slot,item:{name:'stramulet',level:0}}))}},
+      autoCompounds:{[merchant]:[{name:'stramulet',targetTier:1,quantity:1}]}}));
+    await live.post('/merchant/routine-priorities',{priorities:{},enabled:{'auto compound':true}});
+    await expect.poll(async()=>{
+      const state=await live.state();
+      native=await live.admin(`output=(async()=>{const p=get_player('${merchant}');if(!p)return null;const u=await db.collection('user').findOne({_id:p.owner});return {bank:Object.entries(u.info).filter(([k,v])=>/^items\\d+$/.test(k)&&Array.isArray(v)).flatMap(([,v])=>v).filter(i=>i&&i.name==='stramulet'),items:p.items.filter(i=>i&&i.name==='stramulet')};})()`);
+      const remote=(state.withdrawals[merchant]||[]).some((r:any)=>String(r.pack).startsWith('bankboi:'));
+      if(remote)sawRemote=true;
+      const job=state.merchantCurrent;
+      if(observations.length===128)observations.shift();
+      observations.push({at:Date.now(),remote,job,transaction:state.bankboiTransaction,native});
+      // With no carried/native-bank triple, unresolved remote inputs alone
+      // must not start an improvement visit. Other merchant work stays allowed.
+      if(remote&&!native?.bank.length&&!native?.items.length)
+        expect(job?.reason).not.toBe('auto compound');
+      return native&&[...native.bank,...native.items].filter((i:any)=>(i.level||0)===0).length===0&&
+        state.merchantActivity.some((a:any)=>a.message==='Auto compounded stramulet to +1'||a.message==='Auto compound failed for stramulet');
+    },{timeout:270_000,intervals:[250,500]}).toBe(true);
+    expect(sawRemote).toBe(true);
+    expect([...native.bank,...native.items].filter((i:any)=>i.level===1).length).toBeLessThanOrEqual(1);
+    expect((await live.post('/merchant/production',{character:merchant,action:'pending'})).pending).toEqual([]);
+  }finally{
+    await info.attach('native-bankboi-compound-admission',{body:JSON.stringify({sawRemote,native,observations,state:await live.state()}),contentType:'application/json'});
+  }
+});
+for(const automatic of [false,true]) for(const interruption of (automatic?['none','handoff','delivery']:['none','handoff','delivery','remote input'])) test(`BankBoi-only offering supplies ${automatic?'required automatic':'manual'} native upgrade (${interruption})`,async({live},info)=>{
+  test.setTimeout(360_000);
+  await live.post('/steam/action',{character:merchant,action:'logout'});
+  await expect.poll(async()=> (await live.state()).activeSlots.some((slot:any)=>slot.character===merchant),{timeout:90_000}).toBe(false);
+  await expect.poll(async()=>{const operation=(await live.state()).steamSwitch;return !operation||operation.phase==='complete';},{timeout:90_000}).toBe(true);
+  await expect.poll(()=>live.admin(`output=!!get_player('${merchant}')`),{timeout:30_000}).toBe(false);
+  await live.post('/slots/1/spawn',{character:merchant});
+  await expect.poll(async()=>{
+    const report=(await live.state()).characters[merchant];
+    return report?.runtime==='headless' && Date.now()-report.seenAt<=3000;
+  },{timeout:90_000}).toBe(true);
+  // The offline storage inventory is a declared account input. All subsequent
+  // slot handoffs, bank deposits/withdrawals and upgrade responses stay native.
+  await live.admin(`output=(async()=>{const c=await db.collection('character').findOne({'info.name':'${storage}'});
+    c.info.items=[{name:'offeringp',q:1},{name:'offeringp',q:1},{name:'offeringp',q:1}${interruption==='remote input'?",{name:'helmet',level:0}":''}];await db.collection('character').replaceOne({_id:c._id},c);
+    const p=get_player('${merchant}');p.items[20]={name:'wand',level:8};p.items[21]={name:'wand',level:8};cache_player_items(p);resend(p,'reopen+cid');return true;})()`);
+  await expect.poll(async()=> (await live.state()).characters[merchant]?.items[20]?.item?.name).toBe('wand');
+  await live.restoreHistoricalSettings(()=>({bankbois:{[storage]:{name:storage,state:interruption==='remote input'?'error':'ready',...(interruption==='remote input'?{error:'POST /merchant/bank-sort/checkpoint · network',retryAt:0}:{}),items:[...[0,1,2].map(slot=>({slot,item:{name:'offeringp',q:1}})),...(interruption==='remote input'?[{slot:3,item:{name:'helmet',level:0}}]:[])]}},...(interruption==='remote input'?{autoUpgradeMarks:{[merchant]:{'helmet@+0':{tiers:1,quantity:-1}}}}:{})}));
+  await expect.poll(async()=> (await live.state()).upgradeOfferingStock.offeringp).toBe(3);
+  {
+    await expect.poll(async()=> (await live.state(true)).merchantCatalog?.allItems?.some((entry:any)=>
+      entry.id==='wand' && (entry.upgradeable || entry.meta?.upgradeable)),
+    {timeout:120_000,message:'Native upgrade catalog must authorize the offering rule'}).toBe(true);
+    await live.post('/command',{character:merchant,type:'upgrade-offering-rule',rule:{name:'wand',floor:8,ceiling:9,offering:'offeringp',required:true}});
+    await live.post('/merchant/routine-priorities',{priorities:{},enabled:{'auto upgrade':true}});
+  }
+  await live.post('/command',{character:merchant,type:automatic?'auto-upgrade-mark':'upgrade-mark',slot:20,item:{name:'wand',level:8},tiers:1});
+  if(!automatic) await live.post('/command',{character:merchant,type:'upgrade-mark',slot:21,item:{name:'wand',level:8},tiers:1});
+  const observations:any[]=[];
+  let native:any,restarted=false,sawSupplyDependency=false;
+  const checkedUpgradeAdmissions=new Set<string>();
+  try {
+  await expect.poll(async()=>{
+    const state=await live.state();
+    sawSupplyDependency ||= !!state.merchantCurrent?.offeringSupply || state.merchantQueue.some((job:any)=>job.offeringSupply);
+    if(interruption==='remote input'&&state.merchantCurrent?.reason==='auto upgrade'&&!checkedUpgradeAdmissions.has(state.merchantCurrent.id)) {
+      checkedUpgradeAdmissions.add(state.merchantCurrent.id);
+      const available=[...(state.characters[merchant]?.items||[]),...Object.values(state.bank?.packs||{}).flat()];
+      expect(available.some((entry:any)=>entry?.item?.name==='helmet'&&(entry.item.level||0)===0),'Remote-only upgrade work must await native input delivery').toBe(true);
+    }
+    if(observations.length>=256) observations.shift();
+    observations.push({at:Date.now(),transaction:state.bankboiTransaction,withdrawals:state.withdrawals[merchant],current:state.merchantCurrent,queue:state.merchantQueue,upgrades:state.upgrades[merchant],activity:state.merchantActivity.slice(-5)});
+    native=await live.admin(`output=(async()=>{const c=await db.collection('character').findOne({'info.name':'${storage}'}),p=get_player('${merchant}');if(!p)return null;
+      const worker=get_player('${storage}'),u=await db.collection('user').findOne({_id:p.owner});
+      const all=[...(worker?worker.items:c.info.items||[]),...p.items,...Object.entries(p.user||u.info).filter(([key,value])=>/^items\\d+$/.test(key)&&Array.isArray(value)).flatMap(([,value])=>value)];
+      return {remaining:all.filter(i=>i&&i.name==='offeringp').reduce((n,i)=>n+(i.q||1),0),helmets:all.filter(i=>i&&i.name==='wand'),merchantItems:p.items,storageItems:worker?worker.items:c.info.items};})()`);
+    const delivered=(state.characters[merchant]?.items || []).some((entry:any)=>entry?.item?.name==='offeringp');
+    if(!restarted && ((interruption==='handoff' && state.bankboiTransaction) || (interruption==='delivery' && delivered))){
+      const targets=(state.upgrades[merchant] || []).map((mark:any)=>({item:mark.item,tiers:mark.tiers,requestId:mark.requestId}));
+      await live.restartCoordinator();restarted=true;
+      const recovered=(await live.state()).upgrades[merchant] || [];
+      for(const target of targets) expect(recovered.some((mark:any)=>mark.item.name===target.item.name && mark.item.level===target.item.level && mark.tiers===target.tiers && mark.requestId===target.requestId)).toBe(true);
+    }
+    return native?.remaining===1 && native.helmets.length<=2 && !native.helmets.some((item:any)=>(item.level||0)===8);
+  },{timeout:270_000}).toBe(true);
+  expect(native.helmets.length).toBeLessThanOrEqual(2);
+  if(native.helmets.length) expect(native.helmets[0].level).toBe(9);
+  await expect.poll(async()=> (await live.post('/merchant/production',{character:merchant,action:'pending'})).pending).toEqual([]);
+  if(['handoff','delivery'].includes(interruption)) expect(restarted).toBe(true);
+  expect(sawSupplyDependency).toBe(true);
+  } finally {
+  await info.attach('native-bankboi-offering-upgrade',{body:JSON.stringify({automatic,interruption,restarted,sawSupplyDependency,native,observations,state:await live.state()}),contentType:'application/json'});
+  }
+});
+
+
+for(const source of ['carried','native bank','optional absent','required absent','protected']) test(`ordinary manual offering stock boundary: ${source}`,async({live},info)=>{
+  test.setTimeout(240_000);
+  await live.post('/steam/action',{character:merchant,action:'logout'});
+  await expect.poll(async()=>!(await live.state()).activeSlots.some((slot:any)=>slot.character===merchant),{timeout:90_000}).toBe(true);
+  await expect.poll(async()=>{const op=(await live.state()).steamSwitch;return !op||op.phase==='complete';},{timeout:90_000}).toBe(true);
+  await live.post('/slots/1/spawn',{character:merchant});
+  await expect.poll(async()=>{const c=(await live.state()).characters[merchant];return c?.runtime==='headless'&&Date.now()-c.seenAt<3000;},{timeout:90_000}).toBe(true);
+  await live.admin(`output=(async()=>{const p=get_player('${merchant}');p.items[20]={name:'helmet',level:0};p.items[22]={name:'scroll0',q:10};
+    ${source==='carried'?"p.items[24]={name:'offeringp',q:2};":source==='protected'?"p.items[24]={name:'offeringp',q:2,l:'l'};":source==='native bank'?"const bank=await db.collection('user').findOne({_id:p.owner});bank.info.items0[0]={name:'offeringp',q:2};await db.collection('user').updateOne({_id:p.owner},{$set:{'info.items0':bank.info.items0}});if(p.user)p.user.items0=bank.info.items0;":''}
+    cache_player_items(p);resend(p,'reopen+cid');return true;})()`);
+  await expect.poll(async()=>(await live.state()).characters[merchant]?.items[20]?.item?.name).toBe('helmet');
+  if(source==='native bank') {
+    const bank=await live.admin(`output=(async()=>{const p=get_player('${merchant}'),u=await db.collection('user').findOne({_id:p.owner});return {gold:0,packs:{items0:u.info.items0.map((item,slot)=>item?{slot,item}:null)}};})()`);
+    await live.post('/bankboi/checkpoint',{character:merchant,bank});
+  }
+  const required=source!=='optional absent'&&source!=='protected';
+  await live.post('/command',{character:merchant,type:'upgrade-offering-rule',rule:{name:'helmet',floor:0,ceiling:1,offering:'offeringp',required}});
+  await live.post('/command',{character:merchant,type:'upgrade-mark',slot:20,item:{name:'helmet',level:0},tiers:1});
+  const observations:any[]=[];let native:any;
+  try {
+    if(source==='required absent') {
+      await expect.poll(async()=>{const state=await live.state();observations.push(state.upgrades[merchant]);return state.upgrades[merchant]?.some((mark:any)=>mark.waitingOffering);},{timeout:90_000}).toBe(true);
+      const before=await live.admin(`output=get_player('${merchant}').items[20]`);
+      expect(before).toMatchObject({name:'helmet',level:0});
+      await live.restartCoordinator();
+      await expect.poll(async()=>(await live.state(true)).merchantCatalog?.allItems?.some((item:any)=>item.id==='helmet'&&(item.upgradeable||item.meta?.upgradeable)),{timeout:90_000}).toBe(true);
+      const state=await live.state(),rule=state.upgradeOfferingRules.find((rule:any)=>rule.name==='helmet');
+      expect(state.upgrades[merchant]).toHaveLength(1);
+      await live.post('/command',{character:merchant,type:'upgrade-offering-rule',rule:{...rule,required:false}});
+    }
+    await expect.poll(async()=>{
+      const state=await live.state();if(observations.length>=128)observations.shift();observations.push({upgrades:state.upgrades[merchant],job:state.merchantCurrent,withdrawals:state.withdrawals[merchant]});
+      native=await live.admin(`output=(async()=>{const p=get_player('${merchant}');if(!p)return null;const u=await db.collection('user').findOne({_id:p.owner});const all=[...p.items,...Object.entries(p.user||u.info).filter(([k,v])=>/^items[0-9]+$/.test(k)&&Array.isArray(v)).flatMap(([,v])=>v)];return {helmets:all.filter(i=>i&&i.name==='helmet'),offerings:all.filter(i=>i&&i.name==='offeringp').reduce((sum,i)=>sum+(i.q||1),0)};})()`);
+      return native && !native.helmets.some((item:any)=>(item.level||0)===0) && !(state.upgrades[merchant] || []).length;
+    },{timeout:120_000}).toBe(true);
+    expect(native.offerings).toBe(source==='carried'||source==='native bank'?1:source==='protected'?2:0);
+    for(const item of native.helmets) expect(item.level).toBe(1);
+  } finally {
+    await info.attach('native-offering-stock-boundary',{body:JSON.stringify({source,native,observations,state:await live.state()}),contentType:'application/json'});
+  }
+});

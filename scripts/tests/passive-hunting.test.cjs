@@ -20,14 +20,14 @@ test('legacy selections migrate; independent edits preserve selections and keep 
 function fixture(){
  const bee={id:'bee1',mtype:'bee',type:'monster',visible:true,hp:100,x:20,y:0,map:'main',in:'main'};
  const c=vm.createContext({Date,Math,Object,String,Number,Promise,passingEncounters:{},peerPassingEncounters:[],passiveGeneratorAttempt:null,
-  character:{name:'W',ctype:'warrior',map:'main',in:'main',x:0,y:0,items:[]},parent:{entities:{bee}},root:{},groupedCombat:null,
+  character:{name:'W',ctype:'warrior',map:'main',in:'main',x:0,y:0,items:[],slots:{}},G:{classes:{warrior:{}},items:{},skills:{}},parent:{entities:{bee}},root:{},groupedCombat:null,
   passiveHunting:{rules:{bee:{enabled:true,keepMoving:true,priority:100}},useFieldGenerators:false},monsterPriorities:{},passiveRareHunts:{},
   fightDeaths:[],currentTravelAttackers:()=>[],navigationIntent:{},coordinatorClockOffset:0,partyTownActive:false,banking:false,stocking:false,upgrading:false,gatheringActive:false,
   forceTraveling:false,townTraveling:false,eventTraveling:false,joinedEvent:false,partyThreats:[],partyPositions:[],
   escapeOwns:()=>false,combatRecoveryActive:()=>false,activeCombatEvent:()=>false,rareActive:()=>false,unfinishedFight:()=>false,
   reunionRealm:()=> 'USII',get_entity:id=>Object.values(c.parent.entities).find(e=>e.id===id),is_in_range:e=>Math.hypot(e.x,e.y)<=100,
   isExternallyClaimedMonster:e=>!!e.claimed,currentPartyList:()=>['W'],sameEventTeamMember:()=>true,equip:()=>{throw Error('unexpected deployment');},rareFields:()=>[]});
- const names=['passiveLevelAllowed','passiveStopRequired','passiveTravelInterruptible','travelStopCandidates','outboundHuntTravel','huntTravelDefense','huntTravelControl','huntTravelExtraAggro','returnDepartureDefense','committedHuntEncounter','passingKey','passingEncounterReport','isPassingEncounter','convoyDiagnosticClock','convoySignalExpired','passingTravelAllowed','walkingPassiveTarget','passingTarget','beginPassingAttack','groupedEntityReport','monsterPriority','passiveRareCandidate','isPartyThreat','isAttackingPartyMember','rareAttackAllowed'];
+ const names=['passiveLevelAllowed','passiveStopRequired','passiveTravelInterruptible','travelStopCandidates','outboundHuntTravel','huntTravelDefense','huntTravelControl','huntTravelExtraAggro','returnDepartureDefense','committedHuntEncounter','passingKey','passingEncounterReport','isPassingEncounter','convoyDiagnosticClock','convoySignalExpired','passingTravelAllowed','walkingPassiveTarget','passingTarget','beginPassingAttack','groupedEntityReport','monsterPriority','passiveRareCandidate','isPartyThreat','isAttackingPartyMember','nativeAttackProjectile','tinyProjectileProtected','rareAttackAllowed'];
  vm.runInContext(names.map(n=>namedFunction(source,n)).join('\n'),c);
  return {c,bee};
 }
@@ -136,7 +136,7 @@ test('actual attack controller sends passing attacks without queue evidence or n
  let passing=true,admitted=false,hits=0;const target={id:'bee1',mtype:'bee'},state={};
  try {
   global.parent={};global.character={range:100,frequency:1};global.setTimeout=()=>0;global.clearTimeout=()=>{};
-  global.sharedRoutine={groupedAttackAllowed:()=>false,rareAttackAllowed:()=>true,
+  global.sharedRoutine={allowsTarget:()=>true,allowsPassingTarget:()=>true,groupedAttackAllowed:()=>false,rareAttackAllowed:()=>true,
    queueEvidence:()=>assert.fail('passing hit acquired queue ownership'),noteAttack:()=>assert.fail('passing hit acquired normal combat ownership')};
   global.attack=async()=>{hits++;};global.can_attack=()=>true;global.is_in_range=()=>true;
   const controller=createAttackController({target:()=>target,selected:()=>target.id,epoch:()=>1,active:()=>true,allowed:()=>true,state:()=>state,
@@ -195,7 +195,7 @@ test('a pending passing attack burst cannot send again after the return starts p
  const saved=Object.fromEntries(keys.map(k=>[k,global[k]]));let passing=true,hits=0;const timers=[],target={id:'armadillo',mtype:'armadillo'},state={};
  try {
   global.parent={};global.character={range:100,frequency:1};global.setTimeout=fn=>{timers.push(fn);return timers.length;};global.clearTimeout=()=>{};
-  global.sharedRoutine={groupedAttackAllowed:()=>true,rareAttackAllowed:()=>true};
+  global.sharedRoutine={allowsTarget:()=>true,allowsPassingTarget:()=>true,groupedAttackAllowed:()=>true,rareAttackAllowed:()=>true};
   global.attack=()=>{hits++;return new Promise(()=>{});};global.can_attack=()=>true;global.is_in_range=()=>true;
   const controller=createAttackController({target:()=>target,selected:()=>target.id,epoch:()=>1,active:()=>true,allowed:()=>true,state:()=>state,passing:()=>passing,report:assert.fail});
   controller.tick();assert.equal(hits,1);passing=false;
@@ -299,7 +299,7 @@ test('real attack controller hits a passing goo during continuous return without
  const saved=Object.fromEntries(keys.map(k=>[k,global[k]]));let hits=0,controller;
  try {
   Object.assign(global,{parent:{},character:{range:100,frequency:1},setTimeout:()=>0,clearTimeout(){},
-   sharedRoutine:{groupedAttackAllowed:()=>false,rareAttackAllowed:()=>true,queueEvidence:()=>assert.fail('normal combat evidence'),noteAttack:()=>assert.fail('normal combat hit')},
+   sharedRoutine:{allowsTarget:()=>true,allowsPassingTarget:()=>true,groupedAttackAllowed:()=>false,rareAttackAllowed:()=>true,queueEvidence:()=>assert.fail('normal combat evidence'),noteAttack:()=>assert.fail('normal combat hit')},
    attack:async()=>{hits++;},can_attack:()=>true,is_in_range:t=>Math.hypot(t.x-c.character.x,t.y)<=100});
   controller=createAttackController({target:()=>c.passingTarget(),selected:()=>c.passingTarget()?.id,epoch:()=>1,active:()=>true,
    allowed:()=>!!c.passingTarget(),passing:t=>t===c.passingTarget(),preparePassing:t=>{c.beginPassingAttack(t);return true;},state:()=>({}),report:assert.fail});
@@ -307,4 +307,15 @@ test('real attack controller hits a passing goo during continuous return without
   bee.target='W';c.character.x=150;controller.reset();controller.tick();assert.equal(hits,1,'walking beyond range ends attacks');
   assert.equal(c.returnDefenseTarget(),null);assert.equal(c.convoyTraveling,convoy);assert.equal(convoy.phase,'travelling');
  } finally {controller?.stop();for(const key of keys)if(saved[key]===undefined)delete global[key];else global[key]=saved[key];}
+});
+
+test('walking retains an existing passing reservation before a nearer equal-priority newcomer',()=>{
+ const {c,bee}=fixture();c.character.moving=true;bee.x=80;
+ const newcomer=c.parent.entities.newcomer={...bee,id:'nearby',x:20};
+ c.beginPassingAttack(bee,{scope:'route',token:'reserved-first'},true);
+ assert.equal(c.walkingPassiveTarget(),bee,'finish the existing admission exchange while still in range');
+ newcomer.mtype='phoenix';c.passiveHunting.rules.phoenix={enabled:true,keepMoving:true,priority:101};
+ assert.equal(c.walkingPassiveTarget(),newcomer,'higher configured priority remains authoritative');
+ newcomer.mtype='bee';bee.claimed=true;assert.equal(c.walkingPassiveTarget(),newcomer);
+ bee.claimed=false;bee.x=101;assert.equal(c.walkingPassiveTarget(),newcomer,'a reservation never permits chasing');
 });

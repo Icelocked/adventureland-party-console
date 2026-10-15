@@ -3,13 +3,15 @@ import { autoItemRuleKey, sameMarkedItem } from "./item-identity.ts";
 
 export interface UpgradeMark {
   passId?: string;
+  liveSlot?: number;
+  liveItem?: Item;
   slot?: number | string;
   item: Item;
   tiers: number;
   auto?: boolean;
   offering?: import("../../upgrade-offerings.ts").UpgradeOffering;
   requestId?: string;
-  waitingOffering?: { offering: string; level: number; signature: string };
+  waitingOffering?: { offering: string; level: number; signature: string; reason?: string };
   equipped?: boolean;
   storage?: { pack: string; slot: number };
   storageReceived?: boolean;
@@ -127,10 +129,10 @@ export function clearResolvedUpgradeMarks(
   marks: UpgradeMark[],
   resolved: readonly UpgradeMark[],
 ): UpgradeMark[] {
-  const completed = new Set(resolved.map((mark) => mark.passId || JSON.stringify(mark)));
+  const completed = new Set(resolved.map((mark) => mark.requestId || mark.passId || JSON.stringify(mark)));
   const legacy = new Set(resolved.map(({passId: _id, ...mark}) => JSON.stringify(mark)));
-  return marks.filter((mark) => !completed.has(mark.passId || JSON.stringify(mark)) &&
-    (mark.passId || !legacy.has(JSON.stringify(mark))));
+  return marks.filter((mark) => !completed.has(mark.requestId || mark.passId || JSON.stringify(mark)) &&
+    (mark.requestId || mark.passId || !legacy.has(JSON.stringify(mark))));
 }
 
 /** Keep matches already in place before assigning any displaced pass to a slot. */
@@ -152,5 +154,5 @@ function upgradeable(entry: InventoryEntry) { return entry.meta?.upgradeable && 
 
 type Equipment = Record<string, {item: Item} | null | undefined>;
 function markedEntry(mark: UpgradeMark, items: Inventory, equipped: Equipment) {
-  return mark.equipped ? equipped[String(mark.slot)] : items.find(entry => entry?.slot === mark.slot);
+  return mark.equipped ? equipped[String(mark.slot)] : items.find(entry => entry?.slot === (mark.liveSlot ?? mark.slot));
 }

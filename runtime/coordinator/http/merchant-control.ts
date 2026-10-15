@@ -1,6 +1,7 @@
 import { releaseMerchantInterruption } from "../navigation/merchant-interruption.ts";
 import { requestObject, requestText, type HttpRequest, type HttpResponse } from "./contracts.ts";
 import type { MerchantWork } from "../merchant/work.ts";
+import type { RealmRequest } from '../characters/realm-request.ts';
 
 interface ControlState {
   merchantCharacter: string | null;
@@ -18,6 +19,7 @@ interface ControlState {
   gatheringModes: unknown[];
   merchantForceStand: boolean;
   merchantHomeReturnAt?: number;
+  merchantRealmRequests?: Record<string, RealmRequest | undefined>;
   activeRealm: string;
 }
 interface ControlPorts {
@@ -34,6 +36,8 @@ export function createMerchantControlRoutes(state: ControlState, ports: ControlP
   function retry(req: HttpRequest, res: HttpResponse): unknown {
     const job = state.merchantQueue.find(entry => entry.id === requestObject(req.body).id);
     if (!job) return res.status(404).json({ error: "queued merchant job not found" });
+    if (state.merchantCharacter) delete state.merchantRealmRequests?.[state.merchantCharacter];
+    state.merchantHomeReturnAt = 0;
     delete job.realmRetryExhausted;
     delete job.realmBlockedReason;
     delete job.realmError;
@@ -42,9 +46,17 @@ export function createMerchantControlRoutes(state: ControlState, ports: ControlP
     ports.persist(); ports.dispatch();
     return res.json({ ok: true });
   }
+  function cancelExchange(job: MerchantWork): void {
+    const deliveryId = job.exchangeDeliveryId || job.id;
+    state.merchantQueue = state.merchantQueue.filter(candidate => candidate.id !== deliveryId && candidate.exchangeDeliveryId !== deliveryId);
+    for (const [member, marks] of Object.entries(state.merchantMarked))
+      state.merchantMarked[member] = (marks || []).filter(raw => requestObject(raw).exchangeJobId !== deliveryId);
+  }
+  function pendingExchange(job: MerchantWork): boolean { return !!(job.exchangeDeliveryId || job.exchangePickupId); }
   function cancelIntent(job: MerchantWork): void {
     const name = job.target;
-    if (job.reason === "marked items") {
+    if (pendingExchange(job)) cancelExchange(job);
+    else if (job.reason === "marked items") {
       state.marked[String(name)] = [];
       state.merchantMarked[String(name)] = [];
     } else if (job.reason === "manual upgrades") {
@@ -88,6 +100,8 @@ export function createMerchantControlRoutes(state: ControlState, ports: ControlP
         type: "merchant-gather",
         mode: null,
       };
+    for (const [member, marks] of Object.entries(state.merchantMarked))
+      state.merchantMarked[member] = (marks || []).filter(raw => !requestObject(raw).exchangeJobId);
     state.merchantQueue = [];
     state.merchantCurrent = null;
     state.gatheringModes = [];

@@ -53,7 +53,7 @@ function client(mode='request') {
  const c=coordinator();c.call('configure',{mode});const calls=[];
  const bank={items0:[{name:'z'},{name:'a'}],items1:Array(42).fill(null),items8:[{name:'z'},{name:'a'}]};
  bank.items1[35]={name:'reserved'};
- const r=vm.createContext({character:{name:'M',ctype:'merchant',map:'main',items:Array(42).fill(null),bank,x:0,y:0},root:{},
+ const r=vm.createContext({bankStaging:true,bankStagingSlot:(pack,slot)=>pack==="items1"&&slot>=35,character:{name:'M',ctype:'merchant',map:'main',items:Array(42).fill(null),bank,x:0,y:0},root:{},
   parent:{socket:{emit(type,{pack,str,inv}){calls.push('swap');[bank[pack][str],r.character.items[inv]]=[r.character.items[inv],bank[pack][str]]}}},
   convoyRuntimeId:'R',coordinatorClockOffset:0,runtimeCurrent:()=>true,
   bank_packs:{items0:['bank'],items1:['bank'],items8:['bank_b']},

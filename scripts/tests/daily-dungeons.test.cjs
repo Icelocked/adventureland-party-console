@@ -299,3 +299,16 @@ for (const native of [false, true]) test('cave choice text remains readable with
   assert.equal(observed.choice.options[1].unavailable, native ? 'Translated shop.far' : 'Not nearby');
   assert.equal(observed.points[0].label, native ? 'Translated shop.npc' : 'Meda');
 });
+
+
+test('Cave command identity is an immutable primitive snapshot and retired runtimes expose none',()=>{
+ let current=true;const calls=[];
+ const runtime=installDungeonRuntime({name:'W',members:()=>['W'],leader:()=> 'W',ready:()=>true,now:()=>100000,
+  alive:()=>true,current:()=>current,cave:()=>cave(),supported:()=>true,info:async()=>{calls.push('info');return {};},
+  request:async()=>{calls.push('request');},keeper:()=>undefined,text:String,move:async()=>{},stop:async()=>{},read:()=>null,write:()=>{}});
+ runtime.receive({owned:true,command:{id:'owned',action:'move',run:'run-1',target:{map:'main',x:0,y:0}}});
+ const before=calls.length,identity=runtime.commandIdentity();
+ assert.deepEqual(identity,{id:'owned',action:'move',run:'run-1'});identity.id='foreign';
+ assert.equal(runtime.commandIdentity().id,'owned');assert.equal(calls.length,before);
+ current=false;assert.equal(runtime.commandIdentity(),undefined);
+});

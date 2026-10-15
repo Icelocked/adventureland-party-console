@@ -235,3 +235,30 @@ for(const purpose of ['shared-walk','event-return','party-travel'])test(purpose+
  f.step(1000);assert.equal(c.phase,'communication-hold');assert.equal(c.recoveryAttempts,2);
  f.stable(2000);assert.equal(c.phase,'shared-prepare');assert.equal(c.recoveryAttempts,2);assert.equal(c.location.x,120);
 });
+
+function initialAssemblyCommunication() {
+ const f=fixture(),c=f.p.activeConvoy;c.phase='assemble';c.purpose='party-travel';delete c.continuousReturn;delete c.runtimes;c.routeVersion=0;
+ const scope=vm.createContext({});vm.runInContext(namedFunction(fs.readFileSync(require.resolve('../convoy-navigation.cjs'),'utf8'),'commandFor'),scope);
+ for(const n of c.participants)f.p.commands[n]={...scope.commandFor(f.p,c,'assemble',n),routeProtocol:4};
+ f.report(1000,'assembled');Object.assign(f.p.statuses.F.convoyNavigation,{phase:'communication-hold',communication:{operation:'/movement-plan',kind:'timeout',since:900}});
+ return f;
+}
+test('initial assembly planner timeout enters existing fresh hold recovery before runtimes are initialized',()=>{
+ const f=initialAssemblyCommunication(),c=f.p.activeConvoy;f.step(1000);
+ assert.equal(c.phase,'communication-hold');assert.equal(f.p.commands.F.phase,'shared-hold');
+ f.stable(2000);assert.equal(c.phase,'shared-prepare');assert.equal(c.communicationHold,undefined);
+ assert.equal(c.location.x,120);assert.equal(c.recoveryAttempts,2);
+});
+for(const mismatch of ['id','epoch','commandId','navigationRevision','runtimeId','expectedRuntime','observedRuntime','routeVersion','future','manual','cancel','realm','operation'])
+test('initial assembly communication rejects mismatched '+mismatch,()=>{
+ const f=initialAssemblyCommunication(),c=f.p.activeConvoy,s=f.p.statuses.F,n=s.convoyNavigation;
+ if(mismatch==='expectedRuntime')c.expected.F.runtimeId='old';
+ else if(mismatch==='observedRuntime')s.combatSelection.runtimeId='new';
+ else if(mismatch==='future')s.seenAt=2000;
+ else if(mismatch==='manual')f.p.commands.F={id:999,type:'character-travel'};
+ else if(mismatch==='cancel')f.p.navigationIntents.F.cancelled=true;
+ else if(mismatch==='realm')s.server='EU';
+ else if(mismatch==='operation')n.communication.operation='/convoy-complete';
+ else n[mismatch]='old';
+ f.step(1000);assert.equal(c.communicationHold,undefined);
+});

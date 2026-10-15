@@ -20,6 +20,7 @@ export function coordinatorGenerationPorts<Block extends WorkerBlock>(
 ): GenerationPorts {
   return {
     directory: "./CODE/adventure_land",
+    activationFile: process.env.AL_CONSOLE_ARTIFACT ? "./CODE/adventure_land/activation.json" : undefined,
     workers: () =>
       Object.entries(workers)
         .filter(([, block]) => block.enabled && block.instance)

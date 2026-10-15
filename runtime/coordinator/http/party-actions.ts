@@ -1,3 +1,4 @@
+import {skipManualEventOccurrences, type EventAttendance} from '../events/attendance-limits.ts';
 import { dungeonOwns } from '../../dungeons/contracts.ts';
 import { merchantPartyGroups } from "../../party-groups.ts";
 import { requestObject, type HttpRequest, type HttpResponse } from "./contracts.ts";
@@ -5,11 +6,13 @@ import type { ReturnLocation } from "../events/return-types.ts";
 import type { MerchantWork } from "../merchant/work.ts";
 
 interface PartyActionState {
+  eventAttendance?: EventAttendance;
+  eventSessions?: Record<string, {event:string; id?:string|null; lastLiveAt?:number; authorizedRealm?:string; authorizedAt?:number; participants:string[]; participationRecorded?:boolean} | undefined>;
   dailyDungeons?: import('../../dungeons/contracts.ts').DungeonState;
   navigationIntents?: Record<string, { revision: number } | undefined>;
   leader: string | null;
   merchantCharacter: string | null;
-  statuses: Record<string, { seenAt: number; map: string; x: number; y: number } | undefined>;
+  statuses: Record<string, { seenAt: number; map: string; x: number; y: number; server?:string; joinedEvent?:unknown; mapEvent?:unknown; eventFeedConnected?:boolean; eventClockStale?:boolean } | undefined>;
   location: ReturnLocation | null;
   commands: Record<string, unknown>;
   townCycle: { id: string; pending: string[]; startedAt: number; revisions?: Record<string, number> } | null;
@@ -62,6 +65,7 @@ export function createPartyActionRoutes(state: PartyActionState, ports: PartyAct
     const names = ports.members().filter(name => ports.active().includes(name));
     if (!ports.convoy(location, "party location", names, body.force === true ? "party-force-travel" : "party-travel"))
       return res.status(409).json({ error: "an online party leader is required for shared travel" });
+    skipManualEventOccurrences(state, names, ports.now());
     ports.persist();
     return res.json({ ok: true, partyLocation: state.location });
   }
@@ -101,6 +105,7 @@ export function createPartyActionRoutes(state: PartyActionState, ports: PartyAct
     if (exitDungeon(res)) return;
     ports.release();
     const names = ports.members().filter((name) => ports.active().includes(name));
+    skipManualEventOccurrences(state, names, ports.now());
     ports.invalidate(ports.members(), "manual Town", true);
     const cycleId = "town-" + ports.now() + "-" + ports.nextCommand();
     state.townCycle = names.length

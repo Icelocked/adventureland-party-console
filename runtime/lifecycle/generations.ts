@@ -11,9 +11,15 @@ import {
 import { requestReload } from "./request-reload.ts";
 
 export function classScript(directory: string, className: string | undefined): string {
-  const manifest = JSON.parse(
-    readFileSync(path.join(directory, "manifest.json"), "utf8"),
-  ) as GameManifest;
+  let manifest: GameManifest;
+  try {
+    const activation = JSON.parse(readFileSync(path.join(directory,'activation.json'),'utf8')) as {id:string;manifest:GameManifest};
+    if (typeof activation.id !== 'string' || !activation.id) throw Error('Invalid CODE activation');
+    manifest = activation.manifest;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    manifest = JSON.parse(readFileSync(path.join(directory,"manifest.json"),"utf8")) as GameManifest;
+  }
   const entry = manifest.classes?.[className as CharacterClass];
   if (manifest.schema !== 1 || !entry || !/^generated\/[a-f0-9]{64}\/[a-z]+\.js$/.test(entry.file))
     throw new Error("Missing compiled class: " + className);
@@ -29,6 +35,7 @@ interface Worker {
 }
 interface GenerationPorts {
   directory: string;
+  activationFile?: string;
   workers(): Worker[];
   current(worker: Worker): boolean | undefined;
   activated(worker: Worker, script: string): void;
@@ -36,12 +43,13 @@ interface GenerationPorts {
   report(message: string, detail?: unknown): void;
 }
 
-/** Watches the manifest's directory because atomic replacement changes its inode. */
+/** Managed consoles consume explicit host activation records; standalone development may watch. */
 export function watchGenerations(ports: GenerationPorts): { dispose(): void } {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let running = false,
     pending = false,
     disposed = false;
+  let activation: {id: string; manifest: GameManifest} | undefined;
   async function refresh(): Promise<void> {
     if (running) {
       pending = true;
@@ -53,7 +61,7 @@ export function watchGenerations(ports: GenerationPorts): { dispose(): void } {
         pending = false;
         const manifest = await verifyManifest(
           ports.directory,
-          JSON.parse(await readFile(path.join(ports.directory, "manifest.json"), "utf8")),
+          ports.activationFile ? activation!.manifest : JSON.parse(await readFile(path.join(ports.directory, "manifest.json"), "utf8")),
         );
         await Promise.all(
           ports.workers().map(async (worker) => {
@@ -91,14 +99,31 @@ export function watchGenerations(ports: GenerationPorts): { dispose(): void } {
     clearTimeout(timer);
     timer = setTimeout(() => void refresh(), delay);
   }
-  const watcher = watch(ports.directory, (_event, file) => {
+  const watcher = ports.activationFile ? undefined : watch(ports.directory, (_event, file) => {
     if (file?.toString() === "manifest.json") schedule();
   });
-  watcher.on("error", (error) => ports.report("Game manifest watcher failed", String(error)));
+  watcher?.on("error", (error) => ports.report("Game manifest watcher failed", String(error)));
+  let reading = false;
+  const activationPoll = ports.activationFile ? setInterval(async () => {
+    if (reading || disposed) return;
+    reading = true;
+    try {
+      const requested = JSON.parse(await readFile(ports.activationFile!, 'utf8')) as {id: string; manifest: GameManifest};
+      if (typeof requested.id !== 'string' || !requested.id || requested.id === activation?.id) return;
+      // Validate before accepting; a partial/invalid record cannot replace the selection.
+      await verifyManifest(ports.directory, requested.manifest);
+      if (disposed) return;
+      activation = requested;
+      schedule(0);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') ports.report('Invalid CODE activation; current runners retained',String(error));
+    } finally { reading = false; }
+  },1000) : undefined;
   return {
     dispose() {
       disposed = true;
-      watcher.close();
+      watcher?.close();
+      clearInterval(activationPoll);
       clearTimeout(timer);
     },
   };

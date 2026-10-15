@@ -1,3 +1,4 @@
+import { sameMarkedItem } from '../inventory/item-identity.ts';
 import { protectedMerchantRecipient } from "../merchant/movement-block.ts";
 import { collectionPickups, type PickupState } from "../merchant/collection-pickups.ts";
 import { ruleOwner } from "../inventory/shared-rules.ts";
@@ -83,9 +84,9 @@ export function createMerchantHandoffRoutes(state: HandoffState, ports: HandoffP
       scoped.merchantMarked = (state.npcSaleMarks || []).filter(mark => mark.character === name && mark.source === 'character' && Boolean(mark.auto) === (job.reason === 'auto npc sale pickup')).map(mark => ({slot: mark.slot, item: mark.item}));
     } else if (!collection && job.reason !== 'deconstruction pickup') scoped.merchantMarked = [];
     if (collection) {
-      const pickups = collectionPickups(state, name);
-      scoped.marked = pickups.bank;
-      scoped.merchantMarked = pickups.keep;
+      const pickups = collectionPickups(state, name, job.reason);
+      scoped.marked = job.exchangeDeliveryId ? [] : pickups.bank;
+      scoped.merchantMarked = job.exchangeDeliveryId ? pickups.keep.filter(mark => mark.exchangeJobId === job.exchangeDeliveryId) : pickups.keep;
       scoped.craftProtection = craftProtection(state);
     }
     return scoped;
@@ -134,6 +135,21 @@ export function createMerchantHandoffRoutes(state: HandoffState, ports: HandoffP
     ports.persist();
     return res.json({ ok: true });
   }
+  function exchangeReceived(delivery: HandoffJob, deliveryId: unknown, kept: unknown): boolean {
+    if (!Array.isArray(kept)) return false;
+    return kept.some(raw => {
+      const entry = requestObject(raw);
+      return entry.exchangeJobId === deliveryId && sameMarkedItem(requestObject(entry.item), requestObject(delivery.exchangePickupItem)) && Number(entry.quantity) >= Number(delivery.exchangePickupQuantity);
+    });
+  }
+  function receiveExchange(job: HandoffJob, name: string, body: Record<string, unknown>): void {
+    const delivery = state.merchantQueue?.find(candidate => candidate.id === job.exchangeDeliveryId && candidate.exchangePickupId === job.id);
+    if (delivery) {
+      if (exchangeReceived(delivery, job.exchangeDeliveryId, body.kept)) { delete delivery.exchangePickupId; delete delivery.pauseReason; }
+      else delivery.pauseReason = 'Waiting for the complete confirmed exchange pickup';
+    }
+    state.merchantMarked[name] = (state.merchantMarked[name] || []).filter(raw => requestObject(raw).exchangeJobId !== job.exchangeDeliveryId);
+  }
   function complete(req: HttpRequest, res: HttpResponse): unknown {
     const body = requestObject(req.body),
       job = current(body, body.character),
@@ -141,6 +157,7 @@ export function createMerchantHandoffRoutes(state: HandoffState, ports: HandoffP
     if (!job) return res.json({ ok: true, stale: true });
     receiveDeconstruction({ deconstructionMarks: state.deconstructionMarks || [], merchantCharacter: state.merchantCharacter, merchantMarked: state.merchantMarked as import("../merchant/deconstruction.ts").DeconstructionState["merchantMarked"] }, name, body.kept, ports.now?.() ?? Date.now());
     receivePlayerSales({ npcSaleMarks: state.npcSaleMarks || [], merchantMarked: state.merchantMarked as import("../merchant/player-npc-sales.ts").PlayerSaleState["merchantMarked"] }, name, body.kept, ports.now?.() ?? Date.now());
+    if (job.exchangeDeliveryId) receiveExchange(job, name, body);
     job.handoff = body;
     job.phase = "processing";
     clearCommand(name, body, "merchant-handoff");

@@ -1,3 +1,4 @@
+import {skipManualEventOccurrences, type EventAttendance} from '../events/attendance-limits.ts';
 import { requestObject, requestText } from "../http/contracts.ts";
 import type { CharacterBlock } from "../characters/types.ts";
 
@@ -16,6 +17,7 @@ interface Command {
 }
 interface Status {
   seenAt: number;
+  server?: string;
   map?: string;
   x?: number;
   y?: number;
@@ -23,6 +25,8 @@ interface Status {
   mapEvent?: unknown;
 }
 export interface ManualNavigationState {
+  eventAttendance?: EventAttendance;
+  eventSessions?: Record<string, {event:string; id?:string|null; lastLiveAt?:number; authorizedRealm?:string; authorizedAt?:number; participants:string[]; participationRecorded?:boolean} | undefined>;
   merchantCharacter: string | null;
   leader: string | null;
   activeRealm: string;
@@ -72,6 +76,7 @@ export function createManualNavigationCommands(
     const destination = location(body.location);
     if (!destination) return undefined;
     if (name !== state.merchantCharacter) ports.releaseEscape();
+    skipManualEventOccurrences(state, [name], ports.now());
     ports.authorize([name], destination);
     state.commands[name] = {
       id: ports.nextCommand(),
@@ -87,6 +92,8 @@ export function createManualNavigationCommands(
     const status = state.statuses[String(state.leader)];
     if (!status || status.seenAt < ports.now() - 10000)
       return error(409, "an online party leader is required");
+    if (body.resumeAfterEvent !== true)
+      skipManualEventOccurrences(state, ports.members(), ports.now());
     ports.authorizeRoute(ports.members(), body.location, true);
     if (body.resumeAfterEvent === true && ports.members().some(attending))
       return { status: 200, body: { ok: true, deferredUntilEventEnd: true } };
@@ -99,6 +106,7 @@ export function createManualNavigationCommands(
   }
   function town(name: string): null {
     const shared = name === state.leader;
+    skipManualEventOccurrences(state, shared ? ports.members() : [name], ports.now());
     ports.invalidate(shared ? ports.members() : [name], "manual Town", shared);
     state.commands[name] = {
       id: ports.nextCommand(),
@@ -115,6 +123,7 @@ export function createManualNavigationCommands(
     const realm = state.activeRealm,
       block = ports.block(name);
     if (!ports.realmExists(realm)) return error(500, "merchant home realm is unavailable");
+    skipManualEventOccurrences(state, [name], ports.now());
     const switching = block.realm !== realm;
     block.realm = realm;
     state.commands[name] = {
@@ -132,6 +141,7 @@ export function createManualNavigationCommands(
     const status = state.statuses[String(state.leader)];
     if (!state.leader || state.leader === name || !status || status.seenAt < ports.now() - 10000)
       return error(409, "an online different party leader is required");
+    skipManualEventOccurrences(state, [name], ports.now());
     ports.authorize([name], { map: status.map, x: Number(status.x), y: Number(status.y) });
     state.commands[name] = { id: ports.nextCommand(), type: "return-leader" };
     return null;
