@@ -292,6 +292,11 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
     if (held && held !== choice.id) target.standInFor = held;
     return target;
   }
+  // A start that throws skips the target like an unroutable one; uncaught, it ended every tick.
+  function startTarget(id: string, location: ReturnLocation | null | undefined): { started: string[] | null; failure: string } {
+    try { return { started: location ? ports.select(id, location) : null, failure: "" }; }
+    catch (error) { return { started: null, failure: String((error as Error)?.message || error) }; }
+  }
   function switchTo(choice: AchievementTarget | null, order: AchievementMonster[]): void {
     if (!choice) {
       release();
@@ -301,10 +306,10 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
         : "Nothing left to farm: every selected monster has finished its ladder or is skipped");
     }
     const location = ports.destination(choice.id);
-    const started = location ? ports.select(choice.id, location) : null;
+    const { started, failure } = startTarget(choice.id, location);
     if (!started) {
       unroutable.set(choice.id, ports.now());
-      return say(`Skipping ${choice.id}: ${location ? "the party convoy could not be started" : "no known spawn location"}`);
+      return say(`Skipping ${choice.id}: ${failure || (location ? "the party convoy could not be started" : "no known spawn location")}`);
     }
     const target = nextTarget(choice, state.achievementTarget);
     release();
@@ -321,9 +326,14 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
     return few > 0 && few < spawnCount(state.monsterChoices, common, at);
   }
   /** `monster` as the target in place of `best`, when it is rarer and `best` would be one of its fillers. */
+  // A rare is never a target (chooseAchievementTarget), so it is never a variant either: the Phoenix's
+  // spawn area covers Squigtoads' and made it look like their rarer variant.
+  function variantCandidate(best: AchievementTarget, monster: AchievementMonster): boolean {
+    return monster.id !== best.id && !monster.rare && settings().monsters.includes(monster.id) && !excluded(monster.id);
+  }
   function variantOf(best: AchievementTarget, monster: AchievementMonster, order: AchievementMonster[],
     kills: Record<string, number>): AchievementTarget | null {
-    if (monster.id === best.id || !settings().monsters.includes(monster.id) || excluded(monster.id)) return null;
+    if (!variantCandidate(best, monster)) return null;
     const count = Number(kills[monster.id]) || 0, step = nextStep(monster.ladder, count);
     const at = step >= 0 && step <= best.step ? ports.destination(monster.id) : null;
     if (!at || !rarer(monster.id, best.id, at)) return null;

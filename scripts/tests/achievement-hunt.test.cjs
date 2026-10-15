@@ -608,3 +608,24 @@ test('the boss recheck time is a setting, validated by the settings route', () =
   assert.equal(validAchievementHuntSettings({ bossRecheckMinutes: 30 }), true);
   for (const bad of [0, 121, 2.5, '10']) assert.equal(validAchievementHuntSettings({ bossRecheckMinutes: bad }), false, String(bad));
 });
+
+test('a rare on the same ground as the target is never farmed as its variant', () => {
+  const f = snakeFixture({ monsterChoices: snakeChoices.map((choice) => choice.id === 'osnake'
+    ? { ...choice, spawnRecords: [{ ...spawn(choice.locations[0], 1), stype: 'randomrespawn' }] } : choice) });
+  f.state.achievementHunt.monsters = ['snake', 'osnake'];
+  f.state.statuses.L.monsterAchievementKills = {};
+  f.hunt.tick();
+  assert.deepEqual(f.selected, ['snake']);
+});
+
+test('a target whose start throws is skipped and the hunt moves on', () => {
+  const f = snakeFixture();
+  f.state.achievementHunt.monsters = ['snake', 'osnake'];
+  f.state.statuses.L.monsterAchievementKills = {};
+  const select = f.ports.select;
+  f.ports.select = (id, location) => { if (id === 'osnake') throw new Error('Choose all five Phoenix regions exactly once'); return select(id, location); };
+  assert.doesNotThrow(() => f.hunt.tick());
+  assert.match(f.state.achievementMessage, /^Skipping osnake: Choose all five Phoenix regions exactly once/);
+  f.advance(1_000); f.hunt.tick();
+  assert.deepEqual(f.selected, ['snake']);
+});
