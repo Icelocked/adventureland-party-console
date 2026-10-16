@@ -3,8 +3,8 @@
 The game server disconnects a socket whose call cost passes `limits.calls`
 (200) within any 4-second window (`node/server.js`, `limitdcreport` with
 `disconnect_reason: "limitdc"`). Every socket call costs 1 and a `move` adds
-`CC.move` (1.5), so one move costs 2.5. A client that issues 80 moves inside
-4 seconds is disconnected by moves alone. The server reports the current cost to
+`CC.move` (1.5), so one move costs 2.5. The server disconnects a client that
+issues 80 moves inside 4 seconds on moves alone. The server reports the current cost to
 the client as `character.cc` in each player update.
 
 `runtime/characters/move-budget.ts` wraps the character's native `move` once.
@@ -13,15 +13,15 @@ Every caller reaches it: the movement executor, direct combat steps in
 
 ## Failure inventory
 
-Written before the implementation; each line has a regression in
+This list predates the implementation. Each line has a regression in
 `scripts/tests/move-budget.test.cjs`.
 
 1. A caller restarts walks in a loop (the 2026-10-15 tank approach churn) and
    floods `move`. The budget must cap issued moves per 4-second window however
    the caller behaves.
 2. The budget defers the latest request. Dropping it leaves the character
-   standing short of its destination, so the newest deferred target is issued
-   as soon as the window frees.
+   standing short of its destination, so the budget issues the newest deferred
+   target as soon as the window frees.
 3. A deferred request replaced by a newer one must settle. Native `move`
    resolves earlier promises with `{reason: "interrupted"}`, and the budget
    resolves superseded calls the same way so awaiting callers continue.

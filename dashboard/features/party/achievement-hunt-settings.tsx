@@ -61,7 +61,7 @@ export function AchievementHuntSettingsControl({
   const save = (patch: Partial<AchievementHuntSettings>) => onSave && run(() => onSave(patch));
   const choose = (ids: string[]) => save({ monsters: ids });
   const toggle = (id: string) => choose(selected.has(id) ? settings.monsters.filter((x) => x !== id) : [...settings.monsters, id]);
-  // Every regular monster from the weakest through this one; special picks are kept.
+  // Every regular monster from the weakest through this one; it keeps special picks.
   const upTo = (index: number) => choose([...regular.slice(0, index + 1).map((m) => m.id), ...special.filter((m) => selected.has(m.id)).map((m) => m.id)]);
   function threshold() {
     const n = Number(deaths);

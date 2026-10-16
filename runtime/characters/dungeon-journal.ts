@@ -37,8 +37,8 @@ export function createDungeonJournal(
       const climbed = command.action === "stairs" && sameRun && !!command.target?.to &&
         command.target.to === "zone_" + cave?.run + "_" + cave?.floor;
       const exited = command.action === "exit" && !cave;
-      // A vote that lands after the other votes resolved the choice is never
-      // recorded, so a resolved or replaced choice also settles it.
+      // The game drops a vote that lands after the other votes resolved the
+      // choice, so a resolved or replaced choice also settles it.
       const voted =
         command.action === "vote" &&
         sameRun &&

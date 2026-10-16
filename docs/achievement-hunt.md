@@ -7,9 +7,9 @@ but it chooses its own targets from achievement progress instead of taking
 quests from Daisy.
 
 It only chooses *what* to farm. Travel, formation, grouped combat and
-competition relocation work exactly as they do when a monster is picked by
-hand, and the fight style follows Auto's logic as in Hunt (scatter where it has
-been learned per monster). Each target switch goes through the same
+competition relocation work as they do when the player picks a monster by
+hand, and the fight style follows Auto's logic as in Hunt (scatter where the
+party has learned it per monster). Each target switch goes through the same
 `manual-monster-override` convoy as `navigate-to-monster`, except that it stays
 in Achievement Hunt instead of resetting the mode to Auto.
 
@@ -26,13 +26,13 @@ settings dialog, next to Hunt settings.
 
 - **Selection.** The player selects monsters from a list sorted weakest to
   strongest by XP per kill, which the game scales with HP, damage and
-  defenses. Ties are broken by bestiary threat (`attack × frequency`), then
+  defenses. Bestiary threat (`attack × frequency`) breaks ties, then
   HP. Threat alone misranks monsters: a Vampire Rat hits harder than a Fire
   Spirit but has a ninth of its HP.
 - **Two lists.** Regular monsters are those with a fixed map spawn. Special
   monsters (bosses, event, cooperative and random-respawn monsters, and those
   the game leaves out of its monster list: the training dummies and the Cave of
-  Many Dreams monsters) are listed separately and are never selected by default.
+  Many Dreams monsters) have their own list, and the defaults select none of them.
   Boss-like monsters the game does not flag are special too: those that never
   respawn (the crypt bosses and the Protectors), and those with at most two
   spawns in the world and at least 50,000 HP (Stompy, Ms. Dracul, Skeletor,
@@ -43,12 +43,12 @@ settings dialog, next to Hunt settings.
   each monster's own ladder.
 - **The target.** It is the first selected monster, weakest first, whose next
   unmet milestone is at the lowest step. So every selected monster reaches step
-  1 before any is farmed for step 2, and so on.
+  1 before the party farms any for step 2, and so on.
 - **Kills.** Kill counts are the account-wide progress the clients already
-  report (`monsterAchievementKills`); the largest value across party statuses
-  is used.
-- **Moving on.** When the target's kill count reaches its milestone, the next
-  target is chosen.
+  report (`monsterAchievementKills`); the hunt uses the largest value across
+  party statuses.
+- **Moving on.** When the target's kill count reaches its milestone, the hunt
+  chooses the next target.
 - **Rares are never the target.** See [Rare spawns](#rare-spawns).
 
 ## Filling respawn waits
@@ -112,15 +112,16 @@ them; deaths they cause still count toward the target's death blacklist.
 Rares appear without a fixed spawn: random respawns (Dracul, Phoenix; `G.maps`
 marks their spawns `stype: "randomrespawn"`, and characters copy that into
 each spawn record) and the rares passive hunting already knows (Phoenix, Golden
-Bat, Cute Bee, Tiny, the chickens). They are listed with the special monsters.
+Bat, Cute Bee, Tiny, the chickens). They appear in the special list.
 
 A selected rare is never the target: waiting at one of its possible spawns
 would stall the hunt. Instead, while the hunt runs, each selected rare with
 steps left gets an enabled passive hunting rule, so the party fights it when a
 character sees one and then returns. Achievement Hunt already waits while a rare
-hunt owns travel. A rare the player already hunts passively is left alone. Any
-other rule is saved in `achievementPassive` and put back, exactly, once the
-rare finishes its ladder, is unselected or blacklisted, or the mode ends. Only
+hunt owns travel. The hunt leaves alone a rare the player already hunts
+passively. It saves any other rule in `achievementPassive` and puts it back,
+exactly, once the rare finishes its ladder, the player unselects or
+blacklists it, or the mode ends. Only
 the party leader's scope runs rare hunts, so independent characters' hunts
 skip their rares.
 
@@ -128,12 +129,13 @@ skip their rares.
 
 Skipping works like Hunt's blacklist:
 
-- **Manual skips.** Monsters are left unselected, or added to the
+- **Manual skips.** The player leaves monsters unselected, or adds them to the
   Achievement Hunt blacklist by hand.
-- **Deaths.** When *Blacklist on deaths* is on, a target is blacklisted after
-  `deathThreshold` party deaths while farming it, 6 by default: the live run
-  used 6, and White Wolf was blacklisted on its sixth death.
-- **Removing entries.** Blacklist entries are removed individually or cleared.
+- **Deaths.** When *Blacklist on deaths* is on, the hunt blacklists a target
+  after `deathThreshold` party deaths while farming it, 6 by default: the live
+  run used 6, and the hunt blacklisted White Wolf on its sixth death.
+- **Removing entries.** The player removes blacklist entries one at a time or
+  clears them.
 
 ## Failure modes considered before implementation
 
@@ -152,8 +154,8 @@ Skipping works like Hunt's blacklist:
    choosing another mode forgets the target.
 4. **Offline owner.** With no fresh report from the scope's owner (the party
    leader, or the independent character) there is nothing to move. It waits.
-5. **No route.** A selected monster may have no known spawn. It is skipped
-   with a reason, not retried every tick.
+5. **No route.** A selected monster may have no known spawn. The hunt skips it
+   with a reason and does not retry it every tick.
 6. **Everything done or skipped.** The party keeps farming the last target.
    The status says nothing is left to farm, instead of clearing focus and
    stranding the party.
@@ -186,9 +188,9 @@ Skipping works like Hunt's blacklist:
     member of the scope, so the target is always the higher tier.
 15. **Fillers that are too strong.** Only monsters no stronger than the target
     by XP per kill, not special and not blacklisted, become fillers.
-16. **Overwriting the player's priorities.** The previous priority of each
-    touched monster, per member, is saved with the target and restored when
-    the target changes or the mode ends.
+16. **Overwriting the player's priorities.** The hunt saves the previous
+    priority of each touched monster, per member, with the target and restores
+    it when the target changes or the mode ends.
 17. **Relocating to a filler-only spawn.** A competition relocation picks among
     the spawns of every focused monster, so it can move the party to a spawn
     without the target. When the farming location is no longer at one of the
@@ -210,9 +212,9 @@ Skipping works like Hunt's blacklist:
     cannot thrash.
 21. **A target that predates its fillers.** A target kept across a restart, or
     a *Fill respawn waits* change mid-target, would keep its old focus until
-    the next switch. After a restart or any settings change, the current
-    target's focus and priorities are set again once, around the party's
-    farming location, without moving the party.
+    the next switch. After a restart or any settings change, the
+    hunt sets the current target's focus and priorities again once, around the
+    party's farming location, without moving the party.
 22. **Fillers next door pull the party to the edge.** Tiny Crabs, Tortoises
     and Froggies spawn in boxes that touch the Squigtoad box but do not share
     it. Characters may fight anything within the search radius of the farming
@@ -224,7 +226,7 @@ Skipping works like Hunt's blacklist:
     `special` flag and sort to the end of the regular list by XP, so selecting
     far down with Up to here picked them, and the rare-variant rule then put
     them ahead of the White Wolves, Irradiated Goos or Ghosts sharing their
-    spawn. They and the other boss-like monsters are listed as special.
+    spawn. They and the other boss-like monsters now appear in the special list.
 
 Found while running on a live party:
 
@@ -236,10 +238,10 @@ Found while running on a live party:
 25. **A failed trip that looks like arrival.** The failed switch had already
     set the farm location to the Arena, so the party, still split between
     Mainland and Winterland, counted as at its target and stayed there for 20
-    minutes. The leader's own position now counts too, but only after our
-    convoy failed or while the leader has no convoy and is idle, so a town
-    restock is never pulled back. A party sent back is sent again no sooner
-    than 30 seconds later.
+    minutes. The leader's own position now counts too, but only after the
+    hunt's convoy failed or while the leader has no convoy and is idle, so the
+    hunt never pulls back a town restock. The hunt sends a party back again no
+    sooner than 30 seconds later.
 26. **Event deaths counted against the target.** A death on an event trip
     counted toward the death blacklist. Hunt leaves those out
     (`scripts/hunt-safety.cjs` `eventDeath`), and so does Achievement Hunt.
