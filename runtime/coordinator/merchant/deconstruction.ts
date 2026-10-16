@@ -227,9 +227,8 @@ export function createDeconstruction(state: DeconstructionState, ports: Ports) {
     mark.state = mark.owner === state.merchantCharacter ? 'ready' : 'collecting';
     delete mark.error;
   }
-  // A full bag blocked the dismantle; nothing else ever retried it, so the merchant's
-  // auto-exchange rewards kept marked items stuck in its bag. Retry once there is room for
-  // the results, at most every SPACE_RETRY_MS so a bag that refills can't loop the merchant.
+  // recoverSpace retries a mark that a full bag blocked once the bag has room for its
+  // results. It waits SPACE_RETRY_MS between tries, so a bag that refills can't loop the merchant.
   function recoverSpace(mark: DeconstructionMark, items: (InventoryEntry | null)[]) {
     if (mark.state !== 'blocked' || mark.storage || mark.error !== 'Insufficient inventory space for deconstruction results' ||
         ports.now() - mark.updatedAt < SPACE_RETRY_MS) return;

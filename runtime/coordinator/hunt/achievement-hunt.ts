@@ -292,7 +292,7 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
     if (held && held !== choice.id) target.standInFor = held;
     return target;
   }
-  // A start that throws skips the target like an unroutable one; uncaught, it ended every tick.
+  // A start that throws skips the target like an unroutable one, so the error can't end every tick.
   function startTarget(id: string, location: ReturnLocation | null | undefined): { started: string[] | null; failure: string } {
     try { return { started: location ? ports.select(id, location) : null, failure: "" }; }
     catch (error) { return { started: null, failure: String((error as Error)?.message || error) }; }
