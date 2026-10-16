@@ -2445,7 +2445,7 @@
   }
   function requestDungeon(action, fields) {
     var id = 'cave:' + character.name + ':' + Date.now() + ':' + Math.random();
-    return root.requestCave(parent.socket, id, action, fields);
+    return root.requestCave(parent.socket, id, action, fields, undefined, parent);
   }
   function dungeonRuntime() {
     if (dungeonClient) return dungeonClient;
