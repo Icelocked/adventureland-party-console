@@ -3,6 +3,7 @@ import { CharacterSessionControls } from './character-session-controls';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroupItem } from '@/components/ui/radio-group';
 import { EventSelectionControl } from './event-selection-control';
+import { GearSetControl } from './gear-set-control';
 import { Coins } from 'lucide-react';
 import { abbreviatedGold } from './abbreviated-gold';
 import { ActiveStatuses } from './active-statuses';
@@ -128,6 +129,14 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
     (eventSelections: string[]) => formation({ character: name, eventSelections }),
     [formation, name],
   );
+  const onEventLimitsChange = useCallback(
+    (event: string, limits: import('@/lib/event-policy').EventLimits) => formation({ character: name, eventLimits: { event, limits } }),
+    [formation, name],
+  );
+  const onEventPriorityChange = useCallback(
+    (eventPriorities: string[]) => formation({ character: name, eventPriorities }),
+    [formation, name],
+  );
   const onFollowChange = useCallback(
     (checked: boolean) => formation({ character: name, follow: !!checked }),
     [formation, name],
@@ -143,13 +152,14 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
       merchantCharacter: state.merchantCharacter,
       followers: state.followers,
       eventsByCharacter: state.eventsByCharacter,
+      eventAttendance: state.eventAttendance,
+      eventLimitsByCharacter: state.eventLimitsByCharacter,
+      eventPrioritiesByCharacter: state.eventPrioritiesByCharacter,
       eventSelectionsByCharacter: state.eventSelectionsByCharacter,
       eventSchedules: state.eventSchedules,
-      dailyChase: state.dailyChase,
-      realmControl: state.realmControl,
     }),
     [state.leader, state.merchantCharacter, state.followers, state.eventsByCharacter,
-      state.eventSelectionsByCharacter, state.eventSchedules, state.dailyChase, state.realmControl],
+      state.eventSelectionsByCharacter, state.eventPrioritiesByCharacter, state.eventLimitsByCharacter, state.eventAttendance, state.eventSchedules],
   );
   const onRadiusSave = useCallback(
     (radius: number) => setFocus(name, monsterFocusSelected, monsterFocusPriorities, radius),
@@ -225,16 +235,6 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
   );
   const [frankyOpen, setFrankyOpen] = useState(false);
   const onFranky = useCallback(() => setFrankyOpen(true), [setFrankyOpen]);
-  const onSelectHalloweenRoutine = useCallback(
-    (mode: string) => setEncounterMode('halloween', mode, name),
-    [setEncounterMode, name],
-  );
-  const onHalloweenAutoDeathLimit = useCallback(
-    (deathLimit: number) => setEncounterAutoLimit('halloween', deathLimit, name),
-    [setEncounterAutoLimit, name],
-  );
-  const [halloweenOpen, setHalloweenOpen] = useState(false);
-  const onHalloween = useCallback(() => setHalloweenOpen(true), [setHalloweenOpen]);
   const collectionSettings = useMemo(
     () => ({
       thresholdError, itemCollectionThresholdError, onClearErrors: clearCollectionErrors,
@@ -330,7 +330,7 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
           </div>
         </div>
         <CharacterMapSection char={char} />
-        <div className="mt-4 flex gap-5 rounded border border-emerald-900/70 bg-black/20 p-3 text-sm">
+        <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 rounded border border-emerald-900/70 bg-black/20 p-3 text-sm">
           <label
             htmlFor={`leader-${char.name}`}
             className="flex items-center gap-2"
@@ -351,12 +351,12 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
           </label>
           <EventSelectionControl onAnniversary={onAnniversary}
             onFranky={char.ctype !== 'merchant' ? onFranky : undefined}
-            onHalloween={char.ctype !== 'merchant' ? onHalloween : undefined}
             state={eventState}
             name={char.name}
             merchant={char.ctype === 'merchant'}
-            onChange={onEventSelectionChange}
+            onChange={onEventSelectionChange} onPriorityChange={onEventPriorityChange} onLimitsChange={onEventLimitsChange}
           />
+          {char.ctype !== 'merchant' && <GearSetControl name={char.name} model={inventoryModel} sets={state.gearSets?.[char.name]} />}
         </div>
         <div className="mt-5 grid gap-3">
           <Meter
@@ -429,20 +429,6 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
             autoDeathLimit={farming.frankyAutoDeathLimit}
             autoDeaths={farming.frankyAutoDeaths}
             onAutoDeathLimitChange={onFrankyAutoDeathLimit}
-          />
-        ) : null}
-        {char.ctype !== 'merchant' ? (
-          <FrankyDialog
-            encounter="halloween"
-            open={halloweenOpen}
-            onOpenChange={setHalloweenOpen}
-            character={char.name}
-            mode={farming.halloweenRoutine}
-            inherited={!!farming.followingLeader}
-            onSelect={onSelectHalloweenRoutine}
-            autoDeathLimit={farming.halloweenAutoDeathLimit}
-            autoDeaths={farming.halloweenAutoDeaths}
-            onAutoDeathLimitChange={onHalloweenAutoDeathLimit}
           />
         ) : null}
         {char.name === state.merchantCharacter ? (

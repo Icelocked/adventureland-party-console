@@ -58,6 +58,34 @@ test('solo cave defense includes self and confirmed kills cannot keep the old fo
   assert.equal(c.getDungeonTarget(),null);
 });
 
+test('fresh scoped committed cave enemy survives a blocked direct bearing for combat recovery',()=>{
+  const {c,actor,enemies}=fixture();actor.cave.floor=0;
+  enemies.wall={...enemies.a,id:'wall',target:null,cave:{side:'enemy'}};
+  c.can_move_to=()=>false;
+  c.groupedCombat={caveScope:'run:0',members:['W','P'],committed:false,target:{id:'wall',state:'planned'}};
+  assert.equal(c.dungeonCombatThreat(enemies.wall),false,'An unreachable new enemy must not interrupt travel');
+  assert.equal(c.getDungeonTarget(),null);
+  c.groupedCombat.committed=true;c.groupedCombat.target.state='engaged';
+  assert.equal(c.getDungeonTarget()?.id,'wall','An owned committed enemy must reach the combat detour');
+  assert.equal(c.dungeonCombatThreat(enemies.wall),false,'Initial travel handoff remains stricter');
+});
+
+for(const [reason,change] of [
+  ['stale group',c=>c.groupedFresh=()=>false],
+  ['wrong cave scope',c=>c.groupedCombat.caveScope='different:0'],
+  ['dead enemy',(c,e)=>e.dead=true],
+  ['known native death',c=>c.root.partyRoleRunner={isKnownDead:()=>true}],
+  ['invisible enemy',(c,e)=>e.visible=false],
+  ['wrong map',(c,e)=>e.map='other'],
+  ['wrong instance',(c,e)=>e.in='other'],
+  ['ally',(c,e)=>e.cave.side='ally'],
+])test('committed cave target still rejects '+reason,()=>{
+  const {c,actor,enemies}=fixture();actor.cave.floor=0;c.can_move_to=()=>false;
+  const enemy=enemies.wall={...enemies.a,id:'wall',target:null,cave:{side:'enemy'}};
+  c.groupedCombat={caveScope:'run:0',members:['W','P'],committed:true,target:{id:'wall',state:'engaged'}};
+  change(c,enemy);assert.equal(c.getDungeonTarget(),null);
+});
+
 test('cave queue survives farming reset and acknowledges before saved leader initialization',()=>{
   const now=Date.now();
   const next={caveScope:'run:0',leader:'W',members:['W','P'],seenAt:now,key:JSON.stringify(['runtime']),resetAt:0,target:null};

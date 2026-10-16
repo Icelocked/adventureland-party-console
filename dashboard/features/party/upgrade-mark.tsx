@@ -9,5 +9,5 @@ export type UpgradeMark = {
   auto?: boolean;
   offering?: import("../../../runtime/upgrade-offerings").UpgradeOffering;
   requestId?: string;
-  waitingOffering?: { offering: string; level: number; signature: string };
+  waitingOffering?: { offering: string; level: number; signature: string; reason?: string };
 };

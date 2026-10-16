@@ -1,5 +1,7 @@
 import {collectPassing} from '../../combat/passing.ts';
+import { bankStagingReserved } from '../inventory/reserved-cargo.ts';
 import {passingControl} from '../../combat/passing-admission.ts';
+import {requestObject} from '../http/contracts.ts';
 import {outboundHunt} from '../../combat/hunt-travel.ts';
 import { merchantEventRecoveryReserved } from '../merchant/event-control.ts';
 import type {Member} from '../../combat/grouped.ts';
@@ -56,12 +58,37 @@ const navigationCommands = new Set([
 
 /** Long-running commands remain deliverable until their completion endpoint acknowledges them. */
 export function createHeartbeatResponse(state: HeartbeatState, ports: HeartbeatResponsePorts) {
+  function retireTownMembership(name: string): boolean {
+    const town = state.townCycle;
+    if (!town?.pending.includes(name) || town.revisions?.[name] === ports.navigationRevision(name)) return false;
+    town.pending = town.pending.filter(member => member !== name);
+    const command = state.commands[name];
+    if (command?.type === "town-party" && command.cycleId === town.id) delete state.commands[name];
+    if (!town.pending.length) state.townCycle = null;
+    return true;
+  }
+  function orphanedTownCommand(name: string): boolean {
+    if (state.commands[name]?.type !== "town-party") return false;
+    const town = state.townCycle;
+    // Town admission updates its cycle and commands synchronously. A command
+    // outside the canonical pending cycle is orphaned, never a newer admission.
+    return !town || state.commands[name]?.cycleId !== town.id || !town.pending.includes(name);
+  }
+  function retireTownCommand(name: string): void {
+    let changed = retireTownMembership(name);
+    if (orphanedTownCommand(name)) {
+      delete state.commands[name];
+      changed = true;
+    }
+    if (changed) ports.persist?.();
+  }
   function restoreTownCommand(name: string): void {
     const town = state.townCycle;
     if (town?.pending.includes(name) && !state.commands[name] && town.revisions?.[name] === ports.navigationRevision(name))
       state.commands[name] = {id: ports.now(), type:"town-party", cycleId:town.id};
   }
   function commandFor(name: string) {
+    retireTownCommand(name);
     if (ports.escapeOwns(name) && state.escape?.stage !== "recovery-convoy") return null;
     restoreTownCommand(name);
     const command = state.commands[name] || null;
@@ -74,7 +101,9 @@ export function createHeartbeatResponse(state: HeartbeatState, ports: HeartbeatR
   function attachLuckySlot(name: string, command: HeartbeatState['commands'][string] | null): void {
     if (!command || name !== state.merchantCharacter) return;
     const slots = state.luckyUpgradeSlots as Record<string, number | null> | undefined;
-    command.luckyUpgradeSlot = slots?.[name] ?? null;
+    const locks = state.luckySlotLocks as Record<string, number | null> | undefined;
+    const resume = state.luckySlotResume as Record<string, {slot: number}> | undefined;
+    command.luckyUpgradeSlot = locks?.[name] ?? resume?.[name]?.slot ?? slots?.[name] ?? null;
   }
 
   function liveEvent(name: string, names: string[]): string | null {
@@ -88,7 +117,7 @@ export function createHeartbeatResponse(state: HeartbeatState, ports: HeartbeatR
           status.serverLiveEvents.some((event) => ports.enabled(name, event.name)),
       );
     return (
-      reporter?.serverLiveEvents?.find((event) => ports.enabled(name, event.name))?.name || null
+      ports.selectedEvents(name).find(event => reporter?.serverLiveEvents?.some(live => live.name === event)) || null
     );
   }
 
@@ -108,7 +137,10 @@ export function createHeartbeatResponse(state: HeartbeatState, ports: HeartbeatR
   }
 
   function returnResponse(name: string) {
-    return {partyTownCycleId: state.townCycle?.id || null, returnProgress: state.returnProgress?.[name] || null};
+    const deferred = requestObject(state.deferredEventReturns?.[name]);
+    const cycleId = state.eventReturn?.participants.includes(name) ? state.eventReturn.cycleId : deferred.phase === "awaiting-event-admission" ? null : deferred.cycleId;
+    return {partyTownCycleId: state.townCycle?.id || null, returnProgress: state.returnProgress?.[name] || null,
+      eventReturnCycleId: typeof cycleId === 'string' ? cycleId : null};
   }
   function turnInPriority(name: string): boolean {
     return name !== state.merchantCharacter && !!state.monsterHunt?.participants?.includes(name) &&
@@ -140,6 +172,8 @@ export function createHeartbeatResponse(state: HeartbeatState, ports: HeartbeatR
         Number(state.goldTargets[String(state.merchantCharacter)]) || 0,
       ),
       gatheringModes: state.bankbois[name] ? [] : state.gatheringModes,
+      bankboiStorage: !!state.bankbois[name],
+      bankStaging: bankStagingReserved(state),
     };
   }
 
@@ -173,6 +207,7 @@ export function createHeartbeatResponse(state: HeartbeatState, ports: HeartbeatR
     if (mode === "combat")
       return {
         serverNow: ports.now(),
+        ...returnResponse(name),
         rareControl: ports.rareControl(name),
         groupedCombat: ports.groupedCombat(),
         passingEncounters: passingReports(),
@@ -199,7 +234,7 @@ export function createHeartbeatResponse(state: HeartbeatState, ports: HeartbeatR
       ...travelResponse(name),
       ...merchantResponse(name),
       ...(name === state.merchantCharacter ? { merchantEventRecoveryReserved: merchantEventRecoveryReserved(state) } : {}),
-      ...partyResponse(state, names, leader),
+      ...partyResponse(state, names, leader, state.statuses[name]?.server),
       groupedCombat: ports.groupedCombat(),
         passingEncounters: passingReports(),
       passingControl: passingAdmission(),

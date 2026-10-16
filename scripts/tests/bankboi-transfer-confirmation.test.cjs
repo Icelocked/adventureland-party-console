@@ -9,7 +9,7 @@ function fixture(){
   sleep:async()=>{now+=100;if(pending){const update=pending;pending=null;update();}},
   bank_store:async(inv,pack,slot)=>{operations.push(['store',inv,slot]);pending=()=>{character.bank[pack][slot]=character.items[inv];character.items[inv]=null;};},
   bank_retrieve:async(pack,slot)=>{operations.push(['retrieve',slot]);pending=()=>{character.items[character.items.indexOf(null)]=character.bank[pack][slot];character.bank[pack][slot]=null;};}};
- vm.createContext(context);vm.runInContext(source.slice(source.indexOf('  async function bankRetrieveConfirmed('),source.indexOf('  async function runBankboiService(')),context);
+ require('./helpers/shared-context.cjs').createSharedContext(context);vm.runInContext(source.slice(source.indexOf('  async function bankRetrieveConfirmed('),source.indexOf('  async function runBankboiService(')),context);
  return {context,character,operations};
 }
 test('two identical tracktrix transfers wait for delayed inventory and bank snapshots at both ends',async()=>{

@@ -15,7 +15,7 @@ export function PartyItemDetails({ model }: { model: PartyConsoleModel }) {
   return model.selected ? <PartyItemDetailsConnected base={model} /> : null;
 }
 function PartyItemDetailsConnected({ base }: { base: PartyConsoleModel }) {
-  const model = usePanelModel(base, { inventory: true, vitals: true, bank: true, market: true });
+  const model = usePanelModel(base, { inventory: true, vitals: true, diagnostics: true, bank: true, market: true });
   const {
     state,
     chars,

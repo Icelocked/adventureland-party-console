@@ -246,6 +246,15 @@
 
   // runtime/characters/roles/monster-attack-policy.ts
   var reflectors = /* @__PURE__ */ new Set(["slenderman", "tiger", "goblin"]);
+  function knownDamageType(value) {
+    return value === "physical" || value === "magical" || value === "pure" ? value : void 0;
+  }
+  function effectiveAttackDamageType(actor, data) {
+    const nativeType = knownDamageType(actor.damage_type);
+    if (nativeType) return nativeType;
+    const weapon = actor.slots?.mainhand;
+    return knownDamageType(weapon && data?.items?.[weapon.name]?.damage_type) || knownDamageType(data?.classes?.[actor.ctype]?.damage_type);
+  }
   function monsterAttackBlock(monster, damageType, range) {
     if (monster === "porcupine" && damageType !== "magical" && damageType !== "pure" && !(Number.isFinite(range) && range >= 75))
       return "Porcupine damage return: physical attacks require range >= 75";
@@ -417,21 +426,6 @@
     "earring1",
     "earring2"
   ];
-  var LUCK_SLOT_ITEM_TYPE = {
-    chest: "chest",
-    pants: "pants",
-    helmet: "helmet",
-    gloves: "gloves",
-    shoes: "shoes",
-    cape: "cape",
-    belt: "belt",
-    orb: "orb",
-    amulet: "amulet",
-    ring1: "ring",
-    ring2: "ring",
-    earring1: "earring",
-    earring2: "earring"
-  };
   function createKillLuckSwap(ports, memory = {}) {
     let active = true;
     const copyLoadout = () => {
@@ -470,13 +464,34 @@
         if (!ports.same(ports.equipped(slot), wanted)) await equipSlot(wanted, slot, session);
       }
     }
-    async function restore(session) {
-      for (const slot of Object.keys(session.original)) {
-        if (!owned(session)) return;
-        const original = session.original[slot] ?? null;
-        if (original && !ports.same(ports.equipped(slot), original)) await equipSlot(original, slot, session);
+    function restoreTarget(session) {
+      const tank = ports.gearSet("tank");
+      if (!tank) return session.original;
+      const target = { ...session.original };
+      for (const slot of Object.keys(tank)) {
+        const [index] = locate([tank[slot]]);
+        const worn = ports.equipped(slot);
+        if (member(worn, tank[slot])) target[slot] = ports.fingerprint(worn);
+        else if (index >= 0) target[slot] = ports.fingerprint(ports.items()[index]);
       }
-      if (owned(session) && matches(session.original)) delete memory.session;
+      return target;
+    }
+    async function restore(session) {
+      const target = restoreTarget(session);
+      for (const slot of Object.keys(target)) {
+        if (!owned(session)) return;
+        const wanted = target[slot] ?? null;
+        if (!wanted) {
+          if (session.plan[slot] && ports.same(ports.equipped(slot), session.plan[slot])) {
+            await ports.unequip(slot);
+            session.expected = { ...session.expected, [slot]: null };
+          }
+          continue;
+        }
+        if (!ports.same(ports.equipped(slot), wanted) && ports.items().some((item) => ports.same(item, wanted)))
+          await equipSlot(wanted, slot, session);
+      }
+      if (owned(session)) delete memory.session;
     }
     function run(operation) {
       if (!active || memory.pending || ports.now() < (memory.retryAt || 0)) return;
@@ -488,60 +503,26 @@
       });
       memory.pending = pending;
     }
-    function bestCarried(carried, type, exclude) {
-      return carried.filter((item) => ports.itemType(item) === type && !exclude(item)).reduce((top, item) => {
-        const luck = ports.luckValue(item);
-        return !top || luck > top.luck ? { item, luck } : top;
-      }, null);
+    function member(item, wanted) {
+      return !!item && item.name === wanted.name && (item.level ?? void 0) === (wanted.level ?? void 0) && (item.p ?? void 0) === (wanted.p ?? void 0) && (item.stat_type ?? void 0) === (wanted.stat_type ?? void 0);
     }
-    function planStandalone(carried) {
-      const plan = {};
-      const luck = {};
-      for (const slot of LUCK_SWAP_SLOTS) {
-        const currentLuck = ports.luckValue(ports.equipped(slot));
-        luck[slot] = currentLuck;
-        const best = bestCarried(carried, LUCK_SLOT_ITEM_TYPE[slot], (item) => ports.luckValue(item) <= currentLuck);
-        if (best) {
-          plan[slot] = ports.fingerprint(best.item);
-          luck[slot] = best.luck;
-        }
-      }
-      return { plan, luck };
-    }
-    function applySetBonuses(carried, plan, luck) {
-      const counts = { ...ports.fixedSetCounts() };
-      for (const slot of LUCK_SWAP_SLOTS) {
-        const set = ports.itemSet(ports.equipped(slot));
-        if (set) counts[set] = (counts[set] || 0) + 1;
-      }
-      const candidatesBySet = /* @__PURE__ */ new Map();
-      for (const slot of LUCK_SWAP_SLOTS) {
-        const bySet = /* @__PURE__ */ new Map();
-        for (const item of carried) {
-          if (ports.itemType(item) !== LUCK_SLOT_ITEM_TYPE[slot] || ports.same(ports.equipped(slot), item)) continue;
-          const set = ports.itemSet(item);
-          if (!set) continue;
-          const value = ports.luckValue(item);
-          const existing = bySet.get(set);
-          if (!existing || value > existing.luck) bySet.set(set, { item, luck: value });
-        }
-        for (const [set, { item }] of bySet) {
-          const list = candidatesBySet.get(set) ?? [];
-          list.push({ slot, item });
-          candidatesBySet.set(set, list);
-        }
-      }
-      for (const [set, candidates] of candidatesBySet) {
-        const bonusGain = ports.setBonusLuck(set, (counts[set] || 0) + candidates.length) - ports.setBonusLuck(set, counts[set] || 0);
-        if (bonusGain <= 0) continue;
-        const displacedLuck = candidates.reduce((sum, { slot, item }) => sum + luck[slot] - ports.luckValue(item), 0);
-        if (bonusGain > displacedLuck) for (const { slot, item } of candidates) plan[slot] = ports.fingerprint(item);
-      }
+    function locate(wanted) {
+      const taken = /* @__PURE__ */ new Set(), items = ports.items();
+      return wanted.map((item) => {
+        const index = items.findIndex((candidate, slot) => !taken.has(slot) && member(candidate, item));
+        if (index >= 0) taken.add(index);
+        return index;
+      });
     }
     function planSwap() {
-      const carried = ports.items().filter((item) => !!item);
-      const { plan, luck } = planStandalone(carried);
-      applySetBonuses(carried, plan, luck);
+      const set = ports.gearSet("luck");
+      if (!set) return {};
+      const slots = Object.keys(set).filter((slot) => LUCK_SWAP_SLOTS.includes(slot) && !member(ports.equipped(slot), set[slot]));
+      const found = locate(slots.map((slot) => set[slot]));
+      const plan = {};
+      slots.forEach((slot, index) => {
+        if (found[index] >= 0) plan[slot] = ports.fingerprint(ports.items()[found[index]]);
+      });
       return plan;
     }
     function beginSwap() {
@@ -572,7 +553,8 @@
       if (!target || !ports.isTank() || ports.otherSwapBusy()) return false;
       trackHpTrend(target);
       if (ports.lethalBasicAttack(target)) return true;
-      return ports.holdsAggro(target) && estimatedSecondsToDeath() <= 3;
+      const pieces = Object.keys(planSwap()).length;
+      return pieces > 0 && ports.holdsAggro(target) && estimatedSecondsToDeath() <= Math.max(3, 1.5 + 0.35 * pieces);
     }
     function shouldRestore(target) {
       if (!ports.isTank()) return true;
@@ -612,6 +594,24 @@
         await memory.pending;
       },
       busy: () => !!memory.pending,
+      /**
+       * Inventory slots this swap holds: combat gear waiting to be restored and the luck pieces it
+       * wears or will wear. Automatic upgrade/compound pickups must leave them alone; one slot per
+       * held item, so identical copies elsewhere in the bag stay eligible.
+       */
+      reservedSlots() {
+        if (!active) return [];
+        const held = [];
+        for (const name of ["luck", "tank"]) {
+          const set = ports.gearSet(name) || {};
+          for (const slot of Object.keys(set)) if (!member(ports.equipped(slot), set[slot])) held.push(set[slot]);
+        }
+        const session = memory.session;
+        if (session) {
+          for (const item of Object.values(session.original)) if (item) held.push(item);
+        }
+        return [...new Set(locate(held).filter((index) => index >= 0))].sort((a, b) => a - b);
+      },
       stop() {
         active = false;
       }
@@ -622,8 +622,6 @@
   function installKillLuckSwap(root, skills, equipment2) {
     const host = parent;
     const memory = host.__partyKillLuckSwap ??= {};
-    const data = G;
-    const itemSet = (item) => item ? data.items[item.name]?.set : void 0;
     const fingerprint = (item) => {
       if (!item) return null;
       const result = { name: item.name };
@@ -637,21 +635,11 @@
       isTank: () => !!sharedRoutine.isTank?.(),
       equipped: (slot) => character.slots[slot],
       items: () => character.items,
-      itemType: (item) => data.items[item.name]?.type,
-      luckValue: (item) => item ? Number(data.items[item.name]?.luck) || 0 : 0,
-      itemSet,
-      setBonusLuck: (set, count) => Number(data.sets[set]?.[count]?.luck) || 0,
-      fixedSetCounts: () => {
-        const counts = {};
-        for (const slot of ["mainhand", "offhand"]) {
-          const set = itemSet(character.slots[slot]);
-          if (set) counts[set] = (counts[set] || 0) + 1;
-        }
-        return counts;
-      },
+      gearSet: (name) => root.partyGearSets?.[character.name]?.[name]?.slots || null,
       fingerprint,
       same: (item, wanted) => JSON.stringify(fingerprint(item)) === JSON.stringify(fingerprint(wanted)),
       equip: (index, slot) => Promise.resolve(equip(index, slot)),
+      unequip: (slot) => Promise.resolve(unequip(slot)),
       lethalBasicAttack: (target) => skills.lethalBasicAttack(target),
       holdsAggro: (target) => target.target === character.name,
       endangered: () => skills.endangeredSelf(),
@@ -685,17 +673,20 @@
   function visitDue(event, status, live, featured, completed, retryAt, now) {
     return live && !featured && event?.available !== false && !!status?.anniversaryVisit && !completed && retryAt <= now;
   }
-  function movementReserved(preWindow, live, complete, unavailable) {
-    return preWindow || live && !complete && !unavailable;
+  function movementReserved(preWindow, live, complete) {
+    return preWindow || live && !complete;
+  }
+  function availableReservation(preWindow, featured, event, state) {
+    return preWindow || featured || event?.available !== false || busy(state);
   }
   function busy(state) {
     return !!state.busy || state.mode === "kiss-active";
   }
+  function liveBusy(live, state) {
+    return live && busy(state);
+  }
   function completedVisit(state, event) {
     return state.mode === "complete" && (state.completedRound === void 0 || state.completedRound === String(event?.round));
-  }
-  function unavailableRound(event, live, featured) {
-    return live && !featured && event?.available === false;
   }
   function claimedVisit(event, claimedRound) {
     return claimedRound !== void 0 && claimedRound === String(event?.round);
@@ -714,8 +705,8 @@
       featured,
       kissDue,
       preWindow,
-      reserved: movementReserved(preWindow, live, completed, unavailableRound(event, live, featured)),
-      busy: live && busy(state),
+      reserved: movementReserved(preWindow, live, completed) && availableReservation(preWindow, featured, event, state),
+      busy: liveBusy(live, state),
       retryAt,
       mode: state.mode || "idle"
     };
@@ -867,8 +858,7 @@
         ports.state().skippedAttack = "waiting for group readiness and target commitment";
         return false;
       }
-      const actor = character;
-      const blocked2 = monsterAttackBlock(target.mtype, actor.damage_type, Number(character.range));
+      const blocked2 = monsterAttackBlock(target.mtype, effectiveAttackDamageType(character, typeof G === "undefined" ? void 0 : G), Number(character.range));
       if (blocked2) {
         ports.state().skippedAttack = blocked2;
         return false;
@@ -1586,7 +1576,7 @@
     const shared = root.sharedRoutine;
     const projectiles = createProjectileTracker(world);
     function world() {
-      const actor = character;
+      const actor = { ...character, damage_type: effectiveAttackDamageType(character, typeof G === "undefined" ? void 0 : G) };
       const context = shared.combatContext?.() || {
         leader: "",
         tank: null,
@@ -2664,10 +2654,11 @@
       }, 3e3);
       socket.once("entities", observe);
     });
+    let convoySuspended = false;
     const rare = createDepartureLoot(ports), hunt = createDepartureLoot({
       ...ports,
       defending: () => mission?.encounter && ports.huntEncounterDefending ? ports.huntEncounterDefending() : ports.defending()
-    }), convoy = createDepartureLoot(ports);
+    }), convoy = createDepartureLoot({ ...ports, defending: () => convoySuspended || ports.defending() });
     let convoyHold = false;
     let lastState = 0, lastRare = null, mission = null, finalKill = null, finalKillAt = 0;
     const activeMission = () => mission && !["ended", "failed-return", "backup-travel", "backup-farming"].includes(mission.stage);
@@ -2702,7 +2693,9 @@
       accept(state) {
         if (state.serverNow < lastState) return lastRare;
         lastState = state.serverNow;
-        convoyHold = !!(state.convoySignal?.phase === "defending" && state.convoySignal.loot);
+        const convoyPhase = state.convoySignal?.phase;
+        convoyHold = !!(["defending", "communication-hold", "observing"].includes(convoyPhase) && state.convoySignal.loot);
+        convoySuspended = convoyHold && convoyPhase !== "defending";
         convoy.accept(convoyHold ? state.convoySignal.loot : null, state.serverNow);
         mission = state.monsterHunt;
         if (state.farmingPolicy && state.farmingPolicy !== "hunt" && !mission?.exitMode) mission = null;
@@ -2904,8 +2897,8 @@
     });
     const recoverFromDeath = createDeathRecovery({
       isDead: () => !!character.rip,
-      blocked: () => !!sharedRoutine.dungeonOwned?.(),
-      respawn: () => sharedRoutine.dungeonOwned?.() ? Promise.reject(Error("Dungeon owns revival")) : Promise.resolve(respawn()),
+      blocked: () => !!sharedRoutine.dungeonOwned?.() || !!sharedRoutine.escapeOwnsRevival?.(),
+      respawn: () => sharedRoutine.dungeonOwned?.() || sharedRoutine.escapeOwnsRevival?.() ? Promise.reject(Error("Recovery owns revival")) : Promise.resolve(respawn()),
       releaseCombat: () => {
         working = false;
       },
@@ -2961,6 +2954,12 @@
       return currentEpoch(epoch) && !character.rip && !sharedRoutine.isOccupied();
     }
     function chooseTarget() {
+      return priorityEventTarget() || fallbackTarget();
+    }
+    function priorityEventTarget() {
+      return exclusiveCombat() ? null : sharedRoutine.getPriorityEventTarget?.() || null;
+    }
+    function fallbackTarget() {
       if (sharedRoutine.dungeonOwned?.()) return sharedRoutine.getDungeonTarget?.() || null;
       if (sharedRoutine.returnCombatActive?.()) return sharedRoutine.returnDefenseTarget?.() || null;
       if (sharedRoutine.bossCombatActive?.()) return sharedRoutine.getEventTarget();
@@ -2996,9 +2995,10 @@
         return;
       }
       if (!sharedRoutine.returnCombatActive?.() && !invalidated && current) {
+        const priorityEvent = priorityEventTarget();
         const rare = sharedRoutine.dungeonOwned?.() ? null : sharedRoutine.getRareTarget?.();
         const nominated = sharedRoutine.dungeonOwned?.() ? sharedRoutine.getDungeonTarget?.() : sharedRoutine.usesLeaderTarget?.() ? sharedRoutine.getGroupedTarget() : null;
-        if ((!rare || rare.id === selectedTarget) && (!(sharedRoutine.dungeonOwned?.() || sharedRoutine.usesLeaderTarget?.()) || nominated?.id === selectedTarget)) return;
+        if ((!priorityEvent || priorityEvent.id === selectedTarget) && (!rare || rare.id === selectedTarget) && (!(sharedRoutine.dungeonOwned?.() || sharedRoutine.usesLeaderTarget?.()) || nominated?.id === selectedTarget)) return;
       }
       invalidated = false;
       selecting = true;

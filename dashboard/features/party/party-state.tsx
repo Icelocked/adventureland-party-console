@@ -2,7 +2,6 @@
 import type { LuckySlotHistory } from '../../../runtime/lucky-slot-tracking';
 import type { MerchantStandLocation } from '../../../runtime/coordinator/merchant/stand-location';
 import type { BossChaseState } from '../../../runtime/coordinator/events/boss-chase';
-import type { DailyChaseState } from '../../../runtime/coordinator/events/daily-chase';
 import type { DeconstructionMark, DeconstructionCatalog } from "./deconstruction";
 import { ActiveSlot } from "./active-slot";
 import { ALDataState } from "./aldata-state";
@@ -89,9 +88,10 @@ export type PartyState = {
   deconstructionMarks?: DeconstructionMark[];
   autoDeconstruction?: Record<string, Record<string, { item: Item }>>;
   deconstructionCatalog?: DeconstructionCatalog;
-  autoNpcSales?: Record<string, { item: Item; createdAt: number; character?: string }>;
+  autoNpcSales?: Record<string, { item: Item; createdAt: number; character?: string; keep?: number }>;
   autoStandMarks?: Record<string, { item: Item; price: number; createdAt: number }>;
   merchantRoutinePriorities?: Record<string, number>;
+  marketIgnoredItems?: import("../../../runtime/market-preferences").MarketIgnoredItem[];
   merchantBlacklist?: Record<string, MerchantBlacklistEntry>;
   merchantAutomations?: Record<string, boolean>;
   giveawayRealms?: { key: string; label: string }[];
@@ -99,7 +99,7 @@ export type PartyState = {
   standBids?: Record<string, StandBid>;
   autoStandBuys?: boolean;
   autoBlacklistMerchants?: boolean;
-  nativeStand?: { offers: Record<string, { itemId: string; auto: boolean; phase: string; slot: string; level?: number; price?: number; quantity?: number; acknowledged?: number; problem?: string }>; problems: Record<string, string> };
+  nativeStand?: { offers: Record<string, { itemId: string; auto: boolean; phase: string; slot: string; level?: number; price?: number; quantity?: number; acknowledged?: number; problem?: string }>; problems: Record<string, string>; purchases?: Record<string, { item: { name: string; q?: number; price?: number }; quantity: number; jobId: string }> };
   standPriceHistory?: Record<string, StandPriceHistory>;
   standSearch?: StandSearchState;
   upgrades?: Record<string, UpgradeMark[]>;
@@ -112,8 +112,13 @@ export type PartyState = {
   withdrawals?: Record<string, Withdrawal[]>;
   leader?: string | null;
   designatedTank?: string | null;
+  /** Saved gear sets per character (luck/tank; gold reserved). */
+  gearSets?: Record<string, Partial<Record<"luck" | "tank" | "gold", { slots: Record<string, { name: string; level?: number; p?: string; stat_type?: string }>; savedAt: number }>>>;
   followers?: Record<string, boolean>;
   eventsByCharacter?: Record<string, boolean>;
+  eventAttendance?: Record<string, Record<string, Pick<import("../../../runtime/coordinator/events/attendance-limits").AttendanceInstance, "ignored" | "ended">>>;
+  eventLimitsByCharacter?: Record<string, Record<string, import("../../lib/event-policy").EventLimits>>;
+  eventPrioritiesByCharacter?: Record<string, string[]>;
   eventSelectionsByCharacter?: Record<string, string[]>;
   eventSchedules?: import("./event-selection-control").EventSchedule[];
   monsterFocus?: string[] | string;
@@ -166,23 +171,18 @@ export type PartyState = {
   merchantForceStand?: boolean;
   merchantStandLocation?: MerchantStandLocation | null;
   bossChase?: BossChaseState | null;
-  dailyChase?: DailyChaseState | null;
   realmHopBlacklist?: string[];
   merchantWeapon?: { item: Item } | null;
   luckyUpgradeSlots?: Record<string, number | null>;
+  luckySlotLocks?: Record<string, number | null>;
+  luckySlotResume?: Record<string, {slot: number; rolls: number}>;
   luckySlotTracking?: LuckySlotHistory;
   merchantQueue?: MerchantJob[];
   merchantCurrent?: MerchantJob | null;
-  productionPending?: {
-    id: string;
-    name: string;
-    level: number;
-    kind: "upgrade" | "compound";
-    journal?: { phase: "prepared" | "running" | "complete" } | null;
-  }[];
   merchantActivity?: MerchantActivity[];
   combatLogs?: Record<string, CombatLogEntry[]>;
   bankSortMode?: "automatic" | "request";
+  bankSortLayout?: "packed" | "gapped";
   bankSortRequest?: { id: string; status: "queued" | "sorting" | "retry"; message?: string } | null;
   gatheringModes?: string[];
   gatheringNoTool?: Record<string, boolean>;

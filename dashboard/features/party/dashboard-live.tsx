@@ -62,7 +62,7 @@ export function DashboardLive() {
         1;
       client.setQueryData(liveConnectionKey, { healthy, version });
     };
-    const inventories = new Map<string, { items: unknown; slots: unknown; size: number }>();
+    const inventories = new Map<string, { items: unknown; slots: unknown; size: number; reserved: string }>();
     const receiver = createLiveReceiver((name, record) => {
       if (!record) {
         for (const kind of ['vitals', 'position', 'inventory'] as const) writeCharacter(client, name, kind, null);
@@ -77,9 +77,10 @@ export function DashboardLive() {
       // them inspectable while retaining the actual capacity separately.
       const displaySize = Object.keys(record.items).reduce((length, key) =>
         /^\d+$/.test(key) && record.items[key] ? Math.max(length, Number(key) + 1) : length, size);
+      const reserved = JSON.stringify(record.vitals.reservedInventory ?? []);
       const previous = inventories.get(name);
-      if (previous?.items === record.items && previous.slots === record.slots && previous.size === size) return;
-      inventories.set(name, { items: record.items, slots: record.slots, size });
+      if (previous?.items === record.items && previous.slots === record.slots && previous.size === size && previous.reserved === reserved) return;
+      inventories.set(name, { items: record.items, slots: record.slots, size, reserved });
       writeCharacter(client, name, 'inventory', {
         items: Array.from(
           { length: displaySize },
@@ -87,6 +88,7 @@ export function DashboardLive() {
         ),
         inventorySize: size,
         slots: record.slots,
+        reservedInventory: (record.vitals.reservedInventory as Char['reservedInventory']) || [],
       }, sampledAt);
     });
     function fail() {

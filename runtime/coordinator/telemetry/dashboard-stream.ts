@@ -25,9 +25,9 @@ export const liveFields = [
   "standOpen",
   "conditions",
   "inventorySize",
-  // A pending lucky-slot/production operation holds merchant work; the reason shows why (#47).
   "upgradeInventoryBusy",
-  "luckyRecoveryError",
+  // Bag slots held by a gear set; the inventory view labels them in place of automatic rules.
+  "reservedInventory",
 ] as const;
 type RecordValue = Record<string, unknown>;
 export interface LiveRecord {

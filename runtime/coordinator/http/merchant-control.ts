@@ -1,6 +1,7 @@
 import { releaseMerchantInterruption } from "../navigation/merchant-interruption.ts";
 import { requestObject, requestText, type HttpRequest, type HttpResponse } from "./contracts.ts";
 import type { MerchantWork } from "../merchant/work.ts";
+import type { RealmRequest } from '../characters/realm-request.ts';
 
 interface ControlState {
   merchantCharacter: string | null;
@@ -18,6 +19,7 @@ interface ControlState {
   gatheringModes: unknown[];
   merchantForceStand: boolean;
   merchantHomeReturnAt?: number;
+  merchantRealmRequests?: Record<string, RealmRequest | undefined>;
   activeRealm: string;
 }
 interface ControlPorts {
@@ -34,6 +36,8 @@ export function createMerchantControlRoutes(state: ControlState, ports: ControlP
   function retry(req: HttpRequest, res: HttpResponse): unknown {
     const job = state.merchantQueue.find(entry => entry.id === requestObject(req.body).id);
     if (!job) return res.status(404).json({ error: "queued merchant job not found" });
+    if (state.merchantCharacter) delete state.merchantRealmRequests?.[state.merchantCharacter];
+    state.merchantHomeReturnAt = 0;
     delete job.realmRetryExhausted;
     delete job.realmBlockedReason;
     delete job.realmError;
@@ -42,9 +46,17 @@ export function createMerchantControlRoutes(state: ControlState, ports: ControlP
     ports.persist(); ports.dispatch();
     return res.json({ ok: true });
   }
+  function cancelExchange(job: MerchantWork): void {
+    const deliveryId = job.exchangeDeliveryId || job.id;
+    state.merchantQueue = state.merchantQueue.filter(candidate => candidate.id !== deliveryId && candidate.exchangeDeliveryId !== deliveryId);
+    for (const [member, marks] of Object.entries(state.merchantMarked))
+      state.merchantMarked[member] = (marks || []).filter(raw => requestObject(raw).exchangeJobId !== deliveryId);
+  }
+  function pendingExchange(job: MerchantWork): boolean { return !!(job.exchangeDeliveryId || job.exchangePickupId); }
   function cancelIntent(job: MerchantWork): void {
     const name = job.target;
-    if (job.reason === "marked items") {
+    if (pendingExchange(job)) cancelExchange(job);
+    else if (job.reason === "marked items") {
       state.marked[String(name)] = [];
       state.merchantMarked[String(name)] = [];
     } else if (job.reason === "manual upgrades") {
@@ -88,6 +100,8 @@ export function createMerchantControlRoutes(state: ControlState, ports: ControlP
         type: "merchant-gather",
         mode: null,
       };
+    for (const [member, marks] of Object.entries(state.merchantMarked))
+      state.merchantMarked[member] = (marks || []).filter(raw => !requestObject(raw).exchangeJobId);
     state.merchantQueue = [];
     state.merchantCurrent = null;
     state.gatheringModes = [];
@@ -128,34 +142,5 @@ export function createMerchantControlRoutes(state: ControlState, ports: ControlP
     ports.persist();
     return res.json({ ok: true, enabled: state.merchantForceStand });
   }
-  /** Ask the merchant to drop a lucky-slot journal its own recovery can't reconcile (#47). */
-  function clearLuckyJournal(_req: HttpRequest, res: HttpResponse): unknown {
-    const merchant = state.merchantCharacter;
-    if (!merchant) return res.status(409).json({ error: "configure a merchant first" });
-    if (state.merchantCurrent) return res.status(409).json({ error: "wait for the merchant's current job to finish" });
-    state.commands[merchant] = { id: ports.nextCommand(), type: "merchant-clear-lucky-journal" };
-    ports.log("Requested clearing the merchant's stuck lucky-slot journal", "warning");
-    ports.persist();
-    return res.json({ ok: true });
-  }
-  /**
-   * Manual "send the merchant to the bank": one bank exchange that deposits, withdraws pending
-   * requests (bank stand/NPC sales, deliveries) and refreshes the bank snapshot (#28 2c).
-   */
-  function visitBank(_req: HttpRequest, res: HttpResponse): unknown {
-    const merchant = state.merchantCharacter;
-    if (!merchant) return res.status(409).json({ error: "configure a merchant first" });
-    const existing = [state.merchantCurrent, ...state.merchantQueue].find(
-      (job) => job?.target === merchant && job.reason === "manual bank exchange");
-    if (existing) return res.json({ ok: true, queued: false });
-    state.merchantQueue.push(ports.stamp({
-      id: "merchant-" + ports.now() + "-" + ports.nextCommand(), target: merchant,
-      reason: "manual bank exchange", manual: true, queuedAt: ports.now(),
-    }));
-    ports.log("Queued a manual merchant bank visit", "info");
-    ports.persist();
-    ports.dispatch();
-    return res.json({ ok: true, queued: true });
-  }
-  return { cancel, clear, force, retry, clearLuckyJournal, visitBank };
+  return { cancel, clear, force, retry };
 }

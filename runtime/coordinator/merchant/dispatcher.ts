@@ -27,9 +27,12 @@ interface AnniversaryControl {
   busy: boolean;
 }
 export interface DispatchPorts {
+  homeBlocked?(): boolean;
   productionPending?(): {id: string; name: string; level: number; kind: string}[];
   eventReserved?(): boolean;
   enabled?(job: MerchantWork): boolean;
+  /** A queued giveaway job that expired before it could be dispatched. */
+  giveawayExpired?(job: MerchantWork): void;
   travel?(realm: string): Promise<unknown>;
   headless?(): boolean;
   now(): number;
@@ -63,7 +66,7 @@ export interface DispatchPorts {
   command(name: string | null, command: MerchantCommand): void;
   idle(): void;
   persist(): void;
-  log(message: string, level: "info" | "error", details?: unknown): void;
+  log(message: string, level: "info" | "warning" | "error", details?: unknown): void;
 }
 
 /** Assigns one job while preserving storage, event, gathering, and realm ownership. */
@@ -71,7 +74,6 @@ export function createMerchantDispatcher(state: DispatchState, ports: DispatchPo
   const realmCheck = createPartyRealmCheck(state, ports);
   let capacityBankAt = -Infinity;
   let productionHold = '';
-  let inventoryHold = '';
   let productionProbeAt = -Infinity;
   function clearCollectionCapacity(): boolean {
     if (!state.queue.some(job => ports.capacityBlocked(job))) return false;
@@ -113,12 +115,20 @@ export function createMerchantDispatcher(state: DispatchState, ports: DispatchPo
   }
 
   function ready(job: MerchantWork): boolean {
+    const homeError = 'Merchant realm return failed after 3 attempts; manual retry required';
+    if (ports.homeBlocked?.() && job.target === ports.merchant() && ports.routineNeedsHome(job.reason)) {
+      if (job.realmBlockedReason !== homeError) { job.realmBlockedReason = homeError; ports.persist(); }
+      return false;
+    }
+    if (job.realmBlockedReason === homeError) { delete job.realmBlockedReason; ports.persist(); }
     if (ports.enabled?.(job) === false) return false;
     return merchantJobReady(job, {now: ports.now(), priority: candidate => ports.priority(candidate as MerchantWork),
       capacityBlocked: candidate => ports.capacityBlocked(candidate as MerchantWork), collectionReady: candidate => ports.collectionReady(candidate as MerchantWork)});
   }
 
   function gatherBefore(readyJobs: readonly MerchantWork[]): boolean {
+    const items = ports.status(ports.merchant())?.items;
+    if (Array.isArray(items) && items.filter(entry => !entry).length <= 3) return false;
     const modes = ports
       .gatheringModes()
       .filter((mode) => Number(ports.gatheringCooldown(mode) || 0) <= ports.now())
@@ -220,7 +230,7 @@ export function createMerchantDispatcher(state: DispatchState, ports: DispatchPo
   }
 
   function hasQueuedWork(job: MerchantWork): boolean {
-    if (job.reason === 'withdrawals') return hasMarkedWithdrawals(ports.inputs().work(job.target).withdrawals);
+    if (job.reason === 'withdrawals' || job.reason === 'bank collection') return hasMarkedWithdrawals(ports.inputs().work(job.target).withdrawals);
     if (job.reason === "deliveries") return ports.inputs().work(job.target).deliveries.length > 0;
     if (job.reason !== "manual compounds") return true;
     if (ports.inputs().work(job.target).compounds.length) return true;
@@ -229,11 +239,15 @@ export function createMerchantDispatcher(state: DispatchState, ports: DispatchPo
   }
 
   function available(): boolean {
+    // Realm reconnect recovery must continue its bounded deadline even while
+    // the departing worker no longer supplies fresh inventory/status reports.
+    if (ports.returningHome() && !ports.ensureHome("resuming merchant work")) return false;
     // Preserve queued work until a fresh living merchant can execute it.
     if (!merchantAlive()) return false;
     state.queue = mergePickupJobs(state.queue, ports.merchant()).map(job => ports.stamp(job));
-    if (ports.returningHome() && !ports.ensureHome("resuming merchant work")) return false;
-    state.queue = state.queue.flatMap(job => splitLegacyWork(job)).filter(hasQueuedWork).filter((job) => !ports.bankboi(job.target) && (buyUpgradeOrder(job) || ports.enabled?.(job) !== false) && !(job.reason === "join giveaway" && Number(job.expiresAt) < ports.now()));
+    const expired = state.queue.filter((job) => job.reason === "join giveaway" && Number(job.expiresAt) < ports.now());
+    state.queue = state.queue.flatMap(job => splitLegacyWork(job)).filter(hasQueuedWork).filter((job) => !ports.bankboi(job.target) && (buyUpgradeOrder(job) || ports.enabled?.(job) !== false) && !expired.includes(job));
+    expired.forEach((job) => ports.giveawayExpired?.(job));
     return !state.current && !!ports.merchant() && !ports.manualEquipmentPending() && !reserved();
   }
 
@@ -265,26 +279,11 @@ export function createMerchantDispatcher(state: DispatchState, ports: DispatchPo
   function dispatch(): void {
     if (ports.eventReserved?.()) return;
     if (productionHeld()) return;
-    if (inventoryHeld()) return;
+    // A receipt can already be settled while its lucky layout or inventory
+    // tidy is still restoring. Hold before realm/home/storage/gathering paths
+    // so none can steal that inventory ownership between native steps.
+    if (ports.status(ports.merchant())?.upgradeInventoryBusy) return;
     dispatchReady();
-  }
-  /**
-   * An idle merchant still holding a lucky-slot/production journal would only defer every job
-   * at its own recovery gate, so hold the queue until its idle recovery (or an operator clear)
-   * releases the inventory, and say why once instead of retrying silently.
-   */
-  function inventoryHeld(): boolean {
-    const status = ports.status(ports.merchant());
-    if (state.current || !status?.upgradeInventoryBusy || !merchantAlive()) {
-      inventoryHold = '';
-      return false;
-    }
-    const reason = status.luckyRecoveryError?.message || 'lucky-slot inventory operation pending';
-    if (inventoryHold !== reason) {
-      inventoryHold = reason;
-      ports.log('Merchant work held until its inventory recovery finishes: ' + reason, 'error');
-    }
-    return true;
   }
   function dispatchReady(): void {
     if (gatheringCastActive(ports.status(ports.merchant()), ports.now())) return;

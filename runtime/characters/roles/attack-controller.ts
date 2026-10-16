@@ -1,8 +1,7 @@
-import type { DamageType } from "typed-adventureland";
 import type { CombatState, Target } from "./types.ts";
 import { errorReason } from "./types.ts";
 import { createCrabRangeRecovery, type RangeSample } from "./crab-range.ts";
-import { monsterAttackBlock } from "./monster-attack-policy.ts";
+import { effectiveAttackDamageType, monsterAttackBlock } from "./monster-attack-policy.ts";
 
 interface Flight {
   passing: boolean;
@@ -95,6 +94,12 @@ export function createAttackController(ports: AttackPorts) {
     return !!target && !!ports.passing?.(target);
   }
   function permitted(target: Target): boolean {
+    const eligible = ports.passing?.(target)
+      ? sharedRoutine.allowsPassingTarget(target) : sharedRoutine.allowsTarget(target);
+    if (!eligible) {
+      ports.state().skippedAttack = "target no longer eligible";
+      return false;
+    }
     if (ports.equipmentBusy?.()) {
       ports.state().skippedAttack = "weapon equipment change in progress";
       return false;
@@ -105,9 +110,7 @@ export function createAttackController(ports: AttackPorts) {
       ports.state().skippedAttack = "waiting for group readiness and target commitment";
       return false;
     }
-    // The server exposes damage_type, but typed-adventureland 0.0.57 omits it on Character.
-    const actor = character as typeof character & { damage_type?: DamageType };
-    const blocked = monsterAttackBlock(target.mtype, actor.damage_type, Number(character.range));
+    const blocked = monsterAttackBlock(target.mtype, effectiveAttackDamageType(character, typeof G === "undefined" ? undefined : G), Number(character.range));
     if (blocked) {
       ports.state().skippedAttack = blocked;
       return false;
@@ -152,10 +155,12 @@ export function createAttackController(ports: AttackPorts) {
       if (attempt.passing && ports.preparePassing?.(target) === false) {
         attempt.pending--; cancelSlots(); return;
       }
-      const action=attempt.passing ? null : (sharedRoutine as any).queueEvidence?.(target,'pending');
+      const publishAfterSend = !attempt.passing && sharedRoutine.independentPullActive?.(target);
+      let action=attempt.passing || publishAfterSend ? null : (sharedRoutine as any).queueEvidence?.(target,'pending');
       try {
         sharedRoutine.noteCombatHandoff?.('attempt', target.id, {cooldownReadyAt:clock(), frequency:Number(character.frequency),timerLatenessMs:lastTimerLatenessMs});
-        Promise.resolve(attack(target)).then(() => {
+        const response = attack(target);
+        Promise.resolve(response).then(() => {
           if (flight !== attempt || attempt.epoch !== ports.epoch() || !ports.active() || attempt.success) return;
           attempt.success = true;
           cancelSlots();
@@ -181,6 +186,10 @@ export function createAttackController(ports: AttackPorts) {
           attempt.pending--;
           if (flight === attempt && attempt.slotsDone && !attempt.pending) finish();
         });
+        if (publishAfterSend) {
+          try { action=(sharedRoutine as any).queueEvidence?.(target,'pending'); }
+          catch (error) { ports.report(error); }
+        }
       } catch (error) {
         if(action)(sharedRoutine as any).queueEvidence?.(target,'rejected',action);
         attempt.pending--; cancelSlots(); rejected(attempt, error);
@@ -268,6 +277,7 @@ export function createAttackController(ports: AttackPorts) {
   return {
     pending() { return !!flight; },
     hasStarted(targetId: string) { return flight?.targetId === targetId || lastSuccessfulTarget === targetId; },
+    engagedTargetId(){return flight?.targetId||lastSuccessfulTarget||null;},
     reset() { cancelSlots(); flight = null; lastSuccessfulTarget = null; retryAt = 0; recovery.reset("runtime reset"); },
     start() { running = true; schedule(Math.max(1, remaining() - 2)); },
     stop() { running = false; cancelSlots(); flight = null; if (timer !== null) clearTimeout(timer); timer = null; },

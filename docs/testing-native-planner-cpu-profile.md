@@ -1,0 +1,7 @@
+Native Cave CPU profile diagnostic failure inventory
+
+Observed before diagnostics: a2c5aac native Cave artifact11786300780 shows114 native slices / scheduler114 / plan114, zero moving/transporting/paused blocks, mean1024.85ms callback gap across115.8 seconds but only4.74 seconds inside native search. Actual runner source schedules an unconditional80ms interval. Offline same-graph three-frame and hidden-child-window timer replays do not reproduce1-second intervals, so they cannot justify a scheduler architecture change.
+
+Diagnostic risks: fake scheduling/game/geometry, bypassing owners or clock limits, timing a retired/cached planner, duplicate profiler sessions, collecting unbounded episodes, losing stop/detach on failure, exposing URL credentials, mistaking root-page metrics for an unrelated native renderer. Profile only one owned active native CODE search via the actual game Frame CDP target. Read-only profiler and Performance metrics preserve all outcome checks. Sampling interval10ms, bounded three eligibility probes, stop from existing poll after10 seconds or existing finally. Original600-second and native expiry constraints remain untouched. Keep actual duration in evidence instead of assuming exact wall scheduling.
+
+Interpret TaskDuration/ScriptDuration/LayoutDuration together with dominant sampled call frames and scheduler gaps. No production change follows merely from idle/busy hypothesis; actual captured workload must justify it.

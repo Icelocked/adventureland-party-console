@@ -43,3 +43,11 @@ test('a refresh does not retire a living target; fresh subsequent absence permit
  result=recoverLostTargets([fight],members,result.searches,10000);
  assert.equal(result.lost[0].id,'bat');assert.match(result.lost[0].reason,/absence/);
 });
+
+
+test('an unattackable retained coordinator target still requests authoritative entity reconciliation',()=>{
+ const f=fixture();f.tick(0,{target:null,retainedTarget:'lockbreaker'});f.tick(5000);
+ assert.equal(f.requests,1);assert.equal(f.reports[0].target,'lockbreaker');
+ f.tick(15000,{enabled:false});assert.equal(f.requests,1);
+ f.tick(16000,{enabled:true});f.tick(21000);assert.equal(f.requests,2);
+});

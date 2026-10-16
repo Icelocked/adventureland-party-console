@@ -9,6 +9,14 @@ function fixture(handler){
  return {c,command,run:done=>c.sharedMovementOptions(command).barrier({map:'main',x:0,y:0,town:true},0,done),calls:()=>calls};
 }
 const timeout=()=>Object.assign(new Error('timeout'),{partyRequest:{path:'/movement-barrier',kind:'timeout',status:0}});
+test('disabled Town is excluded from every shared walking planner including event retries',()=>{
+ const f=fixture(()=>({ready:true}));
+ for(const extra of [{purpose:'shared-walk'},{purpose:'shared-walk-return'},
+ {purpose:'monster-hunt',phase:'plan-return',allowTown:true},{routeRecovery:{relocation:'town'}}]){
+  assert.equal(f.c.sharedMovementOptions({...f.command,continuousReturn:undefined,...extra,disableTown:true}).town,false);
+ }
+ assert.equal(f.c.sharedMovementOptions({...f.command,continuousReturn:undefined,purpose:'shared-walk'}).town,true);
+});
 for(const completed of [false,true])test('lost '+(completed?'arrival':'departure')+' response retries the same barrier identity',async()=>{
  const bodies=[];const f=fixture((count,c,args)=>{bodies.push(args[1].body);if(count===1)throw timeout();return {ready:true};});
  assert.equal(await f.run(completed),true);assert.equal(f.calls(),2);assert.deepEqual(JSON.parse(JSON.stringify(bodies[0])),JSON.parse(JSON.stringify(bodies[1])));
@@ -70,4 +78,20 @@ test('restart recovers a captured communication-only shared-walk failure without
  failureCode:'route-failed',failureDetails:{failureContext:{convoyId:'C',epoch:2}},failure:'Return route held after two planning cycles; first: GermanicHP: Shared route coordinator signal expired; latest: QwenTina: Error: Error: POST /movement-barrier · timeout'};
  const restored=initialCommandState({activeConvoy:saved},()=>1000).activeConvoy;
  assert.equal(restored.phase,'communication-hold');assert.equal(restored.recoveryAttempts,0);assert.equal(restored.communicationLegacyRecovered,true);
+});
+
+for(const [label,flags,town,loot,canTown,expected] of [
+ ['owned evacuation door',{purpose:'franky-exit',navigationExempt:true,combatHandoffAllowed:false},false,false,true,true],
+ ['ordinary door',{purpose:'party-travel'},false,false,true,false],
+ ['unexempt exit',{purpose:'franky-exit',combatHandoffAllowed:false},false,false,true,false],
+ ['combat handoff exit',{purpose:'franky-exit',navigationExempt:true,combatHandoffAllowed:true},false,false,true,false],
+ ['other exempt route',{purpose:'party-travel',navigationExempt:true,combatHandoffAllowed:false},false,false,true,false],
+ ['evacuation Town',{purpose:'franky-exit',navigationExempt:true,combatHandoffAllowed:false},true,false,true,false],
+ ['evacuation pending loot',{purpose:'franky-exit',navigationExempt:true,combatHandoffAllowed:false},false,true,true,false],
+ ['evacuation unavailable Town',{purpose:'franky-exit',navigationExempt:true,combatHandoffAllowed:false},true,false,false,false],
+])test('living attacker transition readiness: '+label,async()=>{
+ const f=fixture((count,c,args)=>({ready:args[1].body.ready}));
+ delete f.command.continuousReturn;Object.assign(f.command,flags);
+ f.c.departureCombatPending=()=>true;f.c.eligibleDepartureChests=()=>loot?[{id:'loot'}]:[];f.c.can_use=()=>canTown;
+ assert.equal(await f.c.sharedMovementOptions(f.command).barrier({map:'level2n',x:-416,y:0,transport:!town,town},0,false),expected);
 });

@@ -1,9 +1,11 @@
 import { createFocusRoute } from "./focus.ts";
 import { createFormationRoute } from "./formation.ts";
+import { createGearSetRoute } from "../characters/gear-sets.ts";
 import { createPartyActionRoutes } from "./party-actions.ts";
 
 type PartyState = Parameters<typeof createFocusRoute>[0] &
   Parameters<typeof createFormationRoute>[0] &
+  Parameters<typeof createGearSetRoute>[0] &
   Parameters<typeof createPartyActionRoutes>[0] & { nextCommandId: number };
 type PartyPorts = Parameters<typeof createFocusRoute>[1] &
   Omit<Parameters<typeof createFormationRoute>[1], "managed"> &
@@ -24,5 +26,6 @@ export function createCoordinatorPartyConfiguration(
     ...ports,
     nextCommand: () => state.nextCommandId++,
   });
-  return { focus, formation, actions };
+  const gearSets = createGearSetRoute(state, { ...ports, nextCommand: () => state.nextCommandId++ });
+  return { focus, formation, actions, gearSets };
 }

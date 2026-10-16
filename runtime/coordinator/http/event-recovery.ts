@@ -1,3 +1,4 @@
+import {manualEventOccurrenceSkipped, type EventAttendance} from '../events/attendance-limits.ts';
 import { requestObject, requestText, type HttpRequest, type HttpResponse } from "./contracts.ts";
 import type { AnniversaryCycle } from "../anniversary/contracts.ts";
 import type { Waypoints } from "../events/return-types.ts";
@@ -8,11 +9,12 @@ interface EventSession {
   waypoints?: Waypoints;
 }
 interface RecoveryState {
+  eventAttendance?: EventAttendance;
   leader: string | null;
   eventReturn: { event: string } | null;
   anniversary: { eventCycle?: AnniversaryCycle | null };
   eventSessions: Record<string, EventSession | undefined>;
-  statuses: Record<string, { serverLiveEvents?: { name: string }[] } | undefined>;
+  statuses: Record<string, { serverLiveEvents?: { name: string }[]; slendermanSearchExhausted?: boolean } | undefined>;
 }
 interface RecoveryPorts {
   owned(name: string): unknown;
@@ -59,7 +61,7 @@ export function createEventRecoveryRoutes(state: RecoveryState, ports: RecoveryP
     // call: later calls cannot replace the already-started recovery.
     const sessions = Object.values(state.eventSessions).filter(entry => entry?.event === event);
     const participants = [...new Set(sessions.flatMap(entry => entry?.participants || []))]
-      .filter(member => !ports.enabled(member, event) &&
+      .filter(member => !manualEventOccurrenceSkipped(state, member, event) && !ports.enabled(member, event) &&
         (!state.eventSessions[member] || state.eventSessions[member]?.event === event));
     if (!participants.length) return;
     const waypoints = disabledWaypoints(participants, event, sessions);
@@ -80,6 +82,10 @@ export function createEventRecoveryRoutes(state: RecoveryState, ports: RecoveryP
     const body = requestObject(req.body),
       name = requestText(body.character),
       event = requestText(body.event);
+    if (ports.owned(name) && manualEventOccurrenceSkipped(state, name, event)) {
+      if (state.eventSessions[name]?.event === event) delete state.eventSessions[name];
+      return res.json({ ok: true, anniversary: ports.snapshot() });
+    }
     if (state.eventReturn && state.eventReturn.event !== event)
       return res.status(409).json({ error: "another return is in progress" });
     if (!ports.owned(name) || ports.enabled(name, event))
@@ -93,6 +99,7 @@ export function createEventRecoveryRoutes(state: RecoveryState, ports: RecoveryP
       const status = state.statuses[name];
       return (
         ports.enabled(name, event) &&
+        !(event === "slenderman" && status?.slendermanSearchExhausted) &&
         Array.isArray(status?.serverLiveEvents) &&
         status.serverLiveEvents.some((entry) => entry?.name === event)
       );

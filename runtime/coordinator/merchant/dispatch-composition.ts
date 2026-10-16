@@ -1,4 +1,5 @@
 import { dungeonOwns } from '../../dungeons/contracts.ts';
+import { realmRequestArrived, type RealmRequest } from '../characters/realm-request.ts';
 import { pendingProduction, type ProductionState } from '../inventory/production.ts';
 import { upgradeOfferingReady } from '../inventory/offering-waits.ts';
 import { deliveryReady } from './delivery-recovery.ts';
@@ -7,10 +8,11 @@ import { ruleOwner } from "../inventory/shared-rules.ts";
 import { routineEnabled } from './routines.ts';
 import { craftProtection } from './craft-reservations.ts';
 import { activeStandSales } from "./stand-reconciliation.ts";
-import { hasWaitingUpgrade, sharedCompoundRules, sharedUpgradeRules, type BankImprovementState } from "./banked-improvements.ts";
+import { localBankUpgrades, sharedCompoundRules, type BankImprovementState } from "./banked-improvements.ts";
 import type { DeconstructionMark } from "./deconstruction.ts";
 import { createMerchantDispatcher, type DispatchPorts } from "./dispatcher.ts";
 import { readyNpcSales } from "./npc-sales.ts";
+import { giveawayAttemptKey } from "./giveaway-scheduler.ts";
 import type { BankboiInventory } from "../inventory/bankboi-completion.ts";
 import type {
   CharacterWork,
@@ -25,9 +27,11 @@ interface DispatchCoordinatorState extends BankImprovementState, MerchantEventSt
   merchantAutomations?: Record<string, boolean | undefined>;
   merchantQueue: MerchantWork[];
   merchantCurrent: MerchantWork | null;
+  giveawayAttempts?: Record<string, number>;
   nextCommandId: number;
   merchantCharacter: string | null;
   merchantHomeReturnAt?: unknown;
+  merchantRealmRequests?: Record<string, RealmRequest | undefined>;
   bankbois?: Record<string, BankboiInventory>;
   bankboiTransaction: unknown;
   merchantForceStand: unknown;
@@ -96,7 +100,7 @@ function commandInputs(state: DispatchCoordinatorState, ports: CompositionPorts)
   return {
     buyUpgradeBatchSize: state.buyUpgradeBatchSize ?? 1,
     craftProtection: craftProtection(state),
-    bankUpgradeRules: state.merchantAutomations?.["auto upgrade"] === false ? [] : sharedUpgradeRules(state).filter(rule => rule.quantity !== 0 && !hasWaitingUpgrade(state, rule)),
+    bankUpgradeRules: state.merchantAutomations?.["auto upgrade"] === false ? [] : localBankUpgrades(state),
     sharedAutoCompounds: state.merchantAutomations?.["auto compound"] === false ? [] : sharedCompoundRules(state).filter(rule => rule.quantity !== 0),
     bankboiItems: Object.values(state.bankbois || {}).flatMap((worker) => worker.items || []),
     merchant: state.merchantCharacter,
@@ -139,9 +143,22 @@ export function createCoordinatorMerchantDispatcher(
       productionPending: () => pendingProduction(state.production),
       eventReserved: () => merchantEventReserved(state, ports.now()),
       enabled: job => !(job.target && dungeonOwns(state, job.target)) && routineEnabled(job, state.merchantAutomations || {}),
+      // Release the discovery claim so a giveaway that is still running is queued again.
+      giveawayExpired: job => {
+        if (state.giveawayAttempts) delete state.giveawayAttempts[giveawayAttemptKey(job)];
+        ports.log("Giveaway from " + job.seller + " expired before the merchant could join", "warning", {
+          item: job.expectedItem?.name, slot: job.slot, realm: job.realm, queuedAt: job.queuedAt, expiresAt: job.expiresAt,
+        });
+      },
       nextCommand: () => state.nextCommandId++,
       merchant: () => state.merchantCharacter,
-      returningHome: () => !!state.merchantHomeReturnAt,
+      returningHome: () => !!state.merchantHomeReturnAt && !state.merchantRealmRequests?.[String(state.merchantCharacter)]?.exhausted,
+      homeBlocked: () => {
+        const request = state.merchantRealmRequests?.[String(state.merchantCharacter)];
+        const status = state.statuses[String(state.merchantCharacter)];
+        if (!request || request.owner !== 'home' || request.realm !== state.activeRealm || !request.exhausted) return false;
+        return !realmRequestArrived(status, request, ports.now());
+      },
       bankboi: (name) => !!state.bankbois?.[String(name)],
       storagePending: () =>
         !!(ports.storageBusy() || state.bankboiTransaction || ports.storagePlan()),

@@ -6,6 +6,20 @@ const vm = require('node:vm');
 const shared = fs.readFileSync(path.join(__dirname, '../../characters/shared.js'), 'utf8');
 const coordinator = require('./helpers/coordinator-source.cjs').coordinatorSource();
 
+test('displaced manual upgrade selects unfinished stock without treating finished duplicates as survivors',()=>{
+ const {namedFunction}=require('./helpers/named-function.cjs');
+ const items=Array(12).fill(null);items[3]={name:'ololipop',level:8};items[5]={name:'ololipop',level:8};items[10]={name:'ololipop',level:5};
+ const c=vm.createContext({character:{items},G:{items:{ololipop:{}}},maximumItemLevel:()=>13,
+  sameItem:(a,b)=>!!a&&!!b&&a.name===b.name&&(a.level||0)===(b.level||0)});
+ vm.runInContext(namedFunction(shared,'findUpgradeMarkSlot'),c);
+ const mark={requestId:'manual',slot:7,item:{name:'ololipop',level:5},tiers:3};
+ assert.equal(c.findUpgradeMarkSlot(mark,{}),10);
+ items[11]={name:'ololipop',level:6};
+ assert.throws(()=>c.findUpgradeMarkSlot(mark,{}),/Upgrade inventory recovery ambiguous.*ololipop.*5.*8/);
+ assert.equal(c.findUpgradeMarkSlot({...mark,liveSlot:11},{}),11);
+ assert.equal(c.findUpgradeMarkSlot(mark,{11:true}),10);
+});
+
 test('upgrade reselects a scroll moved during its asynchronous protection checkpoint', async () => {
   const {namedFunction} = require('./helpers/named-function.cjs');
   const items = [{name:'wcap',level:1},{name:'scroll0',q:4},null];
@@ -15,6 +29,7 @@ test('upgrade reselects a scroll moved during its asynchronous protection checkp
     findInventoryItemByName:name=>items.findIndex(item=>item?.name===name),
     merchantLuckyUpgrade:()=>({run:async(item,scroll)=>{selected=scroll;return {success:true};}}),
   });
+  require('./helpers/client-dependencies.cjs').productionJournalContext(context);
   vm.runInContext(namedFunction(shared,'observedUpgradeConfirmed'),context);
   await context.observedUpgradeConfirmed(0,1,'wcap',1);
   assert.equal(selected,2);
@@ -30,6 +45,7 @@ for(const [verified,candidate,expected] of [[null,0,0],[null,null,2],[7,0,7]])te
   luckySlotTracking:()=>({select:()=>candidate,begin:()=>begins++}),verifyMerchantItemMarks:async()=>{},
   findInventoryItemByName:name=>items.findIndex(item=>item?.name===name),merchantLuckyUpgrade:()=>service,
   upgradeAtSlotConfirmed:async(slot,scroll)=>{calls.push([slot,scroll]);items[slot].level++;items[scroll].q--;return {success:true};}});
+ require('./helpers/client-dependencies.cjs').productionJournalContext(context);
  vm.runInContext(namedFunction(shared,'observedUpgradeConfirmed'),context);await context.observedUpgradeConfirmed(2,4,'wcap',1);
  assert.deepEqual(calls,[[expected,4]]);assert.equal(begins,1);assert.equal(items[2].level,1);assert.equal(items[0].name,'tracker');assert.equal(journal,null);
 });
@@ -143,4 +159,19 @@ test('the Town watchdog cannot interrupt merchant work even with a stale global 
   guard();
   assert.deepEqual(stops, []);
   assert.equal(r.root.__partyTownGuardTimer, null);
+});
+test('legacy manual bank pass identity survives normalization and an admitted old command',()=>{
+ const {initialItemIntents}=require('../../runtime/coordinator/inventory/initial-intents.ts');
+ const {rememberUpgradeContinuation}=require('../../runtime/coordinator/inventory/upgrade-continuation.ts');
+ const mark={passId:'bank-manual-pass',slot:7,item:{name:'sshield',level:0},tiers:4};
+ const intents=initialItemIntents({upgrades:{M:[mark]}});
+ assert.equal(intents.upgrades.M[0].requestId,mark.passId);
+ const state={...intents,merchantCharacter:'M',autoUpgradeMarks:{}};
+ const body={kind:'upgrade',item:{name:'sshield',level:1},automatic:{family:'manual-upgrade',mark:{...mark,slot:9}}};
+ rememberUpgradeContinuation(state,body);
+ assert.equal(state.upgrades.M[0].liveSlot,9);
+ assert.equal(state.upgrades.M[0].liveItem.level,1);
+ assert.throws(()=>rememberUpgradeContinuation(state,{...body,automatic:{family:'manual-upgrade',mark:{...mark,passId:'other'}}}),/continuation changed/);
+ assert.throws(()=>rememberUpgradeContinuation(state,{...body,item:{name:'helmet',level:1}}),/item changed/);
+ assert.throws(()=>rememberUpgradeContinuation(state,{...body,automatic:{family:'manual-upgrade',mark:{...mark,tiers:5}}}),/target changed/);
 });

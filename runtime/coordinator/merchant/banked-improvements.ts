@@ -1,9 +1,10 @@
 import { upgradeOfferingReady } from '../inventory/offering-waits.ts';
+import { protectedMerchantStorageStock } from '../inventory/merchant-storage-stock.ts';
 import { itemRuleConflicts, type ConflictState } from "../inventory/shared-rules.ts";
 import type { InventoryEntry } from "../contracts/item.ts";
 import type { CompoundRule } from "./automatic-improvements.ts";
 import type { StorageReference, BankboiInventory } from "../inventory/bankboi-completion.ts";
-import { availableCraftStock, craftProtection, type CraftReservationState } from "./craft-reservations.ts";
+import { type CraftReservationState } from "./craft-reservations.ts";
 
 type UpgradePreference = number | string | { tiers: number; quantity?: number };
 export interface BankUpgradeRule { name: string; level: number; tiers: number; quantity: number; existingTargetQuantity?: number }
@@ -62,6 +63,11 @@ export function runnableBankUpgrades(state: BankImprovementState): BankUpgradeRu
   const available = availableUpgradeStock(state);
   return sharedUpgradeRules(state).filter(rule => !hasWaitingUpgrade(state, rule) && (rule.quantity === -1 || rule.quantity > 0) && !itemRuleConflicts(state,{name:rule.name,level:rule.level}).length && available.some(entry => matchesUpgrade(rule, entry)));
 }
+/** Remote stock needs a storage handoff before it can admit an upgrade visit. */
+export function localBankUpgrades(state: BankImprovementState, rules = runnableBankUpgrades(state)): BankUpgradeRule[] {
+  const local = availableUpgradeStock(state).filter(entry => !entry?.craftLocation?.startsWith('bankboi:'));
+  return rules.filter(rule => local.some(entry => matchesUpgrade(rule, entry)));
+}
 function workerUpgrade(state: BankImprovementState, rule: BankUpgradeRule): StorageReference[] {
   const entry = availableUpgradeStock(state).find(entry => entry?.craftLocation?.startsWith('bankboi:') && matchesUpgrade(rule,entry));
   if (entry && Number.isSafeInteger(entry.slot)) return [{pack:entry.craftLocation!,slot:entry.slot,item:entry.item,improvement:'auto upgrade'}];
@@ -78,13 +84,7 @@ export function planUpgradeStorage(state: BankImprovementState, rules: BankUpgra
 }
 
 function availableUpgradeStock(state: BankImprovementState) {
-  const locations: [string,(InventoryEntry | null)[]][] = [
-    ['inventory:'+state.merchantCharacter,state.statuses?.[String(state.merchantCharacter)]?.items || []],
-    ...Object.entries(state.bankSnapshot?.packs || {}).map(([pack,items]): [string,(InventoryEntry | null)[]] => [pack,items || []]),
-    ...Object.values(state.bankbois || {}).map((worker): [string,(InventoryEntry | null)[]] => ['bankboi:'+worker.name,worker.items || []])
-  ];
-  const entries = locations.flatMap(([craftLocation,items]) => items.map(entry => entry && {...entry,craftLocation}));
-  return availableCraftStock(entries,craftProtection(state));
+  return protectedMerchantStorageStock(state);
 }
 
 export function hasWaitingUpgrade(state: BankImprovementState, rule: BankUpgradeRule): boolean {

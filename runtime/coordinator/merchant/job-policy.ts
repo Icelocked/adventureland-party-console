@@ -1,9 +1,11 @@
 import { routineFor } from './routines.ts';
+import { bankStagingReserved } from '../inventory/reserved-cargo.ts';
 import { hasMarkedWithdrawals } from './marked-withdrawals.ts';
 import { merchantJobPriority } from "./priority.ts";
 import type { PrioritizedJob } from "./priority.ts";
 
 interface BankCapacity {
+  bankbois?: Record<string, unknown> | null;
   merchantCharacter: string | null;
   bankSnapshot?: { packs?: Record<string, Record<number, unknown> | undefined> } | null;
 }
@@ -20,11 +22,12 @@ function completesStorageHandoff<Bid extends { priorityOverride?: number }>(
   state: PriorityState<Bid>,
   job: PrioritizedJob,
 ): boolean {
-  if (job.target !== state.merchantCharacter || !["withdrawals", "manual bank exchange", "upgrades and compounds", "manual upgrades", "auto upgrade", "manual compounds", "auto compound"].includes(job.reason)) return false;
+  if (!bankStagingReserved(state)) return false;
+  if (job.target !== state.merchantCharacter || !["withdrawals", "bank collection", "manual bank exchange", "upgrades and compounds", "manual upgrades", "auto upgrade", "manual compounds", "auto compound"].includes(job.reason)) return false;
   return (state.withdrawals?.[String(state.merchantCharacter)] || []).some(
     (request) =>
       (routineFor(job) === routineFor({reason: request.improvement || "manual bank exchange"}) ||
-        job.reason === 'withdrawals' && hasMarkedWithdrawals([request])) &&
+        ['withdrawals','bank collection'].includes(job.reason) && hasMarkedWithdrawals([request])) &&
       request.pack === "items1" &&
       Number(request.slot) >= 35 &&
       state.bankSnapshot?.packs?.items1?.[Number(request.slot)],
@@ -61,7 +64,7 @@ export function coordinatorMerchantTransferBlocked(
   if (
     !job ||
     job.target === state.merchantCharacter ||
-    !["marked items", "inventory cleanout"].includes(job.reason)
+    !["marked items", "inventory cleanout", "exchange pickup"].includes(job.reason)
   )
     return false;
   const items = state.statuses[String(state.merchantCharacter)]?.items;

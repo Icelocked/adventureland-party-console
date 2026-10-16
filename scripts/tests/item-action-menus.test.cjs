@@ -30,7 +30,7 @@ test('gold marker follows the next test slot and clicking the empty slot opens a
   assert.equal(view.root.findByType('LuckyMenuRoot').props.open,true);
   assert.equal(view.root.findAllByType('LuckyMenuItem').find(n=>text(n)==='Show item details').props.disabled,true);
   await act(async()=>view.root.findAllByType('LuckyMenuItem').find(n=>text(n)==='Show lucky slot data').props.onClick());assert.equal(opened,1);
-  p.luckySlotTracking={version:1,slots:{0:{totalRolls:1,sumRolls:0.4,rollsAbove96_3:0,perfectRolls:0}}};
+  p.luckySlotTracking={version:1,cursor:{slot:1,at:1000,rolls:1},slots:{0:{totalRolls:1,sumRolls:0.4,rollsAbove96_3:0,perfectRolls:0}}};
   await act(async()=>view.update(React.createElement(InventoryPanel,{...p})));
   assert.match(marker().props.render.props['aria-label'],/slot 1/);
   await act(async()=>marker().props.render.props.onClick({currentTarget:{}}));assert.equal(opened,1);

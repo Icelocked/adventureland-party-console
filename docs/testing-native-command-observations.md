@@ -1,0 +1,7 @@
+# Compact native command and transport observations
+
+Failure inventory before observational changes: native986 event-return reports remain on old held command IDs while the coordinator publishes newer preparation IDs, despite fresh received reports. Existing character artifacts omit local request attempts, applied command/intent, signal identity/expiry and status diagnostics. Cave also waits for prepared movement but may have a different control path. Fresh reports alone cannot establish that a response or command was actually applied.
+
+Record only existing runtime globals alongside existing native snapshots, without another request, mutation, synthetic acknowledgement or history dump. Bound diagnostic history to six entries and transport to timings. Compare native last command, navigation revision, signal owner/phase, latest full/fast round-trip and source timestamps with coordinator expected owner. Distinguish network failures, full tick blockage, rejected intent, supersession and lease expiry before changing behavior.
+
+Potential fast command delivery failure inventory (not implemented): full status blocked while newer owned fast signal arrives; obsolete fast response dispatches an old phase; wrong runtime/epoch/revision overwrites manual navigation; concurrent full/fast receipt dispatches one command twice; preparation bypasses a combat or physical-stop fence. Any future fix must demonstrate the first case and retain exact identity/intent/runtime fences and existing native movement assertions.

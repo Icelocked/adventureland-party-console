@@ -17,6 +17,10 @@ export function isUpgradeOffering(value: unknown): value is UpgradeOffering {
 export function offeringRule(rules: readonly UpgradeOfferingRule[], name: string, level: number) {
   return rules.find(rule => rule.name === name && rule.floor <= level && level < rule.ceiling);
 }
+/** Explicit selections override policy for their single attempt. */
+export function resolveUpgradeOffering(rules: readonly UpgradeOfferingRule[], name: string, level: number, explicit?: UpgradeOffering) {
+  return explicit ? {offering: explicit, required: true} : offeringRule(rules, name, level);
+}
 export function offeringOverlap(rules: readonly UpgradeOfferingRule[], next: UpgradeOfferingRule) {
   return rules.find(rule => rule.id !== next.id && rule.name === next.name && rule.floor < next.ceiling && next.floor < rule.ceiling);
 }

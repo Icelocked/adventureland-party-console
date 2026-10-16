@@ -41,7 +41,7 @@ test('one fresh planning retry then durable hold, without losing the original ca
 });
 function client(phase){
  const entities={passive:{id:'passive',type:'monster',hp:100,visible:true,target:null},boo:{...boo,type:'monster',visible:true},far:{...boo,id:'far',type:'monster',visible:true}};
- const c=vm.createContext({root:{},character:{name:'L',map:'spookytown',in:'spookytown'},currentPartyList:()=>['L','F'],navigationIntent:{revision:0},escapeOwns:()=>false,combatRecoveryActive:()=>false,convoyTraveling:{continuousReturn:1,phase},parent:{entities},isAttackingPartyMember:t=>['L','F'].includes(t.target),is_in_range:t=>t.id==='boo',reunionRealm:()=> 'USII'});
+ const c=require('./helpers/shared-context.cjs').createSharedContext({root:{},character:{name:'L',map:'spookytown',in:'spookytown'},currentPartyList:()=>['L','F'],navigationIntent:{revision:0},escapeOwns:()=>false,combatRecoveryActive:()=>false,convoyTraveling:{continuousReturn:1,phase},parent:{entities},isAttackingPartyMember:t=>['L','F'].includes(t.target),is_in_range:t=>t.id==='boo',reunionRealm:()=> 'USII'});
  vm.runInContext(['returnCombatActive','returnAttacker','returnDefenseTarget','cancelReturnTownUnderAttack','queueMarkers'].map(n=>namedFunction(source,n)).join('\n'),c);
  return {c,entities};
 }

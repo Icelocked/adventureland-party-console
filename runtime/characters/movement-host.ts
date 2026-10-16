@@ -7,6 +7,7 @@ export interface MoveState extends Point {
 // The movement host accepts a minimal payload, with normalized geometry and death state.
 export interface Character extends Point, Pick<GameCharacter, 'name' | 'real_x' | 'real_y' | 'speed' | 'moving'> {
   base: Geometry;
+  hp?: GameCharacter['hp'];
   rip?: Extract<GameCharacter['rip'], boolean>;
   // Inventory observations need only a name and may include newly introduced item IDs.
   items: ({ name: string } | null)[];
@@ -14,6 +15,9 @@ export interface Character extends Point, Pick<GameCharacter, 'name' | 'real_x' 
 export interface MovementHost {
   character: Character; G: GameData & { version: number };
   smart: MoveState;
+  // Pinned runner 15555 exposes BFS queue/start globals; typed-adventureland
+  // omits these internal counters. Optional: unknown runners keep normal bounds.
+  queue?: unknown[]; start?: number;
   smart_move(this: void, destination: unknown, callback?: (done: boolean) => void): Promise<unknown>;
   smart_move_logic(this: void): void;
   start_pathfinding(this: void): void; continue_pathfinding(this: void): void;
@@ -30,7 +34,9 @@ export interface MovementHost {
   find_npc(name: string): Point | null;
   game_log(message: string, color: string): void;
   // caracAL supplies its selected game-file version through process arguments.
-  parent: { __partyClientVersion?: number | string; socket: { emit(event: string, data: unknown): void }; push_deferred(key: string): Promise<unknown> };
+  // Upstream types omit the runner's synchronous BFS visibility-budget hook.
+  // Verified in pinned 15555 and installed 17665; unknown versions keep native behavior.
+  parent: { __partyClientVersion?: number | string; is_hidden?: (this: void) => boolean; socket: { emit(event: string, data: unknown): void; on?(event: string, listener: (data: unknown) => void): unknown; off?(event: string, listener: (data: unknown) => void): unknown; removeListener?(event: string, listener: (data: unknown) => void): unknown }; push_deferred(key: string): Promise<unknown> };
   __partyMovement?: { dispose(): void };
   __partyNativeMovement?: NativeFunctions;
 }
@@ -39,18 +45,30 @@ export interface NativeFunctions {
 }
 export interface MovementContext {
   runtime: string; revision: number; current: boolean; paused: boolean;
+  map?: string; instance?: string | number; server?: string;
 }
 export interface MovementOptions {
   // Cave combat may stop direct movement without retiring the dungeon journey.
   retainOnDirectStop?: boolean;
+  // Independent combat may promptly try a smaller radius after a verified planner rejection.
+  rejectUnreachableGoal?: boolean;
+  // Cave combat can displace an actor off its validated shared walking edge.
+  // Repair only the local same-map connector, never the destination route.
+  repairSharedDrift?: boolean;
   relocation?: 'town' | 'door';
-  owner?: {convoyId?: string; epoch?: number; commandId?: number; navigationRevision?: number; recoveryStage?: string};
+  owner?: {convoyId?: string; epoch?: number; commandId?: number; navigationRevision?: number; routeVersion?: number; recoveryStage?: string};
   transitionComplete?: (destination: Point) => void;
   townAttempt?: (state: 'casting' | 'interrupted' | 'complete' | 'unavailable', index: number, from: Point, destination: Point) => void;
   compareTown?: boolean;
   skipLootWait?: boolean;
   avoidLeave?: boolean; town?: boolean; native?: boolean; shared?: boolean; speed?: number;
   arrivalTolerance?: number;
+  // Assembled Cave followers consume the leader's validated route instead of
+  // duplicating its search. Large generated floors need an explicit bound.
+  awaitSharedRoute?: boolean;
+  nativePlanningTimeoutMs?: number;
+  // Cave-only maximum while the same native BFS keeps advancing.
+  nativePlanningProgressMs?: number;
   barrier?: (step: Step, index: number, completed: boolean) => Promise<boolean>;
 }
 export interface MovementPorts {

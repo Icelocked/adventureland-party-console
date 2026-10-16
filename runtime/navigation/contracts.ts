@@ -21,7 +21,7 @@ export interface GameData {
 }
 export const isTransition = (step: Step): boolean => !!(step.town || step.transport || step.method === "leave");
 export interface PlanRequest { base?: Geometry; avoidLeave?: boolean; id: string; from: Point; to: Point; speed: number; town: boolean; fingerprint: string; version: number }
-export interface PlanResult { id: string; plot: Step[]; fingerprint: string; version: number; ms: number }
+export interface PlanResult { id: string; plot: Step[]; fingerprint: string; version: number; ms: number; error?: string; failure?: 'unreachable' }
 export interface Issue { reason: string; from: Point; to: Point }
 export const point = (p: Point): Point => ({ map: p.map, x: p.x, y: p.y, ...(p.in === undefined ? {} : { in: p.in }) });
 export const distance = (a: Point, b: Point): number => a.map === b.map && (a.in === undefined || b.in === undefined || a.in === b.in) ? Math.hypot(a.x - b.x, a.y - b.y) : Infinity;

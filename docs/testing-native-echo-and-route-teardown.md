@@ -1,0 +1,5 @@
+# Native echo completion and safe reload route teardown inventory
+
+- The storage echo journey recorded all six genuine upgrade-success receipts at +89.531, +104.944, +123.915, +203.492, +221.853 and +239.570 seconds. Its 240-second durable completion poll expires while settling the last confirmed result. Preserve exact two +3 results, echo count, pending journal clearing and restart accounting; use a bounded 300-second completion/480-second total window.
+- Safe reload trace shows route removal at 808809ms, interception-pattern update at 808812ms, then a late owned continuation at 808825ms throws Route already handled before fixture AfterHooks. The owned page route must finish before its handler is removed; no active route error should be swallowed.
+- A route.fetch that finishes after holdFull is cleared must not register a wait after the release list was drained. Recheck the flag, release existing waits, and use supported unrouteAll behavior wait for this test's page route cleanup. Keep all combat/drain/farming assertions and deadlines unchanged.

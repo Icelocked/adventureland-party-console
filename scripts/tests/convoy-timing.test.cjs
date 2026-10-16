@@ -102,3 +102,17 @@ test('transporting reports cannot release a communication hold',()=>{
  for(let at=13000;at<=18000;at+=1000){report(p,at);e.step(p,at);}
  assert.equal(p.activeConvoy.phase,'shared-prepare');
 });
+
+
+test('older full inactivity cannot retire a newer matching fast-channel convoy',()=>{
+ const t=transport(),c=t.context,source=fs.readFileSync('characters/shared.js','utf8');
+ vm.runInContext(namedFunction(source,'convoyActivityFromStatus'),c);t.at(2200);c.acceptTravelResponse(t.reply(),{mono:0,wall:0},true);
+ assert.equal(c.convoyActivityFromStatus({serverNow:11000,partyConvoyActive:false}),true);
+ assert.equal(c.convoyActivityFromStatus({serverNow:12001,partyConvoyActive:false}),false);
+ t.at(5000);assert.equal(c.convoyActivityFromStatus({serverNow:11000,partyConvoyActive:false}),false);
+});
+for(const field of ['epoch','commandId','runtimeId','routeVersion','navigationRevision'])test('older full inactivity cannot retain a mismatched fast '+field,()=>{
+ const t=transport(),c=t.context,source=fs.readFileSync('characters/shared.js','utf8');
+ vm.runInContext(namedFunction(source,'convoyActivityFromStatus'),c);t.at(2200);c.acceptTravelResponse(t.reply(),{mono:0,wall:0},true);
+ c.convoySignal[field]='other';assert.equal(c.convoyActivityFromStatus({serverNow:11000,partyConvoyActive:false}),false);
+});

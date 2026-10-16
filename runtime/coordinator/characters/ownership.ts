@@ -21,7 +21,7 @@ interface OwnershipState {
   bankbois: Record<string, unknown>;
   bankboiTransaction: unknown;
   merchantCharacter: string | null;
-  merchantCurrent: unknown;
+  merchantCurrent: { phase?: string; realmStartedAt?: number } | null;
   activeRealm?: string | null;
   leader: string | null;
   lifecycle: Record<string, string>;
@@ -143,7 +143,12 @@ export function createCoordinatorOwnershipPorts<Block extends { enabled?: boolea
     !!(
       state.bankboiTransaction ||
       ((state.statuses[name]?.seenAt ?? 0) > ports.now() - 5000 && inventoryBusy(state.statuses[name])) ||
-      ((state.statuses[name]?.seenAt ?? 0) > ports.now() - 5000 && name === state.merchantCharacter && state.merchantCurrent)
+      // Explicit party-realm reconnects intentionally lose heartbeats. Keep their
+      // ownership fence only within the same sixty-second recovery deadline;
+      // orphaned ordinary jobs must not block login recovery.
+      (name === state.merchantCharacter &&
+        state.merchantCurrent?.phase === "switching party realm" &&
+        Number(state.merchantCurrent.realmStartedAt) > ports.now() - 60_000)
     );
   return {
     now: ports.now,

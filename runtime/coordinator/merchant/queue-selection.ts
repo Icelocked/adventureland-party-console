@@ -1,6 +1,8 @@
+import {offeringSupplyReady,offeringCollectionReady,pendingOfferingCollection} from '../inventory/offering-waits.ts';
 import { merchantMovementBlocked, type MerchantMovementState } from "./movement-block.ts";
 import {
   collectionSlotCount,
+  freshCollectionStatus,
   isItemCollection,
   merchantCollectionNearby,
   markedCollectionReady,
@@ -12,8 +14,9 @@ import type { InventoryEntry, ItemMark } from "../contracts/item.ts";
 import type { ObservedPosition } from "../contracts/position.ts";
 import { collectionPickups, type PickupState } from './collection-pickups.ts';
 import { pickupReason } from './pickup-jobs.ts';
+import { bankCollectionReason, type BankCollectionState } from './bank-collection.ts';
 
-interface CollectionState extends PickupState, MerchantMovementState {
+interface CollectionState extends PickupState, MerchantMovementState, BankCollectionState {
   merchantCharacter: string | null;
   statuses: Record<string, (ObservedPosition & { items?: (InventoryEntry | null)[] }) | undefined>;
   marked?: Record<string, ItemMark[] | undefined>;
@@ -23,7 +26,7 @@ interface CollectionState extends PickupState, MerchantMovementState {
   autoCompounds?: Record<string, {name:string;targetTier?:number;quantity?:number}[] | undefined>;
 }
 type PriorityState = Parameters<typeof coordinatorMerchantPriority>[0];
-interface QueueState<Job extends PrioritizedJob> extends CollectionState, PriorityState {
+interface QueueState<Job extends PrioritizedJob> extends Omit<CollectionState, 'withdrawals'>, PriorityState {
   merchantQueue: Job[];
 }
 
@@ -48,15 +51,26 @@ export function coordinatorCollectionNearby(
   );
 }
 
+function exchangeCollectionReady(state: CollectionState, job: PrioritizedJob, reason: string, now: number): boolean {
+  const target = state.statuses[String(job.target)];
+  const picks = collectionPickups(state, String(job.target), reason).keep.filter(mark => mark.exchangeJobId === job.exchangeDeliveryId);
+  return freshCollectionStatus(target, now) && collectionSlotCount(target?.items || [], picks) > 0;
+}
+
 /** A small collection may proceed only when current nearby status makes another trip unnecessary. */
 export function coordinatorCollectionReady(
   state: CollectionState,
   job: PrioritizedJob,
   now: () => number,
 ): boolean {
+  if (job.exchangePickupId) return false; // Released only by the matching confirmed handoff.
+  if (!offeringCollectionReady(state, job)) return false;
+  if (!offeringSupplyReady(state, job)) return false;
   if (merchantMovementBlocked(state, job)) return false;
+  if (job.reason === 'bank collection' || job.reason === 'withdrawals') return bankCollectionReason(state) === job.reason;
   const reason = pickupReason(job.reason, job.target, state.merchantCharacter);
   if (!isItemCollection(reason)) return true;
+  if (job.exchangeDeliveryId) return exchangeCollectionReady(state, job, reason, now());
   return markedCollectionReady(
     reason,
     state.statuses[job.target!],
@@ -72,6 +86,7 @@ export function pruneIneligibleCollections<Job extends PrioritizedJob>(
   state: QueueState<Job> & {transferSignatures?: Record<string,string>}, now: () => number,
 ): boolean {
   const retained = state.merchantQueue.filter(job => {
+    if (job.exchangePickupId || job.exchangeDeliveryId || job.offeringSupply || pendingOfferingCollection(state,job)) return true; // A supply wait is durable work, not an ineligible pickup.
     if (merchantMovementBlocked(state,job) || coordinatorCollectionReady(state,job,now)) return true;
     if (state.transferSignatures && job.target) delete state.transferSignatures[job.target];
     return false;

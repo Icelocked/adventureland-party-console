@@ -1,0 +1,5 @@
+# Gathering capacity stand ownership prerequisite inventory
+
+12c shard7 actual dashboard shows both modesBLOCKED but native capacity reason remains stand operation beyond15s. Artifact11770877857 activity proves new stand return starts while gathering begins and takes17s; native merchant at main(-63,100),standOpenfalse. Existing declared inventory seed replaces stand0 with helmet. Failure risks: probing capacity before unrelated stand mutation settles; deleting real required stand tool creates unrelated idle failures; disabling owner safety or widening reason timeout hides interference. Establish actual supported stand lifecycle before capacity seed, preserve its real stand0 within the same39occupiedslots, then release forcedstand and enable gathering. Retain native zero cast cooldowns/items/blocked reason/free-space recovery exactly. No production capacity logic changes.
+
+Historical cooldown seeding intentionally restarts the master. Recheck actual pendingCommands/standOpen afterward while forcedstand remains enabled, reusing the same90s preparation deadline. No second90s budget or overall scenario timeout extension.

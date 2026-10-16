@@ -8,6 +8,7 @@ import type { Combatant, SkillDecision, SkillDiagnostic, SkillId, SkillWorld } f
 export interface SkillPorts {
   world(): SkillWorld;
   cast(d: SkillDecision): Promise<unknown>;
+  publishAfterCast?(d: SkillDecision): boolean;
   evidence(target: Combatant, state: 'pending' | 'engaged' | 'rejected', action?: string): string | null;
   diagnostic(d: SkillDiagnostic): void;
 }
@@ -62,11 +63,16 @@ export function createSkillEngine(ports: SkillPorts) {
     const token = { epoch, cost: amount, until: w.now + 2500 };
     pending.set(id, token);
     if (d.category === 'damage') budget.debit(amount);
-    const actions = d.targets.map(t => w.skills[d.skill]?.hostile ? ports.evidence(t, 'pending') : null);
+    const publishAfterCast = !!ports.publishAfterCast?.(d);
+    let actions = publishAfterCast ? [] : d.targets.map(t => w.skills[d.skill]?.hostile ? ports.evidence(t, 'pending') : null);
     report(w, d, 'selected');
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
-      const result = await Promise.race([ports.cast(d), new Promise<never>((_, reject) => {
+      const casting = ports.cast(d);
+      // Retain a rejection handler even if optional evidence publication throws.
+      void Promise.resolve(casting).catch(() => {});
+      if (publishAfterCast) actions = d.targets.map(t => w.skills[d.skill]?.hostile ? ports.evidence(t, 'pending') : null);
+      const result = await Promise.race([casting, new Promise<never>((_, reject) => {
         timeout = setTimeout(() => reject(new Error('skill acknowledgement timeout')), 2500);
       })]);
       if (epoch !== token.epoch || stopped) return false;

@@ -8,6 +8,13 @@ const source = fs.readFileSync(path.join(__dirname, '../../characters/shared.js'
 function runtime(levels = [0, 0, 0, 0, 0], scrolls = {}) {
   const purchases = [];
   const r = vm.createContext({
+    // No offering rule applies in these scroll-budget scenarios. Keep the real
+    // resolver and checkpoint path rather than bypassing offering preparation.
+    partyResolveUpgradeOffering: require('../../runtime/upgrade-offerings.ts').resolveUpgradeOffering,
+    request: async (route, {body}) => {
+      assert.equal(route, '/merchant/checkpoint'); assert.equal(body.protectionOnly, true);
+      return {craftProtection: {requirements: []}, upgradeOfferingRules: [], upgradeOfferingStock: {}};
+    },
     character: { items: levels.map(level => ({ name: 'wshoes', level })), gold: 1e9 },
     G: { items: { wshoes: {}, scroll0: { g: 1000 }, scroll1: { g: 40000 } } },
     maximumItemLevel: () => 13,

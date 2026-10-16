@@ -8,8 +8,9 @@ import type { LocalTLS } from './tls.ts';
 import { trustHelper } from './trust.ts';
 import { requestOrigin } from './request-origin.ts';
 import { transfer } from './setup-transfer.ts';
-import { toString as qrToString } from 'qrcode';
 export interface Options {
+  builds?: { route(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> };
+  code?:{route(req:IncomingMessage,res:ServerResponse,pathname:string):Promise<boolean>};
   realms?: Promise<import('./realms.ts').RealmDiscovery>;
   debug?: import('../debug/service.ts').DebugInstances;
   steam?: import('../steam/service.ts').LocalSteam;
@@ -40,7 +41,10 @@ async function steamLoader(options: Options, input: Record<string, unknown>) {
   return { code: loaderCode(address.origin + suffix) };
 }
 export async function pair(req: IncomingMessage, res: ServerResponse, options: Options) {
-  const credential = await options.access.pair(text((await body(req)).token));
+  const input = await body(req);
+  const credential = text(input.code)
+    ? await options.access.pairCode(text(input.code))
+    : await options.access.pair(text(input.token));
   browserCookie(req, res, credential);
   json(res, 200, { ok: true });
 }
@@ -56,7 +60,7 @@ async function setupState(req: IncomingMessage, options: Options) {
   const secure = options.tls?.trusted(req);
   const origin = options.publicUrl || (secure ? requestOrigin(req, options) : undefined);
   const tls = options.tls ? { tls: await options.tls.status(), secure, httpPort: Number(process.env.AL_HTTP_PUBLIC_PORT || process.env.AL_PORT || 3010) } : {};
-  return { configured: options.configured(), requirePairing: options.access.required, canConfigureAccount: !!options.configure, serverAddress: setupAddress(req, origin), steamPreferences: await options.steam?.preferences.read(), ...await options.realms, ...tls };
+  return { configured: options.configured(), requirePairing: options.access.required, ...(options.access.required ? { accessCodeExpiresAt: options.access.accessCodeExpiry } : {}), canConfigureAccount: !!options.configure, serverAddress: setupAddress(req, origin), steamPreferences: await options.steam?.preferences.read(), ...await options.realms, ...tls };
 }
 async function readSetup(
   req: IncomingMessage,
@@ -110,15 +114,7 @@ export async function setupRoute(req: IncomingMessage, res: ServerResponse, path
       await options.configure(text(input.session), text(input.realm));
       return { ok: true };
     },
-    "/setup/invite": async () => {
-      const token = await options.access.invitation();
-      // POSTs are origin-checked (sameBrowserOrigin), so Origin is the address this browser really uses;
-      // the Host header can be an internal address behind a reverse proxy or public URL.
-      const origin = req.headers.origin || options.publicUrl || requestOrigin(req, options);
-      const url = `${origin}/setup#${token}`;
-      const qrSvg = await qrToString(url, { type: "svg", margin: 1 });
-      return { token, url, qrSvg };
-    },
+    "/setup/invite": async () => ({ token: await options.access.invitation(), ...options.access.accessCode() }),
     "/setup/revoke": async () => {
       await options.access.revokeSteam();
       return { ok: true };

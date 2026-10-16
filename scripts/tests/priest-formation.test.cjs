@@ -31,7 +31,7 @@ function setup(priestSelf = false) {
   const monster = { id: 'A', type: 'monster', mtype: 'goo', map: 'main', x: 186, y: 0, range: 20, target: 'W', visible: true };
   const players = { W: warrior, P: priest }, entities = { A: monster };
   const c = require('./helpers/client-dependencies.cjs').passingContext({ farmingTravelToken: null, character: priestSelf ? priest : warrior, leader: 'W', followLeader: true,
-    farmingMode: 'default', eventTraveling: false, joinedEvent: null, eventTargetTypes: [],
+    farmingMode: 'default', eventTraveling: false, joinedEvent: null, eventTargetTypes: [], runtimeCurrent: () => true,
     G: { maps: { main: {} }, monsters: { goo: { range: 20 } } }, parent: { entities },
     partyPositions: [warrior, priest].map(p => ({ ...p, seenAt: now, server: 'USII' })),
     get_player: name => players[name], get_entity: id => entities[id], currentPartyList: () => ['W', 'P'],
@@ -63,6 +63,21 @@ test('peaceful recovery follower may take a safe wall detour away from priest',(
  r.c.followTerrainRecovery();assert.equal(r.moves.length,1,'monster or terrain clearance still required');
  r.c.terrainRecoverySafe=()=>true;r.c.can_move_to=()=>true;
  r.c.followTerrainRecovery();assert.equal(r.moves.length,1,'direct visible route cannot bypass coverage');
+});
+
+test('peaceful priest follower may round a wall to a warrior recovery mover',()=>{
+ const r=setup(true);Object.assign(r.priest,{x:610,y:-144});Object.assign(r.warrior,{x:681.43,y:-319.04});
+ r.c.groupedCombat={target:r.monster,formationRecovery:{mover:'W'}};
+ r.c.formationMembers=()=>[r.warrior,r.priest];
+ r.c.partyQueueClient={formation:{followPoint:()=>({x:586,y:-120})}};
+ r.c.terrainRecoveryContext=()=>({allowed:true});r.c.can_move_to=()=>false;
+ r.c.terrainRecoverySafe=()=>true;r.c.terrainCoverageStep=()=>false;
+ r.c.followTerrainRecovery();assert.equal(r.moves.length,1);assert.ok(r.moves[0].x<610&&r.moves[0].y>-144);
+ r.c.terrainRecoveryContext=()=>({allowed:false});r.c.followTerrainRecovery();assert.equal(r.moves.length,1,'active combat cannot bypass coverage');
+ r.c.terrainRecoveryContext=()=>({allowed:true});r.c.terrainRecoverySafe=()=>false;
+ r.c.followTerrainRecovery();assert.equal(r.moves.length,1,'monster or terrain clearance still required');
+ r.c.terrainRecoverySafe=()=>true;r.c.can_move_to=()=>true;
+ r.c.followTerrainRecovery();assert.equal(r.moves.length,1,'direct approach cannot bypass coverage');
 });
 
 test('target loss stops only the direct destination owned by combat',()=>{
@@ -377,7 +392,10 @@ test('terrain-clear mage approach stalled by a monster gets a safe detour or an 
 test('no safe monster detour reports blockage without emitting another wandering move',()=>{
  const r=setup(),{c,warrior:mage,priest,monster,entities,moves}=r;
  Object.assign(mage,{ctype:'mage',range:200,x:-300,y:0});Object.assign(priest,{x:0,y:0});Object.assign(monster,{x:180,target:null});
- entities.blocker={id:'blocker',type:'monster',visible:true,map:'main',x:0,y:0,range:250};
+ // A monster outranging the mage only reserves body clearance while targeting
+ // a teammate. Match the mage's range so the blocker's 208-unit safety radius
+ // still covers every regroup endpoint within the priest's healing coverage.
+ entities.blocker={id:'blocker',type:'monster',visible:true,map:'main',x:0,y:0,range:200,target:'P'};
  c.can_move=()=>true;c.can_move_to=()=>true;c.formationMove(monster);moves.length=0;r.now(12000);c.formationMove(monster);
  assert.equal(c.partyCombatPosition.mode,'formation-blocked');assert.equal(c.partyCombatPosition.constraint,'monster-blocked approach');assert.equal(moves.length,0);
  const at=c.formationState.recovery.retryAt;r.now(12100);c.formationMove(monster);assert.equal(c.formationState.recovery.retryAt,at);
@@ -543,13 +561,13 @@ test('visibility recovery applies the same healing limit as ordinary movement',(
  assert.equal(r.c.formationRecoverySafePoint({x:170,y:0}),true);
 });
 
- test('terrain-blocked priest proposes safe recovery goals after local recovery stalls',()=>{
+ test('terrain-blocked priest proposes safe recovery goals when no local step is reachable',()=>{
   const r=setup(true),proposals=[];
   r.monster.target=null;r.monster.x=400;r.c.can_move_to=()=>false;
   r.c.can_move=p=>p.x===p.going_x&&p.y===p.going_y;
   r.c.terrainRecoveryContext=()=>({allowed:true,target:'goo'});
-  r.c.partyQueueClient={formation:{movement:()=>false,propose:(id,goals)=>proposals.push({id,goals})}};
-  r.c.formationMove(r.monster);assert.equal(proposals.length,0);
+  r.c.partyQueueClient={formation:{movement:()=>proposals.length>0,propose:(id,goals)=>proposals.push({id,goals})}};
+  r.c.formationMove(r.monster);assert.equal(proposals.length,1);
   r.now(12000);r.c.formationMove(r.monster);assert.equal(proposals.length,1);
   assert.equal(proposals[0].id,'goo');assert.ok(proposals[0].goals.length>0);
   assert.ok(proposals[0].goals.every(p=>r.c.terrainRecoverySafe(p,true)));
@@ -660,4 +678,114 @@ test('return runner attacks and supports while planning or held without issuing 
   assert.ok(attacks>=2,'attacks must run while the planner or hold owns movement');assert.ok(support>0);
   assert.equal(r.moves.length,0);assert.equal(c.partyCombatState.error,null);
  } finally {c.sharedRoutine.resetCombatMovement=()=>{};c.partyRoleRunner.stop();}
+});
+test('role follower goals use real healing coverage and remain outside every captured enemy envelope',()=>{
+ const r=setup(true);Object.assign(r.priest,{x:-825.7427489279485,y:-296.81719371323635,range:207,awidth:27,aheight:34});
+ Object.assign(r.warrior,{x:-685.9062960514897,y:-352.0792231731289,range:36,awidth:27,aheight:34});
+ const mage={...r.priest,name:'M',ctype:'mage',x:-829.7373953705331,y:-300.665292562237,range:215};
+ const rows=[['4295903',-715.3146116853552,-194.02972212265013,185,null],['4295988',-576.5554792745352,-188.41094661614653,185,null],
+  ['4296207',-653.6906953636296,-224.30108266806596,200,null],['4296298',-633.7286564653707,-363.96073366527446,200,null],
+  ['4296367',-610.9274303891598,-306.37724430702815,185,null],['4296428',-577.515883110854,-289.7409292478349,200,null],
+  ['4296538',-521.0003298853356,-237.2263675595063,200,'outsider']];
+ delete r.entities.A;
+ for(const [id,x,y,range,target]of rows)r.entities[id]={id,x,y,range,target,type:'monster',mtype:range===185?'sparkbot':'targetron',map:'main',visible:true,hp:100,awidth:31,aheight:34};
+ r.c.groupedCombat={target:{...r.entities['4295988'],state:'planned'},formationRecovery:{mover:'W'}};
+ r.c.formationMembers=()=>[r.warrior,r.priest,mage];
+ r.c.distance=(a,b)=>Math.hypot(Math.max(Math.abs(a.x-b.x)-(a.awidth+b.awidth)/2,0),Math.max(Math.abs(a.y-b.y)-Math.max(a.aheight,b.aheight),0));
+ r.c.can_move=()=>true;
+ const goal={x:r.warrior.x,y:r.warrior.y};
+ assert.equal(r.c.terrainRecoveryFollowerGoals(goal).length,0,'The captured cohort has no jointly safe formation-ready endpoint and must report bounded unreachability');
+ for(const id of Object.keys(r.entities))delete r.entities[id];
+ const goals=r.c.terrainRecoveryFollowerGoals(goal);assert.ok(goals.length,'With blockers absent, actual healing and formation-ready follower positions are available');
+ assert.ok(goals.some(point=>Math.hypot(point.x-goal.x,point.y-goal.y)>40));
+ for(const point of goals){assert.equal(r.c.terrainRecoveryFollowerTerminal(point,goal),true);assert.equal(r.c.terrainRecoverySafe(point,true),true);}
+ assert.equal(r.c.terrainRecoveryFollowerTerminal({x:-1000,y:-700},goal),false,'An arbitrary distant safe point cannot waive healing coverage');
+ r.c.groupedCombat.priest='P';r.c.formationMembers=()=>[r.warrior,mage];
+ assert.equal(r.c.terrainRecoveryFollowerTerminal(goal,goal),false,'A missing expected healer cannot authorize fallback follow movement');
+ assert.equal(r.c.terrainRecoveryFollowerGoals(goal).length,0);
+});
+test('role follower inside forty moves toward its certified retreat rather than reversing it',()=>{
+ const r=setup();Object.assign(r.warrior,{x:20,y:0});Object.assign(r.priest,{x:0,y:0});
+ r.c.groupedCombat={target:r.monster,formationRecovery:{mover:'P'}};
+ r.c.formationMembers=()=>[r.warrior,r.priest];r.c.partyQueueClient={formation:{followPoint:()=>({x:40,y:0})}};
+ r.c.terrainRecoveryFollowerTerminal=()=>false;r.c.terrainRecoverySafe=(point,endpoint)=>!endpoint||point.x!==20;
+ r.c.terrainCoverageStep=()=>true;r.c.can_move_to=()=>true;
+ r.c.followTerrainRecovery();assert.equal(r.moves.length,1);assert.ok(r.moves[0].x>20,'Issued step must have positive direction toward the certified waypoint');
+ assert.ok(r.moves[0].x<=40);
+});
+test('native healable terminal outside existing formation readiness is rejected',()=>{
+ const r=setup(true);Object.assign(r.priest,{x:0,y:0,range:207,awidth:27,aheight:34});
+ Object.assign(r.warrior,{x:200,y:0,awidth:27,aheight:34});
+ r.c.groupedCombat={range:187,priest:'P',target:r.monster,formationRecovery:{mover:'W'}};
+ r.c.formationMembers=()=>[r.warrior,r.priest];
+ r.c.distance=(a,b)=>Math.hypot(Math.max(Math.abs(a.x-b.x)-(a.awidth+b.awidth)/2,0),Math.max(Math.abs(a.y-b.y)-Math.max(a.aheight,b.aheight),0));
+ assert.ok(r.c.distance(r.priest,r.warrior)<187,'The actual hitboxes are within native healing reach');
+ assert.equal(r.c.terrainRecoveryFollowerTerminal({x:0,y:0},{x:200,y:0}),false,'Center readiness cannot be waived by native healing alone');
+});
+
+test('designated tank: the priest formation leaves its movement to tankMovementTick',()=>{
+ const r=setup();r.c.tank=null;
+ assert.equal(r.c.formationMove(r.monster),true);assert.ok(r.moves.length>0,'a non-tank warrior orbits in formation');
+ const q=setup();q.c.tank='W';
+ assert.equal(q.c.formationMove(q.monster),false);assert.equal(q.moves.length,0);
+ q.c.tank='P';assert.equal(q.c.formationMove(q.monster),true,'another tank leaves this warrior in formation');
+});
+
+test('designated tank: does not kite its own target but still kites another attacker',async()=>{
+ const r=setup();r.c.tank='W';r.c.bossCombatActive=()=>false;r.c.returnCombatActive=()=>false;
+ assert.equal(await r.c.kiteIfNeeded(r.monster),false);assert.equal(r.moves.length,0);
+ r.monster.target=null;r.entities.B={id:'B',type:'monster',mtype:'goo',map:'main',x:150,y:20,range:20,target:'W',visible:true};
+ assert.equal(await r.c.kiteIfNeeded(r.monster),true);assert.equal(r.moves.length,1);
+ const n=setup();n.c.tank=null;n.c.bossCombatActive=()=>false;n.c.returnCombatActive=()=>false;
+ assert.equal(await n.c.kiteIfNeeded(n.monster),true,'a non-tank still kites its own attacker');
+});
+
+test('designated tank: approaches to melee range and skips the no-target defensive evade',()=>{
+ const r=setup();r.c.tank='W';r.warrior.x=100;r.c.bossCombatActive=()=>false;
+ r.c.approachCombatTarget(r.monster);assert.equal(r.c.partyCombatPosition.mode,'tank-approaching');
+ assert.ok(r.moves.at(-1).x>100);
+ r.c.formationMove=()=>{throw Error('full formation solver without target');};
+ let evades=0;r.c.kiteIfNeeded=async()=>{evades++;};
+ const start=source.indexOf('    defensiveFormationMove: function () {');
+ const end=source.indexOf('    pollFarmingCombatHandoff:',start);
+ vm.runInContext('var defense = {'+source.slice(start,end)+'};',r.c);
+ assert.equal(r.c.defense.defensiveFormationMove(),false);assert.equal(evades,0);
+ r.warrior.x=170;assert.equal(r.c.defense.defensiveFormationMove(),false,'tank stays put when the attacker is close');
+ r.c.tank=null;assert.equal(r.c.defense.defensiveFormationMove(),true);assert.equal(evades,1);
+});
+
+test('designated tank: stops holding below half HP or outside the priest heal range',()=>{
+ const r=setup();r.c.tank='W';
+ assert.equal(r.c.designatedTankHolds(),true);
+ r.warrior.hp=40;assert.equal(r.c.designatedTankHolds(),false,'low HP');
+ assert.equal(r.c.formationMove(r.monster),true,'formation moves a low-HP tank');
+ const q=setup();q.c.tank='W';Object.assign(q.warrior,{x:260});Object.assign(q.monster,{x:288});
+ assert.equal(q.c.designatedTankHolds(),false,'priest out of heal range');
+ const n=setup();n.c.tank='W';n.c.currentPartyList=()=>['W'];n.c.partyPositions=[n.warrior];
+ assert.equal(n.c.designatedTankHolds(),true,'no priest in the party');
+});
+
+test('ordinary committed warrior movement intercepts transverse native motion instead of chasing its current center',()=>{
+ const r=setup();Object.assign(r.warrior,{x:0,y:0,real_x:0,real_y:0,range:30,speed:60});
+ Object.assign(r.priest,{x:0,y:0,range:1000});Object.assign(r.monster,{x:100,y:0,moving:true,going_x:100,going_y:100,speed:40,target:null});
+ r.c.partyQueueClient={independent:{movement:()=>false,report:()=>null,intercept:require('../../runtime/combat/interception.ts').predictCombatIntercept}};
+ r.c.is_in_range=()=>Math.hypot(r.monster.x-r.warrior.x,r.monster.y-r.warrior.y)<=30;
+ r.c.recoverFormationCorner=()=>null;
+ assert.equal(r.c.formationMove(r.monster),true);assert.equal(r.moves.length,1);
+ assert.ok(r.moves[0].y>5,'The actual collision-safe issued step must lead the transverse native leg');
+});
+
+
+test('numeric intercept body preserves both pinned native combat distance contracts',()=>{
+ const r=setup(),{namedFunction}=require('./helpers/named-function.cjs');
+ const monster={type:'monster',mtype:'goo',map:'main',x:100,y:100,width:120,height:60,mscale:2,renderer:{private:true}};
+ const point={x:140,y:160};
+ const projected=r.c.combatRangeReference(monster,point);assert.equal(projected.type,'monster');assert.equal(projected.mtype,'goo');assert.equal(projected.renderer,undefined);assert.equal('in' in projected,false);
+ for(const version of ['15555','17665']){
+  const fixture=require('./fixtures/native-combat-distance-contracts.json').versions[version];
+  const c=vm.createContext({G:{dimensions:{goo:[24,24]},monsters:{goo:{}}}});
+  for(const declaration of fixture.functions)vm.runInContext(declaration,c);
+  const own={x:0,y:0,map:'main',width:20,height:20};
+  assert.equal(c.distance(own,projected),c.distance(own,{...monster,...point}),version);
+ }
 });

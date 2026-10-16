@@ -14,6 +14,8 @@ interface Mark {
   auto?: boolean;
   offering?: UpgradeOffering;
   requestId?: string;
+  /** Legacy bank-withdrawal identity retained when loading existing marks. */
+  passId?: string;
 }
 type Rule = number | string | { tiers: number; quantity?: number };
 interface UpgradeState extends SharedScope {
@@ -76,7 +78,8 @@ export function createUpgradeCommands(state: UpgradeState, ports: UpgradePorts) 
       ...(body.equipped === true ? { equipped: true } : {}),
       tiers,
       ...(auto ? { auto: true } : {}),
-      ...(!auto && isUpgradeOffering(body.offering) ? {offering:body.offering, requestId:randomUUID()} : {}),
+      ...(!auto ? {requestId:randomUUID()} : {}),
+      ...(!auto && isUpgradeOffering(body.offering) ? {offering:body.offering} : {}),
     };
     if (index >= 0) list[index] = entry;
     else list.push(entry);
@@ -185,6 +188,6 @@ export function createUpgradeCommands(state: UpgradeState, ports: UpgradePorts) 
 function validateManualOffering(state: UpgradeState, body: Request): CommandOutcome {
   if (body.offering === undefined || body.remove === true) return null;
   if (!isUpgradeOffering(body.offering) || body.tiers !== 1) return failure("Invalid manual offering attempt");
-  if (!offeringStock(state)[body.offering]) return failure("Offering no longer available in merchant inventory or bank", 409);
+  if (!offeringStock(state)[body.offering]) return failure("Offering no longer available in merchant inventory, bank or BankBoi storage", 409);
   return null;
 }

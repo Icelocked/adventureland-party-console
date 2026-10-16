@@ -2,7 +2,7 @@ import { capturedCommunicationFailure } from './communication-failure.ts';
 import { travelObservationIssue } from './travel-defense.ts';
 import { requestObject } from '../http/contracts.ts';
 import { recordConvoyHistory } from './convoy-history.ts';
-import { characterRuntime, reportMatches, type SharedConvoy, type SharedState, type SharedReport } from './shared-route-types.ts';
+import { characterRuntime, reportMatches, type SharedConvoy, type SharedState, type SharedReport, type SharedCommand } from './shared-route-types.ts';
 
 /** Only the old, captured completion-network failure is eligible for migration. */
 export function legacyCompletionFailure(c: { id: string; purpose?: string | null; phase: string;
@@ -26,6 +26,10 @@ interface Ports {
 }
 interface Stability { since: number; observedAt: number; runtimes: string }
 
+function failedRouteHeld(c: SharedConvoy, legacy: boolean): boolean {
+  return c.merchantInterruption?.resumePhase === 'failed' || c.phase === 'failed' && !legacy;
+}
+
 /** Readiness is intentionally not persisted: every restart requires fresh observations. */
 export function createCommunicationRecovery(ports: Ports) {
   const stable = new WeakMap<SharedConvoy, Stability>();
@@ -43,7 +47,9 @@ export function createCommunicationRecovery(ports: Ports) {
   function detect(state: SharedState, c: SharedConvoy, now: number): boolean {
     const transport = capturedCommunicationFailure(c);
     const legacy = legacyCompletionFailure(c) || transport;
-    if (c.phase === 'failed' && !legacy) return false;
+    // Collection's stopped barrier handles freshness for an exhausted route.
+    // Communication recovery must not turn that temporary hold into fresh travel.
+    if (failedRouteHeld(c, legacy)) return false;
     const names = c.participants.filter(n => affected(state, c, n, now));
     if (!legacy && !names.length) return false;
     if (!c.participants.every(n => ports.owned(state, c, n))) return false;
@@ -129,7 +135,7 @@ function affected(state: SharedState, c: SharedConvoy, name: string, now: number
   if (s?.rip || s?.hp === 0) return false;
   if (!s || now - s.seenAt > 3000) return true;
   if (observationLost(s, now)) return true;
-  return reportMatches(state, name) && communicationReport(s.convoyNavigation, c.routeVersion);
+  return recoveryReportMatches(state,c,name,now) && communicationReport(s.convoyNavigation, c.routeVersion);
 }
 function communicationReport(report: SharedReport | undefined, routeVersion: number | undefined): boolean {
   if (!report?.communication || report.communication.operation === '/convoy-complete') return false;
@@ -144,4 +150,30 @@ function communicationReport(report: SharedReport | undefined, routeVersion: num
 
 function observationLost(s: NonNullable<SharedState["statuses"][string]>, now: number): boolean {
   return !!s.groupedCombat && !!travelObservationIssue(s, now);
+}
+
+// The legacy assembly barrier binds expected runtimes before it creates the
+// shared route's runtimes map. A failed initial planner request must still
+// reach the existing fresh all-party hold protocol.
+function initialAssemblyReport(state: SharedState,c: SharedConvoy,name: string,now: number): boolean {
+  const s=state.statuses[name],command=state.commands[name],n=s?.convoyNavigation;
+  if(c.phase!=='assemble' || c.runtimes || !command || !n || !readyStatus(s,now))return false;
+  if(!initialAssemblyCommand(c,command,n))return false;
+  return initialAssemblyRuntime(c,name,command.id,command.navigationRevision,s,n) && initialAssemblyTransport(state,c,s,n);
+}
+function recoveryReportMatches(state: SharedState,c: SharedConvoy,name: string,now: number): boolean {
+  return reportMatches(state,name) || initialAssemblyReport(state,c,name,now);
+}
+function initialAssemblyRuntime(c: SharedConvoy,name: string,id: number,revision: number,s: NonNullable<SharedState['statuses'][string]>,n: SharedReport): boolean {
+  const expected=c.expected?.[name],runtime=characterRuntime(s);
+  return !!runtime && runtime===n.runtimeId && expected?.runtimeId===runtime && expected.commandId===id && expected.revision===revision;
+}
+function initialAssemblyTransport(state: SharedState,c: SharedConvoy,s: NonNullable<SharedState['statuses'][string]>,n: SharedReport): boolean {
+  return typeof s.server==='string' && !!s.server && s.server===state.statuses[c.leader]?.server &&
+    n.communication?.operation==='/movement-plan' && ['network','timeout'].includes(n.communication.kind);
+}
+function initialAssemblyCommand(c: SharedConvoy,command: SharedCommand,n: SharedReport): boolean {
+  return command.type==='party-monster-travel' && command.phase==='assemble' && command.routeProtocol===4 &&
+    command.convoyId===c.id && command.epoch===c.epoch && n.id===c.id && n.epoch===c.epoch &&
+    n.commandId===command.id && n.navigationRevision===command.navigationRevision && !n.routeVersion;
 }

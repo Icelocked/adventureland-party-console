@@ -8,10 +8,12 @@ el('toggleSession').onclick=()=>sessionVisible(el('session').type==='password');
 async function call(path,body){const r=await fetch('/setup/'+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw Error(data.error||'Setup request failed');return data}
 const action=(id,fn)=>el(id).onclick=async()=>{el(id).disabled=true;el('error').textContent='';try{await fn()}catch(e){el('error').textContent=e.message}finally{el(id).disabled=false}};
 function preferences(){return {placement:el('placement').value,client:el('client').value,https:forceHttps}}
-function savePreferences(){try{localStorage.setItem('party-connection-setup',JSON.stringify(preferences()))}catch{}}
+function validPreferences(p){return p&&['same','remote'].includes(p.placement)&&['windows-steam','linux-steam','windows-browser','linux-browser'].includes(p.client)}
+function savePreferences(){if(!validPreferences(preferences()))return;try{localStorage.setItem('party-connection-setup',JSON.stringify(preferences()))}catch{}}
 function restorePreferences(){
  let p={};try{p=JSON.parse(localStorage.getItem('party-connection-setup')||'{}')}catch{}
  const q=new URLSearchParams(location.search);if(q.has('placement'))p={placement:q.get('placement'),client:q.get('client'),https:q.get('https')==='1'};
+ if(!validPreferences(p))p=validPreferences(state.steamPreferences)?state.steamPreferences:{};
  el('placement').value=p.placement||'';el('client').value=p.client||'';forceHttps=p.https===true;
 }
 function selection(){
@@ -57,7 +59,7 @@ async function generateLoader(){
  el('code').value=r.code;el('copy').disabled=false;linkReady=true;el('linkStatus').textContent='Waiting for your client to connect…';void watchConnection(generation);
 }
 async function refresh(){
- state=await call('state');serverAddress=state.serverAddress||location.origin;el('address').textContent=serverAddress;
+ const firstRefresh=!Object.keys(state).length;state=await call('state');if(firstRefresh)restorePreferences();serverAddress=state.serverAddress||location.origin;el('address').textContent=serverAddress;
  el('pair').hidden=true;el('settings').hidden=false;el('account').hidden=!state.canConfigureAccount||state.configured;el('paths').hidden=!state.configured;el('invite').hidden=!state.requirePairing;
  const selected=el('realm').value,realms=state.realms||[];
  el('realm').replaceChildren(...realms.map(realm=>new Option(realm,realm)));
@@ -87,11 +89,32 @@ action('checkHttps',async()=>{
  }catch(e){if(generation!==linkGeneration)return;status.style.color='#fca5a5';status.textContent='Could not verify HTTPS. If you already installed the certificate, try restarting your browser and the Adventure Land client. Open '+secureOrigin+'/setup in a new tab to see any certificate error, then retry this check.';return}
  await generateLoader();
 });
-action('pairButton',async()=>{await call('pair',{token:location.hash.slice(1)});history.replaceState(null,'','/setup');await refresh()});
+action('pairButton',async()=>{
+ const code=el('accessCode').value.trim(),token=location.hash.slice(1);
+ if(!code&&!token)throw Error('Enter the access code shown on a paired browser');
+ await call('pair',code?{code}:{token});el('accessCode').value='';history.replaceState(null,'','/setup');await refresh();
+});
+el('accessCode').onkeydown=e=>{if(e.key==='Enter')el('pairButton').click()};
 action('connect',async()=>{await call('session',{session:el('session').value,realm:el('realm').value});el('session').value='';sessionVisible(false);await refresh();el('success').hidden=false;el('success').textContent='Account connected. Choose how to run your characters below.'});
 action('copy',async()=>{try{await navigator.clipboard.writeText(el('code').value);if(!countingDown)el('linkStatus').textContent='Copied. Paste into CODE and click Engage.'}catch{el('code').focus();el('code').select();if(!countingDown)el('linkStatus').textContent='Code selected. Copy it and paste into CODE.'}});
 action('revoke',async()=>{if(confirm('Revoke private client tokens? Direct tokenless loaders are unaffected.')){await call('revoke',{});stopLinking();el('success').hidden=true;el('code').value='';el('copy').disabled=true;el('linkStatus').textContent='Client tokens revoked. Choose your setup again to create a new loader.'}});
-action('invite',async()=>{const r=await call('invite',{});el('invitation').textContent=r.url;el('invitationQr').innerHTML=r.qrSvg;el('invitationQr').hidden=false});
+// The link uses location.origin, the address this browser opened, so it stays right behind a proxy or public URL.
+let inviteTimer;
+function endInvitation(message){clearInterval(inviteTimer);el('invitation').hidden=true;el('accessCodeValue').textContent='';el('invitationLink').textContent='';el('invitationStatus').textContent=message}
+action('invite',async()=>{
+ const r=await call('invite',{});clearInterval(inviteTimer);
+ el('accessCodeValue').textContent=r.code;el('pairAddress').textContent=location.origin+'/setup';el('invitationLink').textContent=location.origin+'/setup#'+r.token;
+ el('invitation').hidden=false;el('invitationStatus').textContent='';
+ const deadline=Date.now()+r.expiresIn;let checks=0;
+ const tick=async()=>{
+  const left=Math.max(0,Math.ceil((deadline-Date.now())/1000));
+  el('accessCodeExpiry').textContent='(expires in '+Math.floor(left/60)+':'+String(left%60).padStart(2,'0')+')';
+  if(left===0)return endInvitation('The access code expired. Choose Pair another browser for a new one.');
+  // The server clears the code once a browser pairs with it, so the paired browser stops showing it.
+  if(++checks%3===0)try{const s=await call('state');if(s.accessCodeExpiresAt!==r.expiresAt)endInvitation('The access code was used or replaced. Choose Pair another browser for a new one.')}catch{}
+ };
+ void tick();inviteTimer=setInterval(tick,1000);
+});
 function resumeConnection(){if(document.visibilityState!=='hidden')void watchConnection(linkGeneration)}
 addEventListener('focus',resumeConnection);document.addEventListener('visibilitychange',resumeConnection);
 el('continue').onclick=stopLinking;addEventListener('pagehide',stopLinking);restorePreferences();

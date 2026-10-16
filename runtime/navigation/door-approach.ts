@@ -1,6 +1,7 @@
 import { doorDetour } from "./door-detour.ts";
 import { stepIssue, type ValidationPorts } from "./validation.ts";
 import { distance, isTransition, type Point, type Step } from "./contracts.ts";
+import {repairWalkingInteriors} from './walking-interior.ts';
 
 function approaches(ports: ValidationPorts, from: Point, to: Step): Point[] {
   const doors = (ports.game.maps[from.map]?.doors || [])
@@ -43,6 +44,11 @@ function transporterPoints(ports: ValidationPorts, from: Point, to: Step): Point
     })),
   );
 }
+/** Choose a native collision-clear point inside the existing transporter interaction radius. */
+export function transporterApproach(ports: ValidationPorts, from: Point, to: Step): Point | undefined {
+  return transporterPoints(ports,from,to).sort((a,b)=>distance(from,a)-distance(from,b))
+    .find(point=>ports.walk(point,point)&&!stepIssue(ports,point,to,true));
+}
 function connector(ports: ValidationPorts, from: Point, to: Step): Point | undefined {
   return approaches(ports, from, to)
     .sort((a, b) => distance(from, a) - distance(from, b))
@@ -75,5 +81,5 @@ export function repairDoorApproaches(ports: ValidationPorts, from: Point, plot: 
     result.push(step);
     previous = step;
   }
-  return result;
+  return repairWalkingInteriors(ports,from,result);
 }

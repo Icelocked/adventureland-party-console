@@ -32,3 +32,16 @@ test('queue change wakes waiting followers immediately and replaces duplicate po
  channel.wait('P',channel.snapshot('P').combatRevision,{json:data=>responses.push(data)});assert.equal(responses.length,2);
  group={queueRevision:'C',selection:'C',committed:true};channel.flush();assert.equal(responses.length,3);
 });
+
+test('native confirmation challenge wakes every waiting fighter synchronously without the poll timeout',()=>{
+ let group={queueRevision:'A',selection:'A',committed:false,independentApproach:true};
+ const channel=createCombatChannel(()=>({groupedCombat:group})),responses=[];
+ for(const name of ['W','P','M'])channel.wait(name,channel.snapshot(name).combatRevision,{json:data=>responses.push({name,data})});
+ channel.flush();assert.equal(responses.length,0);
+ group={...group,independentConfirmation:{id:'A-round1',selection:'A',target:'A',startedAt:1000,expiresAt:4000}};
+ channel.flush();assert.equal(responses.length,3);
+ assert.deepEqual(responses.map(r=>r.data.groupedCombat.independentConfirmation.id),['A-round1','A-round1','A-round1']);
+ const old=channel.snapshot('W').combatRevision;group={...group,independentConfirmation:{...group.independentConfirmation,expiresAt:4500}};
+ assert.equal(channel.snapshot('W').combatRevision,old);
+ channel.wait('W',old,{json:data=>responses.push({name:'W',data})});group={...group,independentConfirmation:undefined};channel.flush();assert.equal(responses.length,4);
+});

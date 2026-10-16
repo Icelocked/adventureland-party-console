@@ -4,7 +4,7 @@ import { usePartyAction } from './query-actions';
 
 const realmLabel = (realm: string) => realm.replace(/^SR_/, '').replace(/(US|EU|ASIA)/, '$1 ');
 
-/** Realms boss chase and daily-event chase never hop to. Manual realm changes are unaffected. */
+/** Realms boss chase never hops to. Manual realm changes are unaffected. */
 export function RealmHopBlacklistSetting({ realms, blacklist }: { realms: RealmOption[]; blacklist?: string[] }) {
   const action = usePartyAction();
   const saved = blacklist || [];
@@ -17,7 +17,7 @@ export function RealmHopBlacklistSetting({ realms, blacklist }: { realms: RealmO
     <legend className="sr-only">Realm hopping blacklist</legend>
     <div>
       <p className="font-semibold text-violet-100">Never hop to these realms</p>
-      <p className="text-xs text-slate-300">Boss chase and event prediction skip checked realms, e.g. ones whose ping cripples DPS. Changing realm by hand still works. PVP realms are always skipped.</p>
+      <p className="text-xs text-slate-300">Boss chase skips checked realms, e.g. ones whose ping cripples DPS. Changing realm by hand still works. PVP realms are always skipped.</p>
     </div>
     {realms.length ? <ul className="grid gap-1 text-xs sm:grid-cols-2">
       {realms.map(realm => {

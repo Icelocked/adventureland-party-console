@@ -37,9 +37,6 @@ export type Char = {
   activeEvent?:string|null;
   joinedEvent?:string|null;
   standOpen?: boolean;
-  /** A lucky-slot/production operation owns the merchant's inventory (live field). */
-  upgradeInventoryBusy?: boolean;
-  luckyRecoveryError?: { message?: string; at?: number } | null;
   name: string;
   owner?: string | number;
   ctype: string;
@@ -102,6 +99,8 @@ export type Char = {
   upgrading?: boolean;
   seenAt: number;
   inventorySize?: number;
+  /** Bag slots held by a gear set or by gear swapped out for one; automatic rules skip them. */
+  reservedInventory?: { slot: number; item: { name?: string; level?: number } | null }[];
   items: (InventoryEntry | null)[];
   slots: Record<string, EquippedEntry | null>;
   conditions?: Condition[];

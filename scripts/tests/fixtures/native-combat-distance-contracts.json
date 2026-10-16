@@ -1,0 +1,27 @@
+{
+  "provenance": "Selected unmodified functions from pinned native old_common_functions.js snapshots; whole-file SHA256 retained for each revision.",
+  "versions": {
+    "15555": {
+      "sourceSHA256": "0be5b557755a98034a50278a4f427f4a44a5292601f072ea698ba85472c95f88",
+      "functions": [
+        "function get_x(e)\n{\n\tif(\"real_x\" in e) return e.real_x;\n\treturn e.x;\n}",
+        "function get_y(e)\n{\n\tif(\"real_y\" in e) return e.real_y;\n\treturn e.y;\n}",
+        "function get_width(e) // visual width\n{\n\tif(e.proxy_character) return e.awidth;\n\tif(\"awidth\" in e) return e.awidth;\n\treturn (e.width||0)/(e.mscale||1);\n}",
+        "function get_height(e) // visual height\n{\n\tif(e.proxy_character) return e.aheight;\n\tif(\"aheight\" in e) return e.aheight;\n\treturn (e.height||0)/(e.mscale||1);\n}",
+        "function distance(a, b) {\n\t// https://discord.com/channels/238332476743745536/1025784763958693958\n\tif (!a || !b) return 99999999;\n\tif (\"in\" in a && \"in\" in b && a.in != b.in) return 99999999;\n\tif (\"map\" in a && \"map\" in b && a.map != b.map) return 99999999;\n\n\tconst a_x = get_x(a);\n\tconst a_y = get_y(a);\n\tconst b_x = get_x(b);\n\tconst b_y = get_y(b);\n\n\tconst aHalfWidth = get_width(a) / 2;\n\tconst aHeight = get_height(a);\n\tconst bHalfWidth = get_width(b) / 2;\n\tconst bHeight = get_height(b);\n\n\t// Compute bounds of each rectangle\n\tconst aLeft = a_x - aHalfWidth;\n\tconst aRight = a_x + aHalfWidth;\n\tconst aTop = a_y - aHeight;\n\tconst aBottom = a_y;\n\n\tconst bLeft = b_x - bHalfWidth;\n\tconst bRight = b_x + bHalfWidth;\n\tconst bTop = b_y - bHeight;\n\tconst bBottom = b_y;\n\n\tconst dx = Math.max(bLeft - aRight, aLeft - bRight, 0);\n\tconst dy = Math.max(bTop - aBottom, aTop - bBottom, 0);\n\n\treturn Math.sqrt(dx * dx + dy * dy);\n}"
+      ]
+    },
+    "17665": {
+      "sourceSHA256": "ef635bd457e013944f6644a8874916e7e2cbab4a97ec04f7d020f317263b559b",
+      "functions": [
+        "function get_x(e)\n{\n\tif(\"real_x\" in e) return e.real_x;\n\treturn e.x;\n}",
+        "function get_y(e)\n{\n\tif(\"real_y\" in e) return e.real_y;\n\treturn e.y;\n}",
+        "function get_width(e) // visual width\n{\n\tif(e.proxy_character) return e.awidth;\n\tif(\"awidth\" in e) return e.awidth;\n\treturn (e.width||0)/(e.mscale||1);\n}",
+        "function get_height(e) // visual height\n{\n\tif(e.proxy_character) return e.aheight;\n\tif(\"aheight\" in e) return e.aheight;\n\treturn (e.height||0)/(e.mscale||1);\n}",
+        "function get_monster_dimensions(type) {\n\tvar dimensions = G.dimensions[type] || [24, 24];\n\tvar width = dimensions[0], height = dimensions[1];\n\tif (G.monsters[type].size) {\n\t\twidth = Math.round(width * G.monsters[type].size);\n\t\theight = Math.round(height * G.monsters[type].size);\n\t}\n\treturn [width, height];\n}",
+        "function get_combat_dimensions(entity) {\n\tif (entity.type === \"monster\" && typeof entity.mtype === \"string\" && Object.prototype.hasOwnProperty.call(G.monsters, entity.mtype)) return get_monster_dimensions(entity.mtype);\n\treturn [get_width(entity), get_height(entity)];\n}",
+        "function distance(a, b) {\n\t// https://discord.com/channels/238332476743745536/1025784763958693958\n\tif (!a || !b) return 99999999;\n\tif (\"in\" in a && \"in\" in b && a.in != b.in) return 99999999;\n\tif (\"map\" in a && \"map\" in b && a.map != b.map) return 99999999;\n\n\tconst a_x = get_x(a);\n\tconst a_y = get_y(a);\n\tconst b_x = get_x(b);\n\tconst b_y = get_y(b);\n\n\tconst aDimensions = get_combat_dimensions(a);\n\tconst bDimensions = get_combat_dimensions(b);\n\tconst aHalfWidth = aDimensions[0] / 2;\n\tconst aHeight = aDimensions[1];\n\tconst bHalfWidth = bDimensions[0] / 2;\n\tconst bHeight = bDimensions[1];\n\n\t// Compute bounds of each rectangle\n\tconst aLeft = a_x - aHalfWidth;\n\tconst aRight = a_x + aHalfWidth;\n\tconst aTop = a_y - aHeight;\n\tconst aBottom = a_y;\n\n\tconst bLeft = b_x - bHalfWidth;\n\tconst bRight = b_x + bHalfWidth;\n\tconst bTop = b_y - bHeight;\n\tconst bBottom = b_y;\n\n\tconst dx = Math.max(bLeft - aRight, aLeft - bRight, 0);\n\tconst dy = Math.max(bTop - aBottom, aTop - bBottom, 0);\n\n\treturn Math.sqrt(dx * dx + dy * dy);\n}"
+      ]
+    }
+  }
+}

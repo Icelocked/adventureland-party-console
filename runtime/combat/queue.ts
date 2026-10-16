@@ -30,10 +30,9 @@ export function reconcileQueue(old: Group | undefined | null, members: Member[],
     (e.startedAt??e.at)<=(r.rejectedAt??r.until-120000)) && !old?.fights.some(f=>identity(f)===identity(e)&&f.state==='engaged');
   const deaths: Death[]=[...(old?.deaths||[]),...reports.flatMap(m=>m.status!.groupedCombat?.deaths||[])];
   const tombstones=[...new Map(deaths.filter(d=>d.at<=now+500).map(d=>[identity(d),d])).values()].slice(-512);
+  const tombstoneIds = new Set(tombstones.map(identity));
   const lostTargets=[...((old?.lostTargets||[]).filter(t=>t.retiredAt>=resetAt))];
   const retired=(t:Target & {server:string|undefined},at?:number)=>lostTargets.some(l=>identity(l)===identity(t)&&(at===undefined||at<=l.retiredAt));
-  // Up to 512 tombstones are checked against every candidate, fight and claim: index them once.
-  const tombstoneIds=new Set(tombstones.map(identity));
   const dead=(t: Target & {server:string|undefined})=>passing.has(passingIdentity(t)) || tombstoneIds.has(identity(t));
   const claims=releaseResetFights(old?.fights||[],reports,reconcileClaims(old?.claims||[],reports,now,resetAt),now).filter(c=>!tombstoneIds.has(identity(c)));
   const claimFor=(t: Target & {server:string|undefined})=>claims.find(c=>identity(c)===identity(t));
@@ -66,7 +65,9 @@ export function reconcileQueue(old: Group | undefined | null, members: Member[],
     const f=fights.find(f=>identity(f)===identity({...t,server:m.status!.server}));
     if(f){f.x=t.x;f.y=t.y;f.fighter=leader;}
   }
-  const recovery=recoverLostTargets(fights,members,old?.searches||{},now);
+  const selectedPlan=old?.queue?.find(t=>t.state==='planned' && old.target && targetIdentity(t)===targetIdentity(old.target as Fight) &&
+    t.startedAt>=resetAt && !excluded(t,t.startedAt) && !fights.some(f=>targetIdentity(f)===targetIdentity(t)));
+  const recovery=recoverLostTargets(selectedPlan?[...fights,selectedPlan]:fights,members,old?.searches||{},now);
   lostTargets.push(...recovery.lost);
   for(let i=fights.length-1;i>=0;i--)if(recovery.lost.some(t=>targetIdentity(t)===targetIdentity(fights[i])))fights.splice(i,1);
   const selector=members.find(m=>m.name===leader);
@@ -75,7 +76,7 @@ export function reconcileQueue(old: Group | undefined | null, members: Member[],
   const reported = reports.flatMap(m => (m.status!.groupedCombat?.candidates || [])
     .filter(t => m.name === leader || t.passiveRare === true || t.mtype === huntTarget)
     .filter(t => m.status!.server === s?.server && t.map === m.status!.map && t.in === m.status!.in));
-  const retained=retainNominations((old?.queue||[]).filter(t=>t.startedAt>=resetAt),members,now);
+  const retained=retainNominations((old?.queue||[]).filter(t=>t.startedAt>=resetAt),members,now,old?.target);
   const unique:Candidate[] = s ? [...new Map<string,Candidate>([...reported,...retained].map(t => [identity({...t,server:s.server}),t])).values()] : [];
   const candidates=(selector&&fresh(selector)?unique:[])
     .filter(t=>t.map===s?.map&&t.in===s?.in&&!excluded({...t,server:s!.server},now)&&!rejected({...t,server:s!.server})&&!(old?.pursuitExclusions||[]).some(e=>e.until>now&&e.identity===targetIdentity({...t,server:s!.server}))&&!fights.some(f=>identity(f)===identity({...t,server:s!.server})))

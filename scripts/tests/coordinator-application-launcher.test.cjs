@@ -17,16 +17,17 @@ for(const directory of ['C:\\Games\\Adventure Land\\.caracal\\standalones','/app
   test('application launcher delegates installed paths unchanged: '+directory,async()=>{
     const calls=[],completion=Promise.resolve(),hostModule={exports:{}};
     function hostRequire(name) {
+      if(name.startsWith('node:'))return require(name);
       calls.push(name);
       assert.equal(name,'../../.build/runtime/coordinator-application.cjs');
       return {startCoordinatorApplication:platform=>{
-        assert.equal(platform.require,hostRequire);assert.equal(platform.directory,directory);
+        assert.equal(platform.require('../../.build/runtime/coordinator-application.cjs').startCoordinatorApplication instanceof Function,true);assert.equal(platform.directory,directory);assert.equal(platform.codeDirectory,directory);
         assert.equal(typeof platform.loadFetch,'function');return completion;
       }};
     }
-    vm.runInNewContext(source,{require:hostRequire,module:hostModule,__dirname:directory});
+    vm.runInNewContext(source,{require:hostRequire,module:hostModule,__dirname:directory,process:{env:{}}});
     assert.equal(hostModule.exports,completion);await completion;
-    assert.deepEqual(calls,['../../.build/runtime/coordinator-application.cjs']);
+    assert.deepEqual(calls,['../../.build/runtime/coordinator-application.cjs','../../.build/runtime/coordinator-application.cjs']);
   });
 }
 test('launcher recognition does not mistake legacy imports or comments for the application entry',()=>{

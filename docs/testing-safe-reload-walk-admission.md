@@ -1,0 +1,3 @@
+# Safe reload native walking admission inventory
+
+Cancelled3cdshard5 artifact11777273142: safe-mode probe260px hits null.id from __partyMovement.report after separatebackendmovingpoll. A shortnativecruisejourney can finish between servermovement observation and nativeactivejourneyread. Existingtest must admitactualnative movingcharacter +ACTIVEjourneyID +matchedmovementgoal/scope in sameclientcall immediatelybeforelease. Never use completedlast()report, extendroute/deadline, or acceptfinishedjourney as parked. Preserve30sadmission,10shold,3.5ssettledsameACTIVEjourney and all realarrival/farming/defense checks. Nowmode physicalmovementprobe unchanged. Retain admittednativeownership/goalproof in samples; truepostadmissionlease race stillfailsrealassertions.

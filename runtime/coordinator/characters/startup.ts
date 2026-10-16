@@ -56,7 +56,7 @@ export function startCoordinatorCharacters<Block extends Worker>(
   });
   slots.prepare();
   ports.later(() => slots.restore(), 4000);
-  if (ports.watchCode)
+  if (ports.watchCode || process.env.AL_CONSOLE_ARTIFACT)
     ports.watchGenerations(
       coordinatorGenerationPorts(workers, {
         owned: (name) => ports.owned(name)!,

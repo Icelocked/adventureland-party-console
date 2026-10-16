@@ -297,6 +297,19 @@ test('grouped rare waits for queue selection and never owns a competing convoy',
  assert.match(r.party.rareHuntState.encounter.message,/Pursuing/);
  r.party.groupedCombat.fights=[r.party.groupedCombat.target];r.controller.tick();assert.match(r.party.rareHuntState.encounter.message,/Fighting/);
 });
+test('rare admission survives old scatter reports until its selected queue is acknowledged',()=>{
+ const r=fixture();const target=groupRare(r);r.party.groupedCombat.queueRevision='rare-revision';r.sight();
+ r.controller.tick();r.party.groupedCombat.target=null;r.party.groupedCombat.queue=[];r.advance(224);r.controller.tick();
+ assert.equal(r.controller.encounter(),true,'A coordinator nomination alone cannot prove client admission');
+ r.party.groupedCombat.target=target;r.party.groupedCombat.queue=[target];
+ for(const status of Object.values(r.party.statuses))status.groupedCombat.queueAck='rare-revision';
+ r.controller.tick();r.party.groupedCombat.target=null;r.party.groupedCombat.queue=[];r.controller.tick();
+ assert.equal(r.controller.encounter(),false,'An acknowledged selection still releases normally');
+ const pending=fixture();groupRare(pending);pending.sight();pending.controller.tick();
+ pending.party.groupedCombat.target=null;pending.party.groupedCombat.queue=[];pending.advance(10001);pending.controller.tick();
+ assert.equal(pending.controller.encounter(),false,'Unacknowledged admission retains its ten-second bound');
+});
+
 test('currently attacking rare survives disabling and pursuit timeout; death waits for remaining attackers',()=>{
  const r=fixture();const target=groupRare(r,'phoenix','engaged');r.sight();const id=r.controller.control('W').id;
  r.controller.setSettings({phoenix:false});r.advance(310000);r.sight('phoenix','W',{target:'W'});

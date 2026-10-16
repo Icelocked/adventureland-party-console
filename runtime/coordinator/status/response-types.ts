@@ -1,6 +1,17 @@
 import type { MerchantCommand } from "../merchant/work.ts";
 import type { Catalog } from "../../../dashboard/lib/farming-zones.ts";
 
+/** Application sighting protocol: normalized IDs/maps and coordinator-clock time. */
+export interface SlendermanSighting {
+  id: string;
+  map: string;
+  in: string | number;
+  x: number;
+  y: number;
+  server: string;
+  observedAt: number;
+}
+
 export interface HeartbeatStatus {
   [field: string]: unknown;
   name: string;
@@ -9,6 +20,8 @@ export interface HeartbeatStatus {
   x?: number;
   y?: number;
   seenAt?: number;
+  /** Hash of the compiled character artifact actually executing this heartbeat. */
+  codeHash?: string | null;
   combat?: { kiting?: boolean };
   combatStats?: { armorPiercing?: number };
   combatSelection?: Record<string, unknown>;
@@ -18,6 +31,7 @@ export interface HeartbeatStatus {
   threats?: EntityReference[];
   target?: EntityReference | null;
   serverLiveEvents?: { name: string }[];
+  slendermanSighting?: SlendermanSighting | null;
 }
 export interface EntityReference {
   id?: string;
@@ -33,13 +47,17 @@ export const heartbeatStateFields = [
   "passiveHunting",
   "leader",
   "designatedTank",
+  "gearSets",
   "abtestingStrategy",
   "merchantCharacter",
   "merchantForceStand",
   "merchantStandLocation",
   "merchantWeapon",
   "luckyUpgradeSlots",
+  "luckySlotLocks",
+  "luckySlotResume",
   "luckySlotTracking",
+  "luckySlotCharacterIds",
   "gatheringNoTool",
   "gatheringCooldowns",
   "standListings",
@@ -59,12 +77,14 @@ export interface HeartbeatState extends Record<(typeof heartbeatStateFields)[num
   dailyDungeons?: import("../../dungeons/contracts.ts").DungeonState;
   passiveHunting: import('../navigation/passive-settings.ts').PassiveSettings;
   eventSessions?: import('../merchant/event-control.ts').MerchantEventState['eventSessions'];
-  eventReturn?: import('../merchant/event-control.ts').MerchantEventState['eventReturn'];
+  eventReturn?: Pick<import('../events/return-types.ts').EventRecovery, 'participants'> &
+    Partial<Pick<import('../events/return-types.ts').EventRecovery, 'cycleId'>> | null;
   deferredEventReturns?: import('../merchant/event-control.ts').MerchantEventState['deferredEventReturns'];
   merchantQueue?: import("../merchant/work.ts").MerchantWork[];
   huntEventTrips?: import("../events/hunt-trip.ts").HuntEventTrips["huntEventTrips"];
   leader: string | null;
   designatedTank: string | null;
+  gearSets: import("../characters/gear-sets.ts").GearSets;
   merchantCharacter: string | null;
   merchantStandLocation: import('../merchant/stand-location.ts').MerchantStandLocation | null;
   commands: Record<string, MerchantCommand | undefined>;
@@ -104,6 +124,7 @@ export interface HeartbeatState extends Record<(typeof heartbeatStateFields)[num
 
 export interface HeartbeatResponsePorts {
   now(): number;
+  persist?(): void;
   activeNames(): string[];
   enabled(name: string, event?: string): boolean;
   navigationRevision(name: string): number;
@@ -117,7 +138,7 @@ export interface HeartbeatResponsePorts {
   mapSubscriberCount(name: string): number;
   bankStackHomes(): unknown;
   groupedCombat(): unknown;
-  selectedEvents(name: string): unknown;
+  selectedEvents(name: string): string[];
   anniversary(): unknown;
   rareOwns(): boolean;
 }

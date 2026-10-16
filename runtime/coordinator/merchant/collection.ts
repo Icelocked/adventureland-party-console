@@ -53,7 +53,7 @@ export function merchantCollectionNearby(
 }
 
 export function isItemCollection(reason: string): boolean {
-  return ["marked items", "npc sale pickup", "auto npc sale pickup"].includes(reason);
+  return ["marked items", "exchange pickup", "npc sale pickup", "auto npc sale pickup"].includes(reason);
 }
 
 export function markedCollectionReady(

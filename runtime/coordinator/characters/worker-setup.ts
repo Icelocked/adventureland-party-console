@@ -1,4 +1,5 @@
 import type { CharacterBlock } from "./types.ts";
+import { realmRequestArrived, type RealmRequest } from './realm-request.ts';
 
 export type SetupWorker = CharacterBlock;
 interface SetupState {
@@ -6,14 +7,17 @@ interface SetupState {
   location?: { realm?: string } | null;
   headlessSlots: (string | null)[];
   lifecycle: Record<string, string | undefined>;
+  merchantRealmRequests?: Record<string, RealmRequest | undefined>;
+  statuses?: Record<string, {server?: string; seenAt?: number} | undefined>;
+  realmSwitch?: { phase: string; realm: string; participants: string[]; homeTargets?: string[] } | null;
 }
 interface SetupPorts {
   configuredRealm: string;
-  /** The character's own home realm (SR_ key), when the account reports one. */
   homeRealm(name: string): string | null;
   script(name: string): string;
   watch(name: string, worker: SetupWorker): void;
   persist(): void;
+  persistRealmRequests?(): void;
   start(name: string): void;
 }
 
@@ -23,10 +27,46 @@ export function createWorkerSetup(
   state: SetupState,
   ports: SetupPorts,
 ) {
+  function switchedRealm(name: string, block: SetupWorker): string | undefined {
+    const switching = state.realmSwitch;
+    if (switching && ["switching", "setting-home"].includes(switching.phase)) {
+      if (switching.participants.includes(name) || switching.homeTargets?.includes(name)) {
+        const hadRequest = !!state.merchantRealmRequests?.[name];
+        delete state.merchantRealmRequests?.[name];
+        delete block.pendingRealm;
+        if (hadRequest) ports.persistRealmRequests?.();
+        return switching.realm;
+      }
+    }
+    return undefined;
+  }
+  function requestedRealm(name: string, block: SetupWorker): string | undefined {
+    const request = state.merchantRealmRequests?.[name];
+    if (request) {
+      const status = state.statuses?.[name];
+      if (realmRequestArrived(status, request, Date.now())) {
+        delete state.merchantRealmRequests?.[name];
+        delete block.pendingRealm;
+        ports.persistRealmRequests?.();
+      } else {
+        block.pendingRealm = request;
+        if (!request.exhausted) return request.realm;
+      }
+    }
+    return undefined;
+  }
+  function connectionRealm(name: string, block: SetupWorker): string | undefined {
+    const requested = switchedRealm(name, block) || requestedRealm(name, block);
+    if (requested) return requested;
+    if (block.instance) return block.realm;
+    return ports.homeRealm(name) || ports.configuredRealm;
+  }
+
   function ensure(name: string): SetupWorker {
     const block = workers[name] || (workers[name] = {});
-    block.realm =
-      block.realm || state.activeRealm || state.location?.realm || ports.configuredRealm;
+    // Running workers retain explicit event/realm travel ownership. New and
+    // restored connections use native home rather than a stale setup default.
+    block.realm = connectionRealm(name, block);
     if (block.code_watcher) {
       block.code_watcher.close();
       block.code_watcher = null;
@@ -41,10 +81,6 @@ export function createWorkerSetup(
     state.headlessSlots[slot - 1] = name;
     ports.persist();
     const block = ensure(name);
-    // A saved realm goes stale while the character is offline (realm switches only move
-    // online participants), and logging in off-home causes Hop Sickness. Spawning starts at home;
-    // deliberate errands (realm switches, merchant trips) still set block.realm themselves.
-    block.realm = ports.homeRealm(name) || state.activeRealm || block.realm;
     block.enabled = true;
     state.lifecycle[name] = block.connected ? "online" : "starting";
     if (!block.instance) ports.start(name);

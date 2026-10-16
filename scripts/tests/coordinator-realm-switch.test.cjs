@@ -7,11 +7,12 @@ function fixture() {
   let now=1000, id=0;
   const effects=[], statuses={}, blocks={M:{enabled:true},P:{enabled:true},S:{enabled:true}};
   const operation={id:'switch',realm:'SR_EUI',participants:['M','P','S'],startedAt:1000,phase:'switching',characters:[]};
-  const ports={now:()=>now,sleep:async ms=>{now+=ms;},pauseMerchant:()=>effects.push('pause'),
+  const ports={now:()=>now,sleep:async ms=>{now+=ms; if(operation.phase==="setting-home") for(const entry of operation.characters) entry.homeConfirmed=true;},pauseMerchant:()=>effects.push('pause'),
     clearCommand:name=>effects.push(['clear',name]),native:()=> 'S',steamMembers:()=>['S'],block:name=>blocks[name],
     stop:async block=>effects.push(['stop',block]),nextCommand:()=>++id,command:(...args)=>effects.push(['command',...args]),
     persist:()=>effects.push('persist'),status:name=>statuses[name],setActiveRealm:realm=>effects.push(['realm',realm]),
-    label:realm=>realm,leader:()=> 'P',dispatchMerchant:()=>effects.push('dispatch')};
+    characterHome:name=>operation.characters.find(entry=>entry.name===name&&entry.homeConfirmed)?operation.realm.replace(/^SR_/,''):null,
+    refresh:async()=>{},start:()=>true,connectionCount:()=>0,label:realm=>realm,leader:()=> 'P',dispatchMerchant:()=>effects.push('dispatch')};
   return {operation,ports,effects,statuses,blocks,service:createRealmSwitch(ports)};
 }
 
@@ -21,7 +22,7 @@ test('realm switch restarts headless workers and commands only the primary Steam
   await service.run(operation);
   assert.equal(operation.phase,'complete');
   assert.equal(blocks.M.realm,'SR_EUI');assert.equal(blocks.P.realm,'SR_EUI');assert.equal(blocks.S.realm,undefined);
-  assert.deepEqual(effects.filter(e=>Array.isArray(e)&&e[0]==='command').map(e=>[e[1],e[2].type]),[['S','native-realm-switch']]);
+  assert.deepEqual(effects.filter(e=>Array.isArray(e)&&e[0]==='command').map(e=>[e[1],e[2].type]),[]);
   assert.equal(effects.at(-1),'dispatch');
 });
 
@@ -33,32 +34,57 @@ test('stale destination reports do not satisfy the sixty-second arrival deadline
   assert.match(operation.error,/within 60 seconds/);assert.equal(effects.includes('dispatch'),false);
 });
 
+test('verified distinct realm arrivals preserve a progressing native group through a late seventy-five-second follower',async()=>{
+ const f=fixture();let elapsed=0;
+ f.ports.sleep=async ms=>{elapsed+=ms;for(const [name,arrivesAt] of [['M',20000],['S',40000],['P',75000]])
+   f.statuses[name]={seenAt:1000+elapsed,server:elapsed>=arrivesAt?'EUI':'USI'};};
+ f.ports.now=()=>1000+elapsed;
+ await f.service.run(f.operation);assert.equal(f.operation.phase,'complete');
+ assert.equal(f.operation.completedAt,76000);assert.ok(f.operation.characters.every(c=>c.arrived));
+});
+
+test('a repeated destination member cannot renew realm progress forever or replace missing followers',async()=>{
+ const f=fixture();let elapsed=0;
+ f.ports.sleep=async ms=>{elapsed+=ms;f.statuses.M={seenAt:1000+elapsed,server:elapsed>=10000?'EUI':'USI'};
+  f.statuses.P={seenAt:999,server:'EUI'};f.statuses.S={seenAt:1000+elapsed,server:'USI'};};
+ f.ports.now=()=>1000+elapsed;
+ await f.service.run(f.operation);assert.equal(f.operation.phase,'failed');assert.equal(f.operation.completedAt,71000);
+ assert.equal(f.effects.includes('dispatch'),false);
+});
+
+test('superseded realm operation cannot complete or clear its successor commands',async()=>{
+ const f=fixture();let owned=true;
+ f.ports.ownsOperation=()=>owned;
+ f.ports.sleep=async()=>{owned=false;for(const name of f.operation.participants)f.statuses[name]={seenAt:1001,server:'EUI'};};
+ await f.service.run(f.operation);assert.notEqual(f.operation.phase,'complete');
+ assert.equal(f.effects.includes('dispatch'),false);assert.equal(f.effects.filter(e=>Array.isArray(e)&&e[0]==='realm').length,0);
+});
+
 test('all-headless participants reconnect to the destination without a native command',async()=>{
  for(const setHome of [false,true]) {
   const {operation,service,ports,statuses,effects,blocks}=fixture();
   operation.setHome=setHome;ports.native=()=>null;ports.steamMembers=()=>[];
   for(const name of operation.participants) statuses[name]={seenAt:999,server:'USII',ctype:name==='M'?'merchant':'priest'};
   ports.sleep=async()=>{
-   for(const name of operation.participants) statuses[name]={...statuses[name],seenAt:1001,server:'EUI'};
+   for(const name of operation.participants) statuses[name]={...statuses[name],seenAt:1001,server:'EUI'}; if(operation.phase==='setting-home') for(const entry of operation.characters) entry.homeConfirmed=true;
   };
   await service.run(operation);
-  assert.equal(operation.phase,setHome?'setting-home':'complete');
+  assert.equal(operation.phase,'complete');
   for(const name of operation.participants) assert.equal(blocks[name].realm,'SR_EUI');
   assert.equal(effects.filter(e=>Array.isArray(e)&&e[0]==='stop').length,3);
   assert.ok(operation.characters.every(entry=>entry.arrived));
   const commands=effects.filter(e=>Array.isArray(e)&&e[0]==='command');
   assert.deepEqual(commands.map(e=>[e[1],e[2].type]),setHome?[['M','realm-set-home'],['P','realm-set-home'],['S','realm-set-home']]:[]);
-  assert.equal(effects.includes('dispatch'),!setHome);
+  assert.equal(effects.includes('dispatch'),true);
  }
 });
 
-test('home realm is per character: every connected participant, merchant included, visits Bean after arrival',async()=>{
+test('home assignment waits for every participant including the merchant',async()=>{
   const {operation,service,statuses,effects}=fixture();operation.setHome=true;
   for(const name of operation.participants) statuses[name]={seenAt:1000,server:'EUI',ctype:name==='M'?'merchant':'priest'};
   await service.run(operation);
-  assert.equal(operation.phase,'setting-home');assert.deepEqual(operation.homeTargets,['M','P','S']);
-  assert.deepEqual(operation.homePending,['M','P','S']);assert.equal(operation.completedAt,null);
-  assert.deepEqual(effects.filter(e=>Array.isArray(e)&&e[0]==='command'&&e[2].type==='realm-set-home').map(e=>e[1]),['M','P','S']);
+  assert.equal(operation.phase,'complete');assert.deepEqual(operation.homeExecutors,['M','P','S']);
+  assert.ok(operation.characters.every(entry=>entry.homeConfirmed));assert.equal(effects.at(-1),'dispatch');
 });
 
 test('shutdown waits for workers before closing storage and ignores duplicate requests',async()=>{

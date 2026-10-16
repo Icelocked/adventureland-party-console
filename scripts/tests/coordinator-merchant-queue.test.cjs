@@ -15,6 +15,14 @@ function fixture() {
     dispatch: () => effects.push('dispatch'), log: message => effects.push(message) };
   return {state, ports, effects, service: createMerchantQueue(state, ports)};
 }
+test('ambiguous upgrade blocks ignore unrelated potion changes but release on relevant inventory changes',()=>{
+ const {upgradeRecoverySignature}=require('../../runtime/coordinator/merchant/upgrade-recovery.ts');
+ const marks=[{requestId:'one',item:{name:'sword',level:0},tiers:1}],items=[{slot:1,item:{name:'sword',level:0}},{slot:2,item:{name:'mpot1',q:10}}];
+ const f=fixture();f.ports.upgradeRecoverySignature=()=>upgradeRecoverySignature(marks,items);
+ f.state.blocks['M\nmanual upgrades']={upgradeRecoverySignature:f.ports.upgradeRecoverySignature()};
+ items[1].item.q=9;f.service.queue(['M'],'manual upgrades');assert.equal(f.state.queue.length,0);
+ items[0].slot=3;f.service.queue(['M'],'manual upgrades');assert.equal(f.state.queue.length,1);
+});
 test('repeated heartbeat queue checks do not persist unchanged settings and still dispatch ready work',()=>{
  const {state,service,effects}=fixture();
  service.queue(['M'],'auto upgrade');

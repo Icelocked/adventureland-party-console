@@ -1,5 +1,4 @@
 import type { MerchantWork } from "../merchant/work.ts";
-import type { ProductionState } from "../inventory/production.ts";
 
 /** These values are owned by other services; the overview only projects them. */
 export const publicStateFields = [
@@ -27,6 +26,7 @@ export const publicStateFields = [
   "merchantRoutinePriorities",
   "merchantAutomations",
   "merchantBlacklist",
+  "marketIgnoredItems",
   "standBids",
   "nativeStand",
   "autoStandBuys",
@@ -46,9 +46,10 @@ export const publicStateFields = [
   "deferredEventReturns",
   "leader",
   "designatedTank",
+  "gearSets",
   "followers",
   "eventsByCharacter",
-  "eventSelectionsByCharacter",
+  "eventSelectionsByCharacter", "eventPrioritiesByCharacter", "eventLimitsByCharacter", "eventAttendance",
   "monsterFocus",
   "monsterFocusByCharacter",
   "monsterPrioritiesByCharacter",
@@ -69,15 +70,16 @@ export const publicStateFields = [
   "merchantForceStand",
   "merchantStandLocation",
   "bossChase",
-  "dailyChase",
   "realmHopBlacklist",
   "merchantWeapon",
   "luckyUpgradeSlots",
+  "luckySlotLocks",
+  "luckySlotResume",
   "luckySlotTracking",
   "merchantCargo",
   "merchantActivity",
   "combatLogs",
-  "bankSortMode", "bankSortRequest",
+  "bankSortMode", "bankSortLayout", "bankSortRequest",
   "gatheringModes",
   "gatheringNoTool",
   "gatheringCooldowns",
@@ -112,7 +114,6 @@ export interface PublicState extends Partial<Record<(typeof publicStateFields)[n
   abtestingStrategy: unknown;
   bankSnapshot: unknown;
   bankVaults?: unknown[];
-  production: ProductionState;
   bankboiQueue: unknown;
   bankboiTransaction: unknown;
   ponty: unknown;

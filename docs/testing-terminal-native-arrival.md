@@ -1,0 +1,3 @@
+# Owned terminal acknowledgement failure inventory
+
+Native run 38316579600 Slender returns both actors physically to Main (0,0). The final issued leave step remains awaiting its completion barrier; the shared signal expires before executor observation, causing a zero-distance reprepare. Possible unsafe completion cases: missing native acknowledgement, intermediate step, moved actor, transporting/dead actor, foreign map/instance/realm, stale command/runtime/revision/owner, replaced plot/callback, or unrelated goal. An acknowledgement may retire only the exact current terminal journey and must issue no move, warp, transport, or barrier. All stale movement remains stopped. Tests precede production implementation.

@@ -16,6 +16,9 @@ if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
 const port = Number(process.env.E2E_COORDINATOR_PORT || 18080);
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid E2E_COORDINATOR_PORT');
 fs.mkdirSync(directory, { recursive: true });
+// Managed character admission reads the real compiled class manifest, even
+// when this console fixture simulates the external account transport.
+fs.cpSync(path.join(root, '.build/game'), path.join(directory, 'CODE/adventure_land'), { recursive: true });
 const game = createGameFixture(directory);
 // Legacy migration and game-cache reads are relative to cwd. Keep them away from live caracAL data.
 process.chdir(directory);
@@ -64,7 +67,18 @@ const logger = {
   error: (...args) => { startupError = new Error(args.map(String).join(' ')); console.error(...args); },
 };
 const adapters = {
-  '../config': { characters: {}, merchant: process.env.E2E_MERCHANT_CONNECTED === 'false' ? null : 'M', watch_CODE: false, enable_TYPECODE: false,
+  // Test the freshly built maintained policy rather than a previous live
+  // deployment's published catalog; E2E builds must not activate live assets.
+  '../../dashboard/lib/event-policy.cjs': require(path.join(root, '.build/shared/event-policy.cjs')),
+  // Map references resolve against the launcher directory. Read the same pinned
+  // catalog from this scenario, without modifying the installed game cache.
+  'node:fs': { ...fs, readFileSync(file, ...args) {
+    const installedCatalog = path.resolve(launcherDirectory, '../game_files', String(version), 'data.js');
+    const scenarioFile = typeof file === 'string' && path.resolve(file) === installedCatalog
+      ? path.join(directory, 'game_files', String(version), 'data.js') : file;
+    return fs.readFileSync(scenarioFile, ...args);
+  } },
+  '../config': { characters: process.env.E2E_MANAGED_MERCHANT === 'true' ? {M:{enabled:false,realm:'SR_USII'}} : {}, merchant: process.env.E2E_MERCHANT_CONNECTED === 'false' ? null : 'M', watch_CODE: false, enable_TYPECODE: false,
     web_app: { party_dashboard: true, port } },
   '../account_info': async () => account,
   '../game_files': { ensure_latest: async () => version, cull_versions: async () => {},
@@ -119,15 +133,11 @@ async function main() {
   }
   await heartbeat(true);
   // Serial recurring reports avoid overlapping samples while retaining real coordinator timers.
-  // A scenario that must observe one specific heartbeat's response (e.g. a
-  // one-shot command delivery) can widen this via E2E_STATUS_INTERVAL_MS so
-  // this ambient loop cannot win that race.
-  const statusIntervalMs = Number(process.env.E2E_STATUS_INTERVAL_MS) || 1000;
   async function refresh() {
-    try { await heartbeat(); setTimeout(refresh, statusIntervalMs).unref(); }
+    try { await heartbeat(); setTimeout(refresh, 1000).unref(); }
     catch (error) { console.error(error); process.exit(1); }
   }
-  setTimeout(refresh, statusIntervalMs).unref();
+  setTimeout(refresh, 1000).unref();
   console.log(JSON.stringify({ event: 'e2e-coordinator-ready', port, directory, simulated: ['account', 'game'] }));
   if (process.send) process.send({ type: 'ready', port });
 }

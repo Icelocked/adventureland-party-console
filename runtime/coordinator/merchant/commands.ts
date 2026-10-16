@@ -106,6 +106,7 @@ export function ownMerchantCommand(
   inputs: CommandInputs,
 ): MerchantCommand {
   if (job.reason === "upgrade preview") return {id,type:"merchant-upgrade-preview",jobId:job.id,upgradePreview:job.upgradePreview};
+  if (job.reason === "prim stack") return {id,type:"merchant-prim-stack",jobId:job.id,primStack:job.primStack};
   const work = inputs.work(job.target);
   return scopeWork(job, {
     id,

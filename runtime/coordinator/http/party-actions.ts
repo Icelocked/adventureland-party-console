@@ -1,3 +1,4 @@
+import {skipManualEventOccurrences, type EventAttendance} from '../events/attendance-limits.ts';
 import { dungeonOwns } from '../../dungeons/contracts.ts';
 import { merchantPartyGroups } from "../../party-groups.ts";
 import { requestObject, type HttpRequest, type HttpResponse } from "./contracts.ts";
@@ -5,11 +6,13 @@ import type { ReturnLocation } from "../events/return-types.ts";
 import type { MerchantWork } from "../merchant/work.ts";
 
 interface PartyActionState {
+  eventAttendance?: EventAttendance;
+  eventSessions?: Record<string, {event:string; id?:string|null; lastLiveAt?:number; authorizedRealm?:string; authorizedAt?:number; participants:string[]; participationRecorded?:boolean} | undefined>;
   dailyDungeons?: import('../../dungeons/contracts.ts').DungeonState;
   navigationIntents?: Record<string, { revision: number } | undefined>;
   leader: string | null;
   merchantCharacter: string | null;
-  statuses: Record<string, { seenAt: number; map: string; x: number; y: number; upgradeInventoryBusy?: boolean } | undefined>;
+  statuses: Record<string, { seenAt: number; map: string; x: number; y: number; server?:string; joinedEvent?:unknown; mapEvent?:unknown; eventFeedConnected?:boolean; eventClockStale?:boolean } | undefined>;
   location: ReturnLocation | null;
   commands: Record<string, unknown>;
   townCycle: { id: string; pending: string[]; startedAt: number; revisions?: Record<string, number> } | null;
@@ -62,6 +65,7 @@ export function createPartyActionRoutes(state: PartyActionState, ports: PartyAct
     const names = ports.members().filter(name => ports.active().includes(name));
     if (!ports.convoy(location, "party location", names, body.force === true ? "party-force-travel" : "party-travel"))
       return res.status(409).json({ error: "an online party leader is required for shared travel" });
+    skipManualEventOccurrences(state, names, ports.now());
     ports.persist();
     return res.json({ ok: true, partyLocation: state.location });
   }
@@ -100,13 +104,8 @@ export function createPartyActionRoutes(state: PartyActionState, ports: PartyAct
   function town(_req: HttpRequest, res: HttpResponse): unknown {
     if (exitDungeon(res)) return;
     ports.release();
-    // Unlike /bank-party (which only queues merchant work the dispatcher already holds while
-    // upgradeInventoryBusy), this assigns travel commands directly, bypassing that hold. Leaving
-    // the merchant out while it's mid lucky-slot/production swap stops this from being the thing
-    // that interrupts it and strands a journal (#47).
-    const merchant = state.merchantCharacter;
-    const merchantHeld = !!merchant && !!state.statuses[merchant]?.upgradeInventoryBusy;
-    const names = ports.members().filter((name) => ports.active().includes(name) && !(merchantHeld && name === merchant));
+    const names = ports.members().filter((name) => ports.active().includes(name));
+    skipManualEventOccurrences(state, names, ports.now());
     ports.invalidate(ports.members(), "manual Town", true);
     const cycleId = "town-" + ports.now() + "-" + ports.nextCommand();
     state.townCycle = names.length
@@ -116,7 +115,7 @@ export function createPartyActionRoutes(state: PartyActionState, ports: PartyAct
     for (const name of names)
       state.commands[name] = { id: ports.nextCommand(), type: "town-party", cycleId };
     ports.persist();
-    return res.json({ ok: true, queued: names, ...(merchantHeld ? { merchantHeld: true } : {}) });
+    return res.json({ ok: true, queued: names });
   }
   function upgrades(_req: HttpRequest, res: HttpResponse): unknown {
     const names = ports

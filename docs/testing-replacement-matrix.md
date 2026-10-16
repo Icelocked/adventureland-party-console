@@ -159,7 +159,7 @@ These are explicit failure families, not permission to keep every test:
 The initial audits remain historical records. Their individual “retain because
 not in the first three browser tests” entries are not an acceptance criterion for
 future tests. New isolation requires failure modes written before code, as stated
-in `AGENTS.md`.
+in `.operator/operator.md`.
 
 ## Initial removal history
 

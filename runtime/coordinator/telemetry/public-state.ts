@@ -1,5 +1,4 @@
 import { offeringStock } from '../inventory/offering-stock.ts';
-import { pendingProduction } from '../inventory/production.ts';
 import { characterConnections } from '../../roster/connection-status.ts';
 import { gameLogs } from "./game-logs.ts";
 import { requestText, type HttpRequest, type HttpResponse } from "../http/contracts.ts";
@@ -71,15 +70,15 @@ const configFields = [
   "marked", "merchantMarked", "autoItemMarks", "merchantDeliveries",
   "standListings", "npcSaleMarks", "deconstructionMarks", "autoDeconstruction",
   "deconstructionCatalog", "autoNpcSales", "autoStandMarks",
-  "merchantRoutinePriorities", "merchantAutomations", "merchantBlacklist",
+  "merchantRoutinePriorities", "merchantAutomations", "merchantBlacklist", "marketIgnoredItems",
   "standBids", "autoStandBuys", "autoBlacklistMerchants", "standSearch",
   "upgrades", "statScrolls", "compounds", "autoCompounds", "autoExchanges", "goldTargets",
-  "leader", "designatedTank", "followers", "eventsByCharacter", "eventSelectionsByCharacter",
+  "leader", "designatedTank", "gearSets", "followers", "eventsByCharacter", "eventSelectionsByCharacter", "eventPrioritiesByCharacter", "eventLimitsByCharacter", "eventAttendance",
   "monsterFocus", "monsterFocusByCharacter", "monsterPrioritiesByCharacter",
   "monsterSearchRadiusByCharacter", "scatterMonsterTypes",
   "farmingPolicy",
   "huntBlacklist", "huntSettings",
-  "restockPolicies", "merchantCharacter", "merchantForceStand", "merchantStandLocation", "bossChase", "dailyChase", "realmHopBlacklist", "merchantWeapon",
+  "restockPolicies", "merchantCharacter", "merchantForceStand", "merchantStandLocation", "bossChase", "realmHopBlacklist", "merchantWeapon",
 ] as const satisfies readonly (typeof publicStateFields)[number][];
 /** Keys present only in the assembled dashboard payload, not publicStateFields. */
 const configExtraKeys = [
@@ -145,9 +144,6 @@ function fullPayload(
     anniversary: ports.anniversary(),
     merchantQueue: state.merchantQueue.map((job) => ports.job(job)),
     merchantCurrent: ports.job(state.merchantCurrent),
-    // Any unresolved attempt blocks all new production until reviewed (beginProduction). Carrying
-    // the list here lets the dashboard offer that review (#35) without its own recurring poll.
-    productionPending: pendingProduction(state.production, true),
     mluckSchedule: ports.luckSchedule(),
     aldata,
     ...(dashboardCore ? {} : { bank: state.bankSnapshot, bankVaults: state.bankVaults || [] }),

@@ -3,7 +3,6 @@ import type { SavedEventState, LastEventReturn } from "./events/initial-contract
 import type { SavedRecoveryState } from "./navigation/recovery-contracts.ts";
 import type { Catalog } from "../../dashboard/lib/farming-zones.ts";
 import { initialBossChase } from "./events/boss-chase.ts";
-import { initialDailyChase } from "./events/daily-chase.ts";
 import { initialRealmHopBlacklist } from "./navigation/realm-hop-blacklist.ts";
 import type { RealmOperation } from "./characters/realm-switch.ts";
 
@@ -22,8 +21,11 @@ export function initialPartySelection(saved: SavedPartySelection) {
     location: saved.location || null,
     leader: saved.leader || null,
     designatedTank: saved.designatedTank || null,
+    gearSets: saved.gearSets || {},
     followers: saved.followers || {},
     eventsByCharacter: saved.eventsByCharacter || {},
+    eventLimitsByCharacter: saved.eventLimitsByCharacter || {},
+    eventPrioritiesByCharacter: saved.eventPrioritiesByCharacter || {},
     eventSelectionsByCharacter: saved.eventSelectionsByCharacter || {},
   };
 }
@@ -33,13 +35,13 @@ export function initialEventState(saved: SavedEventState, configuredRealm: strin
     realmSwitch: null as RealmOperation | null,
     eventReturn: saved.eventReturn || null,
     eventReturnLast: null as LastEventReturn,
+    eventAttendance: saved.eventAttendance || {},
     eventSessions: saved.eventSessions || {},
     deferredEventReturns: saved.deferredEventReturns || {},
     huntEventTrips: saved.huntEventTrips || {},
     combatEventHandoff: saved.combatEventHandoff || null,
     abtestingStrategy: saved.abtestingStrategy || null,
     bossChase: initialBossChase(saved.bossChase),
-    dailyChase: initialDailyChase(saved.dailyChase),
     realmHopBlacklist: initialRealmHopBlacklist(saved.realmHopBlacklist),
   };
 }

@@ -75,6 +75,7 @@ export interface FarmingAndTravelHandlers<Handler> {
   monsterSelectionRoutes: { navigate: Handler; passive: Handler };
   focusRoute: Handler;
   formationRoute: Handler;
+  gearSetRoute: Handler;
   huntBlacklistRoute: Handler;
   huntSettingsRoute: Handler;
   huntModeRoute: Handler;
@@ -101,6 +102,7 @@ export function installFarmingAndTravelRoutes<Handler>(
   router.post("/party-api/rare-hunting", handlers.monsterSelectionRoutes.passive);
   router.post("/party-api/focus", handlers.focusRoute);
   router.post("/party-api/formation", handlers.formationRoute);
+  router.post("/party-api/gear-sets", handlers.gearSetRoute);
   router.post("/party-api/hunt-blacklist", handlers.huntBlacklistRoute);
   router.post("/party-api/hunt-settings", handlers.huntSettingsRoute);
   router.post("/party-api/farming-mode", handlers.huntModeRoute);
@@ -200,8 +202,8 @@ export interface MerchantTransactionsHandlers<Handler> {
   merchantRequestRoutes: { giveaway: Handler; search: Handler };
   manualMarketOrderRoutes: { stand: Handler; purchase: Handler; ponty: Handler; sale: Handler };
   merchantOrderRoute: { handle: Handler };
-  merchantExchangeRoutes: { progress: Handler; supply: Handler; order: Handler };
-  merchantControlRoutes: { clear: Handler; force: Handler; clearLuckyJournal: Handler; visitBank: Handler };
+  merchantExchangeRoutes: { progress: Handler; supply: Handler; order: Handler; offeringSupply:Handler };
+  merchantControlRoutes: { clear: Handler; force: Handler };
   merchantHandoffRoutes: {
     handoff: Handler;
     complete: Handler;
@@ -236,11 +238,10 @@ export function installMerchantTransactionsRoutes<Handler>(
   router.post("/party-api/merchant/order", handlers.merchantOrderRoute.handle);
   router.post("/party-api/merchant/exchange-progress", handlers.merchantExchangeRoutes.progress);
   router.post("/party-api/merchant/exchange-supply", handlers.merchantExchangeRoutes.supply);
+  router.post("/party-api/merchant/offering-supply", handlers.merchantExchangeRoutes.offeringSupply);
   router.post("/party-api/merchant/exchange-order", handlers.merchantExchangeRoutes.order);
   router.post("/party-api/merchant/clear", handlers.merchantControlRoutes.clear);
   router.post("/party-api/merchant/force-stand", handlers.merchantControlRoutes.force);
-  router.post("/party-api/merchant/clear-lucky-journal", handlers.merchantControlRoutes.clearLuckyJournal);
-  router.post("/party-api/merchant/bank-visit", handlers.merchantControlRoutes.visitBank);
   router.post("/party-api/merchant/handoff", handlers.merchantHandoffRoutes.handoff);
   router.post("/party-api/merchant/handoff-complete", handlers.merchantHandoffRoutes.complete);
   router.post("/party-api/merchant/cleanout", handlers.merchantHandoffRoutes.cleanout);

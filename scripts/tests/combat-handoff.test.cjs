@@ -5,18 +5,18 @@ const settle=async()=>{for(let i=0;i<20;i++)await Promise.resolve();};
 async function fixture(run){
  const keys=['parent','character','get_entity','setInterval','clearInterval'];
  const saved=Object.fromEntries(keys.map(k=>[k,global[k]])),dateNow=Date.now;
- let now=1000,group=null,sequence=0,enabled=true;
+ let now=1000,group=null,sequence=0,enabled=true,ready=null;const listeners=new Map();
  const pending=[],root={},deaths=[];
- Object.assign(global,{parent:{},character:{name:'W',map:'cave',in:'cave'},get_entity:()=>null,setInterval:()=>1,clearInterval(){}});
+ Object.assign(global,{parent:{socket:{on:(e,f)=>listeners.set(e,f),off:(e,f)=>{if(listeners.get(e)===f)listeners.delete(e);}}},character:{name:'W',map:'cave',in:'cave'},get_entity:()=>null,setInterval:()=>1,clearInterval(){}});
  Date.now=()=>now;
  const shared={usesGroupedCombat:()=>enabled,queueMembers:()=>enabled?['W']:[],sharedTargetId:()=>null,queueClockOffset:()=>0,
   acceptQueue:g=>{group=g;root.__partyGroupedCombat=g;},
-  queueAcknowledgement:()=>({groupedCombat:{ack:group?.selection,queueAck:group?.queueRevision}}),
-  queueReport:()=>({server:'USII',travelSample:{sequence:++sequence},groupedCombat:{ack:group?.selection,queueAck:group?.queueRevision,deaths:[...deaths]}}),
+  queueAcknowledgement:()=>({groupedCombat:{independentReady:ready,ack:group?.selection,queueAck:group?.queueRevision}}),
+  queueReport:()=>({server:'USII',travelSample:{sequence:++sequence},groupedCombat:{independentReady:ready,ack:group?.selection,queueAck:group?.queueRevision,deaths:[...deaths]}}),
   queueRequest:body=>new Promise((resolve,reject)=>pending.push({body,resolve,reject}))};
  const client=installQueueClient(root,shared);
  const response=(g=group)=>({groupedCombat:g,combatRevision:g?.selection||'empty'});
- try{await run({client,root,deaths,pending,response,reports:()=>pending.filter(r=>r.body.combatOnly),waits:()=>pending.filter(r=>r.body.combatWait),now:v=>now=v,disable:()=>enabled=false});}
+ try{await run({client,root,deaths,pending,response,reports:()=>pending.filter(r=>r.body.combatOnly),waits:()=>pending.filter(r=>r.body.combatWait),now:v=>now=v,readiness:v=>ready=v,listeners,disable:()=>enabled=false});}
  finally{client.stop();Date.now=dateNow;Object.assign(global,saved);}
 }
 test('death while report is in flight flushes the newest state immediately and coalesces changes',()=>fixture(async f=>{
@@ -65,3 +65,19 @@ test('handoff timing preserves local times, ignores old-target results, and stay
  assert.equal(entries[4].at-entries[0].at,80);
  for(let i=0;i<300;i++)t.event('timer',{sequence:i});assert.equal(entries.length,256);
 });
+
+test('native position events immediately send changed range readiness without timestamp echo loops',()=>fixture(async f=>{
+ f.client.tick();f.reports()[0].resolve(f.response());await settle();
+ f.readiness({target:'A',selection:'s',at:1000,ready:true,confirmation:'c1'});
+ f.listeners.get('player')?.({});await settle();assert.equal(f.reports().length,2);
+ f.reports()[1].resolve(f.response());await settle();
+ f.readiness({target:'A',selection:'s',at:1001,ready:true,confirmation:'c1'});f.listeners.get('entities')?.({});await settle();assert.equal(f.reports().length,2);
+ f.readiness({target:'A',selection:'s',at:1001,ready:false});f.listeners.get('entities')?.({});await settle();assert.equal(f.reports().length,3);
+ f.client.stop();assert.equal(f.listeners.size,0);
+}));
+
+test('range confirmation commit receipt is traced once per actual challenge',()=>fixture(async f=>{
+ f.client.tick();const first={selection:'s',target:{id:'A',state:'planned'},committed:true,independentConfirmation:{id:'c1'}};f.reports()[0].resolve(f.response(first));await settle();
+ const next={...first,independentConfirmation:{id:'c2'}};f.waits()[0].resolve(f.response(next));await settle();
+ assert.deepEqual(f.root.__partyHandoffTrace.filter(e=>e.stage==='range-commit-received').map(e=>e.confirmation),['c1','c2']);
+}));

@@ -3,7 +3,6 @@ import { MerchantCollectionSettings, type MerchantCollectionSettingsProps } from
 import { useClock } from "@/hooks/use-clock";
 import { MerchantActivityLog } from "@/components/merchant-activity";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Check,
   ChevronRight,
@@ -27,6 +26,9 @@ import { PartyState } from "./party-state";
 import { SendToPartyControl } from "./send-to-party-control";
 import { MerchantCancelJobControl } from "./merchant-cancel-job-control";
 import { routineFor } from '../../../runtime/coordinator/merchant/routines';
+import { coordinatorMerchantTransferBlocked } from '../../../runtime/coordinator/merchant/job-policy';
+import { collectsPartyItems, pickupReason } from '../../../runtime/coordinator/merchant/pickup-jobs';
+import { useCharacterData } from './dashboard-live';
 
 export const MerchantCardControls = memo(function MerchantCardControls({
   state: baseState,
@@ -64,9 +66,10 @@ export const MerchantCardControls = memo(function MerchantCardControls({
   const logs = useQueries({ queries: [{ ...domainOptions(client, 'logs'), enabled: visible }].filter(() => activityOpen) })[0];
   const state = { ...baseState, ...logs?.data };
   const [cleanupResult, setCleanupResult] = useState<string | null>(null);
-  const [productionReviewReasons, setProductionReviewReasons] = useState<Record<string, string>>({});
-  const [productionReviewError, setProductionReviewError] = useState<string | null>(null);
-  const merchant = state.merchantCharacter ? state.characters[state.merchantCharacter] : null;
+  const inventory = useCharacterData(state.merchantCharacter || "", 'inventory');
+  const merchantStatus = state.merchantCharacter ? state.characters[state.merchantCharacter] : null;
+  const merchant = merchantStatus ? {...merchantStatus, ...inventory} : null;
+  const inventoryAtCapacity = Array.isArray(merchant?.items) && merchant.items.filter(entry => !entry).length <= 3;
   const readiness = (mode: "fishing" | "mining") => {
     const remaining = Math.max(
       0,
@@ -91,7 +94,16 @@ export const MerchantCardControls = memo(function MerchantCardControls({
     );
   };
   const jobLabel = (job: MerchantJob) => merchantJobLabel(job, state.merchantCatalog?.allItems);
-  const merchantJobs = [
+  const capacityBlocked = (job: MerchantJob) => {
+    if (job.reason === "fishing" || job.reason === "mining") return inventoryAtCapacity;
+    const reason = pickupReason(job.reason, job.target, state.merchantCharacter);
+    return coordinatorMerchantTransferBlocked(
+      { merchantCharacter: state.merchantCharacter || null, statuses: {...state.characters, ...(merchant && state.merchantCharacter ? {[state.merchantCharacter]: merchant} : {})} },
+      { ...job, reason: collectsPartyItems(reason) ? "marked items" : reason },
+    );
+  };
+  const capacityReason = `Merchant capacity blocked (${merchant?.items?.filter(Boolean).length}/${merchant?.items?.length} slots occupied; three slots reserved)`;
+  const merchantJobs: {job: MerchantJob; status: string}[] = [
     ...(state.merchantCurrent
       ? [
           {
@@ -104,7 +116,13 @@ export const MerchantCardControls = memo(function MerchantCardControls({
           },
         ]
       : []),
-    ...(state.merchantQueue || []).map((job) => ({ job, status: "queued" })),
+    ...(state.merchantQueue || []).map((job) => ({ job, status: capacityBlocked(job) ? (job.reason === "fishing" || job.reason === "mining" ? "BLOCKED" : "blocked") : "queued" })),
+    ...(state.gatheringModes || []).filter((mode): mode is "fishing" | "mining" =>
+      (mode === "fishing" || mode === "mining") &&
+      Math.max(Number(merchant?.gatheringCooldowns?.[mode] || 0), Number(state.gatheringCooldowns?.[mode] || 0)) <= now &&
+      ![state.merchantCurrent, ...(state.merchantQueue || [])].some(job => job?.reason === mode)
+    ).map(mode => ({job: {reason: mode, target: state.merchantCharacter || ""} satisfies MerchantJob,
+      status: inventoryAtCapacity ? "BLOCKED" : "queued"})),
   ];
   return (
     <section className="border-b border-amber-900/70 bg-amber-400/[0.03] p-4">
@@ -122,7 +140,7 @@ export const MerchantCardControls = memo(function MerchantCardControls({
               key={job.id || `${job.reason}-${index}`}
               className="flex min-w-0 items-center gap-3 text-left"
             >
-              {status === "queued" && job.reason !== "fishing" && job.reason !== "mining" ? (
+              {(status === "queued" || status === "blocked") && job.reason !== "fishing" && job.reason !== "mining" ? (
                 <MerchantCancelJobControl id={job.id} reason={routineFor(job)} label={jobLabel(job)} onCancel={onCancelJob} />
               ) : null}
               <span title={`${jobLabel(job)}${job.target && job.reason !== "join giveaway" ? ` · ${job.target}` : ""}`}
@@ -136,7 +154,7 @@ export const MerchantCardControls = memo(function MerchantCardControls({
                 {jobLabel(job)}
                 {job.target && job.reason !== "join giveaway" ? ` · ${job.target}` : ""}
               </span>
-              <span className="max-w-32 shrink-0 truncate text-emerald-100/70" title={job.realmBlockedReason || job.pauseReason || status}>{job.realmBlockedReason || (job.retryAt && job.retryAt > Date.now() ? `Retry at ${new Date(job.retryAt).toLocaleTimeString()}` : job.pauseReason || status)}</span>
+              <span className={`max-w-32 shrink-0 truncate ${status.toLowerCase() === "blocked" ? "text-red-400" : "text-emerald-100/70"}`} title={status.toLowerCase() === "blocked" ? capacityReason : job.realmBlockedReason || job.pauseReason || status}>{status.toLowerCase() === "blocked" ? status : job.realmBlockedReason || (job.retryAt && job.retryAt > now ? `Retry at ${new Date(job.retryAt).toLocaleTimeString()}` : job.pauseReason || status)}</span>
               {job.realmRetryExhausted && <button type="button"
                 className="rounded border border-amber-600 bg-zinc-950 px-2 py-1 text-amber-200 hover:border-amber-300 hover:bg-amber-950 hover:text-white"
                 onClick={() => action.mutate({ path: '/merchant/job/retry', body: { id: job.id } })}>Retry</button>}
@@ -195,75 +213,6 @@ export const MerchantCardControls = memo(function MerchantCardControls({
           </div>
           <MerchantActivityLog entries={state.merchantActivity || []} />
         </details>
-      {merchant?.upgradeInventoryBusy && merchant.luckyRecoveryError && !state.merchantCurrent ? (
-        <div role="alert" className="grid gap-2 rounded border border-amber-600 bg-[#1a1206] p-2 text-xs text-amber-100">
-          <p className="font-semibold">Merchant work is held: inventory recovery keeps failing</p>
-          <p className="break-words font-mono text-[10px] text-amber-200">{merchant.luckyRecoveryError.message}</p>
-          <p>Clearing drops the stuck lucky-slot journal so jobs can run again. Items stay where they are; check the lucky slot afterwards.</p>
-          <Button
-            variant="outline"
-            disabled={action.isPending}
-            onClick={() => {
-              if (!confirm("Clear the merchant's stuck lucky-slot journal? Items stay where they are.")) return;
-              action.reset();
-              action.mutate({ path: '/merchant/clear-lucky-journal', body: {} });
-            }}
-            className="h-9 border-amber-400 bg-[#07100f] text-xs text-amber-100 hover:bg-amber-950 hover:text-white"
-          >
-            Clear stuck lucky-slot journal
-          </Button>
-        </div>
-      ) : null}
-      {!state.merchantCurrent && (state.productionPending || []).length ? (
-        <div role="alert" className="grid gap-2 rounded border border-orange-600 bg-[#1a1206] p-2 text-xs text-orange-100">
-          <p className="font-semibold">Merchant work is held: a production outcome needs review</p>
-          <p>
-            Recovery couldn&apos;t confirm what happened, so no further production can start until each
-            attempt below is reviewed. This never affects upgrade/compound quotas either way.
-          </p>
-          {(state.productionPending || []).map((attempt) => (
-            <div key={attempt.id} className="grid gap-1.5 rounded border border-orange-800 bg-[#0f0a04] p-2">
-              <p className="font-mono text-[10px] text-orange-200">
-                {attempt.kind} {attempt.name} +{attempt.level - 1} → +{attempt.level}
-                {attempt.journal ? ` (${attempt.journal.phase})` : " (no local journal)"}
-              </p>
-              <Textarea
-                value={productionReviewReasons[attempt.id] || ""}
-                onChange={(event) =>
-                  setProductionReviewReasons((previous) => ({ ...previous, [attempt.id]: event.target.value }))
-                }
-                placeholder="Review reason (required)"
-                className="min-h-16 border-orange-700 bg-[#07100f] text-xs text-orange-100 placeholder:text-orange-500/70 focus-visible:ring-orange-500/50"
-              />
-              <Button
-                variant="outline"
-                disabled={action.isPending || !(productionReviewReasons[attempt.id] || "").trim()}
-                onClick={() => {
-                  const reason = (productionReviewReasons[attempt.id] || "").trim();
-                  if (!reason) return;
-                  if (!confirm("Mark this production attempt reviewed? This does not undo or redo anything in-game.")) return;
-                  setProductionReviewError(null);
-                  action.reset();
-                  action.mutate(
-                    { path: '/merchant/production', body: {
-                      character: state.merchantCharacter, action: 'resolve-unknown', id: attempt.id,
-                      item: { name: attempt.name, level: attempt.level - 1 }, kind: attempt.kind, reason,
-                    } },
-                    { onError: (error) => setProductionReviewError(error instanceof Error ? error.message : 'Review failed'),
-                      onSuccess: () => setProductionReviewReasons((previous) => { const next = { ...previous }; delete next[attempt.id]; return next; }) },
-                  );
-                }}
-                className="h-9 border-orange-400 bg-[#07100f] text-xs text-orange-100 hover:bg-orange-950 hover:text-white"
-              >
-                Mark reviewed
-              </Button>
-            </div>
-          ))}
-          {productionReviewError ? (
-            <p className="break-words font-mono text-[10px] text-rose-300">{productionReviewError}</p>
-          ) : null}
-        </div>
-      ) : null}
       <div className="grid grid-cols-2 gap-2">
         <Button
           variant="outline"
@@ -306,15 +255,6 @@ export const MerchantCardControls = memo(function MerchantCardControls({
           Join giveaway
         </Button>
         <SendToPartyControl state={state} onSend={onBank} />
-        <Button
-          variant="outline"
-          disabled={action.isPending}
-          onClick={() => { action.reset(); action.mutate({ path: '/merchant/bank-visit', body: {} }); }}
-          className="h-9 border-sky-700 bg-[#07100f] text-xs text-sky-200 hover:bg-sky-950 hover:text-sky-50"
-        >
-          <Landmark className="mr-1.5 h-3.5 w-3.5" />
-          Visit bank
-        </Button>
         <Button
           variant="outline"
           aria-pressed={state.merchantForceStand === true}

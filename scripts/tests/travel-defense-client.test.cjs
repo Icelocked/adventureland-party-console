@@ -12,7 +12,7 @@ function fixture(grouped=false){
   ['  function dungeonOwned()', '  function cavePartyNames()'],
   ['  function groupedEntityReport(', '  function groupedThreatReports('],
   ['  function departureTargetEngaged(', '  function inFarmRadius('],
-  ['  function groupedAttackAllowed(', '  var groupRegroup ='],
+  ['  function independentPullReady(', '  var groupRegroup ='],
   ['  function isAllowedTarget(', '  function sameEventTeamMember('],
   ['  function getNearestPartyAttacker(', '  function getNearestPartyTarget('],
   ['  async function afterCombat(', '  function inFarmArea('],

@@ -1,9 +1,11 @@
+import {terminalSettlementMatches} from './terminal-settlement.ts';
 import {classifyTravelDefense} from './travel-defense.ts';
 import { requestObject } from '../http/contracts.ts';
 import { routeOwner, routeIdentityOwned, sharedRoute } from './shared-route-store.ts';
 import { isPoint, type Point } from '../../navigation/contracts.ts';
-import type { SharedState, SharedConvoy } from './shared-route-types.ts';
-interface Barrier { key: string; ready: Map<string, number>; completed: Set<string>; releasedAt?: number }
+import type { SharedState, SharedConvoy, SharedStatus } from './shared-route-types.ts';
+interface ReadyAcknowledgement { at:number; owner:Record<string,unknown>; position:Pick<SharedStatus,'map'|'in'|'x'|'y'> }
+interface Barrier { key: string; ready: Map<string, ReadyAcknowledgement>; completed: Set<string>; releasedAt?: number }
 const barriers = new WeakMap<SharedConvoy, Map<string, Barrier>>();
 function getBarrier(c: SharedConvoy, key: string): Barrier {
   let store = barriers.get(c); if (!store) { store = new Map(); barriers.set(c, store); }
@@ -29,14 +31,30 @@ export function movementBarrier(state: SharedState, input: unknown, now: number)
   const barrier = getBarrier(c, key);
   const name = String(body.character), members = c.participants.filter(n => !c.completed.includes(n));
   if(townBlocked(state,c,barrier,body,now))return {ready:false,waiting:'fresh party observations without attackers'};
-  acknowledge(barrier,body,name,now);
-  if (body.completed === true) return { ready: members.every(n => barrier!.completed.has(n)) };
-  if (!barrier.releasedAt && members.every(n => barrier.ready.has(n) && barrier.ready.get(n)! >= now - 1000)) barrier.releasedAt = now;
+  acknowledge(state,barrier,body,name,now);
+  if (body.completed === true) return completedBarrier(state,c,barrier,members,body,now);
+  if (!barrier.releasedAt && members.every(n => readyOwner(state,barrier.ready.get(n),now))) barrier.releasedAt = now;
   return { ready: !!barrier.releasedAt };
 }
-function acknowledge(barrier: Barrier, body: Record<string,unknown>, name: string, now: number): void {
+function stopped(status:SharedStatus|undefined):status is SharedStatus {
+  return !!status && !status.rip && status.hp!==0 && !status.moving && !status.transporting &&
+    typeof status.map==='string' && Number.isFinite(status.x) && Number.isFinite(status.y);
+}
+function readyOwner(state:SharedState,ack:ReadyAcknowledgement|undefined,now:number):boolean {
+  if(!ack || ack.at<now-3000 || !routeOwner(state,ack.owner,now))return false;
+  const status=state.statuses[String(ack.owner.character)],position=ack.position;
+  return stopped(status) && status.seenAt<=now+500 && status.map===position.map &&
+    String(status.in??status.map)===String(position.in??position.map) &&
+    Math.hypot(status.x-position.x,status.y-position.y)<=1;
+}
+function acknowledge(state:SharedState,barrier: Barrier, body: Record<string,unknown>, name: string, now: number): void {
   if(body.completed===true)barrier.completed.add(name);
-  else if(body.ready===true)barrier.ready.set(name,now);
+  else if(body.ready===true && stopped(state.statuses[name])) {
+    const status=state.statuses[name]!;
+    // Readiness shares the existing fresh-owner window, and is valid only at
+    // the same stopped native position. It never renews a client's walking lease.
+    barrier.ready.set(name,{at:now,owner:{...body},position:{map:status.map,in:status.in,x:status.x,y:status.y}});
+  }
   else if(!barrier.releasedAt)barrier.ready.delete(name);
 }
 function unavailable(state: SharedState, body: Record<string,unknown>, now: number) {
@@ -57,4 +75,9 @@ function publishedStep(c: SharedConvoy, body: Record<string,unknown>): boolean {
 function townBlocked(state:SharedState,c:SharedConvoy,barrier:Barrier,body:Record<string,unknown>,now:number):boolean {
   return !barrier.releasedAt && !!c.continuousReturn && !!(body.destination as {town?:boolean}).town &&
     classifyTravelDefense(state,c.participants,now).state!=='clear';
+}
+
+function completedBarrier(state:SharedState,c:SharedConvoy,barrier:Barrier,members:string[],body:Record<string,unknown>,now:number) {
+  if(barrier.releasedAt)for(const peer of members)if(terminalSettlementMatches(state,c,peer,Number(body.step),body.destination as Point,now))barrier.completed.add(peer);
+  return {ready:members.every(n=>barrier.completed.has(n))};
 }

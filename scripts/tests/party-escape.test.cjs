@@ -215,3 +215,14 @@ test('overlapping potion pulses only issue one request',async()=>{
  await r.escapePotions(()=>true);assert.deepEqual(casts,['use_mp']);
  finish();await first;
 });
+
+
+test('recovery does not cancel a moving survivor passing through the Town safety radius',()=>{
+ const f=fixture(),e=f.start();f.party.statuses.warrior.rip=true;f.control.step();
+ for(const status of Object.values(f.party.statuses))Object.assign(status,{rip:false,map:'main',in:'main',x:30,y:0,moving:false});
+ f.party.statuses.warrior.moving=true;f.control.step();assert.equal(e.stage,'recovering');
+ f.party.statuses.warrior.moving=false;f.party.statuses.warrior.movement={id:'owned-return',remaining:2};f.control.step();assert.equal(e.stage,'recovering');
+ f.party.statuses.warrior.movement={id:'owned-return',done:true};f.control.step();assert.equal(e.stage,'recovery-convoy');
+ f.party.statuses.warrior.moving=true;f.control.step();assert.equal(e.stage,'recovery-convoy');
+ f.party.statuses.warrior.moving=false;f.control.step();assert.equal(e.stage,'failed-hold');
+});
