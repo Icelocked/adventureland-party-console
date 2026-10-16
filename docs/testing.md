@@ -911,3 +911,15 @@ writes to occupied slots. The browser bridge must choose a free numbered slot
 and preserve unrelated cache and its original snapshot. Native 17665 documents
 numbered slots 1–100 in `/savecode` and `filename_to_cdata`; a missing `X.codes`
 inventory is unknown and must not be treated as an empty account.
+
+## Accelerated simulation and local benchmark
+
+Issue #58's optional [ChronAL harness](../tools/sim/README.md) runs the real native
+server, coordinator, route planner and staged character CODE on a seeded virtual
+clock. Use Node 24+, `npm run sim:setup`, then `npm run sim:benchmark` for a bounded
+farming comparison with a paced baseline, accelerated run and traced replay. Reports
+include wall time and timeline hashes; the benchmark retains a hashed evidence manifest.
+Use `npm run sim -- tools/sim/scenarios/farm-goo.json` for the two-hour soak.
+This is separate from `npm test`; existing browser/native coverage remains required.
+Simulation throughput measures virtual gameplay per wall second and does not imply
+that the Playwright suite itself runs faster.
