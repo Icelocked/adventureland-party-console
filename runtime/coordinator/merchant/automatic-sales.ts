@@ -8,6 +8,7 @@ import type { StandMark } from "./stand-marks.ts";
 import { reconcilePlayerSales, type PlayerSaleState } from "./player-npc-sales.ts";
 import { bankCollectionReason } from './bank-collection.ts';
 import { protectedMerchantStorageStock } from '../inventory/merchant-storage-stock.ts';
+import { keptNpcSaleCopies, keptNpcSaleRule, npcSaleSpare } from './npc-sale-keep.ts';
 
 interface AutomaticStandMark extends StandMark {
   auto?: boolean;
@@ -43,21 +44,12 @@ interface SalesPorts {
 
 /** Materialize automatic sale intent, then recover runnable work from durable marks. */
 export function createAutomaticMerchantSales(state: SalesState, ports: SalesPorts) {
-  /**
-   * #116: a rule with `keep` sells only what exceeds it. Spare stock is what the merchant's bag,
-   * bank and BankBois hold outside craft reservations, less copies already marked or being
-   * withdrawn for sale. One allowance serves a whole marking pass.
-   */
+  /** #116: a rule with `keep` sells only its spare stock. One allowance serves a whole marking pass. */
   function saleAllowance(): (key: string, quantity: number) => number {
-    const kept = Object.entries(state.autoNpcSales).filter(([, rule]) => !rule.character && Number.isSafeInteger(rule.keep));
+    const kept = Object.keys(state.autoNpcSales).flatMap(key => { const rule = keptNpcSaleRule(state, key); return rule ? [[key, rule.keep] as const] : []; });
     if (!kept.length) return (_key, quantity) => quantity;
-    const stock = protectedMerchantStorageStock(state), pending = state.withdrawals?.[String(state.merchantCharacter)] || [];
-    const spare = new Map(kept.map(([key, rule]) => {
-      const held = stock.filter(entry => entry.item && automaticCommerceRuleKey(entry.item) === key).reduce((sum, entry) => sum + entry.storageQuantity, 0);
-      const marked = state.npcSaleMarks.filter(mark => mark.source === "merchant" && mark.autoRuleKey === key).reduce((sum, mark) => sum + (Number(mark.quantity) || 1), 0);
-      const withdrawing = pending.filter(mark => mark.autoNpcRuleKey === key).reduce((sum, mark) => sum + (Number(mark.item?.q) || 1), 0);
-      return [key, held - rule.keep! - marked - withdrawing] as const;
-    }));
+    const stock = protectedMerchantStorageStock(state);
+    const spare = new Map(kept.map(([key, keep]) => [key, npcSaleSpare(state, key, keep, stock)] as const));
     return (key, quantity) => {
       const available = spare.get(key);
       if (available === undefined) return quantity;
@@ -253,12 +245,26 @@ export function createAutomaticMerchantSales(state: SalesState, ports: SalesPort
     return sales.changed;
   }
 
+  // #116: carried kept copies hold bank marks; a bank trip deposits them. Retry a full bank slowly.
+  let keptBankAt = -Infinity;
+  function keptCopiesCarried(items: readonly (SaleEntry | null)[]): boolean {
+    if (state.merchantCurrent || state.merchantQueue.some(job => job.target === state.merchantCharacter) ||
+        ports.now() - keptBankAt < 600000) return false;
+    const kept = keptNpcSaleCopies(state);
+    if (!items.some(entry => entry?.item && Number.isSafeInteger(entry.slot) && kept(entry))) return false;
+    keptBankAt = ports.now();
+    return true;
+  }
+  function queueBankTrip(items: readonly (SaleEntry | null)[]): void {
+    const collection = bankCollectionReason(state);
+    if (collection) ports.queue([state.merchantCharacter], collection);
+    else if (keptCopiesCarried(items)) ports.queue([state.merchantCharacter], "manual bank exchange");
+  }
   function reconcileMerchant(items: readonly (SaleEntry | null)[]): boolean {
     // Banked sales also reserve capacity against opportunistic buys.
     const marks = markInventory(items), bankChanged = markBankStock();
     const changed = reconcileSales(items) || marks.changed || bankChanged;
-    const collection = bankCollectionReason(state);
-    if (collection) ports.queue([state.merchantCharacter], collection);
+    queueBankTrip(items);
     if (bankChanged && bankStandPending())
       ports.queue([state.merchantCharacter], "manual bank exchange");
     if (marks.standChanged || bankChanged) {
