@@ -321,7 +321,7 @@ test('a vote that lands after the choice resolved no longer blocks later dungeon
   journal.save(vote, 'dispatched');
   const gather = { id: 'g1', run: 'r1', action: 'gather' };
   assert.equal(journal.blocked(gather), true);
-  // The other two votes resolved the choice; this character's vote was never recorded.
+  // The other two votes resolved the choice, and the game never recorded this character's vote.
   journal.reconcile({ run: 'r1', floor: 0, choice: { id: 'c1', resolved: true, votes: { A: 'fight', B: 'fight' } } }, 'Leader');
   assert.equal(journal.blocked(gather), false);
   journal.save({ ...vote, id: 'v2', choice: 'c2' }, 'dispatched');

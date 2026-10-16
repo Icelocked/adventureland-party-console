@@ -180,7 +180,7 @@ export function createHeartbeatResponse(state: HeartbeatState, ports: HeartbeatR
   }
 
   /** Bosses on the Achievement Hunt target's ground (docs/achievement-hunt.md § Bosses). Characters
-   *  clear their list when the field is absent, so only a list with bosses is sent. */
+   *  clear their list when the field is absent, so the coordinator sends it only with bosses in it. */
   function avoidMonsters(): { avoidMonsters?: string[] } {
     const avoid = state.farmingPolicy === "achievements" ? state.achievementTarget?.avoid || [] : [];
     return avoid.length ? { avoidMonsters: avoid } : {};

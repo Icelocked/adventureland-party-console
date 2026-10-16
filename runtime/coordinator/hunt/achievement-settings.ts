@@ -38,7 +38,7 @@ export interface AchievementTargetState {
   standInFor?: string;
 }
 
-// The live test ran with 6, and White Wolf was blacklisted on its sixth death.
+// The live test ran with 6, and the hunt blacklisted White Wolf on its sixth death.
 export const defaultAchievementHuntSettings: AchievementHuntSettings = {
   monsters: [],
   blacklistDeaths: true,
