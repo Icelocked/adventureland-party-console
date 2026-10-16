@@ -627,7 +627,7 @@ export function startCoordinatorApplication(
         refresh: () => my_acc.updateInfo(),
         later: (callback, milliseconds) => setTimeout(callback, milliseconds),
         assign: assignHeadlessSlot,
-        persistBank: persistBankState,
+        persistBank: () => { adoptReservedBankboiCargo(); persistBankState(); },
         serviceBank: maybeStartBankboiService,
         log: merchantLog,
       });
@@ -986,6 +986,8 @@ export function startCoordinatorApplication(
       now: () => Date.now(),
       persist: persistBankState,
     });
+    // Restore reserved-row intent even when the merchant reconnects outside the bank.
+    reservedBankboiCargo.reconcile();
     const inventoryReservations = coordinatorPolicies.createInventoryReservations(party);
     const bankQueueService = coordinatorPolicies.createBankQueue(party, {
       now: () => Date.now(),

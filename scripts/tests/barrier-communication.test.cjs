@@ -9,6 +9,14 @@ function fixture(handler){
  return {c,command,run:done=>c.sharedMovementOptions(command).barrier({map:'main',x:0,y:0,town:true},0,done),calls:()=>calls};
 }
 const timeout=()=>Object.assign(new Error('timeout'),{partyRequest:{path:'/movement-barrier',kind:'timeout',status:0}});
+test('disabled Town is excluded from every shared walking planner including event retries',()=>{
+ const f=fixture(()=>({ready:true}));
+ for(const extra of [{purpose:'shared-walk'},{purpose:'shared-walk-return'},
+ {purpose:'monster-hunt',phase:'plan-return',allowTown:true},{routeRecovery:{relocation:'town'}}]){
+  assert.equal(f.c.sharedMovementOptions({...f.command,continuousReturn:undefined,...extra,disableTown:true}).town,false);
+ }
+ assert.equal(f.c.sharedMovementOptions({...f.command,continuousReturn:undefined,purpose:'shared-walk'}).town,true);
+});
 for(const completed of [false,true])test('lost '+(completed?'arrival':'departure')+' response retries the same barrier identity',async()=>{
  const bodies=[];const f=fixture((count,c,args)=>{bodies.push(args[1].body);if(count===1)throw timeout();return {ready:true};});
  assert.equal(await f.run(completed),true);assert.equal(f.calls(),2);assert.deepEqual(JSON.parse(JSON.stringify(bodies[0])),JSON.parse(JSON.stringify(bodies[1])));

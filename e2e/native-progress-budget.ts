@@ -9,9 +9,10 @@ export function createNativeProgressBudget(clock:()=>number,idleMs:number,totalM
  return {
   check,
   observe(markers:readonly string[]){
-   check();let changed=false;
+   if(clock()-startedAt>=totalMs)throw Error('Native required rooms exceeded the absolute completion budget');
+   let changed=false;
    for(const marker of markers){if(!seen.has(marker)){seen.add(marker);changed=true;}}
-   if(seeded&&changed)lastProgressAt=clock();seeded=true;
+   if(seeded&&changed)lastProgressAt=clock();seeded=true;check();
   },
   snapshot(){return{startedAt,lastProgressAt,elapsedMs:clock()-startedAt,quietMs:clock()-lastProgressAt,
    idleMs,totalMs,markers:[...seen]};},

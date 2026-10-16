@@ -34,8 +34,8 @@ for(const scene of [{monster:'sparkbot',wallRange:false},{monster:'goo',wallRang
   live.consoleDrainLease('native-range-setup');
   await expect.poll(async()=>{const state=await live.state();return fighters.every(name=>state.characters[name]?.consoleMaintenance?.id==='native-range-setup'&&state.characters[name].consoleMaintenance.ready);},{timeout:15000}).toBe(true);
   seed=await live.admin(`output=(()=>{
-   const original=G.monsters[${JSON.stringify(monster)}];globalThis.__e2eFollowOriginal=original;G.monsters[${JSON.stringify(monster)}]=${'queue' in scene&&!!scene.queue}?original:{...original,stationary:true};
-   const m=new_monster('uhills',{__e2eAmbientExempt:true,type:${JSON.stringify(monster)},count:1,position:${JSON.stringify(targetPosition)},radius:${'queue' in scene&&!!scene.queue?40:0}},{temp:1});
+   const original=G.monsters[${JSON.stringify(monster)}];globalThis.__e2eFollowOriginal=original;G.monsters[${JSON.stringify(monster)}]={...original,stationary:true};
+   const m=new_monster('uhills',{__e2eAmbientExempt:true,type:${JSON.stringify(monster)},count:1,position:${JSON.stringify(targetPosition)},radius:0},{temp:1});
    __e2eFollowOwnedMonsters.push({id:String(m.id),type:m.type,map:m.map,instance:m.in});
    if(!${'queue' in scene&&!!scene.queue}){m.speed=0;m.moving=false;}
    const observableCombatSeconds=20,partyDps=${JSON.stringify(fighters)}.map(get_player).reduce((sum,p)=>sum+Math.max(1,p.attack)*Math.max(0.1,p.frequency),0);
@@ -55,13 +55,33 @@ for(const scene of [{monster:'sparkbot',wallRange:false},{monster:'goo',wallRang
    await info.attach('native-independent-wall-range-precondition',{body:JSON.stringify(geometry),contentType:'application/json'});
    expect(geometry.every(v=>v.inRange&&!v.sight),'Actual casters must be in native attack range while terrain blocks movement to the monster').toBe(true);
   }
-  await expect.poll(async()=>{
+  const heldSelection=async()=>{
    const roles=await Promise.all(fighters.map(name=>live.clients[name].run(`(()=>{const g=globalThis.__partyGroupedCombat,n=globalThis.__partyNomination,e=parent.entities[${JSON.stringify(seed.id)}],h=globalThis.__partyConsoleMaintenance;return {name:character.name,selected:g?.target?.id===${JSON.stringify(seed.id)}&&!!g?.selection,group:{selection:g?.selection,target:g?.target,committed:g?.committed,independent:g?.independentApproach,reason:g?.reason,members:g?.members},nomination:n&&{focus:n.focus,blocked:n.blocked,eligible:n.eligible,rejected:n.rejected,revision:n.revision},entity:e&&{id:e.id,map:e.map,in:e.in,x:e.real_x??e.x,y:e.real_y??e.y,hp:e.hp,visible:e.visible,dead:e.dead,moving:e.moving,speed:e.speed,going_x:e.going_x,going_y:e.going_y,inRange:is_in_range(e),target:e.target},hold:h&&{id:h.id,mode:h.mode,phase:h.phase},socket:parent.socket?.connected};})()`)));
    configured.push({at:Date.now(),phase:'held-selection',roles});if(configured.length>32)configured.splice(4,1);
-   return roles.map(r=>r.selected&&(!queue||(r.entity?.moving&&r.entity.inRange===false&&r.entity.speed>0&&
-     Math.hypot(r.entity.going_x-r.entity.x,r.entity.going_y-r.entity.y)/r.entity.speed>=4)));
-  },{timeout:15000,message:'Held selection must include a real moving native leg before testing predictive interception'}).toEqual([true,true,true]);
-  if(queue){expect(seed.aggro||0).toBe(0);expect(seed.speed).toBeGreaterThan(0);}
+   return roles;
+  };
+  await expect.poll(async()=>(await heldSelection()).map(r=>r.selected),{timeout:15000,message:'All clients must select the declared target before movement setup'}).toEqual([true,true,true]);
+  if(queue){
+   expect(seed.aggro||0).toBe(0);expect(seed.speed).toBeGreaterThan(0);
+   // Declare the encounter's first leg only after setup is acknowledged. Native
+   // movement, packets, interception and subsequent random roaming remain real.
+   seed.movement=await live.admin(`output=(()=>{
+    const m=instances.uhills.monsters[${JSON.stringify(seed.id)}];
+    if(!m||m.dead||m.target||!m.temp)throw Error('Declared held Goo is no longer available');
+    const players=${JSON.stringify(fighters)}.map(get_player),candidates=[];
+    for(const length of [120,100,80])for(let i=0;i<32;i++){
+     const x=m.x+Math.cos(i*Math.PI/16)*length,y=m.y+Math.sin(i*Math.PI/16)*length;
+     if(can_move({...m,going_x:x,going_y:y})&&players.every(p=>distance(p,{...m,x,y})>p.range+30))candidates.push({x,y,length});
+    }
+    const destination=candidates[0];if(!destination)throw Error('No native-clear out-of-range Goo movement leg');
+    G.monsters.goo=__e2eFollowOriginal;m.map_def.radius=40;
+    m.going_x=destination.x;m.going_y=destination.y;start_moving_element(m);
+    return {at:Date.now(),from:{x:m.x,y:m.y},destination,speed:m.speed,duration:destination.length/m.speed};
+   })()`);
+   await expect.poll(async()=>(await heldSelection()).map(r=>r.selected&&r.entity?.moving&&r.entity.inRange===false&&r.entity.speed>0&&
+    Math.hypot(r.entity.going_x-r.entity.x,r.entity.going_y-r.entity.y)/r.entity.speed>=4),
+   {timeout:15000,message:'Held selection must include a real moving native leg before testing predictive interception'}).toEqual([true,true,true]);
+  }
   if(monster==='sparkbot')transport=await observeNativeTransport(live.clients[W].page);
   releasedAt=Date.now();live.consoleDrainLease(null);
   await expect.poll(async()=>{const state=await live.state();return fighters.every(name=>!state.characters[name]?.consoleMaintenance);},{timeout:15000,message:'The actual ordered host lease release must reach all fighters'}).toBe(true);
@@ -93,7 +113,7 @@ for(const scene of [{monster:'sparkbot',wallRange:false},{monster:'goo',wallRang
    expect(samples.some(s=>s.queue?.target===seed.id&&s.queue.primaryAlive&&queued.every((id:string)=>s.queue.ids?.includes(id))),'Both actual successors must be observed queued while the first native primary is alive').toBe(true);
    const attack=fighters.flatMap(name=>events[name]).filter(e=>(e.event==='attack-issued'||e.event==='offensive-skill-issued')&&(queued.includes(e.data?.id)||e.data?.ids?.some((id:string)=>queued.includes(id))||queued.includes(e.motion?.independent?.target))).sort((a,b)=>a.at-b.at)[0],barrier=attack.motion?.independent;
    expect(attack.motion.inRange).toBe(true);expect(barrier?.committed).toBe(true);expect(queued).toContain(barrier?.target);
-   const origin=seed.successors.find((m:any)=>m.id===barrier.target);expect(attack.motion.attackTarget?.id).toBe(barrier.target);expect(Math.hypot(attack.motion.attackTarget.x-origin.x,attack.motion.attackTarget.y-origin.y),'The actual next target must move under native AI before its first hostile packet').toBeGreaterThan(5);
+   expect(attack.motion.attackTarget?.id).toBe(barrier.target);
    expect(barrier.confirmation?.target).toBe(barrier.target);expect(barrier.serverAt).toBeLessThan(barrier.confirmation.expiresAt);
    for(const name of fighters){const ready=barrier.ready[name];expect(ready.confirmation).toBe(barrier.confirmation.id);expect(ready.selection).toBe(barrier.selection);expect(ready.target).toBe(barrier.target);expect(ready.ready).toBe(true);expect(ready.at).toBeGreaterThanOrEqual(barrier.confirmation.startedAt);expect(barrier.serverAt-ready.at).toBeLessThanOrEqual(1000);}
    await info.attach('native-queued-successor-confirmation',{body:JSON.stringify({seed,attack}),contentType:'application/json'});

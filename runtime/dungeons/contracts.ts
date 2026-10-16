@@ -84,6 +84,8 @@ export interface CaveObservation {
   };
 }
 export interface CaveCommand {
+  /** Destination repair plans from the displaced actor, not the old shared route. */
+  independent?: boolean;
   cruiseSpeed?: number;
   id: string;
   action: "gather" | "enter" | "move" | "vote" | "buy" | "exit" | "revival" | "stairs";
@@ -97,7 +99,7 @@ export interface CaveCommand {
   amber?: number;
 }
 export interface DungeonState {
-  travel?: { target: CavePoint; origin: CavePoint; stage: 'assembling' | 'travelling'; serial: number; repairs?:number; assemblyRepairs?:number };
+  travel?: { target: CavePoint; origin: CavePoint; stage: 'assembling' | 'travelling'; serial: number; repairs?:number; assemblyRepairs?:number; destinationRepairs?:number };
   stairContinuation?: CavePoint;
   progress?: { enabled: boolean; target?: string; floor?: number; serial: number; message?: string };
   protectFromEvents: boolean;

@@ -1,3 +1,20 @@
+Completed Cave destination movement is a historical receipt, not proof of current
+arrival. After every participant completes its move and is freshly ready, displaced
+actors receive independent native paths to the same destination, with three bounded
+repair rounds. These paths retain party combat readiness but do not reuse the old
+leader route or compare incompatible route progress. Stairs still require physical
+arrival and current receipts. Validate the native Cave farewell/stairs journey and
+its declared post-completion displacement; see docs/testing-completed-travel-recovery.md.
+
+Shared walking excludes Town whenever disableTown is set, including event entry.
+An exhausted, still-owned event entry starts the existing forced exit/checkpoint
+flow and marks that native occurrence with travel failure. Fresh participant status,
+matching saved navigation revisions, session membership and command ownership fence
+this recovery; newer commands and merchant interruption remain authoritative.
+Occurrence skips persist across restart and expire through native attendance identity.
+Validate live-event-entry-failure.spec.ts. Build character and coordinator assets
+together; activate only through an explicitly requested console load.
+
 Market display ignores are account settings keyed by item name and exact level;
 omitted native levels normalize to +0. They filter all marketplace tabs without
 changing merchant automation or trade intent. The ignored-item mutation route

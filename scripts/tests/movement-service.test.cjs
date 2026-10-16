@@ -101,6 +101,25 @@ test('ALClient planning executes validated segments, uses actual speed and permi
  assert.equal(r.request.town,true);assert.equal(r.request.speed,60);assert.equal(r.searches,0);assert.equal(r.c.x,100);r.dispose();
 });
 
+// Healing protection must start at send, survive delayed acknowledgement, and
+// end on actual arrival/rejection/cancellation. Waiting to depart or waiting for
+// peers after arrival must not suppress healing.
+test('Town healing protection covers only the sent, unresolved cast',async()=>{
+ const r=fixture(),{createMovementExecutor}=require('../../runtime/characters/movement-executor.ts');
+ let ready=false,acknowledge,now=1000; r.host.town=()=>new Promise(resolve=>{acknowledge=resolve;});
+ Object.assign(r.c,{x:200,real_x:200});
+ const e=createMovementExecutor(r.host,{plot:[{map:'main',x:0,y:0,town:true}],use_town:true},
+  {game:r.host.G,walk:()=>true,door:()=>true},()=>now);
+ const options={barrier:async(_s,_i,done)=>!done&&ready};
+ e.tick(options);await settle();assert.equal(e.townCasting(),false);
+ ready=true;now+=500;e.tick(options);await settle();e.tick(options);
+ assert.equal(e.townCasting(),true);
+ acknowledge();await settle();assert.equal(e.townCasting(),true);
+ Object.assign(r.c,{x:0,real_x:0});e.tick(options);
+ assert.equal(e.transition(),'town');assert.equal(e.townCasting(),false);
+ e.cancel();assert.equal(e.townCasting(),false);r.dispose();
+});
+
 test('Town arrival waits past the cast deadline for a follower without recasting or failing',async()=>{
  let follower=false;
  const r=fixture({plot:[{map:'main',x:0,y:0,town:true},{map:'main',x:100,y:0}]});
@@ -142,6 +161,7 @@ test('Town cast rejection reports interruption but cooldown rejection does not',
    {game:r.host.G,walk:()=>true,door:()=>true},()=>1000);
   const options={townAttempt:s=>outcomes.push(s)};
   e.tick(options);await settle();assert.throws(()=>e.tick(options));
+  assert.equal(e.townCasting(),false);
   assert.deepEqual(outcomes,['casting',reason==='cooldown'?'unavailable':'interrupted']);r.dispose();
  }
 });

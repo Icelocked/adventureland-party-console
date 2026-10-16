@@ -6,6 +6,20 @@ const vm = require('node:vm');
 const shared = fs.readFileSync(path.join(__dirname, '../../characters/shared.js'), 'utf8');
 const coordinator = require('./helpers/coordinator-source.cjs').coordinatorSource();
 
+test('displaced manual upgrade selects unfinished stock without treating finished duplicates as survivors',()=>{
+ const {namedFunction}=require('./helpers/named-function.cjs');
+ const items=Array(12).fill(null);items[3]={name:'ololipop',level:8};items[5]={name:'ololipop',level:8};items[10]={name:'ololipop',level:5};
+ const c=vm.createContext({character:{items},G:{items:{ololipop:{}}},maximumItemLevel:()=>13,
+  sameItem:(a,b)=>!!a&&!!b&&a.name===b.name&&(a.level||0)===(b.level||0)});
+ vm.runInContext(namedFunction(shared,'findUpgradeMarkSlot'),c);
+ const mark={requestId:'manual',slot:7,item:{name:'ololipop',level:5},tiers:3};
+ assert.equal(c.findUpgradeMarkSlot(mark,{}),10);
+ items[11]={name:'ololipop',level:6};
+ assert.throws(()=>c.findUpgradeMarkSlot(mark,{}),/Upgrade inventory recovery ambiguous.*ololipop.*5.*8/);
+ assert.equal(c.findUpgradeMarkSlot({...mark,liveSlot:11},{}),11);
+ assert.equal(c.findUpgradeMarkSlot(mark,{11:true}),10);
+});
+
 test('upgrade reselects a scroll moved during its asynchronous protection checkpoint', async () => {
   const {namedFunction} = require('./helpers/named-function.cjs');
   const items = [{name:'wcap',level:1},{name:'scroll0',q:4},null];

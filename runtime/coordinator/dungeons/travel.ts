@@ -109,7 +109,29 @@ export function createCaveTravel(
     return true;
   }
   function repairOrRegroup(d: DungeonState, t: NonNullable<DungeonState['travel']>) {
-    return repair(d,t) || regroup(d,t);
+    return repair(d,t) || regroup(d,t) || repairDestination(d,t);
+  }
+  function repairDestination(d: DungeonState, t: NonNullable<DungeonState['travel']>) {
+    if (t.stage !== 'travelling' || !d.participants.every(n =>
+      regroupReady(n,d,t.target) && receiptComplete(n,d.commands[n]))) return false;
+    const displaced = d.participants.filter(name => {
+      const command = d.commands[name];
+      return command?.action === 'move' && command.run === d.run &&
+        command.target?.id === t.target.id && command.target.map === t.target.map &&
+        command.target.x === t.target.x && command.target.y === t.target.y &&
+        receiptComplete(name, command) && !atPoint(name,t.target);
+    });
+    if (!displaced.length) return false;
+    if ((t.destinationRepairs || 0) >= 3) {
+      d.error = 'Cave destination repeatedly displaced after completion. Stop travel and choose the destination again.';
+      return true;
+    }
+    t.destinationRepairs = (t.destinationRepairs || 0)+1;
+    for (const name of displaced) ports.issue([name],'move',
+      `cave-travel:${d.run}:${t.serial}:regroup:${t.destinationRepairs}`,
+      {run:d.run,target:t.target,cruiseSpeed:d.commands[name]?.cruiseSpeed,independent:true});
+    ports.persist();
+    return true;
   }
   function repair(d: DungeonState, t: NonNullable<DungeonState['travel']>) {
     const failed = d.participants.some(n => {

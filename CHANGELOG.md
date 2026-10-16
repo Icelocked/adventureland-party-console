@@ -3,6 +3,41 @@
 ## Unreleased
 
 - Find giveaway hosts through the game's merchant directory when they are not in sight, walk to their stand and join, instead of failing at the market; report hosts on another realm, without an open stand, or inside the bank, and skip discovered giveaways inside the bank (#129). Expire queued giveaway jobs at the giveaway's real remaining time rather than two minutes after a marketplace observation, log a warning when one expires unattempted, and release its claim so a still-running giveaway is queued again.
+
+- Remove the arbitrary successor spawn-distance requirement from the queued Goo E2E test, retaining actual combat and fresh party confirmation checks. Allow 240 seconds for event-handoff checkpoint returns so communication safety holds can recover on slower CI runners.
+
+- Stabilize the roaming Goo E2E fixture by starting its declared native movement leg after all clients acknowledge target selection, preserving interception, damage and fresh whole-party confirmation checks.
+
+- Stabilize native merchant regressions around consumed compound ingredients and stand reconciliation. Split Cave interface/navigation coverage from floor completion and displaced-stairs recovery into fresh visits, retaining native combat and floor transitions without extending the game timer.
+
+- Resume travel toward the saved farming spawn when a targetless party has drifted apart. Empty-spawn recovery selects a newly visible eligible monster before reaching the spawn center, retaining independent approach and whole-party attack confirmation.
+- Fix the goldenbat Hunt regression's encounter-setup race at the spawn boundary. Preserve the hawk approach fixture's declared first-monster movement settings while its successors roam, and cover automatic spawn return with native movement and damage evidence.
+
+- Fix a lucky-slot E2E timing race by waiting for exact coordinator roll totals after merchant job completion. Document asynchronous fixture timing and evidence requirements in repository guidance.
+
+- Stabilize native terrain and Cave E2E checks: capture Targetron approach positions independently of sparse server updates, and recognize distinct native Cave travel, combat and encounter progress without extending the absolute completion deadline.
+- Declare the native layout for Cave shop-inspection coverage; retain randomized and missing-shop coverage in the separate regroup scenarios.
+
+- Prevent priest healing from cancelling an active Town cast during travel or event recovery. Healing resumes after arrival or interruption; waiting for departure or other party members still permits healing.
+
+- Keep declared Mr. Green and Mr. Pumpkin stats active throughout the native event-switch regression, including native stat recalculation, then restore them during cleanup. This prevents unintended boss movement from turning ranged damage checks into intermittent projectile misses.
+
+- Prevent native event-entry and manual-travel recovery tests from accidentally timing out planner requests while inspecting them. Fault injection now observes actual status traffic, preserves exact journey ownership, and records decision latency and transport failures.
+
+- Recover Cave participants displaced after completing a waypoint or stair approach, waiting for combat to clear and issuing bounded independent return paths before continuing the floor transition.
+- Honor disabled Town shortcuts during event walking retries. Exhausted event entry now returns the owned party through Main to its saved checkpoints and skips that occurrence, preventing stranded survivors and repeated rejoin attempts.
+
+- Match native manual-travel fault injection to the current assembly journey and command, preventing delayed event requests from causing false recovery-test failures.
+
+- Make native Cave regroup test setup tolerate an optional entry shop with no valid NPC placement, with a reproducible missing-shop layout alongside randomized coverage and unchanged regrouping checks.
+
+- Reconcile BankBoi transfer-row requests at startup and after account changes, clearing stale staging work when the final BankBoi is removed without requiring another bank visit.
+- Recover displaced manual upgrade work from unfinished inventory without confusing completed copies for survivors. Report item, levels and candidate slots for genuine ambiguity, and pause retries until relevant inventory or upgrade intent changes.
+
+- Keep approaching a selected combat target's last known position when it temporarily leaves everyone's view. Reacquisition preserves whole-party attack confirmation; confirmed local absence retires the target after the existing bounded search.
+
+- Update retained equipment-comparison and merchant-upgrade test fixtures for loadout totals and manual offering checkpoints, preserving their existing behavior assertions.
+
 - Apply upgrade offering rules to manual as well as automatic upgrades, collecting batch supplies from the bank and BankBoi before resuming. Preserve upgrade identities and intermediate progress through storage handoffs and restarts; wait for remote inputs before admitting upgrade work and retry interrupted storage checkpoints.
 - Let a peaceful priest round terrain toward the party's recovery mover, preserving combat and monster-clearance checks.
 - Hide irrelevant +0 levels on stand buy orders for items that cannot be upgraded or compounded.

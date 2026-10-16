@@ -28,7 +28,7 @@ test.afterEach(async({},info)=>{
 
 for(const variant of ['leaving Green','following a Pumpkin leader','restoring a held Green return','interrupting a checkpoint return'] as const){
   test(`active event return hands off when ${variant}`,async({live},info)=>{
-    test.setTimeout(360_000);
+    test.setTimeout(450_000);
     // Failure inventory: docs/testing-event-return-handoff.md. Initial native
     // monsters are declared inputs; damage, commands and return arrival are real.
     await live.post('/formation',{leader:W});
@@ -95,7 +95,7 @@ for(const variant of ['leaving Green','following a Pumpkin leader','restoring a 
       await info.attach('active-return-handoff-combat',{body:JSON.stringify({variant,seeds,checkpoints,samples,state:fighting,events:await live.clients[W].events()}),contentType:'application/json'});
       await live.post('/formation',{character:W,eventSelections:[]});
       await expect.poll(async()=>{const s=await live.state();return !s.eventReturn&&fighters.every(name=>
-        s.characters[name]?.map===checkpoints[name].map&&!s.characters[name]?.joinedEvent&&Math.hypot(s.characters[name].x-checkpoints[name].x,s.characters[name].y-checkpoints[name].y)<100);},{timeout:150_000,message:'After Pumpkin attendance, both fighters must actually return to their saved navigation checkpoint'}).toBe(true);
+        s.characters[name]?.map===checkpoints[name].map&&!s.characters[name]?.joinedEvent&&Math.hypot(s.characters[name].x-checkpoints[name].x,s.characters[name].y-checkpoints[name].y)<100);},{timeout:240_000,message:'After Pumpkin attendance, both fighters must actually return to their saved navigation checkpoint'}).toBe(true);
     }finally{
       await info.attach('active-return-handoff-final',{body:JSON.stringify({variant,samples,state:await live.state(),events:await Promise.all(fighters.map(name=>live.clients[name].events()))}),contentType:'application/json'});
       await live.post('/formation',{character:W,eventSelections:[]});

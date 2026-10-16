@@ -23,3 +23,30 @@ test('repeated completed assembly drift is bounded and retains the selected targ
  const f=setup();f.d.travel.assemblyRepairs=3;f.travel.tick();
  assert.equal(f.calls.length,0);assert.match(f.d.error,/assembly.*displaced/i);assert.equal(f.d.travel.target.id,'boss');
 });
+
+function destinationFixture(){
+ const f=setup();f.d.travel.stage='travelling';f.d.travel.target.down=true;
+ for(const name of f.d.participants){f.d.commands[name]={id:'move:'+name,action:'move',run:'r',target:f.d.travel.target,cruiseSpeed:79};
+ Object.assign(f.party.statuses[name],{x:1000,y:0});f.party.statuses[name].dungeon.action={id:'move:'+name,status:'complete'};}
+ f.party.statuses.W.x=1219;return f;
+}
+test('completed Cave destination displaced by combat resumes before stairs',()=>{
+ const f=destinationFixture();f.party.statuses.W.dungeon.ready=false;f.travel.tick();assert.equal(f.calls.length,0);
+ f.party.statuses.W.dungeon.ready=true;f.travel.tick();
+ assert.equal(f.calls.length,1);assert.deepEqual(f.calls[0].names,['W']);assert.equal(f.calls[0].action,'move');
+ assert.equal(f.d.commands.W.cruiseSpeed,79);assert.equal(f.d.commands.W.independent,true);assert.equal(f.d.travel.destinationRepairs,1);
+ f.travel.tick();assert.equal(f.calls.length,1);
+ f.party.statuses.W.x=1000;f.party.statuses.W.dungeon.action={id:f.d.commands.W.id,status:'complete'};f.travel.tick();
+ assert.equal(f.calls.at(-1).action,'stairs');assert.equal(f.d.travel,undefined);
+});
+test('destination repair preserves current run, fresh readiness and owned command',()=>{
+ for(const change of [f=>f.party.statuses.P.seenAt=0,f=>f.party.statuses.P.dungeon.ready=false,
+ f=>f.party.statuses.W.dungeon.cave.run='other',f=>f.party.statuses.W.map='other',
+ f=>f.d.commands.W.action='vote',f=>f.party.statuses.W.dungeon.action.id='old',
+ f=>f.d.commands.W.target={...f.d.travel.target,x:2000},f=>f.party.statuses.P.dungeon.cave.paused=true]){
+ const f=destinationFixture();change(f);f.travel.tick();assert.equal(f.calls.length,0);}
+});
+test('destination drift is bounded without replaying completed transport or changing target',()=>{
+ const f=destinationFixture();f.d.travel.destinationRepairs=3;f.travel.tick();
+ assert.equal(f.calls.length,0);assert.match(f.d.error,/destination.*displaced/i);assert.equal(f.d.travel.target.id,'boss');
+});

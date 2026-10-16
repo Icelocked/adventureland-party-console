@@ -3,6 +3,12 @@ const {createReservedBankboiCargo}=require('../../runtime/coordinator/inventory/
 function fixture(){const slots=Array(42).fill(null),state={bankbois:{B:{name:"B"}},bankSnapshot:{packs:{items1:slots}},bankboiQueue:[],bankboiReservedMigrated:false,withdrawals:{}};let saves=0;
  const service=createReservedBankboiCargo(state,{identity:item=>item.name,now:()=>100,persist:()=>saves++});
  return {state,slots,service,saves:()=>saves};}
+test('last worker removal prunes reserved cargo without a bank observation and preserves ordinary requests',()=>{
+ const f=fixture();f.slots[35]={item:{name:'sword'}};f.service.reconcile();
+ f.state.bankboiQueue.push({id:'ordinary',pack:'items0',slot:0,item:{name:'helmet'}});
+ f.state.bankbois={};f.state.bankSnapshot=null;f.service.reconcile();
+ assert.deepEqual(f.state.bankboiQueue.map(r=>r.id),['ordinary']);
+});
 test('reserved cargo adopts the staging row once and refreshes stack quantities',()=>{
  const f=fixture();f.slots[34]={item:{name:'normal'}};f.slots[35]={item:{name:'leather',q:2}};f.slots[41]={item:{name:'drapes'}};
  assert.equal(f.service.reconcile(),true);assert.equal(f.state.bankboiQueue.length,2);assert.equal(f.state.bankboiQueue[0].bootstrap,true);

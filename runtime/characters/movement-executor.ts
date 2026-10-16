@@ -255,6 +255,9 @@ export function createMovementExecutor(host: MovementHost, state: MoveState, val
   return { tick, settleTerminal, reset, cancel, pause, progress: () => ({step:index,phase:phase(),destination:issued?.step,durations:{...durations},
     position:position(),noProgressMs:issued ? now()-issued.progressAt : 0,reissued:!!issued?.reissued}),
     transition: () => issued && isTransition(issued.step) ? (issued.step.town ? 'town' : 'transport') : null,
+    // A prepared Town step can still be waiting on combat/loot/peers. Protect
+    // only a sent cast, including the gap before its native channel report.
+    townCasting: () => !!issued?.step.town && !!issued.sendVersion && !issued.error && !arrivedTransition(issued,position()),
     walkingEdge:()=>walkingEdge?.to===state.plot[0] ? walkingEdge : undefined,
     remaining: () => state.plot.map(p => ({ ...p })) };
 }

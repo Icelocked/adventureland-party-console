@@ -1,5 +1,8 @@
 import { createHuntResume } from "./hunt-resume.ts";
 import { createEventReturns } from "./returns.ts";
+import { recoverExhaustedEventEntry } from './failed-entry.ts';
+import type { EventAttendance } from './attendance-limits.ts';
+import type { EventSession } from './observations.ts';
 import { createHuntReturnHandoff, type HuntReturnState } from "./hunt-return.ts";
 import type {
   EventReturnPorts,
@@ -26,7 +29,8 @@ interface CoordinatorReturnState extends Omit<HuntReturnState, "activeConvoy"> {
   activeConvoy: (NonNullable<ReturnType<EventReturnPorts["convoy"]>> & NonNullable<HuntReturnState["activeConvoy"]>) | null;
   townCycle: unknown;
   anniversary: { eventCycle?: ReturnType<EventReturnPorts["anniversary"]> };
-  eventSessions: Record<string, { event: string }>;
+  eventSessions: Record<string, Pick<EventSession,'event'> & Partial<EventSession>>;
+  eventAttendance?: EventAttendance;
 }
 interface ReturnCompositionPorts {
   now: () => number;
@@ -61,7 +65,7 @@ export function createCoordinatorEventReturns(
   const huntResume = createHuntResume(state, {
     now: ports.now, capture: ports.navigation.capture, cancelConvoy: ports.cancelConvoy,
   });
-  return createEventReturns(
+  const returns = createEventReturns(
     {
       get current() {
         return state.eventReturn;
@@ -121,4 +125,8 @@ export function createCoordinatorEventReturns(
       persist: ports.persist,
     },
   );
+  return { ...returns, reconcile() {
+    recoverExhaustedEventEntry(state,ports,returns.begin);
+    returns.reconcile();
+  }};
 }

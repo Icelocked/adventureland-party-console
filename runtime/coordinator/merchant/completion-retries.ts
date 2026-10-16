@@ -2,6 +2,7 @@ import { buyUpgradeOrder, commerceRouteFailure, commerceRetryDelay } from './com
 import { requestText } from "../http/contracts.ts";
 import { communicationReason } from '../navigation/communication-failure.ts';
 import { failNpcSales } from "./npc-sales.ts";
+import {upgradeRecoverySignature} from './upgrade-recovery.ts';
 import type {
   CompletionState,
   CompletionPorts,
@@ -119,6 +120,17 @@ function completionLevel(body: CompletionReport, decision: RetryDecision): strin
 }
 
 export function createCompletionRetries(state: CompletionState, ports: CompletionPorts) {
+  function upgradeRecoveryBlock(job: CompletionJob, body: CompletionReport): boolean {
+    if (!body.success && /^(?:Upgrade inventory recovery ambiguous:|Automatic upgrade survivor is ambiguous)/.test(requestText(body.error))) {
+      state.merchantJobBlocks[job.target + "\n" + job.reason] = {
+        error: requestText(body.error),
+        upgradeRecoverySignature: upgradeRecoverySignature(state.upgrades[String(job.target)] || [],state.statuses[String(state.merchantCharacter)]?.items || []),
+      };
+      ports.log("Upgrade recovery paused; waiting for matching inventory or upgrade intent to change", "error", body.error);
+      return true;
+    }
+    return false;
+  }
   function resourceBlock(job: CompletionJob, body: CompletionReport): void {
     const error = requestText(body.error || ""),
       capacity = !transientUpgradeInput(error) && /^(bank_full|inventory_full|no_space)$|^Couldn't use lucky slot:/i.test(error);
@@ -164,6 +176,7 @@ export function createCompletionRetries(state: CompletionState, ports: Completio
     }
   }
   function decide(job: CompletionJob, body: CompletionReport): RetryDecision {
+    upgradeRecoveryBlock(job, body);
     resourceBlock(job, body);
     const decision = classify(job, body);
     if (!body.success && buyUpgradeOrder(job)) job.lastError = requestText(body.error);

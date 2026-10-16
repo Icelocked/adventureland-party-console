@@ -65,6 +65,9 @@ export interface ReturnStatus {
   eventRecovery?: { cycleId: string; phase: string };
 }
 export interface ReturnConvoy {
+  retryExhausted?: boolean;
+  walkingEvent?: string;
+  routeServer?: string;
   failureCode?: string;
   townFirst?: boolean;
   disableTown?: boolean;

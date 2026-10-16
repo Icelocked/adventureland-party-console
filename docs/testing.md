@@ -75,10 +75,72 @@ server restarts the empty giveaway, never two queued copies, and a join after re
 A host inside the bank has no live coverage. Failure inventory:
 `e2e/giveaway-locate-failures.md`. Activate with the ordinary full restart.
 
+## Roaming target setup
+
+The queued Goo regression holds its initial monster stationary until all clients
+acknowledge the selected target. It then declares one terrain-valid native movement
+leg at the monster's original speed, observes movement and remaining travel on all
+clients, and releases the party. Native simulation owns displacement and later
+roaming; attack, damage, predictive interception and successor confirmation remain
+unmodified. Retain the declared leg and timestamped client observations in
+`native-sparkbot-follow-result`. Starting random roaming before client setup can
+consume the required movement window and fail before gameplay is exercised.
+
+## Merchant observation and Cave visit budgets
+
+Run the focused native scenarios matching `auto merchant collects twelve native copies alongside a finite compound rule|merchant gathering waits at capacity|Cave entry closes|Cave completes native rooms`.
+Compound failures legitimately leave null inventory cells before the successful
+item; restart assertions must skip those cells while retaining exact native
+consumption, result counts and the exhausted finite rule. Gathering capacity
+coverage observes the stand return/reconciliation after enabling modes before
+checking the published capacity reason, unchanged cooldowns and no active attempt.
+The dashboard's BLOCKED state alone does not acknowledge client stand completion.
+
+The Cave interface/navigation journey and the native room-completion/stairs
+journey use separate fresh visits. The former retains map rendering, manual
+Stop/resume, farm/boss arrival and duel checks; the latter clears actual native
+required rooms, answers the farewell, exercises lost completion plus real
+displacement, and requires both members to reach the next floor. Neither changes
+the game timer or fabricates room completion. An unexpected ended visit fails
+immediately with its last observed remaining time. Preserve the room-progress,
+farewell, stairs-displacement and native floor-transition artifacts.
+
+## Native terrain and Cave progress observation
+
+Failure inventory: sparse server `player` packets can miss a brief terrain bend;
+requested destinations alone do not prove movement. Capture native client positions
+throughout Targetron's approach, retain actual damage and collision-clear owned
+movement assertions, and reject truncated capture. Cave travel may make progress
+without completing a room: count distinct native deaths, first-time 100-unit
+distance improvements toward each destination, and newly encountered/resolved votes.
+Repeated receipts, oscillation and revisiting the same destination must not renew
+quiet time. Observe fresh evidence before checking quiet expiry, including after a
+bounded vote action, but never renew the ten-minute absolute cap. Retain the
+position trace and progress markers with the ordinary native artifacts.
+The shop-inspection journey declares native layout seed `00000000000000000000000000000001`;
+the native generator still owns geometry, NPC placement, movement and votes.
+Random layouts and the explicitly unavailable entry shop remain covered by the
+separate assembly scenarios. An optional shop without placement cannot exercise
+the required item-inspection assertions.
+
+## Town channel healing
+
+Run the native cases matching `Town executes a real cast|Halloween mrgreen stages`.
+The minor-injury Town variant declares a 15-HP deficit and 40% MP once during
+the first actual native channel, matching the incident's MP-recovery priority
+without changing casts, healing, transport or responses.
+It requires native arrival from that first cast, no priest heal during the
+channel, and both party members returning. Retain `native-town-healing-channel`
+and the saved-checkpoint Halloween evidence, then run `npm run test:e2e:verify`.
+The retained passive-healing and movement-service regressions cover delayed
+channel acknowledgement, rejection, cancellation, and arrival while a peer
+barrier remains pending. Recovery potions/regeneration remain available.
+
 ## CI parallelism
 
 The full native workflow uses 16 isolated GitHub runners with one Playwright
-worker each. Shards 1–3 run the three named `live-cave.spec.ts` journeys separately;
+worker each. Shards 1–3 run the named `live-cave.spec.ts` journey groups separately;
+shard 2 includes the fresh floor-completion/stairs visit alongside route pacing.
 shards 4–16 set `E2E_SKIP_CAVE=1` and distribute the remaining live project over
 13 shards. Focused `grep` runs retain one runner and include Cave normally.
 When adding or renaming a Cave scenario, update its workflow filter. Validate
@@ -844,6 +906,25 @@ the complete paired sequence; the 150-second ordinary-job, 180-second final-job,
 and 20-second potion-recovery deadlines still enforce progress independently.
 
 The assembly regroup fixture must first find a nearby native staging position.
+Run 38609591558 shard 3 failed before assembly because the declared entry shop
+had no NPC. Native merchant placement can reject every position near a doorway;
+declaring an encounter does not guarantee that its actor spawned. The setup
+now distinguishes unavailable placement from delayed spawning and resolves real
+pending shop votes before staging. Missing NPCs with valid positions still fail
+after a bounded readiness wait; unresolved votes and unsafe staging remain errors.
+The assembly group covers both a randomized layout and native seed
+`00000000000000000000000000000020`, whose candidate shop positions all fall
+inside the native 112-unit spawn exclusion. Only the layout RNG input is declared,
+scoped to native entry and restored in finally; no NPC, vote or movement outcome
+is fabricated. Both cases must finish the same physical displacement, new gather
+command and party-arrival assertions. Retain `native-cave-entry-shop-setup` and
+`native-cave-completed-assembly-regroup` evidence. Run with
+`npm test -- -- --project=live --grep "Cave assembly regroups"`.
+Both cases passed locally in 3.5 minutes with 78 verified evidence files. The
+fixed seed produced `npc: null`, zero placements, a new regroup command, and
+both participants stopped at the shared destination. The 16-shard allocation
+check contains all 200 native tests exactly once (two assembly cases on shard 3).
+
 Run 37775616033 placed the doorway 408 pixels from a farm, making its former
 410-pixel clearance check impossible in every direction. Before changing this
 fixture, the failure modes were recorded: no connected safe staging geometry,

@@ -2686,8 +2686,8 @@
         catch(error) { movement.cancel('Cave convoy route could not be shared: '+String(error),{code:'cave-route-rejected'}); }
       },
       move: function (point, command) {
-        travelTrack = command.cruiseSpeed ? {id:command.id,distance:0,x:character.real_x,y:character.real_y,leader:character.name===cavePartyNames()[0],prepared:false} : null;
-        var journey = movement.move(point, undefined, { native: true, shared:!!command.cruiseSpeed, arrivalTolerance:command.action==='gather'?1:20, town: false, retainOnDirectStop: true,
+        travelTrack = command.cruiseSpeed && !command.independent ? {id:command.id,distance:0,x:character.real_x,y:character.real_y,leader:character.name===cavePartyNames()[0],prepared:false} : null;
+        var journey = movement.move(point, undefined, { native: true, shared:!!travelTrack, arrivalTolerance:command.action==='gather'?1:20, town: false, retainOnDirectStop: true,
         awaitSharedRoute:!!travelTrack && !travelTrack.leader, nativePlanningTimeoutMs:travelTrack ? 90000 : 30000,
         nativePlanningProgressMs:travelTrack ? 240000 : undefined,
         repairSharedDrift:!!travelTrack,
@@ -6069,10 +6069,11 @@
       var survivors = [];
       character.items.forEach(function (candidate, index) {
         if (!used[index] && candidate && (Number(candidate.level) || 0) >= start &&
-            (Number(candidate.level) || 0) <= target &&
+            (Number(candidate.level) || 0) < target &&
             sameItem(Object.assign({},candidate,{level:mark.item.level}),mark.item)) survivors.push(index);
       });
-      if (survivors.length > 1) throw Error("Automatic upgrade survivor is ambiguous; waiting for inventory recovery");
+      if (survivors.length > 1) throw Error("Upgrade inventory recovery ambiguous: " + mark.item.name + " +" + start + " to +" + target +
+        "; original slot " + slot + "; unfinished candidates " + survivors.map(function(index){return index + " (+" + (Number(character.items[index].level)||0) + ")";}).join(", "));
       if (survivors.length === 1) return survivors[0];
     }
     return character.items.findIndex(function (candidate, index) {
@@ -13880,6 +13881,10 @@
 
   async function healPartyBelow(ratio, options) {
     if (character.ctype !== "priest" || character.rip || healingBusy) return false;
+    // Native heal (including self-heal) clears the caster's Town channel.
+    // Include an issued movement cast whose native acknowledgement is pending;
+    // waiting to depart or waiting for peers after arrival still permits healing.
+    if (character.c && character.c.town || typeof movement !== "undefined" && movement.townCasting && movement.townCasting()) return false;
     options = options || {};
     ratio = ratio || 0.9;
     healingBusy = true;
@@ -14731,7 +14736,7 @@
       return reject("Franky attendance only permits the Franky monster");
     var huntTravel = huntTravelCommand && huntTravelCommand.purpose === "monster-hunt" &&
       huntTravelCommand.combatHandoffAllowed === true && huntTravelCommand.huntTarget === (target && target.mtype);
-    huntTravel = huntTravel || !!(huntTravelCommand && ['', 'party-travel', 'farm-relocation', 'manual-monster-override'].indexOf(huntTravelCommand.purpose || '')>=0 && huntTravelCommand.combatHandoffAllowed === true);
+    huntTravel = huntTravel || !!(huntTravelCommand && ['', 'party-travel', 'farm-relocation', 'manual-monster-override', 'empty-spawn-recovery'].indexOf(huntTravelCommand.purpose || '')>=0 && huntTravelCommand.combatHandoffAllowed === true);
     if (travelCombatActive() && !huntTravel && !departureTargetEngaged(target)) return reject("travel owns combat");
     if(typeof root!=='undefined' && root.partyLootClient && root.partyLootClient.huntPending() &&
       target && target.type==='monster' && !isAttackingPartyMember(target))return reject("hunt loot pending");
@@ -14978,7 +14983,7 @@
 
   function farmingTravelTarget(command) {
     var huntTravel = command && command.purpose === "monster-hunt" && command.combatHandoffAllowed === true && command.huntTarget;
-    var farmTravel=command && ['', 'party-travel', 'farm-relocation', 'manual-monster-override'].indexOf(command.purpose || '')>=0 && command.combatHandoffAllowed===true;
+    var farmTravel=command && ['', 'party-travel', 'farm-relocation', 'manual-monster-override', 'empty-spawn-recovery'].indexOf(command.purpose || '')>=0 && command.combatHandoffAllowed===true;
     if (travelCombatActive() && !huntTravel && !farmTravel) return null;
     if (command && ["rare-hunt", "phoenix-patrol"].indexOf(command.purpose) >= 0) return null;
     var waypoint = command && command.location;
@@ -15258,7 +15263,7 @@
       },
       skipLootWait: command.continuousReturn === 1,
       compareTown: command.continuousReturn === 1 && !command.disableTown,
-      town: command.continuousReturn === 1 ? !command.disableTown : command.routeRecovery && command.routeRecovery.relocation === 'town' || command.purpose !== 'monster-hunt' || command.phase === 'plan-return' && !!command.allowTown,
+      town: !command.disableTown && (command.continuousReturn === 1 || command.routeRecovery && command.routeRecovery.relocation === 'town' || command.purpose !== 'monster-hunt' || command.phase === 'plan-return' && !!command.allowTown),
       townAttempt: command.continuousReturn !== 1 ? undefined : function(state, index, from, destination) {
         var c=convoyTraveling;
         if(!c || c.id!==command.convoyId || c.commandId!==command.id)return;
@@ -15372,9 +15377,13 @@
     return {destination:segment.location,plot:segment.plot,source:"itinerary"};
   }
   function convoyHandoffReachable(target, command) {
+    // Recovery relinquishes travel to the independently routed, all-ready pull
+    // barrier on sight. This authorizes approach, never an immediate attack.
+    if (command && command.purpose === "empty-spawn-recovery")
+      return !!(target && target.visible && !target.dead && target.hp !== 0);
     // Farming keeps smart-route ownership until the leader can attack now.
     // A walkable future approach does not establish group combat clearance.
-    if (command && ['', 'party-travel', 'farm-relocation', 'manual-monster-override'].indexOf(command.purpose || '') >= 0)
+    if (command && ['', 'party-travel', 'farm-relocation', 'manual-monster-override', 'empty-spawn-recovery'].indexOf(command.purpose || '') >= 0)
       return !!(target && !target.dead && target.hp !== 0 && typeof is_in_range === "function" && is_in_range(target));
     return eventCombatReachable(target);
   }
@@ -17935,7 +17944,8 @@
     pollFarmingSpawnRecovery: function () {
       if (typeof unfinishedFight === "function" && unfinishedFight()) return;
       if (typeof rareActive === "function" && rareActive()) return;
-      if (groupedFarming() && groupedCombat && !groupedCovered()) return;
+      // The return convoy owns regrouping; lack of priest coverage must not
+      // strand an otherwise idle party outside its saved farming area.
       if (character.name !== leader || farmingMode === "scatter" || !partyLocation ||
           navigationIntent.cancelled || activeCombatEvent() || joinedEvent ||
           G.maps && G.maps[character.map] && G.maps[character.map].event ||

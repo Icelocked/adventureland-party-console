@@ -1,4 +1,5 @@
 import { routineEnabled } from './routines.ts';
+import {upgradeRecoverySignature} from './upgrade-recovery.ts';
 import { createMerchantQueue } from "./queue.ts";
 import { standSyncSignature } from "./stand-sync-signature.ts";
 import type { InventoryEntry } from "../contracts/item.ts";
@@ -6,6 +7,7 @@ import type { InventoryEntry } from "../contracts/item.ts";
 type QueueState = Parameters<typeof createMerchantQueue>[0];
 type QueuePorts = Parameters<typeof createMerchantQueue>[1];
 interface CoordinatorQueueState {
+  upgrades?: Record<string, unknown[] | undefined>;
   merchantQueue: QueueState["queue"];
   merchantCurrent: QueueState["current"];
   merchantJobBlocks: QueueState["blocks"];
@@ -53,6 +55,7 @@ export function createCoordinatorMerchantQueue(
       enabled: reason => routineEnabled({reason}, state.merchantAutomations || {}),
       bankboi: (name) => !!state.bankbois?.[name],
       capacitySignature: (name) => ports.capacitySignature(name),
+      upgradeRecoverySignature: (name) => upgradeRecoverySignature(state.upgrades?.[name] || [],state.statuses[String(state.merchantCharacter)]?.items || []),
       gold: () => ({
         bank: Number(state.bankSnapshot?.gold) || 0,
         merchant: Number(state.statuses[String(state.merchantCharacter)]?.gold) || 0,

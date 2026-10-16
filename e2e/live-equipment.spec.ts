@@ -6,13 +6,12 @@ const capacityTest=test.extend({initialGatheringReady:true});
 capacityTest('merchant gathering waits at capacity without resetting cooldowns',async({live,page},info)=>{
   const name='E2EMerchant';
   for(const mode of ['fishing','mining'])await live.post('/merchant/gather',{mode,enabled:false});
-  const standDeadline=Date.now()+90_000;
   async function standReady(){await expect.poll(async()=>{
     const [state,response]=await Promise.all([live.state(),fetch(live.url+'/party-api/state?section=fast',{signal:AbortSignal.timeout(15_000)})]);
     expect(response.ok).toBe(true);
     const fast=await response.json();expect(fast.pendingCommands).toEqual(expect.any(Object));
     return state.characters[name]?.standOpen && fast.pendingCommands[name]?.type!=='merchant-idle';
-  },{timeout:Math.max(1,standDeadline-Date.now()),message:'Native stand return and reconciliation must finish before the capacity-only fixture'}).toBe(true);}
+  },{timeout:90_000,message:'Native stand return and reconciliation must finish before the capacity-only fixture'}).toBe(true);}
   const standTool=await live.admin(`output=(()=>{const p=get_player('${name}');
     if(!G.items.stand0.stand)throw new Error('Native stand0 definition missing');
     p.items[12]={name:'stand0'};cache_player_items(p);resend(p,'reopen+cid');return p.items[12];})()`);
@@ -48,36 +47,17 @@ capacityTest('merchant gathering waits at capacity without resetting cooldowns',
   for(const mode of ['fishing','mining'])await live.post('/merchant/gather',{mode,enabled:true});
   await page.goto(live.url);await page.getByText(/Merchant logistics ·/).click();
   await expect(page.locator('details').filter({has:page.locator('summary').getByText(/Merchant logistics/)}).getByText('BLOCKED',{exact:true})).toHaveCount(2);
-  // Capture real reason transitions in the native document, rather than
-  // repeatedly sampling the same heartbeat phase over CDP.
-  const reasonFrame=live.clients[name].frame;
-  await reasonFrame.evaluate(()=>{
-    const game=window as any,until=Date.now()+15000;
-    const probe={samples:[] as {at:number;reason:string|null}[],timer:null as any};
-    game.__e2eGatheringReasonProbe=probe;
-    probe.timer=setInterval(()=>{
-      const root=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
-      if(probe.samples.length===160)probe.samples.shift();
-      probe.samples.push({at:Date.now(),reason:root?.__merchantGatheringBlockedReason??null});
-      if(Date.now()>=until)clearInterval(probe.timer);
-    },100);
-  });
-  let reasonSamples:{at:number;reason:string|null}[]=[];
-  try{await expect.poll(async()=>{
-    try{reasonSamples=await live.clients[name].frame.evaluate(()=>(window as any).__e2eGatheringReasonProbe?.samples||[]);
-      return reasonSamples.some(sample=>sample.reason==='inventory capacity');
-    }catch(error){
-      if(/Execution context was destroyed|Cannot find context|Frame was detached|Native game frame is not present/.test(String(error)))return false;
-      throw error;
-    }
-  },{timeout:15000}).toBe(true);}
-  finally{
-    if(!reasonFrame.isDetached())try{await reasonFrame.evaluate(()=>{
-      const game=window as any,probe=game.__e2eGatheringReasonProbe;
-      if(probe){clearInterval(probe.timer);delete game.__e2eGatheringReasonProbe;}
-    });}catch(error){if(!/Execution context was destroyed|Cannot find context|Frame was detached/.test(String(error)))throw error;}
-    await info.attach('native-gathering-reason-samples',{body:JSON.stringify(reasonSamples),contentType:'application/json'});
-  }
+  // Enabling gathering can admit another stand reconciliation. Its completion
+  // is separate from the dashboard's capacity decision. Observe that real
+  // operation before starting the capacity-only observation window.
+  await standReady();
+  await expect.poll(async()=>{
+    const state=await live.state(),merchant=state.characters[name];
+    expect(state.gatheringCooldowns).toEqual(before);
+    expect(merchant?.gatheringActive).toBe(false);
+    expect(merchant?.gatheringAttemptId??null).toBe(null);
+    return merchant?.standOpen&&merchant.gatheringBlockedReason==='inventory capacity';
+  },{timeout:15_000,message:'Settled native stand must publish the capacity block without a gathering attempt'}).toBe(true);
   const after=await live.state();expect(after.gatheringCooldowns).toEqual(before);
   const native=await live.admin(`output=(()=>{const p=get_player('${name}');return {items:p.items,last:{fishing:p.last.fishing,mining:p.last.mining}};})()`);
   expect(Object.values(native.last).map(value=>new Date(value as string).getTime())).toEqual([0,0]);

@@ -16,6 +16,33 @@ The inventory and corresponding regressions were written before each implementat
 
 ## Validation and artifacts
 
+CI 38609591558 shard 13 exposed a fault-injection race: a late event planner
+request shared the priest's runtime with the new manual convoy. The interceptor
+aborted the old event destination while the coordinator was assembling manual
+travel. Superseded recovery was correctly ignored and manual arrival succeeded,
+but the intended assembly hold was never exercised. The fixture must match the
+request journey to the actual client movement report and the corresponding
+status sample's convoy, epoch, command, revision, runtime and rally destination
+before aborting. A missing or
+superseded owner, old destination, or concurrent second intercepted request must
+pass through. The transport ledger retains unmatched requests and the selected
+movement owner; all-party stopped recovery and real arrival remain mandatory.
+Initial assembly calls generic navigation without a movement `owner` field.
+Match its journey to the real status sample, which captures movement and convoy
+identity together. Initial assembly can precede its first outgoing movement
+status. Read the native movement plus existing combat/navigation diagnostics in
+one atomic game-frame evaluation, in parallel with validating the coordinator
+owner, and complete the decision within 1500ms before aborting.
+The production planner request has a two-second deadline: the previous CODE
+iframe lookup and five-second poll could themselves cause a timeout in CI.
+A late event destination or ownerless movement report never authorizes the
+injected failure. See testing-planner-fault-observation.md for the CI evidence
+and the bounded status-traffic observation used for event-entry recovery.
+The corrected local run passed both entry points in 5.1 minutes with 70 verified
+evidence files. The faulted case captured exactly one matching assembly request
+and five fresh whole-party stopped holds, followed by native arrival, restart
+persistence and attendance at the next occurrence.
+
 Initial-assembly transport regression failure inventory (before implementation):
 CI 38525662222 shard 13 lost the priest's `/movement-plan` request while the
 party-travel convoy was still assembling. Both attendance exclusions remained

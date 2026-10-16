@@ -1,5 +1,24 @@
 import {test,expect} from './live-fixtures';
 
+test('displaced manual upgrade recovers unfinished inventory among completed duplicates',async({live},info)=>{
+ test.setTimeout(180_000);const merchant='E2EMerchant';
+ await live.post('/merchant/force-stand',{enabled:true});
+ await live.admin(`output=(()=>{const p=get_player('${merchant}');p.items[7]={name:'wcap',level:0};p.items[9]={name:'wcap',level:1};p.items[12]={name:'wcap',level:1};p.items[10]=null;cache_player_items(p);resend(p,'reopen+cid');return true})()`);
+ await expect.poll(async()=>(await live.clients[merchant].snapshot()).items[7]?.name).toBe('wcap');
+ await live.post('/command',{character:merchant,type:'upgrade-mark',slot:7,item:{name:'wcap',level:0},tiers:1});
+ await live.clients[merchant].run(`(async()=>{await swap(7,10);return true})()`);
+ await expect.poll(async()=>(await live.clients[merchant].snapshot()).items[10]?.name).toBe('wcap');
+ const before=await live.state();expect(before.upgrades[merchant]).toHaveLength(1);
+ await info.attach('displaced-manual-upgrade-before',{body:JSON.stringify({marks:before.upgrades[merchant],items:(await live.clients[merchant].snapshot()).items}),contentType:'application/json'});
+ await live.post('/merchant/force-stand',{enabled:false});
+ await expect.poll(async()=>(await live.state()).upgrades[merchant]?.length||0,{timeout:120_000}).toBe(0);
+ const after=await live.state(),events=await live.clients[merchant].events(),items=(await live.clients[merchant].snapshot()).items;
+ expect(events.some((e:any)=>e.event==='game_response'&&['upgrade_success','upgrade_fail'].includes(e.data?.response))).toBe(true);
+ expect(items.filter((item:any)=>item?.name==='wcap'&&item.level===1).length).toBeGreaterThanOrEqual(2);
+ expect(after.merchantActivity.filter((e:any)=>JSON.stringify(e).includes('survivor is ambiguous'))).toHaveLength(0);
+ await info.attach('displaced-manual-upgrade-recovered',{body:JSON.stringify({after,events,items}),contentType:'application/json'});
+});
+
 test('withdrawn manual shield and inventory shield finish one mixed upgrade batch',async({live},info)=>{
   test.setTimeout(240_000);
   const merchant='E2EMerchant';
