@@ -6,18 +6,18 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 
 | | |
 |---|---|
-| Upstream base | `bugfix-1.4` @ 9273ecb, merged as 400fb81 (0c4b4d8 as 7886c52). Draft PR #64; upstream `main` is still ecbf152. Upstream tip 1d19a8d is 14 commits ahead, not merged |
-| Fork head | `adopt/bugfix-1.4` @ 15c2f2a. origin is at 9358a00 (pushed 10-14); the fork's `main` is still at 373b7ab |
-| Divergence | 14 behind; 263 files differ from upstream's tip (1d19a8d) |
-| Checked | 2026-10-13, against every upstream issue, comment and PR (#13–#124); #129 added 10-15 |
+| Upstream base | `bugfix-1.4` @ 9273ecb, merged as 400fb81 (0c4b4d8 as 7886c52). PR #64 merged into `main` as b4443e4 on 10-15 and released as v1.4.0. Upstream tip 2d35a54 is 16 commits ahead of the fork, not merged |
+| Fork head | `adopt/bugfix-1.4` @ 7e46cb7. origin is at 9358a00 (3 unpushed commits); the fork's `main` is still at 373b7ab |
+| Divergence | 16 behind; 269 files differ from upstream's tip (2d35a54) |
+| Checked | 2026-10-16, against every upstream issue, comment and PR (#13–#131) |
 
 | Status | Count |
 |---|---|
 | New issue | 0 |
-| Update / comment | 8 (1 to do) |
-| Done upstream | 36 |
-| Matches | 14 (all done but #129, not commented) |
-| Open upstream | 19 |
+| Update / comment | 9 (2 to do) |
+| Done upstream | 38 |
+| Matches | 15 (all done but #129 and #130, not commented) |
+| Open upstream | 21 |
 | Closed | 19 |
 | Fork-only | 6 |
 
@@ -69,7 +69,9 @@ Issues filed before the work landed, features that changed with use, and maintai
 
 - The keepalive rule is wrong in the issue. After `S.franky.end`, the event ends once nobody has hit Franky for 20 s. The fork uses a 45 s keepalive from 5 min before the end, then a hit every 10 s in the final minute.
 
-- Add to the issue: the tank approaches through adds, Auto mode with a death limit, the off-tank flee reads Franky's aggro from the live entity, and only the encounter's tank uses Absorb Sins.
+- 10-13: the maintainer closed this as a duplicate when he filed [#114](https://github.com/Ryan-Haines/adventureland-party-console/issues/114) (per-event timid/bold mode) as the general successor.
+
+- Add to #114 (the issue this one was closed into): the tank approaches through adds, Auto mode with a death limit, the off-tank flee reads Franky's aggro from the live entity, and only the encounter's tank uses Absorb Sins.
 
 ### Designated tank role and kill-time luck swap
 
@@ -131,9 +133,17 @@ Issues filed before the work landed, features that changed with use, and maintai
 
 - New since the issue: trace windows, death records, the `phoenix-farm.json` scenario, and a list of bugs the simulation found. Update the permalink, which still points at 1ef9ddd.
 
+### Achievement Hunt v2 and the 1.4.0 fixes (PR #131)
+
+[#131 · opened 10-15](https://github.com/Ryan-Haines/adventureland-party-console/pull/131)
+
+Icelocked's [PR #131](https://github.com/Ryan-Haines/adventureland-party-console/pull/131) replaces #89 (closed 10-15) and is built on v1.4.0 (b4443e4), with no merge conflicts, offered as context for the fork's agent and split by section so any section can be taken alone: 1. Achievement Hunt, a fifth farming mode that farms monsters for their kill achievements (`farmingPolicy: "achievements"`); 2. Achievement Hunt fixes (rares as variants, a throwing start); 3. dungeon vote fix; 4. deconstruction retry; 5. movement request budget; 6. repeated log messages; 7–9. tests, live run and known failures. Sections 2–6 touch 8 runtime files; the rest is Achievement Hunt.
+
+- To do: review sections 2–6 against the fork's event, movement and merchant work, and reply on which to take; the Achievement Hunt sections follow the same offer pattern as #89.
+
 ## Done upstream: reimplemented on bugfix-1.4, adopted in fdd89f0, 3e414a1, a311d12, 13e8b7c, 1566e02, 43ac030, 7eb464b and 9577eca
 
-The maintainer fixed these on bugfix-1.4 (draft PR #64), often going further than the fork did. Where the fork had its own fix, the merge took upstream’s version and removed the fork’s, including the extras in the last column.
+The maintainer fixed these on bugfix-1.4 (PR #64, merged into `main` as b4443e4 on 10-15 and released as v1.4.0), often going further than the fork did. Where the fork had its own fix, the merge took upstream’s version and removed the fork’s, including the extras in the last column. [#79](https://github.com/Ryan-Haines/adventureland-party-console/issues/79) (hot reload) and [#94](https://github.com/Ryan-Haines/adventureland-party-console/issues/94) (in-game mute) were also fixed in 1.4, with no fork code; the fork’s base already has both. On 10-15 the maintainer closed most of these with v1.4.0; still open: #23, #35, #57, #83 and #106.
 
 | Issue | Fork commit | Upstream's version | Fork extras (dropped) |
 |---|---|---|---|
@@ -142,6 +152,8 @@ The maintainer fixed these on bugfix-1.4 (draft PR #64), often going further tha
 | [#96](https://github.com/Ryan-Haines/adventureland-party-console/issues/96) | — | [dc38439](https://github.com/Ryan-Haines/adventureland-party-console/commit/dc38439): discovery uses the inferred square once it is inferred; the sequential cursor stays for the search | Nothing (no fork code) |
 | [#97](https://github.com/Ryan-Haines/adventureland-party-console/issues/97) | — | Tracktrix drill-down data for monsters such as Targetron ([dc38439](https://github.com/Ryan-Haines/adventureland-party-console/commit/dc38439)) | Nothing (no fork code) |
 | [#77](https://github.com/Ryan-Haines/adventureland-party-console/issues/77) | — | Superseded navigation no longer blocks the party after a realm switch ([dc38439](https://github.com/Ryan-Haines/adventureland-party-console/commit/dc38439)) | Nothing (no fork code) |
+| [#94](https://github.com/Ryan-Haines/adventureland-party-console/issues/94) | — | A mute for game sounds and music in the Steam interface | Nothing (no fork code) |
+| [#79](https://github.com/Ryan-Haines/adventureland-party-console/issues/79) | — | Immediate and combat-safe console reloads replace the hot-reload behavior that kept killing characters while an agent edited files | Nothing (no fork code) |
 | [#99](https://github.com/Ryan-Haines/adventureland-party-console/issues/99) | [99497d5](https://github.com/Thefonze74065/adventureland-party-console/commit/99497d5), [33c85ab](https://github.com/Thefonze74065/adventureland-party-console/commit/33c85ab) | Party-member Exchange and Auto exchange hand selected stock to the merchant ([dc38439](https://github.com/Ryan-Haines/adventureland-party-console/commit/dc38439)) | The fork’s processing pickup, its live spec and failure inventory, README paragraph |
 | [#100](https://github.com/Ryan-Haines/adventureland-party-console/issues/100) | [ac1278d](https://github.com/Thefonze74065/adventureland-party-console/commit/ac1278d), [08f490f](https://github.com/Thefonze74065/adventureland-party-console/commit/08f490f) | The fork’s design adopted almost verbatim: the transfer row is reserved only while a BankBoi exists ([dc38439](https://github.com/Ryan-Haines/adventureland-party-console/commit/dc38439)) | The fork’s live spec, failure inventory, docs, staging fixtures and the sort-signature refresh |
 | [#101](https://github.com/Ryan-Haines/adventureland-party-console/issues/101) | [c17452f](https://github.com/Thefonze74065/adventureland-party-console/commit/c17452f) | `resolveUpgradeOffering` committed ([9b36edb](https://github.com/Ryan-Haines/adventureland-party-console/commit/9b36edb)) | The fork’s `offeringRule` substitution |
@@ -150,7 +162,7 @@ The maintainer fixed these on bugfix-1.4 (draft PR #64), often going further tha
 | [#83](https://github.com/Ryan-Haines/adventureland-party-console/issues/83) | [9129853](https://github.com/Thefonze74065/adventureland-party-console/commit/9129853), [acdf0da](https://github.com/Thefonze74065/adventureland-party-console/commit/acdf0da) | Blocked melee approaches use reachable sides of the target and keep a local detour; only healthy, unattacked melee may leave priest coverage while its target fights another member ([6100c78](https://github.com/Ryan-Haines/adventureland-party-console/commit/6100c78)) | The fork’s open-side detour, “separate skips coverage” and `melee-wall-stall-failures.md` |
 | [#85](https://github.com/Ryan-Haines/adventureland-party-console/issues/85) | [fee19ed](https://github.com/Thefonze74065/adventureland-party-console/commit/fee19ed) | Recovery goals use the visible native monster body and range-capped edge distance ([6100c78](https://github.com/Ryan-Haines/adventureland-party-console/commit/6100c78)) | The fork’s hitbox goal solver, `terrain-recovery-goals.test.cjs` and `terrain-goals-hitbox-failures.md` |
 | [#93](https://github.com/Ryan-Haines/adventureland-party-console/issues/93) | [6fbff2b](https://github.com/Thefonze74065/adventureland-party-console/commit/6fbff2b), [0727f29](https://github.com/Thefonze74065/adventureland-party-console/commit/0727f29) | Active returns hand members to their next selected live event, carrying the checkpoint, and new returns leave them out ([a51d3bf](https://github.com/Ryan-Haines/adventureland-party-console/commit/a51d3bf)); live journey `live-event-return-handoff.spec.ts` | The fork’s release code and isolated tests. The fork’s follower and leave journeys and its walk fix (359b370) stay |
-| [#86](https://github.com/Ryan-Haines/adventureland-party-console/issues/86) | None | Steam merchants navigate their native game page after an accepted giveaway, Ponty or ALData realm switch, and get a native command for home returns ([5c199b8](https://github.com/Ryan-Haines/adventureland-party-console/commit/5c199b8)). Opened by Icelocked; still open | None. The fork had no fix |
+| [#86](https://github.com/Ryan-Haines/adventureland-party-console/issues/86) | None | Steam merchants navigate their native game page after an accepted giveaway, Ponty or ALData realm switch, and get a native command for home returns ([5c199b8](https://github.com/Ryan-Haines/adventureland-party-console/commit/5c199b8)). Opened by Icelocked; closed 10-15 with v1.4.0 | None. The fork had no fix |
 | [#92](https://github.com/Ryan-Haines/adventureland-party-console/issues/92) | [629a4f7](https://github.com/Thefonze74065/adventureland-party-console/commit/629a4f7) | Delete refreshes the roster first and forgets a BankBoi the game no longer has, despite stale storage ([d5a8217](https://github.com/Ryan-Haines/adventureland-party-console/commit/d5a8217)) | The fork’s cached-roster shortcut and its tests |
 | [#23](https://github.com/Ryan-Haines/adventureland-party-console/issues/23) | [48fd8ea](https://github.com/Thefonze74065/adventureland-party-console/commit/48fd8ea) | Statistical elimination over the 42-way joint posterior; Ruled out rows and count | None |
 | [#63](https://github.com/Ryan-Haines/adventureland-party-console/issues/63) | [943dae1](https://github.com/Thefonze74065/adventureland-party-console/commit/943dae1) | One shared asynchronous simulation estimator (60M rolls per cart, cancellable); fewer than 30 completed runs marks a line unavailable, which needs a confirmed gold cap. Capped at +12 | The Crowns-style analytic budget for targets too hard to simulate, and the fork’s E2E spec |
@@ -180,6 +192,7 @@ A comment saying where it's implemented, with the commit link, is enough.
 
 | Issue | Feature | Fork commits | Note |
 |---|---|---|---|
+| [#130](https://github.com/Ryan-Haines/adventureland-party-console/issues/130) maintainer, not commented | Stand item with "Purchase outcome unconfirmed; reconciliation required" | [bf5da1b](https://github.com/Thefonze74065/adventureland-party-console/commit/bf5da1b) | The unconfirmed-purchase state that #124 filed: the fork's `resolve-purchase` flow and the WTB row's "It was bought / It wasn't" controls clear it. Comment pointing to #124 |
 | [#129](https://github.com/Ryan-Haines/adventureland-party-console/issues/129) maintainer, not commented | Giveaway entry: host not visible at the market; can't join in the bank | [15c2f2a](https://github.com/Thefonze74065/adventureland-party-console/commit/15c2f2a) | A host not in sight is looked up through `/api/pull_merchants` and walked to; another realm, no open stand and inside-the-bank hosts are reported; bank giveaways are not queued. Also: jobs expire at the observed remaining minutes, and an unattempted expiry logs a warning and releases its claim. `live-giveaway-locate.spec.ts` |
 | [#116](https://github.com/Ryan-Haines/adventureland-party-console/issues/116#issuecomment-6184053452) yours, commented 10-14 | Keep a set amount of an item, auto-sell the rest | [9358a00](https://github.com/Thefonze74065/adventureland-party-console/commit/9358a00) | “Keep in storage” on the auto NPC-sale dialog; spare = bag + bank + BankBois outside craft reservations, less pending sales; bank stacks withdrawn while spare remains, carried stacks sold down to the spare quantity. `live-npc-sale-keep.spec.ts`: 600 → exactly 250 kept |
 | [#124](https://github.com/Ryan-Haines/adventureland-party-console/issues/124) filed 10-14 | An unconfirmed stand purchase blocks its WTB forever | [bf5da1b](https://github.com/Thefonze74065/adventureland-party-console/commit/bf5da1b) | `resolve-purchase` (refused while the job is current or queued) and “It was bought” / “It wasn’t bought” on the WTB row; `live-wtb-unconfirmed-purchase.spec.ts` |
@@ -199,10 +212,14 @@ A comment saying where it's implemented, with the commit link, is enough.
 
 | Issue | Topic | Fork state |
 |---|---|---|
+| [#128](https://github.com/Ryan-Haines/adventureland-party-console/issues/128) | Mailbox enhancements. New, opened by the maintainer. | Not started |
+| [#127](https://github.com/Ryan-Haines/adventureland-party-console/issues/127) | Add a "cleave" action for scatter farming or when multiple monsters aggro the party. New, opened by the maintainer. | Not started |
+| [#126](https://github.com/Ryan-Haines/adventureland-party-console/issues/126) | Look for bosses while navigating to boss location. New, opened by the maintainer. | Not started |
+| [#125](https://github.com/Ryan-Haines/adventureland-party-console/issues/125) | Changing farming target during an event leaves the party stuck in main. New, opened by the maintainer. | Not started. The maintainer suspects [cc73174](https://github.com/Ryan-Haines/adventureland-party-console/pull/64/commits/cc73174c21699eb1609fd8c3543) (in the 16 unmerged commits) may already fix it |
 | [#122](https://github.com/Ryan-Haines/adventureland-party-console/issues/122) | Fix the position of the “minimize” control in the Steam interface. New, opened by the maintainer. | Not started |
 | [#120](https://github.com/Ryan-Haines/adventureland-party-console/issues/120) | Persistent buy orders, optionally “buy until N of an item at a level exist” across bank, merchant and BankBoi. New, opened by the maintainer. | Not started |
 | [#115](https://github.com/Ryan-Haines/adventureland-party-console/issues/115) | Ctrl/Shift+click to multi-select items in any inventory context and apply one disposition to all; show only actions valid for every selected item. New, opened by the maintainer. | Not started |
-| [#114](https://github.com/Ryan-Haines/adventureland-party-console/issues/114) | Per-event “timid” or “bold” boss mode: timid joins 30 s late, waits for someone else to hold aggro and only heals the party. New, opened by the maintainer. | Not started |
+| [#114](https://github.com/Ryan-Haines/adventureland-party-console/issues/114) | Per-event “timid” or “bold” boss mode: timid joins 30 s late, waits for someone else to hold aggro and only heals the party. Opened 10-13; #36 (Franky off-tank) was closed as a duplicate of it. | Partial: the fork's Franky off-tank routine (the #36 work) is the Franky-specific version; the general per-event mode is not started |
 | [#113](https://github.com/Ryan-Haines/adventureland-party-console/issues/113) | Fix merchant and top-bar action icons (Force stand, Send to party, Mining, Fishing, Bestiary, Catalog, Stand). New, opened by the maintainer. | Not started |
 | [#112](https://github.com/Ryan-Haines/adventureland-party-console/issues/112) | Show each character’s current target, and keep the event boss’s sprite or health bar visible above attack animations. New, opened by the maintainer. | Not started |
 | [#111](https://github.com/Ryan-Haines/adventureland-party-console/issues/111) | Add “Auto exchange” to the bank context menu. The body is empty. New, opened by the maintainer. | Not started |
@@ -211,11 +228,9 @@ A comment saying where it's implemented, with the commit link, is enough.
 | [#103](https://github.com/Ryan-Haines/adventureland-party-console/issues/103) | Mark “add stat scroll” and “deliver to” together, delivering only after the scroll is applied. New, opened by the maintainer. | Not started |
 | [#76](https://github.com/Ryan-Haines/adventureland-party-console/issues/76) | Route the convoy from whichever character is closest to the destination, with others meeting there; maybe configurable (group at tank or at leader). New, opened by the maintainer. | Not started. Relates to the tank role (#39) |
 | [#78](https://github.com/Ryan-Haines/adventureland-party-console/issues/78) | Rules for using higher-tier upgrade scrolls even when not required. New, opened by the maintainer. | Not started. Would build on the #63 estimator |
-| [#79](https://github.com/Ryan-Haines/adventureland-party-console/issues/79) | Investigate/rework hot reload: characters keep dying while an agent edits files. New, opened by the maintainer. | Not started. The fork's live dev install auto-publishes on every `shared.js` edit, the same exposure |
 | [#80](https://github.com/Ryan-Haines/adventureland-party-console/issues/80) | Option to “mark for compounding” items in the bank. The body is a placeholder. New, opened by the maintainer. | Not started |
 | [#81](https://github.com/Ryan-Haines/adventureland-party-console/issues/81) | Show contribution-based multi-drops on monster details; investigate items listed twice for one monster with different rates (e.g. Broom). New, opened by the maintainer. | Not started |
 | [#82](https://github.com/Ryan-Haines/adventureland-party-console/issues/82) | Auto-cycle PVP-marked items (shadow stones that won't stack) and show the PVP mark on inventory icons. New, opened by the maintainer. | Not started |
-| [#94](https://github.com/Ryan-Haines/adventureland-party-console/issues/94) | Add a mute for game sounds. New, opened by the maintainer. | Not started |
 | [#95](https://github.com/Ryan-Haines/adventureland-party-console/issues/95) | “Go headless” fails with “Wait for the character’s active inventory operation to finish”. New, opened by the maintainer. | Not started |
 | [#98](https://github.com/Ryan-Haines/adventureland-party-console/issues/98) | Inspect and compare an offline character’s equipment and inventory. New, opened by the maintainer. | Not started |
 
@@ -279,4 +294,4 @@ These belong with the features they split.
 
 Removed on 10-08 when adopting 1.4, because no upstream issue represents it. A faster character kept walking its path, and `afterCombat` got an escape option for event return, travel and party assembly.
 
-This ledger was built from `git log upstream/bugfix-1.4..adopt/bugfix-1.4` (upstream at 9273ecb, merged as 400fb81), and all upstream issues #13–#124, comments and PRs as of 2026-10-13. Icelocked opened #28, #47, #59–#63 and #86; comment on those rather than editing them.
+This ledger was built from `git log upstream/bugfix-1.4..adopt/bugfix-1.4` (upstream at 9273ecb, merged as 400fb81), and all upstream issues #13–#131, comments and PRs as of 2026-10-16. Icelocked opened #28, #47, #59–#63 and #86, and [PR #131](https://github.com/Ryan-Haines/adventureland-party-console/pull/131) (replacing #89); comment on those rather than editing them.
