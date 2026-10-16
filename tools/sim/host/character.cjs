@@ -109,6 +109,19 @@ function bootCharacter(o) {
   game.api_call = (method, a, r) =>
     method === "servers_and_characters" ? undefined : api(method, a, r);
 
+  const ledger = [];
+  for (const event of [
+    "hit",
+    "death",
+    "new_map",
+    "game_response",
+    "chest_opened",
+    "disappearing_text",
+  ])
+    game.socket.on(event, (data) => {
+      ledger.push({ at: env.clock.now, event, data });
+    });
+  game.__simEvents = ledger;
   const handlers = [];
   let runnerHost = null;
   const runnerFiles = chronal.RUNNER_FILES.filter((file) => !/jquery/.test(file));
@@ -129,6 +142,7 @@ function bootCharacter(o) {
             log("error", `[${args.cname} CODE] ${(e && (e.stack || e.message)) || e}`);
           },
         });
+        state.code = runner;
         runner.queueMicrotask = microtask;
         runner.XMLHttpRequest = o.transport.xhrClass();
         runner.fetch = o.transport.fetchFunction();
@@ -195,6 +209,14 @@ function bootCharacter(o) {
   send({ type: "initialized" });
   return {
     state,
+    query(expression) {
+      if (!state.code) throw new Error("CODE not ready");
+      const value = require("node:vm").runInContext(expression, state.code, { timeout: 5000 });
+      if (value && typeof value.then === "function")
+        throw new Error("Async CODE queries are not supported by the gameplay fixture");
+      const json = JSON.stringify(value);
+      return json === undefined ? undefined : JSON.parse(json);
+    },
     receive: (message) => {
       for (const handler of handlers.slice()) handler(message);
     },

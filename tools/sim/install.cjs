@@ -52,4 +52,16 @@ if (process.platform === "win32") {
   const symlinkSync = fs.symlinkSync;
   fs.symlinkSync = (from, to) => symlinkSync(from, to, "junction");
 }
+// Use the exact native E2E game revision while leaving ChronAL's checkout clean.
+const pins = require("./pins.json"),
+  upstreamFile = path.join(target, "upstream.json");
+const readFileSync = fs.readFileSync;
+fs.readFileSync = (file, options) => {
+  const content = readFileSync(file, options);
+  if (String(file) !== upstreamFile) return content;
+  const upstream = JSON.parse(String(content));
+  for (const key of ["game", "common", "config"]) upstream[key].commit = pins[key];
+  const json = JSON.stringify(upstream);
+  return typeof content === "string" ? json : Buffer.from(json);
+};
 console.log("installed:", require(path.join(target, "lib/install.js")).install());

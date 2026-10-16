@@ -100,7 +100,7 @@ async function main() {
       name: c.name,
       type: c.type,
       account: "party",
-      over: { level: c.level || 50, ...c.over },
+      over: characterSeed(c, scenario, sim.server.G),
     });
     return {
       ...c,
@@ -209,6 +209,21 @@ async function main() {
   // the clock's event order, and the traced replay would no longer be the run it investigates.
   enableTrace({ clock, out, transport, sim });
 
+  if (process.env.SIM_E2E_IPC === "1") {
+    await require("./session.cjs").serveSession({
+      sim,
+      api,
+      waitFor,
+      out,
+      counts,
+      transport,
+      characters,
+      root,
+      runDir,
+    });
+    await sim.close();
+    return;
+  }
   const executeStep = async (step) => {
     if (step.action === "farm") return farm(step);
     if (step.action === "hunt") return hunt(step);
@@ -337,6 +352,35 @@ async function main() {
     if (error) throw error;
     return value;
   }
+}
+
+function characterSeed(c, scenario, G) {
+  const over = { level: c.level || 50, ...c.over };
+  if (!scenario.initialLoadout) return over;
+  const definition = scenario.initialLoadout;
+  const slots = structuredClone(G.classes[c.type].base_slots || {});
+  for (const item of Object.values(slots)) if (item?.name) item.level = definition.weaponLevel;
+  const stat = c.type === "warrior" ? "str" : c.type === "ranger" ? "dex" : "int";
+  Object.assign(slots, definition.armor, {
+    amulet: { name: stat + "amulet", level: 20 },
+    belt: { name: stat + "belt", level: 20 },
+  });
+  over.info = {
+    ...over.info,
+    slots,
+    hp: 1e9,
+    mp: 1e9,
+    gold: 10000000,
+    map: "main",
+    in: "main",
+    x: 0,
+    y: 0,
+    items: [
+      { name: "hpot1", q: 1000 },
+      { name: "mpot1", q: 1000 },
+    ],
+  };
+  return over;
 }
 
 function characterHost({ scenario, sim, apps, transport, log, characters, credentials, clock }) {

@@ -140,6 +140,7 @@ function runWindow(end) {
 function command(message) {
   if (message.t === "q")
     reply({ value: character ? character.state.query(message.expr) : undefined });
+  else if (message.t === "code") reply({ value: character.query(message.expr) });
   else if (message.t === "rec_open") reply({});
   else if (message.t === "stop") {
     reply({});

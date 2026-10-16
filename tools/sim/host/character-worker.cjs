@@ -74,6 +74,7 @@ function workerFactory(o) {
               state,
               game: state.game,
               query: async (expr) => state.query(expr),
+              queryCode: async (expr) => character.query(expr),
               get errors() {
                 return state.errors;
               },

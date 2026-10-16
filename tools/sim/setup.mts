@@ -9,20 +9,17 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 export const target = path.join(root, ".build/sim/chronal");
-export const revision = "e858d3f4cc941cc5ab87b94d2e471c0fb9dfd785";
+const pins: Record<string, string> = JSON.parse(
+  readFileSync(path.join(root, "tools/sim/pins.json"), "utf8"),
+);
+export const revision = pins.chronal;
 /** The game ChronAL installs into runtime/app, pinned so a game update can't silently change a simulation. */
 export const game = {
-  adventureland_mongodb: [
-    "https://github.com/kaansoral/adventureland_mongodb",
-    "2148cf25d01060f54bcab01dfa7c2cf5b7baf374",
-  ],
-  common_engine: [
-    "https://github.com/kaansoral/common_engine",
-    "fa74fabf5d3782503712621e037bfb934ecb8439",
-  ],
+  adventureland_mongodb: ["https://github.com/kaansoral/adventureland_mongodb", pins.game],
+  common_engine: ["https://github.com/kaansoral/common_engine", pins.common],
   adventureland_secretsandconfig: [
     "https://github.com/kaansoral/adventureland_secretsandconfig",
-    "6b3493be30abe367cfaf879a2d5ad370742e0866",
+    pins.config,
   ],
 } as const;
 
