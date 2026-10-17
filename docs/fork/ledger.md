@@ -7,7 +7,7 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 | | |
 |---|---|
 | Upstream base | `1.5-feature-branch` @ 849c38a, merged as 53a3cd6 on 10-16 (branch `adopt/1.5`, from `main`). Carries v1.4.0 (PR #64, b4443e4) plus the ChronAL simulation harness (7f81f71) and accelerated gameplay E2Es (849c38a) |
-| Fork head | `adopt/1.5` @ dbadfe7, not pushed; `main` @ 9f27849, pushed to origin |
+| Fork head | `adopt/1.5` @ 365a69d, pushed to origin; `main` @ 9f27849, pushed to origin |
 | Divergence | 0 behind; 208 files differ from upstream’s tip (849c38a) |
 | Checked | 2026-10-16, against every upstream issue, comment and PR (#13–#131); #136 and #137 filed 10-17 |
 
