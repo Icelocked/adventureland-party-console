@@ -3,8 +3,9 @@
 Runs the party console's coordinator and every character's real CODE against the real
 game server at faster than real time, for problems that need hours of play to show up:
 long travel, slow state growth, and bugs that only appear after many fights. It is a
-separate tool, not part of `npm test`: the live E2E suite remains the source of truth
-for observable behavior.
+standalone soak tool. Seven existing gameplay E2Es now also use this host through
+the [accelerated fixture](../../docs/testing-simulation.md) in `npm test`; browser,
+deployment and native-only journeys retain their original fixtures.
 
 ## How it works
 
@@ -50,8 +51,7 @@ differently, so they are each reproducible but differ slightly from each other.
 ## Use
 
 ```sh
-npm run build:runtime          # the coordinator and CODE bundles the simulation runs
-npm run sim:setup              # once: pinned ChronAL + game under .build/sim/chronal
+npm run sim:setup              # Node 24+, once: pinned ChronAL + game under .build/sim/chronal
 npm run sim -- tools/sim/scenarios/farm-goo.json
 ```
 
@@ -97,20 +97,65 @@ A run that misses an expectation lists it in `report.expect` and exits 1.
 
 ## Pins and maintenance
 
-`setup.mts` pins ChronAL (0.10.0) and the three game repositories it installs to exact
-commits. The game commits are the ones that ChronAL release is tested with (its
-`upstream.json`). No patches are needed: since 0.9.0 ChronAL itself exports its window
-builder, lets `login` start a character's thread from this tool's own worker script, and
-supports the current game's socket.io calls (MtlSnkAI/chronal#1, #2). Moving the pin
-force-checks-out ChronAL and reinstalls its dependencies. The game moves quickly; when
-ChronAL or the game is updated, move the pins together and re-run a scenario before
-trusting results.
+`setup.mts` pins ChronAL **0.10.0** (`e858d3f4cc941cc5ab87b94d2e471c0fb9dfd785`)
+and its three game repositories to exact commits in `pins.json`. The game revision
+is shared with the native Docker E2E stack (`90052162eb3ebda36c893e1eb4af643913c8f984`). No upstream patches are required.
+Setup refuses tracked dependency edits and unexpected origins, and uses shallow pinned
+fetches. `install.cjs` confines upstream configuration to this checkout; on Windows it
+adapts the installer's Bash copy to Node file copying and directory links to junctions.
+No administrator symlink privilege or Bash installation is needed. Generated caches and
+CODE use copies. The game dependency installer still needs npm and network access.
+Each run rebuilds shared/runtime bundles and stages CODE from the working tree.
+
+The host integration is adapted from [Thefonze74065's implementation](https://github.com/Thefonze74065/adventureland-party-console/tree/e67f6c702dcc8055b6e65573a282e26c63360459/tools/sim)
+for [issue #58](https://github.com/Ryan-Haines/adventureland-party-console/issues/58).
+Move simulator/game pins together and rerun the benchmark when upgrading.
+
+## Local speed and replay validation
+
+```sh
+npm run sim:benchmark
+# optionally supply a different bounded scenario:
+npm run sim:benchmark -- tools/sim/scenarios/benchmark-goo.json
+```
+
+The default five-minute native Goo farming journey runs three times: paced at real
+time, accelerated, and accelerated with passive tracing. All three must satisfy the
+same gameplay expectations and produce byte-identical timelines from the same CODE,
+coordinator and scenario hashes. The benchmark fails if wall time is not reduced.
+`benchmark.json` records per-run simulation and full subprocess wall time (including
+build/boot); `evidence.json` hashes the reports, timelines, logs and traced requests.
+Results live under `.build/sim-benchmarks/`; underlying runs remain in `.build/sim-results/`.
+`--paced` is a benchmark baseline for this virtual-clock host, not a measurement of
+Playwright. The long scenarios remain opt-in soak coverage; this tool does not make
+the unmigrated Playwright journeys faster or replace browser, Steam, deployment or live networking assertions.
+Use `npm run test:e2e:benchmark` to measure the actual migrated E2Es.
+
+Scenario API steps fail on HTTP errors. Every run requires completed virtual duration,
+native players and coordinator heartbeats, no transport errors, and any declared
+kill/death/error expectations. Requests have a 120-virtual-second deadline.
+Verify the retained benchmark with `npm run sim:verify -- <absolute-path-to-evidence.json>`.
+Historical standalone validation, before the E2E integration and game-pin alignment, on 2026-10-16 completed the default scenario in 333.75 s
+paced, 63.77 s accelerated, and 69.87 s with tracing: **5.23x** full-command speedup.
+All three timelines hashed to
+`3ee62e21393d06540990cfab12ed52db83e362ead9ead022cca42c5dc26dbd4d`, with
+205 actual Goo kills and no character deaths or coordinator errors. One accelerated
+run logged a Windows `EPERM` journal-compaction deferral; the native timeline still
+matched. The retained benchmark is `.build/sim-benchmarks/2026-10-16T23-14-49-354Z/`.
+The separate focused console/native E2E run passed two scenarios with 46 verified
+evidence files. This is bounded harness validation, not a complete native-suite or
+multi-hour soak certification.
+
+See [failure inventory](FAILURE-MODES.md).
 
 ## Limits
 
-- Speed is bound by the CPU of the CODE and coordinator. For two farming characters,
+- Speed is bound by the CPU of the CODE and coordinator. The reference implementation reported that for two farming characters,
   single-threaded runs reach about 4x real time and threaded runs about 5-6x; the main
   thread (game server plus coordinator) is then the busiest. Idle characters run at about
   20x (single-threaded) to 35x (threaded).
+- ChronAL 0.10.0 runs native `smart_move` searches in one virtual-clock turn;
+  the coordinator planner is unaffected. Do not use this pin for timing-sensitive
+  native `smart_move` claims (upstream's fix is unreleased).
 - No dashboard, Steam runner or realm switching. ChronAL has no other players, and its own
   README notes that timing-exact numbers (deaths, damage taken, potions) can differ from live.

@@ -5,7 +5,19 @@
   "minutes": 5,
   "sampleSeconds": 30,
   "characters": [
-    { "name": "SimWarrior", "type": "warrior", "level": 60 },
-    { "name": "SimPriest", "type": "priest", "level": 60 }
-  ]
+    {
+      "name": "SimWarrior",
+      "type": "warrior",
+      "level": 60
+    },
+    {
+      "name": "SimPriest",
+      "type": "priest",
+      "level": 60
+    }
+  ],
+  "expect": {
+    "maxDeaths": 0,
+    "maxErrors": 0
+  }
 }

@@ -5,9 +5,7 @@
   "realm": "SR_USI",
   "minutes": 180,
   "sampleSeconds": 60,
-  "track": [
-    "phoenix"
-  ],
+  "track": ["phoenix"],
   "characters": [
     {
       "name": "SimWarrior",
@@ -135,9 +133,7 @@
       "atSeconds": 30,
       "action": "hunt",
       "leader": "SimWarrior",
-      "followers": [
-        "SimPriest"
-      ],
+      "followers": ["SimPriest"],
       "monster": "phoenix"
     }
   ],

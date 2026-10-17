@@ -7,7 +7,8 @@ const { EventEmitter } = require("node:events");
 const { PassThrough } = require("node:stream");
 const { dispatch } = require("./transport.cjs");
 
-const IPC_PATH = "/sim-caracal-ipc/", HTTP_PATH = "/sim-party-api/";
+const IPC_PATH = "/sim-caracal-ipc/",
+  HTTP_PATH = "/sim-party-api/";
 
 /**
  * @param {object} o
@@ -16,41 +17,86 @@ const IPC_PATH = "/sim-caracal-ipc/", HTTP_PATH = "/sim-party-api/";
  * @param {object} o.stats      transport stats to add the characters' requests to
  * @param {(level:string, message:string)=>void} o.log
  */
+function recordRequest(stats, parsed, body) {
+  const kind =
+    body && /"combatWait":true/.test(body)
+      ? " [combatWait]"
+      : body && /"combatOnly":true/.test(body)
+        ? " [combatOnly]"
+        : "";
+  stats.requests++;
+  stats.byPath.set(parsed.pathname + kind, (stats.byPath.get(parsed.pathname + kind) || 0) + 1);
+  if (body && body.length > stats.largestBody) stats.largestBody = body.length;
+  if (stats.observe) stats.observe(parsed.pathname, body);
+}
+function recordResponse(stats, parsed, body, result) {
+  const tag = parsed.pathname + " " + result.statusCode;
+  stats.byStatus.set(tag, (stats.byStatus.get(tag) || 0) + 1);
+  if (result.statusCode >= 400 && !stats.firstFailure.has(tag))
+    stats.firstFailure.set(tag, result.body.slice(0, 300));
+  if (stats.observeResponse) stats.observeResponse(parsed.pathname, body, result.body);
+}
+
 function threadedHost(o) {
-  const { sim } = o, clock = sim.clock;
+  const { sim } = o,
+    clock = sim.clock;
   const { Server } = sim.hub.socketIoModule(JSON);
   const http = Server(null, { path: HTTP_PATH });
-  http.on("connection", (socket) => socket.on("req", (m) => {
-    const parsed = new URL(m.url, "http://127.0.0.1:924");
-    const kind = m.body && /"combatWait":true/.test(m.body) ? " [combatWait]" : m.body && /"combatOnly":true/.test(m.body) ? " [combatOnly]" : "";
-    o.stats.requests++;
-    o.stats.byPath.set(parsed.pathname + kind, (o.stats.byPath.get(parsed.pathname + kind) || 0) + 1);
-    if (m.body && m.body.length > o.stats.largestBody) o.stats.largestBody = m.body.length;
-    if (o.stats.observe) o.stats.observe(parsed.pathname, m.body);
-    const local = /^(127\.0\.0\.1|localhost)$/.test(parsed.hostname), app = local && o.apps.get(Number(parsed.port || 80));
-    if (!app) {
-      o.stats.errors++;
-      return void socket.emit("res", { id: m.id, error: local ? "nothing listens on " + parsed.host : "network disabled: " + parsed.host });
-    }
-    dispatch(app, { method: m.method || "GET", path: parsed.pathname + parsed.search, headers: m.headers, body: m.body }, (result) => {
-      const tag = parsed.pathname + " " + result.statusCode;
-      o.stats.byStatus.set(tag, (o.stats.byStatus.get(tag) || 0) + 1);
-      if (result.statusCode >= 400 && !o.stats.firstFailure.has(tag)) o.stats.firstFailure.set(tag, result.body.slice(0, 300));
-      if (o.stats.observeResponse) o.stats.observeResponse(parsed.pathname, m.body, result.body);
-      socket.emit("res", { id: m.id, result: { ...result, headers: Object.fromEntries(Object.entries(result.headers || {}).map(([k, v]) => [k, String(v)])) } });
-    });
-  }));
+  http.on("connection", (socket) =>
+    socket.on("req", (m) => {
+      const parsed = new URL(m.url, "http://127.0.0.1:924");
+      recordRequest(o.stats, parsed, m.body);
+      const local = /^(127\.0\.0\.1|localhost)$/.test(parsed.hostname),
+        app = local && o.apps.get(Number(parsed.port || 80));
+      if (!app) {
+        o.stats.errors++;
+        return void socket.emit("res", {
+          id: m.id,
+          error: local ? "nothing listens on " + parsed.host : "network disabled: " + parsed.host,
+        });
+      }
+      dispatch(
+        app,
+        {
+          method: m.method || "GET",
+          path: parsed.pathname + parsed.search,
+          headers: m.headers,
+          body: m.body,
+        },
+        (result) => {
+          recordResponse(o.stats, parsed, m.body, result);
+          socket.emit("res", {
+            id: m.id,
+            result: {
+              ...result,
+              headers: Object.fromEntries(
+                Object.entries(result.headers || {}).map(([k, v]) => [k, String(v)]),
+              ),
+            },
+          });
+        },
+      );
+    }),
+  );
 
-  const sockets = new Map(), workers = new Map(), queued = new Map();
+  const sockets = new Map(),
+    workers = new Map(),
+    queued = new Map();
   const ipc = Server(null, { path: IPC_PATH });
   ipc.on("connection", (socket) => {
     const name = String(socket.handshake.query.name);
     sockets.set(name, socket);
     for (const message of queued.get(name) || []) socket.emit("ipc", message);
     queued.delete(name);
-    socket.on("ipc", (message) => { const worker = workers.get(name); if (worker) worker.emit("message", message); });
+    socket.on("ipc", (message) => {
+      const worker = workers.get(name);
+      if (worker) worker.emit("message", message);
+    });
     socket.on("log", ({ level, message }) => o.log(level, message));
-    socket.on("exit", (code) => { const worker = workers.get(name); if (worker) worker.exit(code); });
+    socket.on("exit", (code) => {
+      const worker = workers.get(name);
+      if (worker) worker.exit(code);
+    });
   });
   const toThread = (name, message) => {
     const socket = sockets.get(name);
@@ -70,10 +116,21 @@ function threadedHost(o) {
     let name = null;
     worker.exit = (code) => {
       if (!worker.connected) return;
-      worker.connected = false; worker.exitCode = code;
-      clock.at(clock.now, () => { worker.emit("disconnect"); worker.emit("exit", code, null); }, "worker exit");
+      worker.connected = false;
+      worker.exitCode = code;
+      clock.at(
+        clock.now,
+        () => {
+          worker.emit("disconnect");
+          worker.emit("exit", code, null);
+        },
+        "worker exit",
+      );
     };
-    worker.kill = () => { worker.exit(null); return true; };
+    worker.kill = () => {
+      worker.exit(null);
+      return true;
+    };
     worker.disconnect = () => worker.exit(0);
     worker.send = (message) => {
       if (message.type === "process_args") {
@@ -90,11 +147,18 @@ function threadedHost(o) {
   /** Log every character's thread in before the run: it waits for the coordinator's process_args. */
   function start(characters, { chronalDir, repoRoot, fps }) {
     for (const c of characters)
-      sim.login({ user_id: c.user_id, auth: c.auth, character: c.id, name: c.name }, {
-        name: c.name, type: c.type, account: "party", code: "", fps: fps || 20,
-        worker: path.join(__dirname, "client-thread.cjs"),
-        extra: { chronalDir, repoRoot, sim: { ipcPath: IPC_PATH, httpPath: HTTP_PATH } },
-      });
+      sim.login(
+        { user_id: c.user_id, auth: c.auth, character: c.id, name: c.name },
+        {
+          name: c.name,
+          type: c.type,
+          account: "party",
+          code: "",
+          fps: fps || 20,
+          worker: path.join(__dirname, "client-thread.cjs"),
+          extra: { chronalDir, repoRoot, sim: { ipcPath: IPC_PATH, httpPath: HTTP_PATH } },
+        },
+      );
   }
 
   return { fork, start };

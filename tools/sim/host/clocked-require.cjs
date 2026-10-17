@@ -10,21 +10,50 @@ const Module = require("node:module");
 function clockedContext({ clock, globals = {}, onError }) {
   const ctx = vm.createContext(vm.constants.DONT_CONTEXTIFY);
   Object.assign(ctx, {
-    console, Buffer, URL, URLSearchParams, TextEncoder, TextDecoder, AbortController, AbortSignal, queueMicrotask, atob, btoa,
-    Headers, Request, Response, FormData, Blob, structuredClone, WebAssembly, EventTarget, Event,
-    crypto: globalThis.crypto, process,
-    fetch: async () => { throw new Error("[sim] network disabled"); },
+    console,
+    Buffer,
+    URL,
+    URLSearchParams,
+    TextEncoder,
+    TextDecoder,
+    AbortController,
+    AbortSignal,
+    queueMicrotask,
+    atob,
+    btoa,
+    Headers,
+    Request,
+    Response,
+    FormData,
+    Blob,
+    structuredClone,
+    WebAssembly,
+    EventTarget,
+    Event,
+    crypto: globalThis.crypto,
+    process,
+    fetch: async () => {
+      throw new Error("[sim] network disabled");
+    },
     ...globals,
   });
   ctx.global = ctx;
-  clock.installInto(ctx, { profile: "node", onError: onError || ((e) => console.error("[sim] timer error:", e)) });
-  ctx.setImmediate = (fn, ...args) => ({ id: clock.at(clock.now, () => fn(...args), "setImmediate") });
+  clock.installInto(ctx, {
+    profile: "node",
+    onError: onError || ((e) => console.error("[sim] timer error:", e)),
+  });
+  ctx.setImmediate = (fn, ...args) => ({
+    id: clock.at(clock.now, () => fn(...args), "setImmediate"),
+  });
   ctx.clearImmediate = (handle) => handle && clock.cancel(handle.id);
   return ctx;
 }
 
 function clockedRequire({ ctx, root, byName = {}, byPath = {}, cache = new Map() }) {
-  const ours = (file) => file.startsWith(root + path.sep) && !file.includes(`${path.sep}node_modules${path.sep}`) && /\.c?js$/.test(file);
+  const ours = (file) =>
+    file.startsWith(root + path.sep) &&
+    !file.includes(`${path.sep}node_modules${path.sep}`) &&
+    /\.c?js$/.test(file);
   function make(fromFile) {
     const real = Module.createRequire(fromFile);
     function req(id) {
@@ -37,10 +66,21 @@ function clockedRequire({ ctx, root, byName = {}, byPath = {}, cache = new Map()
       const file = real.resolve(id);
       if (!ours(file)) return real(id);
       if (cache.has(file)) return cache.get(file).exports;
-      const module = { exports: {}, id: file, filename: file, loaded: false, children: [], paths: [] };
+      const module = {
+        exports: {},
+        id: file,
+        filename: file,
+        loaded: false,
+        children: [],
+        paths: [],
+      };
       cache.set(file, module);
       const source = fs.readFileSync(file, "utf8").replace(/^#!.*/, "");
-      const wrapped = vm.runInContext(`(function (exports, require, module, __filename, __dirname) {${source}\n})`, ctx, { filename: file });
+      const wrapped = vm.runInContext(
+        `(function (exports, require, module, __filename, __dirname) {${source}\n})`,
+        ctx,
+        { filename: file },
+      );
       wrapped.call(module.exports, module.exports, make(file), module, file, path.dirname(file));
       module.loaded = true;
       return module.exports;
@@ -60,8 +100,14 @@ function clockedLifecycle({ clock, root, onError }) {
   const ctx = clockedContext({ clock, onError });
   const fsp = require("node:fs/promises");
   const syncReads = { ...fsp, readFile: async (file, options) => fs.readFileSync(file, options) };
-  const make = clockedRequire({ ctx, root, byName: { "node:fs/promises": syncReads, "fs/promises": syncReads } });
-  return make(path.join(root, "tools/sim/host/lifecycle-entry.cjs"))(path.join(root, ".build/runtime/lifecycle.cjs"));
+  const make = clockedRequire({
+    ctx,
+    root,
+    byName: { "node:fs/promises": syncReads, "fs/promises": syncReads },
+  });
+  return make(path.join(root, "tools/sim/host/lifecycle-entry.cjs"))(
+    path.join(root, ".build/runtime/lifecycle.cjs"),
+  );
 }
 
 module.exports = { clockedContext, clockedRequire, clockedLifecycle };

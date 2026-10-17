@@ -22,10 +22,16 @@
       "atSeconds": 30,
       "action": "farm",
       "leader": "SimWarrior",
-      "followers": [
-        "SimPriest"
-      ],
+      "followers": ["SimPriest"],
       "monster": "goo"
     }
-  ]
+  ],
+  "track": ["goo"],
+  "expect": {
+    "minKills": {
+      "goo": 1
+    },
+    "maxDeaths": 0,
+    "maxErrors": 0
+  }
 }
