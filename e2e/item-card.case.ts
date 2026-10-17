@@ -362,6 +362,7 @@ test("item details show stats as the game card beside a matching extras box", as
   const ringCard = ringDialog.getByRole("region", { name: "Item card", exact: true });
   const ringExtras = ringDialog.getByRole("region", { name: "Item extras", exact: true });
   for (const text of ["Locked", "Account Bound", "Expires"]) await expect(ringCard).toContainText(text);
+  expect(await color(ringCard.locator('[data-line="lock"]'))).toBe(rgb("#8C8C8C"));
   for (const text of ["Quantity", "Stat scroll"]) await expect(ringCard).not.toContainText(text);
   await expect(line(ringExtras, "quantity")).toHaveText("Quantity: 2");
   await expect(line(ringExtras, "stat_type")).toHaveText("Stat Scroll: Dexterity");

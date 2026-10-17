@@ -224,7 +224,8 @@ function stateLines(item: Item): ItemCardLine[] {
   const lines: ItemCardLine[] = [];
   if (item.l === "s") lines.push({ kind: "text", key: "lock", text: "Sealed", color: "#C45F5F" });
   else if (item.l === "u") lines.push({ kind: "text", key: "lock", text: "Unsealing", color: "#C4A35F" });
-  else if (item.l) lines.push({ kind: "text", key: "lock", text: "Locked", color: "#404141" });
+  // The game colors Locked #404141, close to invisible on black; this keeps it muted but readable.
+  else if (item.l) lines.push({ kind: "text", key: "lock", text: "Locked", color: "#8C8C8C" });
   if (item.acl) lines.push({ kind: "text", key: "acl", text: "Account Bound", color: "#ADA68E" });
   if (item.expires) lines.push({ kind: "prop", key: "expires", label: "Expires", value: new Date(item.expires).toLocaleString(), color: COLORS.gray });
   return lines;

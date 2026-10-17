@@ -57,6 +57,8 @@ Written before the implementation; each line has a check in
 11. Item state disappears or lands in the wrong box. Sealed, locked, account
     bound and expiry show on the card. Quantity and stat scroll show in the
     extras box, since the game shows them on the inventory slot, not the card.
+    "Locked" uses `#8C8C8C`: the game's `#404141` is close to invisible on
+    black.
 12. Booleans print "true" and "false". They read Yes and No.
 13. A scrolled stat shows twice. Once a copy has a stat scroll (`stat_type`), the
     game folds its "stat" into that stat and shows no Stat line
