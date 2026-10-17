@@ -7,8 +7,8 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 | | |
 |---|---|
 | Upstream base | `1.5-feature-branch` @ 849c38a, merged as 53a3cd6 on 10-16 (branch `adopt/1.5`, from `main`). Carries v1.4.0 (PR #64, b4443e4) plus the ChronAL simulation harness (7f81f71) and accelerated gameplay E2Es (849c38a) |
-| Fork head | `adopt/1.5` and `main` @ the commit recording this, pushed to origin; v1.4.1 released from 2dd3b2b on 10-17 |
-| Divergence | 0 behind; 213 files differ from upstream’s tip (849c38a) |
+| Fork head | `adopt/1.5` @ the commit recording this (after ab0c3f3), pushed to origin; `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
+| Divergence | 0 behind; 214 files differ from upstream’s tip (849c38a) |
 | Checked | 2026-10-16, against every upstream issue, comment and PR (#13–#131); #136 and #137 filed 10-17 |
 
 | Status | Count |
@@ -36,6 +36,8 @@ Nothing unfiled. The Fan farm gear set was commented on #39 (10-17).
 [c873716](https://github.com/Thefonze74065/adventureland-party-console/commit/c873716)
 
 - After #137 was filed: the stand now searches spots within Fan of Knives reach for the most one-shot mobs (up to five) instead of the cluster's middle, the independent approach ends at Fan of Knives reach, and Fan of Knives replaces the basic attack on a lone target while fan-farming (control: basic-attack kills on lone Goos with throwing stars). Commented on #137 with the change and the stars-with-dagger attack cut.
+
+- 10-17: [second comment](https://github.com/Ryan-Haines/adventureland-party-console/issues/137#issuecomment-6240938676) for [ab0c3f3](https://github.com/Thefonze74065/adventureland-party-console/commit/ab0c3f3): a rogue that outspends back-to-back MP potions may dip into the survival reserve with Fan of Knives while fan-farming, drinks before fewer than two casts remain, and retries a cooldown-rejected cast on the next attack instead of a one-second lockout. Retained isolated test `fan-mana.test.cjs`.
 
 Issues filed before the work landed, features that changed with use, and maintainer replies that leave out what the fork already has.
 
