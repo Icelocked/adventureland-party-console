@@ -30,8 +30,11 @@ jobs:
         with:
           path: .build/sim/chronal
           key: simulation-${{ runner.os }}-node24-${{ hashFiles('tools/sim/pins.json', 'package-lock.json') }}
-      - name: Console and accelerated gameplay E2E
-        run: npm run test:e2e -- --project=console --project=simulation && npm run test:e2e:verify
+      # Fork-only: upstream's accelerated simulation E2Es time out at startup on GitHub runners
+      # ("Simulation IPC startup timed out", also on upstream 849c38a). Restore --project=simulation
+      # once upstream fixes the harness; see docs/fork/ledger.md.
+      - name: Console E2E
+        run: npm run test:e2e -- --project=console && npm run test:e2e:verify
       - name: Retained isolated regression exceptions
         shell: bash
         run: |

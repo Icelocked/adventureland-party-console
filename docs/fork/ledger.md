@@ -7,27 +7,39 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 | | |
 |---|---|
 | Upstream base | `1.5-feature-branch` @ 849c38a, merged as 53a3cd6 on 10-16 (branch `adopt/1.5`, from `main`). Carries v1.4.0 (PR #64, b4443e4) plus the ChronAL simulation harness (7f81f71) and accelerated gameplay E2Es (849c38a) |
-| Fork head | `adopt/1.5` @ 365a69d, pushed to origin; `main` @ 9f27849, pushed to origin |
-| Divergence | 0 behind; 208 files differ from upstream’s tip (849c38a) |
+| Fork head | `adopt/1.5` and `main` @ the commit recording this (after c873716), pushed to origin; release 1.4.1 pending |
+| Divergence | 0 behind; 213 files differ from upstream’s tip (849c38a) |
 | Checked | 2026-10-16, against every upstream issue, comment and PR (#13–#131); #136 and #137 filed 10-17 |
 
 | Status | Count |
 |---|---|
-| New issue | 0 |
-| Update / comment | 8 (2 to do) |
+| New issue | 1 |
+| Update / comment | 9 (3 to do) |
 | Done upstream | 39 |
 | Matches | 17 (all done but #129 and #130, not commented) |
 | Open upstream | 21 |
 | Closed | 19 |
-| Fork-only | 6 |
+| Fork-only | 7 |
 
 ## New issue: not represented upstream
 
 Implemented on the fork, with no upstream issue or PR describing it yet.
 
-Nothing unfiled. The giveaway and unconfirmed-purchase fixes were filed as #123 and #124.
+### Fan farm gear set
+
+[c873716](https://github.com/Thefonze74065/adventureland-party-console/commit/c873716)
+
+- A `fan` gear set a rogue wears while scatter farming mobs Fan of Knives one-shots (barely enough damage, the rest luck and attack speed, for crab/suckerpunch farming), restoring the previous gear after 3 s out of fan-farming or on convoy departure. A too-weak set comes off and is held off for 10 minutes. `live-fan-farm-gear.spec.ts`; retained isolated test `fan-farm-gear.test.cjs`. Builds on #137. To file.
 
 ## Update / comment: the issue doesn't match the fork's work
+
+### Rogue Fan of Knives: five-target stand and lone targets
+
+[#137 · not commented](https://github.com/Ryan-Haines/adventureland-party-console/issues/137)
+
+[c873716](https://github.com/Thefonze74065/adventureland-party-console/commit/c873716)
+
+- After #137 was filed: the stand now searches spots within Fan of Knives reach for the most one-shot mobs (up to five) instead of the cluster's middle, the independent approach ends at Fan of Knives reach, and Fan of Knives replaces the basic attack on a lone target while fan-farming (control: basic-attack kills on lone Goos with throwing stars). Comment on #137 with the change.
 
 Issues filed before the work landed, features that changed with use, and maintainer replies that leave out what the fork already has.
 
@@ -260,6 +272,12 @@ Every closed upstream issue not covered above. None has fork commits still pendi
 ### Agreed exceptions without an issue
 
 `VINEXT_NO_DEV_LOCK` in the E2E fixture, and the release pipeline below. Decided 10-08: everything else in the fork is upstream’s code or backed by an upstream issue.
+
+### Release CI skips upstream's simulation E2Es
+
+[`.github/workflows/release.yml`](../../.github/workflows/release.yml)
+
+Upstream's 7 accelerated simulation E2Es time out at startup on GitHub runners ("Simulation IPC startup timed out"), on upstream's own run at 849c38a too; all console E2Es pass. The fork's release step runs `--project=console` only. Restore `--project=simulation` once upstream fixes the harness. Decided 10-17.
 
 ### Release pipeline points at the fork
 
