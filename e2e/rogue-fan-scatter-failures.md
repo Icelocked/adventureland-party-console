@@ -49,3 +49,13 @@ replaces a swing (it shares the attack cooldown). Live journey:
     to five, holding while its spot already reaches as many; the approach should end at Fan
     of Knives reach. Requested by the user on 2026-10-17 ("positions itself such that it gets
     5 targets in range"). Retained isolated test: `scripts/tests/fan-stand.test.cjs`.
+11. **Spent below the reserve.** At ~1.6 attacks/s a rogue spends ~275 MP/s on Fan of Knives,
+    more than back-to-back `mpot1` return (250 MP/s). MP drifts to the 20% survival reserve,
+    and those swings become basic attacks; the potion rule also left a dead zone (no potion
+    until a whole one fits, no cast below cost + reserve). While fan-farming, Fan of Knives may
+    dip into the reserve down to its own cost, and the rogue drinks before fewer than two casts
+    remain. Reported by the user on 2026-10-17 (~16 basic attacks a minute, some at 300 MP).
+12. **Locked out after a cooldown race.** A Fan of Knives the server rejects for "cooldown" (sent
+    at the attack cooldown's edge) locked the skill out for a second, and the attack loop used
+    basic attacks meanwhile. A cooldown rejection retries on the next attack; other failures
+    keep the lockout. Retained isolated test: `scripts/tests/fan-mana.test.cjs` (11-12).

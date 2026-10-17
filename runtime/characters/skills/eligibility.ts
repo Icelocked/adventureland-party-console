@@ -1,5 +1,5 @@
-import type { SkillWorld, SkillId, SkillDefinition, SkillDecision } from './types.ts';
-import { incomingDps } from './damage.ts';
+import type { Combatant, SkillWorld, SkillId, SkillDefinition, SkillDecision } from './types.ts';
+import { damage, incomingDps } from './damage.ts';
 
 export function cost(w: SkillWorld, id: SkillId): number {
   const mp = id === 'heal' ? w.actor.mp_cost : w.skills[id]?.mp;
@@ -30,6 +30,17 @@ export function unlocked(w: SkillWorld, id: SkillId): boolean {
   if (w.actor.level < (s.level || 0) || !equipment(w, s)) return false;
   return Object.entries(s.requirements || {}).every(([key, value]) =>
     Number(Reflect.get(w.actor, key)) >= Number(value));
+}
+export const fanLethal = (w: SkillWorld, m: Combatant) => w.allowed(m, 'fanofknives') && damage(w, 'fanofknives', m, true) >= m.max_hp;
+/** Fan-farming judged with the gear worn now; `unseen` while scatter fan-farming has no authorized mob in view. */
+export function fanVerdict(w: SkillWorld): 'lethal' | 'weak' | 'unseen' | 'off' {
+  if (w.actor.ctype !== 'rogue' || w.context.mode !== 'scatter' || !unlocked(w, 'fanofknives')) return 'off';
+  const seen = w.context.monsters.filter(m => w.allowed(m, 'fanofknives'));
+  return !seen.length ? 'unseen' : seen.some(m => fanLethal(w, m)) ? 'lethal' : 'weak';
+}
+/** A Knife Belt rogue scatter farming mobs that Fan of Knives kills outright. */
+export function fanFarming(w: SkillWorld): boolean {
+  return fanVerdict(w) === 'lethal';
 }
 export function reserve(w: SkillWorld): number {
   const availableCost = (id: SkillId) => unlocked(w, id) ? cost(w, id) : 0;
@@ -75,6 +86,7 @@ function ownsAggro(w: SkillWorld, d: SkillDecision): boolean {
 function manaBlock(w: SkillWorld, d: SkillDecision, pending: number): string | null {
   const remaining = w.actor.mp - pending - cost(w, d.skill);
   if (remaining < 0) return 'insufficient MP';
-  if (d.category !== 'survival' && remaining < reserve(w)) return 'survival MP reserved';
+  // A rogue outspends even back-to-back MP potions while fan-farming; Fan of Knives may dip into the reserve.
+  if (d.category !== 'survival' && remaining < reserve(w) && !(d.skill === 'fanofknives' && fanFarming(w))) return 'survival MP reserved';
   return null;
 }

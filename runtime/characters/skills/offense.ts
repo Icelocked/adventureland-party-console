@@ -1,25 +1,15 @@
-import { blocked, cost, reserve, unlocked } from './eligibility.ts';
+import { blocked, cost, fanFarming, fanLethal } from './eligibility.ts';
+export { fanFarming, fanVerdict } from './eligibility.ts';
 import { damage, usefulDamage, purifiable } from './damage.ts';
 import { decision, type Combatant, type SkillDecision, type SkillId, type SkillWorld } from './types.ts';
 
-/** A Knife Belt rogue scatter farming mobs that Fan of Knives kills outright. */
-export function fanFarming(w: SkillWorld): boolean {
-  return fanVerdict(w) === 'lethal';
-}
-/** Fan-farming judged with the gear worn now; `unseen` while scatter fan-farming has no authorized mob in view. */
-export function fanVerdict(w: SkillWorld): 'lethal' | 'weak' | 'unseen' | 'off' {
-  if (w.actor.ctype !== 'rogue' || w.context.mode !== 'scatter' || !unlocked(w, 'fanofknives')) return 'off';
-  const seen = w.context.monsters.filter(m => w.allowed(m, 'fanofknives'));
-  return !seen.length ? 'unseen' : seen.some(m => damage(w, 'fanofknives', m, true) >= m.max_hp) ? 'lethal' : 'weak';
-}
-const fanLethal = (w: SkillWorld, m: Combatant) => w.allowed(m, 'fanofknives') && damage(w, 'fanofknives', m, true) >= m.max_hp;
 /**
- * While fan farming with MP to cast: the spot within Fan of Knives range of the target that keeps
+ * While fan farming with MP for a cast: the spot within Fan of Knives range of the target that keeps
  * the most other one-shot mobs in range (up to its five targets), nearest first. A rogue whose
  * spot already reaches as many stays where it is.
  */
 export function fanStand(w: SkillWorld, primary: Combatant): { x: number; y: number } | null {
-  if (!fanFarming(w) || w.actor.mp - cost(w, 'fanofknives') < reserve(w)) return null;
+  if (!fanFarming(w) || w.actor.mp < cost(w, 'fanofknives')) return null;
   const range = w.skills.fanofknives?.range || 160, reach = Math.max(20, range - 20);
   const cap = w.skills.fanofknives?.max_targets || 5;
   const near = (p: { x: number; y: number }, m: { x: number; y: number }, r: number) => Math.hypot(m.x - p.x, m.y - p.y) <= r;

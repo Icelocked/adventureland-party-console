@@ -85,7 +85,8 @@ export function createSkillEngine(ports: SkillPorts) {
     } catch (error) {
       rejectActions(d, actions);
       if (epoch !== token.epoch || stopped) return false;
-      failures.set(d.skill, ports.world().now + 1000);
+      // A cooldown race at the attack cooldown's edge retries on the next attack instead of a lockout.
+      if (errorReason(error) !== 'cooldown') failures.set(d.skill, ports.world().now + 1000);
       report(w, d, 'rejected', errorReason(error));
       return false;
     } finally {
