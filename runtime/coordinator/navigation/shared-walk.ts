@@ -169,13 +169,16 @@ export function createSharedWalks(input: unknown, ports: WalkPorts) {
   function failedEntry(c: SharedConvoy): boolean {
     return c.phase === "failed" && (c.retryExhausted || c.walkingActivity === "event" || c.label === "event walking leg") === true;
   }
+  function eventPreempts(c: SharedConvoy, r: WalkRequest): boolean {
+    return r.activity === "event" && !sessions.has(c) && !c.navigationExempt && !c.nonPreemptible;
+  }
   function canReplace(r: WalkRequest): boolean {
     const c = state.activeConvoy;
     if (!c) return true;
     // A walk to a different event is a new journey, not a retry of the failed leg.
     if (failedEntry(c)) return runtimeTurnoverReady(c, r) || otherEventAfterFailure(c, r) && ports.allowed(r.activity);
-    if (c.restartRecovery && c.walkingParents && !c.retryExhausted) return ports.allowed(r.activity);
-    return r.activity === "event" && !sessions.has(c) && !c.navigationExempt && !c.nonPreemptible && ports.allowed(r.activity);
+    const recovering = !!c.restartRecovery && !!c.walkingParents && !c.retryExhausted;
+    return (recovering || eventPreempts(c, r)) && ports.allowed(r.activity);
   }
   function replaceActive(): void { if (state.activeConvoy) ports.cancel(); }
   function leaderForRequest(r: WalkRequest): string | undefined {

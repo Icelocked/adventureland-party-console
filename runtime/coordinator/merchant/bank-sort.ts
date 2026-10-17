@@ -96,24 +96,24 @@ export function createBankSortRoutes(state: BankSortState & CraftReservationStat
     ports.persist();
     return res.json({ ok: true });
   }
+  function stackProtection() {
+    const protection = craftProtection(state);
+    return { protection: {
+      staging: bankStagingReserved(state),
+      locations: Object.values(state.withdrawals || {}).flat().map(({pack, slot}) => ({pack, slot})),
+      items: protection.requirements.map(need => ({name: need.id, level: need.level})),
+      ...(protection.error ? {error: protection.error} : {}),
+    } };
+  }
   function checkpoint(req: HttpRequest, res: HttpResponse) {
     const body = requestObject(req.body);
     if (!currentRuntime(body, ports))
       return res.status(409).json({ error: "merchant runtime is no longer current" });
-    if (body.action === 'stack') {
-      const protection = craftProtection(state);
-      return res.json({ protection: {
-        staging: bankStagingReserved(state),
-        locations: Object.values(state.withdrawals || {}).flat().map(({pack, slot}) => ({pack, slot})),
-        items: protection.requirements.map(need => ({name: need.id, level: need.level})),
-        ...(protection.error ? {error: protection.error} : {}),
-      } });
-    }
-    if (body.character !== state.merchantCharacter)
-      return res.json({ mode: state.bankSortMode || "automatic", layout: state.bankSortLayout || "packed", pending: null });
-    if (updatePending(state, body)) ports.persist();
+    if (body.action === 'stack') return res.json(stackProtection());
+    const merchant = body.character === state.merchantCharacter;
+    if (merchant && updatePending(state, body)) ports.persist();
     return res.json({ mode: state.bankSortMode || "automatic", layout: state.bankSortLayout || "packed",
-      pending: state.bankSortRequest || null });
+      pending: merchant ? state.bankSortRequest || null : null });
   }
   return { configure, checkpoint, reconcile };
 }

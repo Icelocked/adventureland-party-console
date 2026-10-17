@@ -38,30 +38,35 @@ export function gearSetItem(value: unknown): GearSetItem | null {
 }
 
 export function createGearSetRoute(state: GearSetState, ports: GearSetPorts) {
+  // Wears the saved set from the bag; the character pauses its automatic swaps first.
+  function equip(res: HttpResponse, name: string, set: GearSetName): unknown {
+    const saved = state.gearSets[name]?.[set];
+    if (!saved) return res.status(409).json({ error: "that gear set is not saved" });
+    state.commands[name] = { id: ports.nextCommand(), type: "gear-set-equip", set, slots: saved.slots };
+    return res.json({ ok: true });
+  }
+  /** The equipped set, or an error message when it cannot be saved. */
+  function equipped(name: string): GearSet["slots"] | string {
+    const status = state.statuses[name];
+    if (!status?.slots || !(Number(status.seenAt) >= ports.now() - 10000)) return "no fresh equipment report for " + name;
+    const slots: GearSet["slots"] = {};
+    for (const slot of GEAR_SET_SLOTS) {
+      const member = gearSetItem(status.slots[slot]?.item);
+      if (member) slots[slot] = member;
+    }
+    return Object.keys(slots).length ? slots : "nothing is equipped in the gear set slots";
+  }
   return function gearSets(req: HttpRequest, res: HttpResponse): unknown {
-    const body = requestObject(req.body), name = requestText(body.character), set = requestText(body.set);
+    const body = requestObject(req.body), name = requestText(body.character), set = requestText(body.set) as GearSetName;
     if (!ports.owned(name)) return res.status(400).json({ error: "invalid character" });
     if (!(GEAR_SET_NAMES as readonly string[]).includes(set)) return res.status(400).json({ error: "invalid gear set" });
+    if (body.action === "equip") return equip(res, name, set);
     const sets = (state.gearSets[name] ||= {});
-    if (body.action === "clear") {
-      delete sets[set as GearSetName];
-    } else if (body.action === "equip") {
-      // Wears the saved set from the bag; the character pauses its automatic swaps first.
-      const saved = sets[set as GearSetName];
-      if (!saved) return res.status(409).json({ error: "that gear set is not saved" });
-      state.commands[name] = { id: ports.nextCommand(), type: "gear-set-equip", set, slots: saved.slots };
-      return res.json({ ok: true });
-    } else if (body.action === "save") {
-      const status = state.statuses[name];
-      if (!status?.slots || !(Number(status.seenAt) >= ports.now() - 10000))
-        return res.status(409).json({ error: "no fresh equipment report for " + name });
-      const slots: GearSet["slots"] = {};
-      for (const slot of GEAR_SET_SLOTS) {
-        const member = gearSetItem(status.slots[slot]?.item);
-        if (member) slots[slot] = member;
-      }
-      if (!Object.keys(slots).length) return res.status(409).json({ error: "nothing is equipped in the gear set slots" });
-      sets[set as GearSetName] = { slots, savedAt: ports.now() };
+    if (body.action === "clear") delete sets[set];
+    else if (body.action === "save") {
+      const slots = equipped(name);
+      if (typeof slots === "string") return res.status(409).json({ error: slots });
+      sets[set] = { slots, savedAt: ports.now() };
     } else return res.status(400).json({ error: "invalid gear set action" });
     ports.persist();
     return res.json({ ok: true, gearSets: state.gearSets[name] });

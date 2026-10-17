@@ -146,27 +146,21 @@ export function createDeconstruction(state: DeconstructionState, ports: Ports) {
   function automaticBank(name: string): void {
     if (name === state.merchantCharacter) enqueueAutomaticBankDeconstruction(state, ports, item => automaticRule(name, item));
   }
+  function automaticCandidate(name: string, entry: InventoryEntry | null): entry is InventoryEntry & { item: Item } {
+    return !!entry?.item && Number.isInteger(entry.slot) && automaticRule(name, entry.item) &&
+      deconstructable(entry.item, state.deconstructionCatalog) &&
+      !ports.reserved(name, entry.slot!, entry.item) && !swapHeld(state.statuses[name], entry.slot, entry.item);
+  }
+  // Do not recreate marks from a heartbeat sampled before the last acknowledgement.
+  function recentlyMarked(name: string, item: Item) {
+    return state.deconstructionMarks.some(m => (m.owner === name || m.origin === name) &&
+      sameMarkedItem(item, m.item) && ports.now() - m.updatedAt < 10000);
+  }
   function automatic(name: string, items: (InventoryEntry | null)[]) {
     if (!sharedMember(state,name)) return;
     automaticBank(name);
-    for (const entry of items) {
-      if (!entry?.item || !Number.isInteger(entry.slot)) continue;
-      if (!automaticRule(name,entry.item)) continue;
-      if (
-        !deconstructable(entry.item, state.deconstructionCatalog) ||
-        ports.reserved(name, entry.slot!, entry.item) ||
-        swapHeld(state.statuses[name], entry.slot, entry.item)
-      )
-        continue;
-      // Do not recreate marks from a heartbeat sampled before the last acknowledgement.
-      const recent = state.deconstructionMarks.some(
-        (m) =>
-          (m.owner === name || m.origin === name) &&
-          sameMarkedItem(entry.item, m.item) &&
-          ports.now() - m.updatedAt < 10000,
-      );
-      if (!recent) add(name, entry.slot!, entry.item, true);
-    }
+    for (const entry of items)
+      if (automaticCandidate(name, entry) && !recentlyMarked(name, entry.item)) add(name, entry.slot!, entry.item, true);
   }
   function held(mark: DeconstructionMark) {
     if (mark.state === "running" && state.merchantCurrent?.id !== mark.jobId) {

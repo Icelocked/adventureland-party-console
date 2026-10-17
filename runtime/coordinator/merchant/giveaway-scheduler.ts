@@ -49,7 +49,7 @@ interface GiveawayPorts {
 type EligibleGiveaway = Giveaway & { seller: string; slot: string };
 /** The game refuses `join_giveaway` while either side is inside the bank. */
 function inBank(giveaway: Giveaway): boolean {
-  return /^bank/.test(String(giveaway.map || ""));
+  return String(giveaway.map || "").startsWith("bank");
 }
 /** Claim key shared by discovery and expiry, so an expired job can release its claim. */
 export function giveawayAttemptKey(job: Pick<Giveaway, "candidateKey" | "seller" | "rid"> & { realm?: string | null }): string {
@@ -80,25 +80,22 @@ export function createGiveawayScheduler(state: GiveawayState, ports: GiveawayPor
         ((!job.realm || job.realm === realm) && (job.slot === giveaway.slot || (!!giveaway.rid && job.rid === giveaway.rid))),
     );
   }
+  // A slot's `giveaway` is its remaining minutes, so it ends no later than that.
+  function timed(giveaway: EligibleGiveaway): EligibleGiveaway {
+    const minutes = Number(giveaway.minutes);
+    return giveaway.expiresAt === undefined && minutes > 0 ? { ...giveaway, expiresAt: ports.now() + minutes * 60_000 } : giveaway;
+  }
   function schedule(
     status: { server?: string; nearbyGiveaways?: (Giveaway | null)[] } | null | undefined,
   ): void {
-    if (
-      state.merchantAutomations["join giveaway"] === false ||
-      !status ||
-      !Array.isArray(status.nearbyGiveaways)
-    )
-      return;
+    if (state.merchantAutomations["join giveaway"] === false || !Array.isArray(status?.nearbyGiveaways)) return;
     const merchant = state.merchantCharacter;
     const realm = status.server ? "SR_" + status.server.replace(/^SR_/, "") : null;
     if (!safeMerchantRealm(merchant, realm)) return;
     for (const giveaway of status.nearbyGiveaways) {
       if (!eligible(giveaway, merchant) || queued(giveaway, realm)) continue;
-      // A slot's `giveaway` is its remaining minutes, so it ends no later than that.
-      const minutes = Number(giveaway.minutes);
-      const timed = giveaway.expiresAt === undefined && minutes > 0 ? { ...giveaway, expiresAt: ports.now() + minutes * 60_000 } : giveaway;
-      if (!claimAttempt(timed, realm)) continue;
-      enqueueGiveaway(timed, realm, merchant);
+      const entry = timed(giveaway);
+      if (claimAttempt(entry, realm)) enqueueGiveaway(entry, realm, merchant);
     }
   }
   function enqueueGiveaway(giveaway: EligibleGiveaway, realm: string | null, merchant: string) {
