@@ -7,14 +7,14 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 | | |
 |---|---|
 | Upstream base | `1.5-feature-branch` @ 849c38a, merged as 53a3cd6 on 10-16 (branch `adopt/1.5`, from `main`). Carries v1.4.0 (PR #64, b4443e4) plus the ChronAL simulation harness (7f81f71) and accelerated gameplay E2Es (849c38a) |
-| Fork head | `adopt/1.5` and `main` @ the commit recording this (after c873716), pushed to origin; release 1.4.1 pending |
+| Fork head | `adopt/1.5` and `main` @ the commit recording this, pushed to origin; v1.4.1 released from 2dd3b2b on 10-17 |
 | Divergence | 0 behind; 213 files differ from upstream’s tip (849c38a) |
 | Checked | 2026-10-16, against every upstream issue, comment and PR (#13–#131); #136 and #137 filed 10-17 |
 
 | Status | Count |
 |---|---|
-| New issue | 1 |
-| Update / comment | 9 (3 to do) |
+| New issue | 0 |
+| Update / comment | 9 (2 to do) |
 | Done upstream | 39 |
 | Matches | 17 (all done but #129 and #130, not commented) |
 | Open upstream | 21 |
@@ -25,21 +25,17 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 
 Implemented on the fork, with no upstream issue or PR describing it yet.
 
-### Fan farm gear set
-
-[c873716](https://github.com/Thefonze74065/adventureland-party-console/commit/c873716)
-
-- A `fan` gear set a rogue wears while scatter farming mobs Fan of Knives one-shots (barely enough damage, the rest luck and attack speed, for crab/suckerpunch farming), restoring the previous gear after 3 s out of fan-farming or on convoy departure. A too-weak set comes off and is held off for 10 minutes. `live-fan-farm-gear.spec.ts`; retained isolated test `fan-farm-gear.test.cjs`. Builds on #137. To file.
+Nothing unfiled. The Fan farm gear set was commented on #39 (10-17).
 
 ## Update / comment: the issue doesn't match the fork's work
 
 ### Rogue Fan of Knives: five-target stand and lone targets
 
-[#137 · not commented](https://github.com/Ryan-Haines/adventureland-party-console/issues/137)
+[#137 · commented 10-17](https://github.com/Ryan-Haines/adventureland-party-console/issues/137#issuecomment-6240619352)
 
 [c873716](https://github.com/Thefonze74065/adventureland-party-console/commit/c873716)
 
-- After #137 was filed: the stand now searches spots within Fan of Knives reach for the most one-shot mobs (up to five) instead of the cluster's middle, the independent approach ends at Fan of Knives reach, and Fan of Knives replaces the basic attack on a lone target while fan-farming (control: basic-attack kills on lone Goos with throwing stars). Comment on #137 with the change.
+- After #137 was filed: the stand now searches spots within Fan of Knives reach for the most one-shot mobs (up to five) instead of the cluster's middle, the independent approach ends at Fan of Knives reach, and Fan of Knives replaces the basic attack on a lone target while fan-farming (control: basic-attack kills on lone Goos with throwing stars). Commented on #137 with the change and the stars-with-dagger attack cut.
 
 Issues filed before the work landed, features that changed with use, and maintainer replies that leave out what the fork already has.
 
@@ -102,6 +98,8 @@ Issues filed before the work landed, features that changed with use, and maintai
 - 10-13: merged Icelocked’s [PR #2](https://github.com/Thefonze74065/adventureland-party-console/pull/2) (fixes 1–2, e1c955d) after the promised live journey `live-tank-formation-hold.spec.ts` ([9beeab8](https://github.com/Thefonze74065/adventureland-party-console/commit/9beeab8)): without the PR both a warrior tank and a priest tank kite (0 holding samples); with it 4 of 4 pass, warrior holding at 5–44 px, priest standing on its goo at 1–47 px, mage in range. Commented results on the PR.
 
 - Loot consolidation was dropped from the issue: loot reaches each character's inventory on its own, and what matters is the aggro holder's luck gear at the kill.
+
+- 10-17: a third saved set, `fan` ("Fan farm"), for a rogue fan-farming crabs for suckerpunches ([c873716](https://github.com/Thefonze74065/adventureland-party-console/commit/c873716)): worn while Fan of Knives one-shots in scatter mode, previous gear restored after 3 s out of fan-farming or on convoy departure, held off 10 minutes when too weak. `live-fan-farm-gear.spec.ts`. [Commented on #39](https://github.com/Ryan-Haines/adventureland-party-console/issues/39#issuecomment-6240621078) rather than filing, since the maintainer hasn't started #39.
 
 ### Phoenix split search
 
