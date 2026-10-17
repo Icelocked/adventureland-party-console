@@ -69,8 +69,8 @@ test("character stats show the game's panel beside collapsible extras", async ({
   const label = (box: Locator, key: string) => color(box.locator(`[data-line="${key}"] [data-label]`).first());
   expect(await label(card, "level")).toBe("rgb(255, 165, 0)");
   expect(await label(card, "hp")).toBe(rgb("#FF2E46"));
-  expect(await label(card, "mp")).toBe(rgb("#365DC5"));
-  expect(await label(card, "attack")).toBe("rgb(0, 128, 0)");
+  expect(await label(card, "mp")).toBe(rgb("#3A62CE"));
+  expect(await label(card, "attack")).toBe(rgb("#DB2900"));
   expect(await label(card, "code")).toBe("rgb(255, 215, 0)");
 
   // 4, 5: every entry and effect of the old grid, each effect named and colored by its stat.
@@ -79,7 +79,7 @@ test("character stats show the game's panel beside collapsible extras", async ({
   await expect(strength.locator('[data-effect="max_hp"]')).toHaveText("+483 Max HP +21 per point");
   expect(await color(strength.locator('[data-effect="max_hp"] [data-value]'))).toBe(rgb("#FF2E46"));
   await expect(strength.locator('[data-effect="armor"]')).toHaveText("+23 Armor +1 per next point");
-  expect(await color(strength.locator('[data-effect="armor"] [data-value]'))).toBe(rgb("#5C5D5E"));
+  expect(await color(strength.locator('[data-effect="armor"] [data-value]'))).toBe(rgb("#A3A9B0"));
   await expect(strength.locator('[data-effect="run_speed"]')).toHaveText("+0.36 Run Speed +0.0156 per next point");
   const intelligence = extras.locator('[data-line="int"]');
   await expect(intelligence.getByRole("button", { name: /Intelligence: 110 Primary/ })).toBeVisible();
@@ -99,7 +99,7 @@ test("character stats show the game's panel beside collapsible extras", async ({
     ["stresistance", "Status Res.: 0"], ["blastresistance", "Blast Res.: 0"], ["dreturn", "D.Return: 0%"], ["reflection", "Reflection: 0%"],
     ["mp_cost", "MP Cost: 0"], ["heal", "Heal: 0"], ["output", "Output: 0%"]] as const)
     await expect(extras.locator(`[data-line="${key}"]`)).toHaveText(text);
-  expect(await label(extras, "lifesteal")).toBe(rgb("#9A1D27"));
+  expect(await label(extras, "lifesteal")).toBe(rgb("#C8323E"));
 
   // 7: side by side on a wide dialog.
   const cardBox = (await card.boundingBox())!, extrasBox = (await extras.boundingBox())!;

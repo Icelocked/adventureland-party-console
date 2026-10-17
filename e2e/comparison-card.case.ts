@@ -84,7 +84,7 @@ test("equipment comparison shows each panel's stats in the game card style", asy
   // 2: game colors on the labels.
   expect(await color(equipped.locator('[data-line="max_hp"] [data-label]'))).toBe(rgb("#FF2E46"));
   expect(await color(equipped.locator('[data-line="int"] [data-label]'))).toBe(rgb("#3E6EED"));
-  expect(await color(equipped.locator('[data-line="lifesteal"] [data-label]'))).toBe(rgb("#9A1D27"));
+  expect(await color(equipped.locator('[data-line="lifesteal"] [data-label]'))).toBe(rgb("#C8323E"));
   // 3: direction colors in the proposed box only.
   await expect(proposed.locator('[data-line="attack"]')).toHaveText("Attack: 900.0 (+300.0 · +50.0%)");
   expect(await color(proposed.locator('[data-line="attack"] [data-change]'))).toBe(rgb("#85C76B"));

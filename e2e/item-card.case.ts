@@ -164,7 +164,7 @@ test("item details show stats as the game card beside a matching extras box", as
   const attire = page.getByRole("dialog", { name: "Spike's Attire +7", exact: true });
   const attireCard = attire.getByRole("region", { name: "Item card", exact: true });
   await expect(line(attireCard, "lifesteal")).toHaveText("Lifesteal: 3.4%");
-  expect(await label(attireCard, "lifesteal")).toBe(rgb("#9A1D27"));
+  expect(await label(attireCard, "lifesteal")).toBe(rgb("#C8323E"));
   await expect(line(attireCard, "hp")).toHaveText("HP: 3700");
   await info.attach("item-card-spikes-attire", { body: await attire.screenshot(), contentType: "image/png" });
 
@@ -230,9 +230,9 @@ test("item details show stats as the game card beside a matching extras box", as
   await expect(line(card, "attack")).toHaveText("Damage: 61");
   expect(await label(card, "attack")).toBe(rgb("#DB2900"));
   await expect(line(card, "critdamage")).toHaveText("Crit Damage: +5%");
-  expect(await label(card, "critdamage")).toBe(rgb("#A8214E"));
+  expect(await label(card, "critdamage")).toBe(rgb("#C2366A"));
   await expect(line(card, "lifesteal")).toHaveText("Lifesteal: 2%");
-  expect(await label(card, "lifesteal")).toBe(rgb("#9A1D27"));
+  expect(await label(card, "lifesteal")).toBe(rgb("#C8323E"));
   await expect(line(card, "fzresistance")).toHaveText("Freeze Res.: 4");
   expect(await label(card, "fzresistance")).toBe(rgb("#69B1B6"));
   await expect(line(card, "damage_type")).toHaveText("Type: Magical");

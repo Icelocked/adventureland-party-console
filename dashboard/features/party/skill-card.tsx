@@ -2,17 +2,18 @@
 import { GameBox, GameLine } from "./item-card";
 import { prettyFloat, STAT_NAMES, WEAPON_TYPES } from "./item-card-lines";
 import type { SkillEntry } from "./skill-entry";
+import { STAT_COLORS as S } from "./stat-colors";
 
 // A port of the game's skill card (render_skill in the game's js/html.js): its line
 // order and English labels (interface.skill.*). The game prints most lines gray; each
 // line here takes a meaning color from the game's palette. docs/skill-card.md.
 type Line = { key: string; label: string; value: string; color: string } | { key: string; text: string; color: string };
 
-const MP = "#3A62CE", COOLDOWN = "#7AC0F5", RANGE = "#36B89E", WEAPON = "#56A244";
-const STAT_COLORS: Record<string, string> = { str: "#F07F2F", int: "#3E6EED", dex: "#44B75C", vit: "#FF2E46", for: "#5F3085" };
+const MP = S.mp, COOLDOWN = S.cooldown, RANGE = S.range, WEAPON = "#56A244";
+const STAT_COLORS: Record<string, string> = { str: S.str, int: S.int, dex: S.dex, vit: S.vit, for: S.for };
 // Extras labels colored by meaning; anything else reads light gray.
 const EXTRA_COLORS: Record<string, string> = {
-  hostile: "#E13758", target: COOLDOWN, procs: "#3BE681", projectile: "#B484E5", party: "#CB83AC", heal: "#CB83AC",
+  hostile: "#E13758", target: S.evasion, procs: "#3BE681", projectile: "#B484E5", party: "#CB83AC", heal: "#CB83AC",
   damage: "#DB2900", damage_multiplier: "#DB2900", ratio: "#DB2900", pierces_immunity: "#E52967", multi: "#FFDE2F",
   class: "#4EB7DE", aura: "#FC5F39",
 };
@@ -35,7 +36,7 @@ export function skillCardLines(definition: Record<string, unknown>, skillName: (
   const lines: Line[] = [];
   const add = (key: string, label: string, value: string, color: string) => lines.push({ key, label, value, color });
   if (Number(definition.mp)) add("mp", "MP", text(definition.mp), MP);
-  if (Number(definition.duration)) add("duration", "Duration", seconds(definition.duration), "#E1924D");
+  if (Number(definition.duration)) add("duration", "Duration", seconds(definition.duration), S.duration);
   if (Number(definition.cooldown)) add("cooldown", "Cooldown", seconds(definition.cooldown), COOLDOWN);
   if (Number(definition.reuse_cooldown)) add("reuse_cooldown", "Reuse Cooldown", seconds(definition.reuse_cooldown), COOLDOWN);
   if (definition.share) add("share", "Cooldown",
@@ -46,7 +47,7 @@ export function skillCardLines(definition: Record<string, unknown>, skillName: (
     add("range_multiplier", "Range", `${prettyFloat(Number(definition.range_multiplier))}X + ${text(definition.range_bonus)}`, RANGE);
   else if (Number(definition.range_multiplier))
     add("range_multiplier", "Range", `${prettyFloat(Number(definition.range_multiplier))}× Character Range`, RANGE);
-  if (Number(definition.level)) add("level", "Level Requirement", text(definition.level), "orange");
+  if (Number(definition.level)) add("level", "Level Requirement", text(definition.level), S.level);
   if (definition.wtype)
     add("wtype", "Weapon Requirement", (Array.isArray(definition.wtype) ? definition.wtype : [definition.wtype])
       .map((type) => `"${weaponType(type)}"`).join(", "), WEAPON);
@@ -58,7 +59,7 @@ export function skillCardLines(definition: Record<string, unknown>, skillName: (
   if (damageType) add("damage_type", "Damage Type", damageType[0], damageType[1]);
   if (definition.condition) add("condition", "Condition", titleCase(text(definition.condition)), "#A59FFF");
   pairs(definition.levels).forEach(([level, value], index) =>
-    add(`levels_${index}`, "Output", Number(level) > 0 ? `${text(value)} (Lv. ${text(level)})` : text(value), "#D93319"));
+    add(`levels_${index}`, "Output", Number(level) > 0 ? `${text(value)} (Lv. ${text(level)})` : text(value), S.output));
   pairs(definition.mp_return_levels).forEach(([level, value], index) =>
     add(`mp_return_${index}`, "HP loss to MP", `${Math.round(Number(value) * 100)}% (Lv. ${text(level)})`, MP));
   const requirements = definition.requirements && typeof definition.requirements === "object" ? definition.requirements as Record<string, unknown> : {};

@@ -27,15 +27,16 @@ import { propertiesAtLevel } from './properties-at-level';
 import { statBadgeClass } from './stat-badge-class';
 import { STAT_SCROLLS } from './stat-scrolls';
 import { GameBox } from './item-card';
+import { STAT_COLORS as S } from './stat-colors';
 
 // docs/comparison-card.md: stat labels in their game colors, and changes in the game's
 // success and failure colors.
 const STAT_COLORS: Record<string, string> = {
-  max_hp: '#FF2E46', max_mp: '#365DC5', attack: 'green', frequency: '#3BE681', range: '#93A6A2', speed: '#36B89E',
-  armor: '#5C5D5E', resistance: '#6A5598', str: '#F07F2F', int: '#3E6EED', dex: '#44B75C', vit: '#FF2E46',
-  fortitude: '#5F3085', luck: '#5DE376', goldBonus: 'gold', xpBonus: '#1E73DE', evasion: '#7AC0F5', reflection: '#B484E5',
-  lifesteal: '#9A1D27', manasteal: '#353C9C', apiercing: '#5C5D5E', rpiercing: '#6A5598', crit: '#E52967',
-  dreturn: '#E94959', mp_cost: '#3A62CE', output: '#D93319',
+  max_hp: S.hp, max_mp: S.mp, attack: S.attack, frequency: S.frequency, range: S.range, speed: S.speed,
+  armor: S.armor, resistance: S.resistance, str: S.str, int: S.int, dex: S.dex, vit: S.vit,
+  fortitude: S.for, luck: S.luck, goldBonus: S.gold, xpBonus: S.xp, evasion: S.evasion, reflection: S.reflection,
+  lifesteal: S.lifesteal, manasteal: S.manasteal, apiercing: S.armor, rpiercing: S.resistance, crit: S.crit,
+  dreturn: S.dreturn, mp_cost: S.mp, output: S.output,
 };
 const GAIN = '#85C76B', LOSS = '#E13758';
 

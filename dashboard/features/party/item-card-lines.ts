@@ -1,5 +1,6 @@
 import type { Item } from "./item";
 import type { ItemMeta } from "./item-meta";
+import { STAT_COLORS as S } from "./stat-colors";
 
 // A port of the game's item card (render_item in the game's js/html.js): its line
 // order, English labels (languages/en/interface.js) and colors (colors in
@@ -14,9 +15,9 @@ const text = (value: unknown) =>
   typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : "";
 
 const COLORS = {
-  hp: "#FF2E46", mp: "#3A62CE", attack: "#DB2900", range: "#93A6A2", armor: "#5C5D5E", resistance: "#6A5598",
-  str: "#F07F2F", int: "#3E6EED", dex: "#44B75C", for: "#5F3085", speed: "#36B89E", lifesteal: "#9A1D27",
-  manasteal: "#353C9C", poison: "#41834A", ability: "#ff9100", gold: "gold", gray: "gray", text: "#C3C3C3",
+  hp: S.hp, mp: S.mp, attack: S.attack, range: S.range, armor: S.armor, resistance: S.resistance,
+  str: S.str, int: S.int, dex: S.dex, for: S.for, speed: S.speed, lifesteal: S.lifesteal,
+  manasteal: S.manasteal, poison: "#41834A", ability: "#ff9100", gold: "gold", gray: "gray", text: "#C3C3C3",
 };
 
 export const WEAPON_TYPES: Record<string, string> = {
@@ -80,18 +81,18 @@ function statLines(prop: Values, definition: Values, monster = false): ItemCardL
   }
   if (definition.debuff) add("debuff", "Effect", "Debuff", "#343792");
   if (n("gold")) add("gold", "Gold", signed(n("gold")) + "%", COLORS.gold);
-  if (n("luck")) add("luck", "Luck", signed(n("luck")) + "%", "#5DE376");
-  if (n("xp")) add("xp", "XP", monster ? text(prop.xp) : signed(n("xp")) + "%", "#1E73DE");
+  if (n("luck")) add("luck", "Luck", signed(n("luck")) + "%", S.luck);
+  if (n("xp")) add("xp", "XP", monster ? text(prop.xp) : signed(n("xp")) + "%", S.xp);
   percent("lifesteal", "Lifesteal", COLORS.lifesteal);
   percent("manasteal", "Manasteal", COLORS.manasteal);
   if (definition.goldsteal) add("goldsteal", "Goldsteal", "Dynamic", COLORS.gold);
-  percent("evasion", "Evasion", "#7AC0F5");
-  percent("avoidance", "Avoidance", "#7AC0F5");
-  if (n("miss") && definition.type !== "elixir") add("miss", "Miss", n("miss") + "%", "#F36C6E");
-  percent("reflection", "Reflection", "#B484E5");
-  percent("dreturn", "D.Return", "#E94959");
-  percent("crit", "Crit", "#E52967");
-  if (n("critdamage")) add("critdamage", "Crit Damage", "+" + prettyFloat(n("critdamage")) + "%", "#A8214E");
+  percent("evasion", "Evasion", S.evasion);
+  percent("avoidance", "Avoidance", S.avoidance);
+  if (n("miss") && definition.type !== "elixir") add("miss", "Miss", n("miss") + "%", S.miss);
+  percent("reflection", "Reflection", S.reflection);
+  percent("dreturn", "D.Return", S.dreturn);
+  percent("crit", "Crit", S.crit);
+  if (n("critdamage")) add("critdamage", "Crit Damage", "+" + prettyFloat(n("critdamage")) + "%", S.critdamage);
   plain("attack", "Damage", COLORS.attack);
   const damageTypes: Record<string, [string, string]> = { pure: ["Pure", "#AA9B55"], magical: ["Magical", "#8998AA"], physical: ["Physical", "#93AB98"] };
   const damageType = damageTypes[text(definition.damage_type)];
@@ -112,15 +113,15 @@ function statLines(prop: Values, definition: Values, monster = false): ItemCardL
   plain("apiercing", "A.Piercing", COLORS.armor);
   plain("rpiercing", "R.Piercing", COLORS.resistance);
   plain("resistance", "Resistance", COLORS.resistance);
-  plain("pnresistance", "Poison Res.", "#68B84B");
-  plain("firesistance", "Fire Res.", "#B42B22");
-  plain("fzresistance", "Freeze Res.", "#69B1B6");
-  plain("phresistance", "Impact Res.", "#69B1B6");
-  plain("stresistance", "Status Res.", "#9FA7B6");
+  plain("pnresistance", "Poison Res.", S.pnresistance);
+  plain("firesistance", "Fire Res.", S.firesistance);
+  plain("fzresistance", "Freeze Res.", S.fzresistance);
+  plain("phresistance", "Impact Res.", S.phresistance);
+  plain("stresistance", "Status Res.", S.stresistance);
   if (definition.wspeed) add("wspeed", "Speed", titleCase(text(definition.wspeed)), COLORS.gray);
   if (n("speed")) add("speed", definition.wtype ? "Run Speed" : "Speed", monster ? text(prop.speed) : signed(n("speed")), COLORS.speed);
-  if (n("frequency") || monster) add("frequency", "A.Speed", monster ? prettyFloat((n("frequency") || 1) * 100) : text(prop.frequency), "#3BE681");
-  if (n("output")) add("output", "Damage Output", signed(n("output")) + "%", "#D93319");
+  if (n("frequency") || monster) add("frequency", "A.Speed", monster ? prettyFloat((n("frequency") || 1) * 100) : text(prop.frequency), S.frequency);
+  if (n("output")) add("output", "Damage Output", signed(n("output")) + "%", S.output);
   if (n("incdmgamp")) add("incdmgamp", "Incoming Damage", n("incdmgamp") + "%", "#D93319");
   for (const [key, label, color] of [["stun", "Stun", "#784224"], ["explosion", "Explosion", "#782D33"], ["blast", "Blast", "#685079"]] as const)
     if (n(key)) add(key, label, n(key) + "%", color);

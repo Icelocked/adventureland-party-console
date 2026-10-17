@@ -84,8 +84,8 @@ test("skills show the game's skill card beside an extras box in both dialogs", a
   expect(await color(supershot.card.locator('[data-line="mp"] [data-label]'))).toBe(rgb("#3A62CE"));
   expect(await color(supershot.card.locator('[data-line="damage_type"] [data-label]'))).toBe(rgb("#93AB98"));
   // 7: meaning colors instead of the game's gray.
-  expect(await color(supershot.card.locator('[data-line="cooldown"] [data-label]'))).toBe(rgb("#7AC0F5"));
-  expect(await color(supershot.card.locator('[data-line="use_range"] [data-label]'))).toBe(rgb("#36B89E"));
+  expect(await color(supershot.card.locator('[data-line="cooldown"] [data-label]'))).toBe(rgb("#4EB7DE"));
+  expect(await color(supershot.card.locator('[data-line="use_range"] [data-label]'))).toBe(rgb("#93A6A2"));
   expect(await color(supershot.card.locator('[data-line="wtype"] [data-label]'))).toBe(rgb("#56A244"));
   expect(await color(supershot.extras.locator('[data-line="hostile"] [data-label]'))).toBe(rgb("#E13758"));
   expect(await color(supershot.extras.locator('[data-line="type"] [data-label]'))).toBe(rgb("#C3C3C3"));

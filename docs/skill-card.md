@@ -11,8 +11,8 @@ details). One component, `SkillCards`, renders both places.
   cooldown, Range, Level Requirement, Weapon and Offhand Requirement, Max,
   Passive, Damage Type, Condition, Output per level, HP loss to MP and Required
   stats. The game prints most of these in gray; the card colors each by its
-  meaning from the game's palette instead: cooldowns light blue `#7AC0F5`,
-  Duration `#E1924D`, Range teal `#36B89E`, Level Requirement orange, weapon
+  meaning from the shared palette (`docs/stat-colors.md`) instead: cooldowns
+  `#4EB7DE`, Duration `#E1924D`, Range `#93A6A2`, Level Requirement orange, weapon
   requirements `#56A244`, Max `#FFDE2F`, Output `#D93319` and each Required
   stat in that stat's color. MP, Damage Type and Condition keep the game's
   colors. The surrounding header keeps the name, `G.skills.<id>` and
