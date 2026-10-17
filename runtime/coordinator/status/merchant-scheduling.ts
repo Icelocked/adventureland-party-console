@@ -63,7 +63,7 @@ interface SchedulingPorts {
   giveaways(report: SchedulingReport): void;
   compounds(name: string, report: SchedulingReport | undefined): void;
   exchanges(report: SchedulingReport | undefined): void;
-  policy(name: string): { hp: SupplyRule; mp: SupplyRule };
+  policy(name: string): { hp: SupplyRule; mp: SupplyRule; elixir?: SupplyRule };
   queue(names: string[], reason: string): void;
   markedItem(mark: ItemMark): Item | null | undefined;
   sameItem(left: Item | null | undefined, right: Item | null | undefined): boolean;
@@ -120,7 +120,7 @@ export function createMerchantScheduling(state: SchedulingState, ports: Scheduli
   function supplies(report: SchedulingReport): void {
     if (state.merchantAutomations.restock === false || !Array.isArray(report.items)) return;
     const policy = ports.policy(report.name);
-    if (needsSupply(policy.hp, report.items) || needsSupply(policy.mp, report.items))
+    if ([policy.hp, policy.mp, policy.elixir].some(rule => rule && needsSupply(rule, report.items!)))
       ports.queue([report.name], "restock");
   }
 

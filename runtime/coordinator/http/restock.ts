@@ -8,6 +8,8 @@ interface Supply {
 interface Policy {
   hp: Supply;
   mp: Supply;
+  /** An elixir the fighter keeps active; the merchant keeps `min`..`max` spares carried. */
+  elixir?: Supply;
 }
 function nonnegative(value: number, fallback: number): number {
   return Number.isSafeInteger(value) && value >= 0 ? value : fallback;
@@ -29,8 +31,10 @@ export function createRestockRoute(
     const body = requestObject(req.body),
       name = body.character;
     if (!ports.owned(name)) return res.status(400).json({ error: "unknown character" });
-    const policy = { hp: supply(body.hp, "hpot1", 5, 20), mp: supply(body.mp, "mpot1", 0, 0) };
-    if (policy.hp.min > policy.hp.max || policy.mp.min > policy.mp.max)
+    const elixir = requestObject(body.elixir);
+    const policy = { hp: supply(body.hp, "hpot1", 5, 20), mp: supply(body.mp, "mpot1", 0, 0),
+      elixir: supply(body.elixir, requestText(elixir.item) || "elixirluck", 0, 0) };
+    if (policy.hp.min > policy.hp.max || policy.mp.min > policy.mp.max || policy.elixir.min > policy.elixir.max)
       return res.status(400).json({ error: "minimum cannot exceed maximum" });
     state.restockPolicies[requestText(name)] = policy;
     ports.persist();

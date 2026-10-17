@@ -7,6 +7,7 @@ import { RestockPolicy } from "./restock-policy";
 const defaults: RestockPolicy = {
   hp: { min: 5, max: 20, item: "hpot1" },
   mp: { min: 0, max: 0, item: "mpot1" },
+  elixir: { min: 0, max: 0, item: "elixirluck" },
 };
 
 export const RestockControls = memo(function RestockControls({
@@ -18,19 +19,19 @@ export const RestockControls = memo(function RestockControls({
   value?: RestockPolicy;
   onSave: (character: string, value: RestockPolicy) => Promise<void>;
 }) {
-  const [draft, setDraft] = useState<RestockPolicy>(value || defaults),
+  const [draft, setDraft] = useState<RestockPolicy>({ ...defaults, ...value }),
     dirty = useRef(false);
   // Character status polling returns a new policy object on every refresh.
   // Reconcile it only while the user has no unsaved local edits.
   useEffect(() => {
-    if (!dirty.current) setDraft(value || defaults);
+    if (!dirty.current) setDraft({ ...defaults, ...value });
   }, [value]);
-  const field = (kind: "hp" | "mp", key: "min" | "max", label: string) => (
+  const field = (kind: "hp" | "mp" | "elixir", key: "min" | "max", label: string) => (
     <label className="grid gap-1 font-mono text-[10px] uppercase text-emerald-100/45">
       {label}
       <Input
         inputMode="numeric"
-        value={draft[kind][key]}
+        value={draft[kind]![key]}
         onChange={(event) => {
           dirty.current = true;
           setDraft({
@@ -66,7 +67,10 @@ export const RestockControls = memo(function RestockControls({
         {field("hp", "max", "HP max")}
         {field("mp", "min", "MP min")}
         {field("mp", "max", "MP max")}
+        {field("elixir", "min", "Luck elixir min")}
+        {field("elixir", "max", "Luck elixir max")}
       </div>
+      <p className="mt-2 text-[10px] text-emerald-100/45">Liquid Luck (12 h) is drunk whenever none is active; the merchant keeps min..max spares carried.</p>
     </section>
   );
 });

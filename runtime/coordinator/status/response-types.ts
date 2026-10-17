@@ -48,6 +48,7 @@ export const heartbeatStateFields = [
   "leader",
   "designatedTank",
   "gearSets",
+  "restockPolicies",
   "abtestingStrategy",
   "merchantCharacter",
   "merchantForceStand",

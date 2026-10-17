@@ -87,7 +87,8 @@ export const validators: Record<string, (value: unknown) => boolean> = {
       object(value) &&
       [value.hp, value.mp].every(
         (p) => object(p) && number(p.min) && number(p.max) && text(p.item),
-      ),
+      ) &&
+      (value.elixir === undefined || object(value.elixir) && number(value.elixir.min) && number(value.elixir.max) && text(value.elixir.item)),
   ),
   bankSortMode: value => value === "automatic" || value === "request",
   bankSortLayout: value => value === "packed" || value === "gapped",

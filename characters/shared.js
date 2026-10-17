@@ -6910,13 +6910,13 @@
         }
       }
       var deliveries = [];
-      var restockSupplies = ["hp", "mp"].map(function (kind) {
+      var restockSupplies = ["hp", "mp", "elixir"].map(function (kind) {
         var supply = command.restock && command.restock[kind];
         if (!supply || !supply.max) return null;
         return { kind: kind, supply: supply, have: statusQuantity(command.targetInventory, supply.item) };
       }).filter(Boolean);
-      // Either low-water mark starts one complete restock. Once the merchant
-      // commits to the visit, bring every configured potion up to its maximum.
+      // Any low-water mark starts one complete restock. Once the merchant
+      // commits to the visit, bring every configured supply up to its maximum.
       var restockTriggered = restockSupplies.some(function (entry) {
         return entry.have <= entry.supply.min;
       });
@@ -6926,9 +6926,17 @@
           var needed = Math.max(0, supply.max - restockEntry.have), seller = itemSeller(supply.item);
           if (needed > 0 && seller) {
             var buyQuantity = Math.max(0, needed - inventoryQuantity(supply.item));
-            if (character.gold >= G.items[supply.item].g * buyQuantity) {
+            var restockCost = G.items[supply.item].g * buyQuantity;
+            // Elixirs cost far more than potions; draw the shortfall from the bank first.
+            if (character.gold < restockCost && (Number(character.bank && character.bank.gold) || 0) > 0) {
+              await merchantVisitBank(command, activity);
+              await withdrawMerchantCash(Math.min(restockCost - character.gold, Number(character.bank && character.bank.gold) || 0), command);
+            }
+            if (character.gold >= restockCost) {
               if (buyQuantity) {
-                await smart_move(find_npc(seller));
+                // By name: the movement destination approaches NPCs behind counters (the Winter
+                // Inn bartender sells Liquid Luck) from the customer side.
+                await smart_move(seller);
                 await buyConfirmed(supply.item, buyQuantity);
               }
               deliveries.push({ name: supply.item, quantity: needed });
@@ -11215,6 +11223,7 @@
       leader = state.leader || null;
       tank = state.designatedTank || null;
       root.partyGearSets = state.gearSets || {};
+      root.partyRestockPolicies = state.restockPolicies || {};
       var followedBeforeRefresh = followLeader;
       followLeader = !!state.followLeader;
       partyTownActive = character.ctype !== "merchant" && !!state.partyTownActive;
@@ -13845,6 +13854,25 @@
       forceTraveling || convoyTraveling || partyConvoyActive || followingLeader ||
       departurePending || partyTownActive || banking || stocking || upgrading ||
       gatheringActive || (character.moving && !engagedMonster());
+  }
+
+  // A fighter keeps its restock policy's elixir active; equipping one consumes it.
+  var elixirBusy = false, elixirRetryAt = 0;
+  function maintainElixir() {
+    if (elixirBusy || Date.now() < elixirRetryAt || character.rip || character.ctype === "merchant") return;
+    var policy = root.partyRestockPolicies && root.partyRestockPolicies[character.name], supply = policy && policy.elixir;
+    if (!supply || !(Number(supply.max) > 0) || !supply.item) return;
+    var active = character.slots && character.slots.elixir;
+    if (active && (!active.expires || new Date(active.expires).getTime() > Date.now())) return;
+    var index = (character.items || []).findIndex(function (item) { return item && item.name === supply.item; });
+    if (index < 0) return;
+    elixirBusy = true;
+    Promise.resolve(equip(index, "elixir")).then(function () {
+      game_log("Drank " + (G.items[supply.item] && G.items[supply.item].name || supply.item), "#51D2E1");
+    }).catch(function (error) {
+      elixirRetryAt = Date.now() + 30000;
+      game_log("Elixir failed: " + String(error && (error.reason || error.message) || error), "red");
+    }).finally(function () { elixirBusy = false; });
   }
 
   function passiveRegenerationTick() {
@@ -17672,7 +17700,7 @@
     start: function () {
       if (timer) return;
       tick();
-      timer = setInterval(function(){ if (gameLogCapture) void gameLogCapture.pulse(); observeFarmArea(); tick(); }, 1000);
+      timer = setInterval(function(){ if (gameLogCapture) void gameLogCapture.pulse(); observeFarmArea(); maintainElixir(); tick(); }, 1000);
       reconcileGameParty();
       root.__partyRosterTimer = setInterval(reconcileGameParty, 5000);
       pollEvents();
