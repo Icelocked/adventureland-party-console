@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -42,9 +42,19 @@ export function AchievementHuntSettingsControl({
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [deaths, setDeaths] = useState(String(settings.deathThreshold));
   const [open, setOpen] = useState(false), [inspected, setInspected] = useState<string | null>(null);
-  useEffect(() => setDeaths(String(settings.deathThreshold)), [settings.deathThreshold]);
   const [recheck, setRecheck] = useState(String(settings.bossRecheckMinutes));
-  useEffect(() => setRecheck(String(settings.bossRecheckMinutes)), [settings.bossRecheckMinutes]);
+  // A saved value that changes elsewhere resets its field during render, as item-details.tsx
+  // resets its preview level, instead of in an effect that renders twice.
+  const [savedDeaths, setSavedDeaths] = useState(settings.deathThreshold);
+  if (savedDeaths !== settings.deathThreshold) {
+    setSavedDeaths(settings.deathThreshold);
+    setDeaths(String(settings.deathThreshold));
+  }
+  const [savedRecheck, setSavedRecheck] = useState(settings.bossRecheckMinutes);
+  if (savedRecheck !== settings.bossRecheckMinutes) {
+    setSavedRecheck(settings.bossRecheckMinutes);
+    setRecheck(String(settings.bossRecheckMinutes));
+  }
   const monsters = useMemo(
     () => achievementMonsters(bestiary as never, choices as never),
     [bestiary, choices],
