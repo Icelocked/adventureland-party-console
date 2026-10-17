@@ -19,6 +19,16 @@ component, `MonsterCards`, renders both places.
   `#F36C6E`, Charge teal, Difficulty orange, Immune `#A59FFF`, Abilities
   `#FC5F39`) or light gray.
 
+A level slider above the boxes previews the monster at levels 1 to 20, as a
+reference. Monsters level up while nobody fights them, and when they drain XP
+from players they kill; a respawn starts at half the previous level
+(`level_monster` and `calculate_monster_stats` in the game's `node/server.js`).
+Each level adds half the base HP and one base XP; Damage grows by 12.5%, Speed
+by 0.24 and attack speed by 0.034 per level up to level 12. Gold and the drop
+roll multiply by the level. On maps whose packs keep growing, the game uses
+smaller Damage, Speed and attack speed steps; the preview shows the ordinary
+steps and says so.
+
 The dialogs keep everything else: the header with the name and
 `G.monsters.<id>`, the navigate button (the game's "Find"), the Monster
 achievements box with score and the achievement ladder (the game card's
@@ -48,3 +58,8 @@ Written before the implementation; each line has a check in
 7. The layout breaks. The boxes sit side by side when the dialog has room and
    stack when it doesn't, with nothing scrolling sideways.
 8. The extras read as a wall of gray. Their labels carry meaning colors.
+9. The level preview drifts from the game's rules. At level 9 Goo reads HP 500,
+   XP 900, Damage 10, Speed 8.16 and A.Speed 70.6; at level 15 the combat
+   stats stop at their level-12 values while HP (800) and XP (1500) keep
+   growing. Level 1 shows the base stats, and the preview names the gold and
+   drop multiplier.

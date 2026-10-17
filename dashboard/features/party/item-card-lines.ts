@@ -119,7 +119,7 @@ function statLines(prop: Values, definition: Values, monster = false): ItemCardL
   plain("phresistance", "Impact Res.", S.phresistance);
   plain("stresistance", "Status Res.", S.stresistance);
   if (definition.wspeed) add("wspeed", "Speed", titleCase(text(definition.wspeed)), COLORS.gray);
-  if (n("speed")) add("speed", definition.wtype ? "Run Speed" : "Speed", monster ? text(prop.speed) : signed(n("speed")), COLORS.speed);
+  if (n("speed")) add("speed", definition.wtype ? "Run Speed" : "Speed", monster ? prettyFloat(n("speed")) : signed(n("speed")), COLORS.speed);
   if (n("frequency") || monster) add("frequency", "A.Speed", monster ? prettyFloat((n("frequency") || 1) * 100) : text(prop.frequency), S.frequency);
   if (n("output")) add("output", "Damage Output", signed(n("output")) + "%", S.output);
   if (n("incdmgamp")) add("incdmgamp", "Incoming Damage", n("incdmgamp") + "%", "#D93319");
@@ -242,6 +242,24 @@ export function monsterCardLines(definition: Values, skillName: (id: string) => 
   });
   if (definition.explanation) lines.push({ kind: "text", key: "explanation", text: text(definition.explanation), color: COLORS.text });
   return lines;
+}
+
+// A monster's stats at a level: level_monster adds half the base HP and one base XP per
+// level, and calculate_monster_stats (both in the game's node/server.js) raises attack
+// 12.5%, speed 0.24 and frequency 0.034 per level up to level 12. docs/monster-card.md.
+export function monsterAtLevel(definition: Values, level: number): Values {
+  if (level <= 1) return definition;
+  const base = (key: string) => Number(definition[key]) || 0;
+  const combat = Math.min(level, 12);
+  return {
+    ...definition,
+    hp: base("hp") + (level - 1) * Math.floor(base("hp") / 2),
+    xp: base("xp") * level,
+    attack: Math.floor(base("attack") * (1 + combat * 0.125)),
+    // Rounding to thousandths drops float error (6 + 12 × 0.24 is 8.8799… in JavaScript).
+    speed: Math.round((base("speed") + combat * 0.24) * 1000) / 1000,
+    frequency: Math.round(((base("frequency") || 1) + combat * 0.034) * 1000) / 1000,
+  };
 }
 
 const monsterAbilities = (definition: Values) =>

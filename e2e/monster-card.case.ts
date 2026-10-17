@@ -88,6 +88,18 @@ test("monsters show the game's monster card beside an extras box in both dialogs
   await expect(gooView.dialog).toContainText("G.monsters.goo");
   await info.attach("monster-card-goo", { body: await gooView.dialog.screenshot(), contentType: "image/png" });
 
+  // 9: the level preview follows level_monster and calculate_monster_stats.
+  const level = gooView.dialog.getByRole("group", { name: "Monster level preview", exact: true }).getByRole("slider");
+  await expect(gooView.dialog.getByText("Level 1", { exact: true })).toBeVisible();
+  await level.focus();
+  for (let step = 1; step < 9; step++) await page.keyboard.press("ArrowRight");
+  await expect(gooView.dialog.getByText("Level 9", { exact: true })).toBeVisible();
+  expect(await lines(gooView.card)).toEqual(["XP: 900", "Damage: 10", "Type: Physical", "Range: 15", "HP: 500", "MP: 2", "Speed: 8.16", "A.Speed: 70.6"]);
+  await expect(gooView.dialog).toContainText("Gold and drop chance ×9");
+  for (let step = 9; step < 15; step++) await page.keyboard.press("ArrowRight");
+  expect(await lines(gooView.card)).toEqual(["XP: 1500", "Damage: 12", "Type: Physical", "Range: 15", "HP: 800", "MP: 2", "Speed: 8.88", "A.Speed: 80.8"]);
+  await info.attach("monster-card-goo-level-15", { body: await gooView.dialog.screenshot(), contentType: "image/png" });
+
   // 2, 3: Mr. Green's game names, flags and spawns.
   const greenView = await show(mrgreen);
   const greenLines = await lines(greenView.card), greenExtras = await lines(greenView.extras);

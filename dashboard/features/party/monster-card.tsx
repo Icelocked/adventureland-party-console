@@ -1,6 +1,8 @@
 "use client";
 import { GameBox, GameLine } from "./item-card";
-import { monsterCardLines, monsterExtras } from "./item-card-lines";
+import { useState } from "react";
+import { Slider } from "@/components/ui/slider";
+import { monsterAtLevel, monsterCardLines, monsterExtras } from "./item-card-lines";
 
 // Extras labels colored by meaning from the game's palette; anything else reads light gray.
 const EXTRA_COLORS: Record<string, string> = {
@@ -20,7 +22,9 @@ export function MonsterCards({ definition, skillName, monsterName, onMonster, on
   onMonster?: (id: string) => void;
   onSkill?: (id: string) => void;
 }) {
-  const lines = monsterCardLines(definition, skillName, monsterName);
+  // A reference preview of a levelled copy; live monsters gain levels over time.
+  const [level, setLevel] = useState(1);
+  const lines = monsterCardLines(monsterAtLevel(definition, level), skillName, monsterName);
   const extras = monsterExtras(definition, skillName);
   const link = (label: string, onClick: () => void) => (
     <button
@@ -33,6 +37,19 @@ export function MonsterCards({ definition, skillName, monsterName, onMonster, on
   );
   return (
     <div className="flex min-w-0 flex-wrap items-start gap-3">
+      <fieldset aria-label="Monster level preview" className="w-full min-w-0 rounded border border-violet-900/70 bg-black/25 p-3">
+        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2 font-mono text-[11px] text-violet-200">
+          <span className="uppercase text-violet-300">Level preview</span>
+          <span>Level {level}</span>
+        </div>
+        <Slider min={1} max={20} step={1} value={level}
+          onValueChange={(value) => setLevel(typeof value === "number" ? value : value[0] || 1)} />
+        <p className="mt-2 text-[11px] text-emerald-100/55">
+          {level > 1 ? `Gold and drop chance ×${level}. ` : ""}
+          Monsters level up while nobody fights them. Damage, speed and attack speed stop growing at level 12, and grow
+          more slowly on maps whose packs keep spawning.
+        </p>
+      </fieldset>
       <GameBox label="Monster card" className="min-w-[14rem] flex-1">
         {lines.map((line) => {
           if (line.kind === "text") return <div key={line.key} data-line={line.key} style={{ color: line.color }}>{line.text}</div>;
