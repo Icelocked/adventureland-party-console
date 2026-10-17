@@ -48,6 +48,7 @@ const GRADES = [null, { name: "High", color: "#696354" }, { name: "Rare", color:
 // to_pretty_float and to_pretty_num in the game's js/old_common_functions.js.
 export const prettyFloat = (value: number) => (0 + Math.trunc((value || 0) * 100) / 100).toLocaleString("en-US");
 export const prettyNum = (value: number) => (Math.floor(value || 0) + 0).toLocaleString("en-US");
+const hundredths = (value: number) => (Math.round(value * 100) / 100).toLocaleString("en-US", { maximumFractionDigits: 2 });
 const signed = (value: number, text = String(value)) => (value > 0 ? "+" : "") + text;
 const titleCase = (value: string) => value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 
@@ -119,8 +120,9 @@ function statLines(prop: Values, definition: Values, monster = false): ItemCardL
   plain("phresistance", "Impact Res.", S.phresistance);
   plain("stresistance", "Status Res.", S.stresistance);
   if (definition.wspeed) add("wspeed", "Speed", titleCase(text(definition.wspeed)), COLORS.gray);
-  if (n("speed")) add("speed", definition.wtype ? "Run Speed" : "Speed", monster ? prettyFloat(n("speed")) : signed(n("speed")), COLORS.speed);
-  if (n("frequency") || monster) add("frequency", "A.Speed", monster ? prettyFloat((n("frequency") || 1) * 100) : text(prop.frequency), S.frequency);
+  if (n("speed")) add("speed", definition.wtype ? "Run Speed" : "Speed", monster ? hundredths(n("speed")) : signed(n("speed")), COLORS.speed);
+  // Monster speeds round to hundredths: prettyFloat truncates, and 0.706 × 100 is 70.5999… in JavaScript.
+  if (n("frequency") || monster) add("frequency", "A.Speed", monster ? hundredths((n("frequency") || 1) * 100) : text(prop.frequency), S.frequency);
   if (n("output")) add("output", "Damage Output", signed(n("output")) + "%", S.output);
   if (n("incdmgamp")) add("incdmgamp", "Incoming Damage", n("incdmgamp") + "%", "#D93319");
   for (const [key, label, color] of [["stun", "Stun", "#784224"], ["explosion", "Explosion", "#782D33"], ["blast", "Blast", "#685079"]] as const)
