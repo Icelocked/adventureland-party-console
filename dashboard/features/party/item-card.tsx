@@ -6,16 +6,16 @@ import { itemCardLines, type ItemCardLine } from "./item-card-lines";
 
 // The game's item box: black, a 5px gray border and a dashed underline under the
 // title (render_item in the game's js/html.js). docs/item-card.md.
-export function GameBox({ label, className = "", children }: { label: string; className?: string; children: ReactNode }) {
-  return (
-    <section
-      aria-label={label}
-      className={`min-w-0 border-[5px] border-[#808080] bg-black px-4 py-3 text-[13px] leading-5 text-[#E4E4E4] ${className}`}
-      style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" }}
-    >
-      {children}
-    </section>
-  );
+// A box inside a dialog that already has regions can be a labelled group (a fieldset) instead.
+export function GameBox({ label, className = "", group = false, children }: {
+  label: string; className?: string; group?: boolean; children: ReactNode;
+}) {
+  const props = {
+    "aria-label": label,
+    className: `min-w-0 border-[5px] border-[#808080] bg-black px-4 py-3 text-[13px] leading-5 text-[#E4E4E4] ${className}`,
+    style: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" },
+  };
+  return group ? <fieldset {...props}>{children}</fieldset> : <section {...props}>{children}</section>;
 }
 
 export function GameHeading({ color = "#E4E4E4", children, aside }: { color?: string; children: ReactNode; aside?: ReactNode }) {
