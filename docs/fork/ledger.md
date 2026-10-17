@@ -6,16 +6,16 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 
 | | |
 |---|---|
-| Upstream base | `bugfix-1.4` @ 9273ecb, merged as 400fb81 (0c4b4d8 as 7886c52). PR #64 merged into `main` as b4443e4 on 10-15 and released as v1.4.0. Upstream tip 2d35a54 is 15 commits past the fork's base 9273ecb (16 past 0c4b4d8), not merged |
-| Fork head | `adopt/bugfix-1.4` @ e214591, pushed to origin; the fork's `main` is still at 373b7ab |
-| Divergence | 15 behind; 271 files differ from upstream's tip (2d35a54) |
+| Upstream base | `1.5-feature-branch` @ 849c38a, merged as 53a3cd6 on 10-16 (branch `adopt/1.5`, from `main`). Carries v1.4.0 (PR #64, b4443e4) plus the ChronAL simulation harness (7f81f71) and accelerated gameplay E2Es (849c38a) |
+| Fork head | `adopt/1.5` @ 53a3cd6, not pushed; `main` @ 9f27849, pushed to origin |
+| Divergence | 0 behind; 201 files differ from upstream’s tip (849c38a) |
 | Checked | 2026-10-16, against every upstream issue, comment and PR (#13–#131) |
 
 | Status | Count |
 |---|---|
 | New issue | 0 |
-| Update / comment | 9 (2 to do) |
-| Done upstream | 38 |
+| Update / comment | 8 (2 to do) |
+| Done upstream | 39 |
 | Matches | 15 (all done but #129 and #130, not commented) |
 | Open upstream | 21 |
 | Closed | 19 |
@@ -125,16 +125,6 @@ Issues filed before the work landed, features that changed with use, and maintai
 
 - The fork dropped PR #25 and its own fix (a2b3a4a) in c010e3a and merged PR #104 in 6a96322. #53 can be closed with a comment pointing at #104.
 
-### ChronAL simulation harness
-
-[#58 · updated 10-08](https://github.com/Ryan-Haines/adventureland-party-console/issues/58)
-
-[b3715a3](https://github.com/Thefonze74065/adventureland-party-console/commit/b3715a3), [493e7af](https://github.com/Thefonze74065/adventureland-party-console/commit/493e7af), [303c486](https://github.com/Thefonze74065/adventureland-party-console/commit/303c486), [8239074](https://github.com/Thefonze74065/adventureland-party-console/commit/8239074)
-
-- The issue's "native movement only" limit is gone: the route planner now runs on the virtual clock. Runs also compile the working tree.
-
-- New since the issue: trace windows, death records, the `phoenix-farm.json` scenario, and a list of bugs the simulation found. Update the permalink, which still points at 1ef9ddd.
-
 ### Achievement Hunt v2 and the 1.4.0 fixes (PR #131)
 
 [#131 · opened 10-15](https://github.com/Ryan-Haines/adventureland-party-console/pull/131)
@@ -143,9 +133,9 @@ Icelocked's [PR #131](https://github.com/Ryan-Haines/adventureland-party-console
 
 - To do: review sections 2–6 against the fork's event, movement and merchant work, and reply on which to take; the Achievement Hunt sections follow the same offer pattern as #89.
 
-## Done upstream: reimplemented on bugfix-1.4, adopted in fdd89f0, 3e414a1, a311d12, 13e8b7c, 1566e02, 43ac030, 7eb464b and 9577eca
+## Done upstream: reimplemented on bugfix-1.4, adopted in fdd89f0, 3e414a1, a311d12, 13e8b7c, 1566e02, 43ac030, 7eb464b, 9577eca and 53a3cd6
 
-The maintainer fixed these on bugfix-1.4 (PR #64, merged into `main` as b4443e4 on 10-15 and released as v1.4.0), often going further than the fork did. Where the fork had its own fix, the merge took upstream’s version and removed the fork’s, including the extras in the last column. [#79](https://github.com/Ryan-Haines/adventureland-party-console/issues/79) (hot reload) and [#94](https://github.com/Ryan-Haines/adventureland-party-console/issues/94) (in-game mute) were also fixed in 1.4, with no fork code; the fork’s base already has both. On 10-15 the maintainer closed most of these with v1.4.0; still open: #23, #35, #57, #83 and #106.
+The maintainer fixed these on bugfix-1.4 (PR #64, merged into `main` as b4443e4 on 10-15 and released as v1.4.0), often going further than the fork did. Where the fork had its own fix, the merge took upstreamâs version and removed the forkâs, including the extras in the last column. [#79](https://github.com/Ryan-Haines/adventureland-party-console/issues/79) (hot reload) and [#94](https://github.com/Ryan-Haines/adventureland-party-console/issues/94) (in-game mute) were also fixed in 1.4, with no fork code; the forkâs base already has both. On 10-15 the maintainer closed most of these with v1.4.0; still open: #23, #35, #57, #83 and #106. On 10-16 the maintainer implemented the ChronAL simulation harness (#58) on `1.5-feature-branch` (7f81f71) and accelerated seven gameplay E2Es through it (849c38a); the fork adopted the branch in 53a3cd6 and dropped its own harness for the maintainer’s.
 
 | Issue | Fork commit | Upstream's version | Fork extras (dropped) |
 |---|---|---|---|
@@ -187,6 +177,7 @@ The maintainer fixed these on bugfix-1.4 (PR #64, merged into `main` as b4443e4 
 | [#60](https://github.com/Ryan-Haines/adventureland-party-console/issues/60) | [de71645](https://github.com/Thefonze74065/adventureland-party-console/commit/de71645) | Same logging block | None |
 | [#61](https://github.com/Ryan-Haines/adventureland-party-console/issues/61) | [9e8b77e](https://github.com/Thefonze74065/adventureland-party-console/commit/9e8b77e) | parse5 allowlist sanitizer (`sanitize-doll-html.ts`) | None. Two sanitizers would conflict, so drop the fork's `safe-doll-html.ts`. |
 | [#62](https://github.com/Ryan-Haines/adventureland-party-console/issues/62) | [64f5791](https://github.com/Thefonze74065/adventureland-party-console/commit/64f5791) | Start token, boot ID and PID namespace, plus a Linux `flock` | None. Upstream goes further. |
+| [#58](https://github.com/Ryan-Haines/adventureland-party-console/issues/58) | [1ef9ddd](https://github.com/Thefonze74065/adventureland-party-console/commit/1ef9ddd), [b3715a3](https://github.com/Thefonze74065/adventureland-party-console/commit/b3715a3), [303c486](https://github.com/Thefonze74065/adventureland-party-console/commit/303c486), [8239074](https://github.com/Thefonze74065/adventureland-party-console/commit/8239074) | The maintainer’s deterministic ChronAL harness (7f81f71) with accelerated gameplay E2Es, selection audit, pins, benchmarks and CODE parity (849c38a) | The fork’s harness (SIM_TRACE replay, death records, track/expect assertions, the `phoenix-mage.json` scenario, the bug list the simulation found), its two `sim` package scripts and the testing.md sim intro. The issue’s permalink still points at 1ef9ddd |
 
 ## Matches: the issue already describes the fork's change
 

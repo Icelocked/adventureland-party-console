@@ -4,9 +4,9 @@ Read this before touching the fork: pulling upstream, filing or reviewing upstre
 
 ## Policy
 
-- The fork (`Thefonze74065/adventureland-party-console`, branch `adopt/bugfix-1.4`, checkout `~/Projects/adventureland-party-console`) is **the maintainer’s code plus issue-backed code**. Strongly prefer the maintainer’s solution: when upstream fixes something the fork fixed, take upstream’s version and drop the fork’s code, tests and docs for it.
+- The fork (`Thefonze74065/adventureland-party-console`, checkout `~/Projects/adventureland-party-console`) is **the maintainer’s code plus issue-backed code**. Adoption branches track the upstream branch being adopted: `adopt/bugfix-1.4` for `bugfix-1.4`, `adopt/1.5` (current) for `1.5-feature-branch`. Strongly prefer the maintainer’s solution: when upstream fixes something the fork fixed, take upstream’s version and drop the fork’s code, tests and docs for it.
 
-- Agreed exceptions that stay fork-only: `VINEXT_NO_DEV_LOCK`, the fork release pipeline, plus the features in Fork-only and Matches (gear sets, gapped bank sort, Phoenix split search, boss guard in `runner.ts`, #31 market bank load, #34 WTB sort and Check, ChronAL `sim` scripts). PR #25 was dropped for PR #104 by the user’s choice.
+- Agreed exceptions that stay fork-only: `VINEXT_NO_DEV_LOCK`, the fork release pipeline, plus the features in Fork-only and Matches (gear sets, gapped bank sort, Phoenix split search, boss guard in `runner.ts`, #31 market bank load, #34 WTB sort and Check). PR #25 was dropped for PR #104 by the user’s choice.
 
 - Work only in the main checkout. Ask before creating worktrees or folders outside the repo; scratch exports go under `.build/` (ignored).
 
@@ -16,21 +16,21 @@ Read this before touching the fork: pulling upstream, filing or reviewing upstre
 
 ## Pulling upstream
 
-- `git fetch upstream`; list `git log adopt/bugfix-1.4..upstream/bugfix-1.4`; dry run with `git merge-tree --write-tree --name-only HEAD upstream/bugfix-1.4`.
+- `git fetch upstream`; list `git log <adoption-branch>..upstream/<upstream-branch>`; dry run with `git merge-tree --write-tree --name-only HEAD upstream/<upstream-branch>`.
 
 - Check open fork issues (`gh issue view N -R Ryan-Haines/adventureland-party-console`): commits that fix them replace the fork’s fix.
 
 - Merge with `--no-ff`. For each conflict, list fork commits since the merge base touching the file. If only superseded fork fixes touched it, take upstream’s file. Otherwise resolve by hand, keeping fork features.
 
-- **After resolving, diff every file the superseded fork commits touched against upstream** (`git diff upstream/bugfix-1.4 -- FILE`): auto-merged leftovers and duplicated imports, fields or object keys survive outside conflict blocks. Twice a leftover line silently changed behavior.
+- **After resolving, diff every file the superseded fork commits touched against upstream** (`git diff upstream/<upstream-branch> -- FILE`): auto-merged leftovers and duplicated imports, fields or object keys survive outside conflict blocks. Twice a leftover line silently changed behavior.
 
 - `playwright.config.ts`: take upstream’s lists and append missing fork specs before the list’s closing bracket; verify with `npx playwright test --project=live --list <fork spec>`. A wrong anchor once dropped ten fork journeys.
 
 - Do not commit regenerated `characters/*.js` bundles; staged builds rebuild them. Keep `party-member.js` equal to upstream’s when its sources match.
 
-- Verify: `npm run typecheck`; `npm run test:unit` compared by failing-test names against the previous run (22 known failures as of 400fb81: 12 environmental (game files 17175, `pwsh`, token catalog, cgoo fixture) and 10 that fail on upstream’s own 9273ecb tree in gear-comparison, item-operations and upgrade-scroll-batch); then the live journeys nearest the change (Halloween, event-return handoff, gear sets, gathering cooldown, bank staging, exchange collection, Phoenix search, designated tank, bank sort gaps).
+- Verify: `npm run typecheck`; `npm run test:unit` compared by failing-test names against the previous run (12 known environmental failures as of 53a3cd6: game files 17175, `pwsh`, token catalog, cgoo fixture); then the live journeys nearest the change (Halloween, event-return handoff, gear sets, gathering cooldown, bank staging, exchange collection, Phoenix search, designated tank, bank sort gaps).
 
-- Attribute a failure before calling it a regression: export upstream with `git archive upstream/bugfix-1.4 | tar -x -C .build/upstream-check`, symlink `node_modules`, `dashboard/node_modules`, `.caracal/node_modules` and `.caracal/game_files` (never `localStorage` or `config.js`), build the runtime there, run the same test, then delete the export.
+- Attribute a failure before calling it a regression: export upstream with `git archive upstream/<upstream-branch> | tar -x -C .build/upstream-check`, symlink `node_modules`, `dashboard/node_modules`, `.caracal/node_modules` and `.caracal/game_files` (never `localStorage` or `config.js`), build the runtime there, run the same test, then delete the export.
 
 ## Filing issues, comments and reviews
 
