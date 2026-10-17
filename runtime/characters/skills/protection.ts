@@ -1,6 +1,7 @@
 import { decision, health, type SkillWorld, type SkillDecision, type Combatant } from './types.ts';
 import { cost, reserve, unlocked } from './eligibility.ts';
 import { endangered, incomingDps, safeTransfer } from './damage.ts';
+import { fanFarming } from './offense.ts';
 
 export function absorbDecision(w: SkillWorld): SkillDecision | null {
   const aggroOwner = w.context.tank || w.context.leader;
@@ -105,7 +106,8 @@ export function combatBuffSupport(w: SkillWorld): SkillDecision[] {
   return [decision(skill, [], 'maintenance', 'maintain combat buff')];
 }
 export function opener(w: SkillWorld, target: Combatant): SkillDecision | null {
-  if (w.actor.ctype !== 'rogue' || w.actor.s?.invis || w.actor.s?.marked) return null;
+  // The 1.25x sneak bonus is overkill on mobs Fan of Knives one-shots.
+  if (w.actor.ctype !== 'rogue' || w.actor.s?.invis || w.actor.s?.marked || fanFarming(w)) return null;
   if (target.target || w.context.monsters.some(m => m.target === w.actor.name)) return null;
   return decision('invis', [], 'maintenance', 'unengaged opener');
 }

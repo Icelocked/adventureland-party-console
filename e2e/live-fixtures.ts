@@ -35,7 +35,7 @@ export type LiveGame = {
   reconnectClient(name: string): Promise<void>;
 };
 
-export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primaryClass: 'warrior' | 'ranger' | 'mage'; extraFighter: 'mage' | null; merchantDefault: string | null; liveHeadless: boolean; recordNativeVideo: boolean; movementMode: 'alclient' | 'shadow'; staleWorkerRealm: string | null; initialPosition: {map: string; x: number; y: number} | null; initialPositions: Record<string,{map:string;x:number;y:number}> | null; initialEventSpawn: string | null; initialMonsterSpawn: string | null; initialConsoleHold: boolean; initialGatheringReady: boolean }>({
+export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primaryClass: 'warrior' | 'ranger' | 'mage' | 'rogue'; extraFighter: 'mage' | null; merchantDefault: string | null; liveHeadless: boolean; recordNativeVideo: boolean; movementMode: 'alclient' | 'shadow'; staleWorkerRealm: string | null; initialPosition: {map: string; x: number; y: number} | null; initialPositions: Record<string,{map:string;x:number;y:number}> | null; initialEventSpawn: string | null; initialMonsterSpawn: string | null; initialConsoleHold: boolean; initialGatheringReady: boolean }>({
   loadout: ['god', {option:true}],
   primaryClass: ['warrior', {option:true}],
   extraFighter: [null, {option:true}],

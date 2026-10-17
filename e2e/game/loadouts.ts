@@ -29,7 +29,7 @@ const baseLoadouts = {
 export const loadouts={...baseLoadouts,'combat-follow-range':{...baseLoadouts['combat-range'],description:'Durable native armor with upgraded staff weapons for caster follow-clearance recovery.'}} as const;
 
 /** Runs after reset, before native login: no connected character is modified. */
-export async function seedLoadout(admin: (code: string) => Promise<unknown>, profile: NativeLoadout, primaryClass: 'warrior' | 'ranger' | 'mage' = 'warrior', extraFighter: 'mage' | null = null) {
+export async function seedLoadout(admin: (code: string) => Promise<unknown>, profile: NativeLoadout, primaryClass: 'warrior' | 'ranger' | 'mage' | 'rogue' = 'warrior', extraFighter: 'mage' | null = null) {
   const names=['E2EWarrior','E2EPriest','E2EMerchant',...(extraFighter?['E2EBankBoi']:[])];
   const selected=loadouts[profile];
   if(!selected)throw Error('Unknown native loadout: '+profile);
@@ -48,9 +48,11 @@ export async function seedLoadout(admin: (code: string) => Promise<unknown>, pro
       for(const value of Object.values(slots))if(value&&value.name)value.level=weaponLevel;
       Object.assign(slots,structuredClone(definition.armor));
       if(profile==='god'||profile==='combat-range'||profile==='combat-follow-range') {
-        const stat=c.type==='warrior'?'str':c.type==='ranger'?'dex':'int';
+        const stat=c.type==='warrior'?'str':c.type==='ranger'||c.type==='rogue'?'dex':'int';
         slots.amulet={name:stat+'amulet',level:20};slots.belt={name:stat+'belt',level:20};
       }
+      // The rogue's native class belt grants Fan of Knives.
+      if(c.type==='rogue')slots.belt={name:'knifebelt',level:0};
       if(profile==='combat-follow-range'&&(c.type==='priest'||c.type==='mage'))slots.mainhand={name:'staff',level:c.type==='priest'?12:15};
       for(const [slot,value] of Object.entries(slots))if(value&&value.name&&!G.items[value.name])throw Error('Unknown native gear '+slot+': '+value.name);
       c.info.slots=slots;

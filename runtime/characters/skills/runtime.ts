@@ -98,6 +98,8 @@ export function installSkillRuntime(root: CombatRoot) {
   shared.skillSupport = () => engine.support();
   shared.skillOffense = t => engine.offense(t);
   shared.absorbLeaderAggro = () => engine.absorb();
+  shared.fanOfKnivesFarming = () => engine.fanFarming();
+  shared.fanOfKnivesStand = t => engine.fanStand(t as unknown as Combatant);
   if (shared.combatContext) {
     shared.combatSkillReady = (id, target, category) => engine.ready(decision(id, [target], category));
     shared.castCombatSkill = (id, target, category) => engine.cast(decision(id, [target], category));

@@ -1,7 +1,7 @@
 import { createManaBudget } from './budget.ts';
 import { errorReason } from '../roles/types.ts';
 import { blocked, cost, reserve, unlocked } from './eligibility.ts';
-import { bestAttack, damageChoices } from './offense.ts';
+import { bestAttack, damageChoices, fanFarming, fanStand } from './offense.ts';
 import { absorbDecision, paladinSupport, rogueSupport, combatBuffSupport, opener } from './protection.ts';
 import type { Combatant, SkillDecision, SkillDiagnostic, SkillId, SkillWorld } from './types.ts';
 
@@ -36,7 +36,9 @@ export function createSkillEngine(ports: SkillPorts) {
       .filter(id => unlocked(w, id) && cost(w, id) <= w.actor.mp - reserve(w))
       .map(id => cost(w, id)));
     const credit = budget.observe(w.now, w.actor.mp, w.actor.mp - reserve(w), cap);
-    if (d.category === 'damage' && w.context.mode !== 'event' && credit < cost(w, d.skill)) {
+    // Fan of Knives one-shots while scatter farming: spend down to the reserve; MP potions refill it.
+    const sustained = d.skill === 'fanofknives' && fanFarming(w);
+    if (d.category === 'damage' && w.context.mode !== 'event' && !sustained && credit < cost(w, d.skill)) {
       report(w, d, 'skipped', 'sustained farming MP budget'); return false;
     }
     return true;
@@ -123,6 +125,8 @@ export function createSkillEngine(ports: SkillPorts) {
       return d ? execute(d) : null;
     },
     busy() { world(); return openerPending || pending.has('attack'); },
+    fanFarming() { return fanFarming(world()); },
+    fanStand(target: Combatant) { return fanStand(world(), target); },
     reset() { epoch++; budget.reset(); auraAt = -Infinity; auraState = ''; },
     stop() { stopped = true; epoch++; },
   };

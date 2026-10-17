@@ -24,6 +24,8 @@ export interface SharedCombat {
   skillSupport?(): Promise<boolean>;
   skillOffense?(target: Target): Promise<boolean>;
   absorbLeaderAggro?(): Promise<boolean>;
+  fanOfKnivesFarming?(): boolean;
+  fanOfKnivesStand?(target: Target): { x: number; y: number } | null;
   combatSkillReady?(id: import('../skills/types.ts').SkillId, target: Target, category: import('../skills/types.ts').Spending): boolean;
   castCombatSkill?(id: import('../skills/types.ts').SkillId, target: Target, category: import('../skills/types.ts').Spending): Promise<boolean>;
   isLeader?(): boolean;

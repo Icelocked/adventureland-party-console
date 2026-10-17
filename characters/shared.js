@@ -17532,6 +17532,9 @@
   // at this character's own weapon range, regardless of who currently has aggro.
   function engageMovementTick(target) {
     if (!target || target.dead) { eventCombatDetour=null; return false; }
+    var fanStand = root.sharedRoutine && root.sharedRoutine.fanOfKnivesStand && root.sharedRoutine.fanOfKnivesStand(target);
+    var fanMove = fanStand ? fanMovementTick(target, fanStand) : null;
+    if (fanMove !== null) return fanMove;
     var delta = combatDistance(target) - desiredCombatRange();
     var tolerance = Math.min(3, Math.max(0.5, Number(character.range) * 0.01));
     if (Math.abs(delta) <= tolerance && is_in_range(target)) { eventCombatDetour=null; return false; }
@@ -17552,6 +17555,25 @@
       blockingAttacker: blockedKite && blockedKite.mode === "blocked" ? blockedKite.blockingAttacker : null,
       reason: "No collision-safe combat approach satisfying attacker clearance" };
     return false;
+  }
+
+  // Fan of Knives one-shots while scatter farming: hold within its range of the target,
+  // toward the nearby cluster, instead of walking in to basic attack range.
+  function fanMovementTick(target, stand) {
+    var reach = Math.max(20, (Number(G.skills.fanofknives && G.skills.fanofknives.range) || 160) - 20);
+    if (combatDistance(target) <= reach && Math.hypot(character.x - stand.x, character.y - stand.y) <= 30) {
+      eventCombatDetour = null; return false;
+    }
+    var dx = stand.x - character.x, dy = stand.y - character.y;
+    var step = Math.min(Math.hypot(dx, dy), Math.max(1, Number(character.speed || 40) * 0.6));
+    var angle = Math.atan2(dy, dx);
+    for (var i = 0, offsets = [0, 0.4, -0.4, 0.8, -0.8]; i < offsets.length; i++) {
+      var point = { x: character.x + Math.cos(angle + offsets[i]) * step,
+        y: character.y + Math.sin(angle + offsets[i]) * step };
+      if (safeCombatPoint(point, target)) return sendCombatMove(target, point, "fan-positioning");
+    }
+    // Terrain blocks the Fan of Knives stand; fall back to the normal approach.
+    return null;
   }
 
   // Generalizes Franky's off-tank "stack tight" clamp (see the stackRange branch in
@@ -18005,7 +18027,9 @@
           (!m.map || m.map === character.map) && (m.in == null || m.in === character.in);
       }).map(function(m){
         var def = G.monsters[m.mtype] || {};
-        return Object.assign({}, def, m);
+        // Native entities keep x/y as PIXI prototype accessors, which Object.assign skips.
+        // Farm-area authorization of multi-target skill targets reads them.
+        return Object.assign({}, def, m, { x: m.x, y: m.y });
       });
       var eventCombat = !!character.cave || event && (joinedEvent === event.name ||
         G.maps[character.map] && G.maps[character.map].event === event.name ||

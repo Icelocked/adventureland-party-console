@@ -1,7 +1,23 @@
-import { blocked, cost } from './eligibility.ts';
+import { blocked, cost, reserve, unlocked } from './eligibility.ts';
 import { damage, usefulDamage, purifiable } from './damage.ts';
 import { decision, type Combatant, type SkillDecision, type SkillId, type SkillWorld } from './types.ts';
 
+/** A Knife Belt rogue scatter farming mobs that Fan of Knives kills outright. */
+export function fanFarming(w: SkillWorld): boolean {
+  return w.actor.ctype === 'rogue' && w.context.mode === 'scatter' && unlocked(w, 'fanofknives') &&
+    w.context.monsters.some(m => fanLethal(w, m));
+}
+const fanLethal = (w: SkillWorld, m: Combatant) => w.allowed(m, 'fanofknives') && damage(w, 'fanofknives', m, true) >= m.max_hp;
+/** While fan farming with MP to cast, stand within Fan of Knives range of the target, toward nearby one-shot mobs. */
+export function fanStand(w: SkillWorld, primary: Combatant): { x: number; y: number } | null {
+  if (!fanFarming(w) || w.actor.mp - cost(w, 'fanofknives') < reserve(w)) return null;
+  const reach = Math.max(20, (w.skills.fanofknives?.range || 160) - 20);
+  const cluster = [primary, ...w.context.monsters.filter(m => m.id !== primary.id && fanLethal(w, m) &&
+    Math.hypot(m.x - primary.x, m.y - primary.y) <= reach * 2)];
+  const cx = cluster.reduce((n, m) => n + m.x, 0) / cluster.length, cy = cluster.reduce((n, m) => n + m.y, 0) / cluster.length;
+  const d = Math.hypot(cx - primary.x, cy - primary.y);
+  return d <= reach ? { x: cx, y: cy } : { x: primary.x + (cx - primary.x) * reach / d, y: primary.y + (cy - primary.y) * reach / d };
+}
 export function attackChoices(w: SkillWorld, primary: Combatant): SkillDecision[] {
   const ids: SkillId[] = w.actor.ctype === 'ranger' ? ['piercingshot', '3shot', '5shot'] :
     w.actor.ctype === 'rogue' ? ['fanofknives'] : [];
@@ -19,7 +35,9 @@ export function bestAttack(w: SkillWorld, primary: Combatant, affordable: (d: Sk
   const options = attackChoices(w, primary).filter(affordable).map(d => ({ d,
     score: d.targets.reduce((sum, t) => sum + usefulDamage(w, d.skill, t), 0) }));
   options.sort((a, b) => b.score - a.score || cost(w, a.d.skill) - cost(w, b.d.skill));
-  return options[0]?.score > baseline ? options[0].d : null;
+  // Fan farming stands at Fan of Knives range: a lone target beyond basic reach still takes the knives.
+  const reach = fanFarming(w) && !w.range(primary, 'attack');
+  return options[0]?.score > baseline || reach && options[0]?.score >= baseline ? options[0].d : null;
 }
 function purifyUseful(w: SkillWorld, target: Combatant): boolean {
   if (damage(w, 'purify', target, true) >= target.hp) return true;
@@ -30,6 +48,9 @@ function independentUseful(w: SkillWorld, id: SkillId, target: Combatant): boole
   const remaining = target.hp - w.incoming(target);
   if (remaining <= 0) return false;
   if (id === 'purify') return purifyUseful(w, target);
+  // Fan of Knives needs the MP. Mental Burst refunds its damage on a kill, capped at
+  // the target's remaining HP, so it only pays for itself on mobs with at least its cost left.
+  if (fanFarming(w)) return id === 'mentalburst' && damage(w, id, target, true) >= remaining && remaining >= cost(w, id);
   if (id === 'huntersmark') return markUseful(w, target, remaining);
   if (id === 'supershot') return remaining >= damage(w, id, target) * .5;
   return true;
