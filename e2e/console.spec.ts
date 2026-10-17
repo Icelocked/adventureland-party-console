@@ -7,6 +7,7 @@ import './item-card.case';
 import './character-card.case';
 import './comparison-card.case';
 import './skill-card.case';
+import './monster-card.case';
 import { createServer } from 'node:http';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { transform, build } from 'esbuild';

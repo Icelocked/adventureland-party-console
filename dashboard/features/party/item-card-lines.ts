@@ -5,7 +5,7 @@ import type { ItemMeta } from "./item-meta";
 // order, English labels (languages/en/interface.js) and colors (colors in
 // js/old_common_functions.js plus the literals in render_item). docs/item-card.md.
 export type ItemCardLine =
-  | { kind: "prop"; key: string; label: string; value: string; color: string; valueColor?: string; skill?: string }
+  | { kind: "prop"; key: string; label: string; value: string; color: string; valueColor?: string; skill?: string; monster?: string }
   | { kind: "text"; key: string; text: string; color: string };
 
 type Values = Record<string, unknown>;
@@ -62,7 +62,9 @@ function fill(template: string, values: { value?: unknown; value2?: unknown }) {
   return template.replace("{value2}", text(values.value2)).replace("{value}", text(values.value));
 }
 
-function statLines(prop: Values, definition: Values): ItemCardLine[] {
+// monster: render_item's monster mode, where XP is a plain number, Range and Speed carry
+// no plus sign and A.Speed always shows as frequency × 100.
+function statLines(prop: Values, definition: Values, monster = false): ItemCardLine[] {
   const lines: ItemCardLine[] = [];
   const add = (key: string, label: string, value: string, color: string) => lines.push({ kind: "prop", key, label, value, color });
   const n = (key: string) => Number(prop[key]) || 0;
@@ -79,7 +81,7 @@ function statLines(prop: Values, definition: Values): ItemCardLine[] {
   if (definition.debuff) add("debuff", "Effect", "Debuff", "#343792");
   if (n("gold")) add("gold", "Gold", signed(n("gold")) + "%", COLORS.gold);
   if (n("luck")) add("luck", "Luck", signed(n("luck")) + "%", "#5DE376");
-  if (n("xp")) add("xp", "XP", signed(n("xp")) + "%", "#1E73DE");
+  if (n("xp")) add("xp", "XP", monster ? text(prop.xp) : signed(n("xp")) + "%", "#1E73DE");
   percent("lifesteal", "Lifesteal", COLORS.lifesteal);
   percent("manasteal", "Manasteal", COLORS.manasteal);
   if (definition.goldsteal) add("goldsteal", "Goldsteal", "Dynamic", COLORS.gold);
@@ -94,7 +96,7 @@ function statLines(prop: Values, definition: Values): ItemCardLine[] {
   const damageTypes: Record<string, [string, string]> = { pure: ["Pure", "#AA9B55"], magical: ["Magical", "#8998AA"], physical: ["Physical", "#93AB98"] };
   const damageType = damageTypes[text(definition.damage_type)];
   if (damageType) add("damage_type", "Type", damageType[0], damageType[1]);
-  if (n("range")) add("range", "Range", "+" + text(prop.range), COLORS.range);
+  if (n("range")) add("range", "Range", (monster ? "" : "+") + text(prop.range), COLORS.range);
   plain("hp", "HP", COLORS.hp);
   plain("str", "Strength", COLORS.str);
   plain("int", "Intelligence", COLORS.int);
@@ -116,8 +118,8 @@ function statLines(prop: Values, definition: Values): ItemCardLine[] {
   plain("phresistance", "Impact Res.", "#69B1B6");
   plain("stresistance", "Status Res.", "#9FA7B6");
   if (definition.wspeed) add("wspeed", "Speed", titleCase(text(definition.wspeed)), COLORS.gray);
-  if (n("speed")) add("speed", definition.wtype ? "Run Speed" : "Speed", signed(n("speed")), COLORS.speed);
-  if (n("frequency")) add("frequency", "A.Speed", text(prop.frequency), "#3BE681");
+  if (n("speed")) add("speed", definition.wtype ? "Run Speed" : "Speed", monster ? text(prop.speed) : signed(n("speed")), COLORS.speed);
+  if (n("frequency") || monster) add("frequency", "A.Speed", monster ? prettyFloat((n("frequency") || 1) * 100) : text(prop.frequency), "#3BE681");
   if (n("output")) add("output", "Damage Output", signed(n("output")) + "%", "#D93319");
   if (n("incdmgamp")) add("incdmgamp", "Incoming Damage", n("incdmgamp") + "%", "#D93319");
   for (const [key, label, color] of [["stun", "Stun", "#784224"], ["explosion", "Explosion", "#782D33"], ["blast", "Blast", "#685079"]] as const)
@@ -216,6 +218,50 @@ function infoPhrase(meta: ItemMeta | null | undefined, level: number): string {
   const uses = meta?.world?.usedIn || [];
   if (uses.some((use) => use.quest === "mcollector")) return "Collectable";
   return uses.length ? "Usable" : "Information";
+}
+
+// The game's monster card: render_item in monster mode (render_monster_info). The dialogs
+// already show the name, G.monsters id, Find, score and achievements. docs/monster-card.md.
+export function monsterCardLines(definition: Values, skillName: (id: string) => string | undefined,
+  monsterName: (id: string) => string | undefined): ItemCardLine[] {
+  const lines = statLines(definition, definition, true);
+  for (const [key, label, color] of [["poisonous", "Poisonous", COLORS.poison], ["cooperative", "Cooperative", "#aeaeae"],
+    ["peaceful", "Peaceful", "#54B25F"], ["supporter", "Supporter", "#CA5931"]] as const)
+    if (definition[key]) lines.push({ kind: "text", key, text: label, color });
+  for (const [id, ability] of Object.entries(monsterAbilities(definition))) {
+    const name = skillName(id);
+    // The game lists only abilities that are skills; monsterExtras keeps the rest.
+    if (!name) continue;
+    const aura = !!(ability && typeof ability === "object" && (ability as Values).aura);
+    lines.push({ kind: "prop", key: `ability_${id}`, label: aura ? "Aura" : "Ability", value: name, color: "#FC5F39", skill: id });
+  }
+  (Array.isArray(definition.spawns) ? definition.spawns : []).forEach((spawn, index) => {
+    const id = Array.isArray(spawn) ? text(spawn[1]) : "";
+    if (id) lines.push({ kind: "prop", key: `spawn_${index}`, label: "Spawns", value: monsterName(id) || titleCase(id), color: "#237B2A", monster: id });
+  });
+  if (definition.explanation) lines.push({ kind: "text", key: "explanation", text: text(definition.explanation), color: COLORS.text });
+  return lines;
+}
+
+const monsterAbilities = (definition: Values) =>
+  definition.abilities && typeof definition.abilities === "object" && !Array.isArray(definition.abilities)
+    ? definition.abilities as Record<string, unknown> : {};
+
+// Definition fields the game's monster card has no line for. Abilities that aren't skills
+// stay here by id, so nothing the old grid showed disappears.
+export function monsterExtras(definition: Values, skillName: (id: string) => string | undefined): [key: string, label: string, value: string][] {
+  // Item-only fields such as s (stack size) stay in the extras when a monster has them.
+  const itemOnly = new Set(["g", "s", "grades", "upgrade", "compound", "level", "set", "wtype", "tier", "class", "ability",
+    "aura", "attr0", "attr1", "gives", "duration", "multiplier", "e", "type"]);
+  const shown = new Set([...[...CARD_KEYS].filter((key) => !itemOnly.has(key)), "name", "skin", "achievements", "abilities", "spawns", "explanation", "poisonous", "cooperative",
+    "peaceful", "supporter"]);
+  const extras: [string, string, string][] = Object.entries(definition)
+    .filter(([key, value]) => !shown.has(key) && value !== null && value !== undefined && value !== "")
+    .map(([key, value]) => [key, key.split("_").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" "),
+      typeof value === "boolean" ? (value ? "Yes" : "No") : typeof value === "object" ? JSON.stringify(value) : text(value)]);
+  const unlisted = Object.keys(monsterAbilities(definition)).filter((id) => !skillName(id));
+  if (unlisted.length) extras.push(["abilities", "Abilities", unlisted.join(", ")]);
+  return extras.sort(([left], [right]) => left.localeCompare(right));
 }
 
 // Per-copy state the game shows on the card. Quantity and stat scroll show on the

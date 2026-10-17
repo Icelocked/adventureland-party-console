@@ -19,7 +19,6 @@ import { Char } from "./char";
 import { comparisonSlotLabel } from "./comparison-slot-label";
 import { comparisonSlotsFor } from "./comparison-slots-for";
 import { COMPARISON_SLOTS } from "./comparison-slots";
-import { DefinitionGrid } from "./definition-grid";
 import { durationStat } from "./format-duration";
 import { InventoryEntry } from "./inventory-entry";
 import { EQUIPMENT_TYPES } from "./equipment-types";
@@ -43,6 +42,7 @@ import type { ExchangeRewardTileData } from './exchange-reward-tile';
 import { itemSlotExtras, onItemCard } from "./item-card-lines";
 import { ItemCard, ItemExtraStats } from "./item-card";
 import { SkillCards } from "./skill-card";
+import { MonsterCards } from "./monster-card";
 import type { SkillClass } from "./skill-class";
 import type { SkillEntry } from "./skill-entry";
 
@@ -329,9 +329,12 @@ export function ItemDetails({
             monster={selectedMonster}
             achievement={achievements[selectedMonster.id] || null}
           />
-          <DefinitionGrid
-            value={selectedMonster.definition}
-            omit={["name", "skin", "achievements"]}
+          <MonsterCards
+            definition={selectedMonster.definition}
+            skillName={skillName}
+            monsterName={(id) => monsters.find((entry) => entry.id === id)?.name}
+            onMonster={onInspectMonster}
+            onSkill={onInspectSkill}
           />
           <section className="rounded border border-amber-900/80 bg-amber-950/10 p-4">
             <BestiaryDrops
