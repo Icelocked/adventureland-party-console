@@ -96,12 +96,27 @@ test('a Knife Belt rogue sustains Fan of Knives with MP potions while scatter fa
 // waves of five native Goos are placed inside the native Goo boundary [-282,702,218,872],
 // every pair more than 160 apart, so each Goo stands alone.
 const sparse = [[-262, 712], [-22, 712], [198, 712], [-142, 862], [98, 862]];
-test('a Knife Belt rogue kills isolated one-shot mobs with Fan of Knives from range, not melee', async ({ live }, info) => {
+// 9: with throwing stars (basic range ~120) a lone Goo inside basic range still takes Fan of Knives.
+// Declared input: Fiery Throwing Stars +7 and Throwing Stars +3 in the bag, equipped natively.
+const stars = async (live: Live) => {
+  await live.admin(`output=(()=>{const p=get_player('${R}');
+    for(const item of [{name:'firestars',level:7},{name:'throwingstars',level:3}]){const i=p.items.findIndex(x=>!x);if(i<0)throw Error('bag full');p.items[i]=item;}
+    cache_player_items(p);resend(p,'u+cid+reopen');return true})()`);
+  for (const [name, slot] of [['firestars', 'mainhand'], ['throwingstars', 'offhand']]) {
+    await expect.poll(async () => live.clients[R].run(`character.items.some(i=>i&&i.name==='${name}')`), { timeout: 30_000 }).toBe(true);
+    await live.clients[R].run(`(()=>{const i=character.items.findIndex(x=>x&&x.name==='${name}');equip(i,'${slot}');return true})()`);
+    await expect.poll(async () => live.clients[R].run(`character.slots.${slot}?.name`), { timeout: 10_000 }).toBe(name);
+  }
+};
+for (const weapon of ['claw', 'stars'] as const)
+test(weapon === 'claw' ? 'a Knife Belt rogue kills isolated one-shot mobs with Fan of Knives from range, not melee'
+  : 'a Knife Belt rogue with throwing stars kills isolated one-shot mobs with Fan of Knives, not basic attacks', async ({ live }, info) => {
   test.setTimeout(300_000);
   const samples: any[] = [], waves: any[] = [];
   let seen: any = null;
   try {
     await observe(live);
+    if (weapon === 'stars') await stars(live);
     await live.admin(`output=(()=>{for(const m of Object.values(instances.main.monsters))if(m.type==='goo')remove_monster(m,{method:'disappear',nospawn:true});
       for(let i=monster_respawns.length-1;i>=0;i--)if(monster_respawns[i][0]?.map==='main'&&monster_respawns[i][0]?.type==='goo')monster_respawns.splice(i,1);return true;})()`);
     await scatter(live);
@@ -120,13 +135,13 @@ test('a Knife Belt rogue kills isolated one-shot mobs with Fan of Knives from ra
     seen = await observed(live, started);
     const kills = seen.hits.filter((h: any) => h.kill);
     expect(kills.length, 'The rogue must make kills in the sparse layout').toBeGreaterThan(0);
-    // 8: lone Goos die to Fan of Knives from range; the rogue does not walk in to swing.
+    // 8, 9: lone Goos die to Fan of Knives; the rogue neither walks in to swing nor basic-attacks from range.
     expect(kills.filter((h: any) => h.source !== 'fanofknives').map((h: any) => h.source),
       'Isolated one-shot Goos must die to Fan of Knives, not melee attacks').toEqual([]);
     // 7: no Assassin's Smoke opener before one-shot kills.
     expect(seen.casts.filter((c: any) => c.skill === 'invis'), 'The rogue must not go invisible before one-shot kills').toEqual([]);
     expect((await native(live)).rip).toBeFalsy();
   } finally {
-    await info.attach('rogue-fan-sparse', { body: JSON.stringify({ waves, samples, observed: seen }), contentType: 'application/json' });
+    await info.attach(`rogue-fan-sparse-${weapon}`, { body: JSON.stringify({ waves, samples, observed: seen }), contentType: 'application/json' });
   }
 });

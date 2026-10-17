@@ -5707,7 +5707,10 @@
   // Gear a luck swap holds in the bag (combat gear awaiting restore, luck pieces it wears) is
   // never automatic merchant stock: compounding it destroyed the tank's best piece mid-swap.
   function swapReservedSlots() {
-    try { return root.partyKillLuckSwap && root.partyKillLuckSwap.reservedSlots ? root.partyKillLuckSwap.reservedSlots() : []; }
+    try {
+      var held = root.partyKillLuckSwap && root.partyKillLuckSwap.reservedSlots ? root.partyKillLuckSwap.reservedSlots() : [];
+      return root.partyFanFarmGear && root.partyFanFarmGear.reservedSlots ? held.concat(root.partyFanFarmGear.reservedSlots()) : held;
+    }
     catch (_swapReservationError) { return []; }
   }
   function swapReserved(request, slot) {
@@ -6742,6 +6745,7 @@
     var slots = command.slots || {}, missing = [], taken = {};
     if (root.partyPorcupineEquipment) await root.partyPorcupineEquipment.manual();
     if (root.partyKillLuckSwap) await root.partyKillLuckSwap.manual();
+    if (root.partyFanFarmGear) await root.partyFanFarmGear.manual();
     for (var i = 0; i < GEAR_SET_EQUIP_SLOTS.length; i++) {
       var slot = GEAR_SET_EQUIP_SLOTS[i], wanted = slots[slot];
       if (!wanted) {
@@ -6760,6 +6764,7 @@
     if (!isDashboardEquipment(command.item)) throw new Error("item is not equipment; use its explicit Use action instead");
     if (root.partyPorcupineEquipment) await root.partyPorcupineEquipment.manual();
     if (root.partyKillLuckSwap) await root.partyKillLuckSwap.manual();
+    if (root.partyFanFarmGear) await root.partyFanFarmGear.manual();
     if (character.ctype === "merchant") await closeMerchantStandForTravel();
     // Normalize old dashboard snapshots too: native drag/equip updates can add
     // or omit null metadata without changing the selected item's identity.
@@ -10919,6 +10924,8 @@
     if (command.type === "unequip") {
       if (root.partyPorcupineEquipment) await root.partyPorcupineEquipment.manual();
       if (root.partyKillLuckSwap) await root.partyKillLuckSwap.manual();
+      if (root.partyFanFarmGear) await root.partyFanFarmGear.manual();
+    if (root.partyFanFarmGear) await root.partyFanFarmGear.manual();
       if (character.ctype === "merchant") await closeMerchantStandForTravel();
       if (typeof command.slot !== "string" || !sameItem(character.slots[command.slot], command.item))
         throw new Error("equipped item no longer matches that slot");
@@ -15553,6 +15560,7 @@
         released=true;convoy.departedAt=now;phase("travelling");
         if (root.partyPorcupineEquipment) root.partyPorcupineEquipment.depart(command.purpose);
         if (root.partyKillLuckSwap) root.partyKillLuckSwap.depart();
+        if (root.partyFanFarmGear) root.partyFanFarmGear.depart();
         return walk();
       } catch(error){freeze();convoy.fail(error.message||String(error));}
       finally {smart.use_town=nativeTown;}
@@ -15692,6 +15700,7 @@
           phase("travelling");
           if (root.partyPorcupineEquipment) root.partyPorcupineEquipment.depart(command.purpose);
           if (root.partyKillLuckSwap) root.partyKillLuckSwap.depart();
+          if (root.partyFanFarmGear) root.partyFanFarmGear.depart();
           return gate.original();
         } catch (error) { convoy.fail(error.message || String(error)); }
         finally { smart.use_town = nativeTown; }
@@ -16731,14 +16740,16 @@
         (coordinated || e.visible && !e.dead && e.hp>0) && (!coordinated || t.map===character.map && t.in===character.in && t.server===reunionRealm()) &&
         !Object.values(parent.entities||{}).some(function(other){return other && other.type==='monster' && !other.dead &&
           (other.target===character.name || other.id!==e.id && isAttackingPartyMember(other));}));
-      var prediction={},radius=Math.max(1,(Number(character.range)||1)-10),point=combatInterceptCenter(e,radius,prediction);
+      var prediction={},radius=Math.max(1,(Number(character.range)||1)-10,fanApproachReach(e)),point=combatInterceptCenter(e,radius,prediction);
       return {allowed:allowed,planned:coordinated?t.state==='planned':true,selection:coordinated?groupedCombat.selection:undefined,committed:coordinated?!!groupedCombat.committed:true,confirmation:coordinated && groupedCombat.independentConfirmation && groupedCombat.independentConfirmation.selection===groupedCombat.selection && groupedCombat.independentConfirmation.target===String(t.id)?groupedCombat.independentConfirmation.id:undefined,target:String(t.id),
         key:JSON.stringify([t.id,character.map,character.in,reunionRealm(),navigationIntent.revision,coordinated?[groupedCombat.key,groupedCombat.selection,groupedCombat.resetAt]:joinedEvent]),point:point,prediction:prediction.at!==undefined?prediction:undefined,radius:radius};
     }
     return {
       context:context,now:function(){return Date.now()+coordinatorClockOffset;},
-      ready:function(){var c=context(),e=c && get_entity(c.target);return !!(c && c.allowed && e && e.visible && !e.dead && e.hp>0 && is_in_range(e));},
-      buffered:function(){var c=context(),e=c && get_entity(c.target);if(!e || !is_in_range(e))return false;
+      ready:function(){var c=context(),e=c && get_entity(c.target);return !!(c && c.allowed && e && e.visible && !e.dead && e.hp>0 && (is_in_range(e) || fanInReach(e)));},
+      buffered:function(){var c=context(),e=c && get_entity(c.target);if(!e)return false;
+        if(fanInReach(e))return true;
+        if(!is_in_range(e))return false;
         var gap=typeof distance==='function'?distance(character,e):combatDistance(e);
         return gap<=Math.max(1,(Number(character.range)||1)-10);},
       clear:function(goal){return can_move({map:character.map,x:character.real_x,y:character.real_y,going_x:goal.x,going_y:goal.y,base:character.base});},
@@ -16764,6 +16775,15 @@
       position:function(id,target,radius,goal,phase){root.partyCombatPosition={at:Date.now(),mode:'independent-approach',movementOwner:'combat-approach',
         approachId:id,target:target,radius:radius,phase:phase,destination:goal,reason:phase==='ready'?'In native attack range; waiting for every fighter':'Independently approaching native attack range'};}
     };
+  }
+  // While fan farming, the approach ends at Fan of Knives reach; fanMovementTick then picks the spot.
+  function fanApproachReach(target) {
+    var stand = root.sharedRoutine && root.sharedRoutine.fanOfKnivesStand && target && root.sharedRoutine.fanOfKnivesStand(target);
+    return stand ? Math.max(20, (Number(G.skills.fanofknives && G.skills.fanofknives.range) || 160) - 20) : 0;
+  }
+  function fanInReach(target) {
+    var reach = fanApproachReach(target);
+    return reach > 0 && combatDistance(target) <= reach;
   }
   function formationMove(target) {
     independentApproachReference=target?{target:target,at:Date.now()}:null;

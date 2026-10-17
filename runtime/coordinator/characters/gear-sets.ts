@@ -1,7 +1,10 @@
 import { requestObject, requestText, type HttpRequest, type HttpResponse } from "../http/contracts.ts";
 
-/** Named equipment sets per character: `luck` for the tank's kill-time swap, `tank` to restore after it. */
-export const GEAR_SET_NAMES = ["luck", "tank", "gold"] as const;
+/**
+ * Named equipment sets per character: `luck` for the tank's kill-time swap, `tank` to restore after
+ * it, `fan` worn while a rogue scatter-farms mobs Fan of Knives one-shots.
+ */
+export const GEAR_SET_NAMES = ["luck", "tank", "gold", "fan"] as const;
 export type GearSetName = (typeof GEAR_SET_NAMES)[number];
 /** Every equipment slot (the game's character_slots). The elixir is recorded but never swapped. */
 export const GEAR_SET_SLOTS = [

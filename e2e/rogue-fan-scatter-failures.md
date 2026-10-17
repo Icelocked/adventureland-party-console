@@ -38,3 +38,14 @@ replaces a swing (it shares the attack cooldown). Live journey:
    The E2E uses the level-zero weapon loadout, since a +100 claw reaches past 160. The
    dense native Goo spawn hides this (walking up to one Goo still leaves others in reach),
    so a second journey declares waves of Goos placed more than 160 apart.
+9. **Basic attacks within reach.** With throwing stars (basic range ~120) a lone one-shot mob
+   inside basic range is killed by a basic attack, because Fan of Knives only ties it. While
+   fan-farming with MP above the reserve, Fan of Knives is used anyway. Reported by the user on
+   2026-10-17: about 17 basic attacks a minute alongside Fan of Knives.
+10. **Stand reaches too few.** The stand aims at the middle of every one-shot mob near the
+    target, which can reach only the target (a group on each side, both out of reach), and
+    the independent approach walks to basic attack range before the stand takes over. The
+    rogue should stand where Fan of Knives reaches the most one-shot mobs with the target, up
+    to five, holding while its spot already reaches as many; the approach should end at Fan
+    of Knives reach. Requested by the user on 2026-10-17 ("positions itself such that it gets
+    5 targets in range"). Retained isolated test: `scripts/tests/fan-stand.test.cjs`.

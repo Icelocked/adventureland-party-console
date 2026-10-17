@@ -12,6 +12,7 @@ type GearSets = NonNullable<PartyState["gearSets"]>[string];
 const SETS = [
   ["luck", "Luck", "Worn by the designated tank right before a kill"],
   ["tank", "Tank", "Restored after the kill"],
+  ["fan", "Fan farm", "Rogue: worn while scatter farming mobs Fan of Knives one-shots"],
 ] as const;
 
 function member(item: { name?: string; level?: number; p?: string; stat_type?: string } | null | undefined, wanted: GearSetItem) {

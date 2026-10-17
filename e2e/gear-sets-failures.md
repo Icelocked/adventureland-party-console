@@ -97,3 +97,26 @@ does not need every piece swapped by hand before saving again.
     undone within seconds by the stranded-luck correction; a manual equip must pause it
     long enough to edit and re-save the set.
 24. **Missing pieces hidden.** Members not carried are reported, not silently skipped.
+
+## Fan farm set (2026-10-17)
+
+Written before the change. Requested: a rogue fan-farming crabs for suckerpunches wears a
+set with barely enough damage to one-shot them and the rest in luck and attack speed. The
+set is no use anywhere else, so it must come off for bosses, events and other farming.
+Live journey: `e2e/live-fan-farm-gear.spec.ts`.
+
+25. **No set.** There is no Fan farm set to save (`/gear-sets` rejects it), and the popover
+    does not show one.
+26. **Never worn.** A rogue scatter farming mobs Fan of Knives one-shots keeps its normal
+    gear although a Fan farm set is saved and carried.
+27. **Worn elsewhere.** The set goes on outside scatter fan-farming (grouped farming,
+    events, bosses, travel), or stays on after the rogue leaves scatter mode.
+28. **Flapping on respawns.** With every farmed mob dead, nothing is in view to judge by;
+    the set must stay on rather than coming off between respawns.
+29. **Too weak.** A set that no longer one-shots what the rogue is farming stays on, or
+    goes back on straight after it was taken off. It must come off, say why, and wait
+    before trying again.
+30. **Previous gear lost.** Leaving fan-farming must restore what was worn before the set
+    went on, including slots that were empty.
+31. **Stock taken.** Fan farm pieces in the bag, and the gear waiting to be restored, are
+    taken by automatic compound, upgrade or cleanout rules.

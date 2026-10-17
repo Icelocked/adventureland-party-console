@@ -25,6 +25,7 @@ export interface SharedCombat {
   skillOffense?(target: Target): Promise<boolean>;
   absorbLeaderAggro?(): Promise<boolean>;
   fanOfKnivesFarming?(): boolean;
+  fanOfKnivesVerdict?(): import("./fan-farm-gear.ts").FanVerdict;
   fanOfKnivesStand?(target: Target): { x: number; y: number } | null;
   combatSkillReady?(id: import('../skills/types.ts').SkillId, target: Target, category: import('../skills/types.ts').Spending): boolean;
   castCombatSkill?(id: import('../skills/types.ts').SkillId, target: Target, category: import('../skills/types.ts').Spending): Promise<boolean>;
@@ -147,7 +148,8 @@ export interface CombatRoot {
   partyPorcupineEquipment?: ReturnType<typeof import("./porcupine-equipment.ts").createPorcupineEquipment>;
   partyKillLuckSwap?: ReturnType<typeof import("./kill-luck-swap.ts").createKillLuckSwap>;
   /** Saved gear sets per character, from the coordinator status response. */
-  partyGearSets?: Record<string, Partial<Record<"luck" | "tank" | "gold", { slots: Record<string, unknown> }>> | undefined>;
+  partyGearSets?: Record<string, Partial<Record<"luck" | "tank" | "gold" | "fan", { slots: Record<string, unknown> }>> | undefined>;
+  partyFanFarmGear?: ReturnType<typeof import("./fan-farm-gear.ts").createFanFarmGear>;
   sharedRoutine: SharedCombat;
   partyRoleRunner?: RoleRunner;
   partyCombatState: CombatState;

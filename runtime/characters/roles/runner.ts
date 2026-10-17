@@ -3,6 +3,7 @@ import {installCombatTrace} from "../../combat/trace.ts";
 import {createEntityRefresh} from "../../combat/entity-refresh.ts";
 import { installPorcupineEquipment } from "./porcupine-equipment-runtime.ts";
 import { installKillLuckSwap } from "./kill-luck-swap-runtime.ts";
+import { installFanFarmGear } from "./fan-farm-gear-runtime.ts";
 import { merchantAnniversaryControl } from "../../coordinator/merchant/anniversary-control.ts";
 import { createAttackController } from "./attack-controller.ts";
 import { installSkillRuntime } from '../skills/runtime.ts';
@@ -23,6 +24,7 @@ export function installRoleRunner(
   root.partyRoleRunner?.stop();
   let equipment: ReturnType<typeof installPorcupineEquipment> | null = null;
   let luckSwap: ReturnType<typeof installKillLuckSwap> | null = null;
+  let fanGear: ReturnType<typeof installFanFarmGear> | null = null;
   function resolvedRole(): Role {
     return { ...defaultRole, ...classRole };
   }
@@ -59,7 +61,7 @@ export function installRoleRunner(
     active: () => active, allowed: () => combatAllowed() || !!passingTarget(),
     passing: target => target.id !== currentTarget()?.id && target.id === passingTarget()?.id,
     preparePassing: target => queueClient?.preparePassing(target) ?? false, state: () => root.partyCombatState,
-    equipmentBusy: () => !!equipment?.busy() || !!luckSwap?.busy(),
+    equipmentBusy: () => !!equipment?.busy() || !!luckSwap?.busy() || !!fanGear?.busy(),
     skillAttack: target => skills?.attack(target) ?? null,
     skillBusy: () => skills?.busy() ?? false,
     report: reportError,
@@ -204,6 +206,7 @@ export function installRoleRunner(
     const target = sharedRoutine.equipmentTarget ? sharedRoutine.equipmentTarget() : currentTarget();
     equipment?.tick(target, actor.damage_type, Number(character.range), combatAllowed());
     luckSwap?.tick(combatAllowed() ? currentTarget() : null);
+    fanGear?.tick(combatAllowed());
   }
   function bossMovement(): boolean {
     if (!sharedRoutine.bossCombatActive?.()) return false;
@@ -333,6 +336,10 @@ export function installRoleRunner(
         lethalBasicAttack: target => skills?.lethalBasicAttack(target) ?? false,
         endangeredSelf: () => skills?.endangeredSelf() ?? false,
       }, equipment);
+      fanGear = installFanFarmGear(root, [
+        { busy: () => !!equipment?.busy() },
+        { busy: () => !!luckSwap?.busy() },
+      ]);
       game_log(character.name + " loaded generic " + resolvedRole().name + " behavior", "#51D2E1");
       active = true;
       root.partyCombatState = { at: Date.now(), stage: "start", error: null };
@@ -361,6 +368,7 @@ export function installRoleRunner(
     stop: function () {
       skills?.stop();
       equipment?.stop();
+      fanGear?.stop();
       queueClient?.stop();queueMarkers?.stop();
       lootClient?.stop();trace?.stop();
       active = false;

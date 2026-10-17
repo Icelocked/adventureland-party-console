@@ -1,7 +1,7 @@
 import { createManaBudget } from './budget.ts';
 import { errorReason } from '../roles/types.ts';
 import { blocked, cost, reserve, unlocked } from './eligibility.ts';
-import { bestAttack, damageChoices, fanFarming, fanStand } from './offense.ts';
+import { bestAttack, damageChoices, fanFarming, fanStand, fanVerdict } from './offense.ts';
 import { absorbDecision, paladinSupport, rogueSupport, combatBuffSupport, opener } from './protection.ts';
 import type { Combatant, SkillDecision, SkillDiagnostic, SkillId, SkillWorld } from './types.ts';
 
@@ -126,6 +126,7 @@ export function createSkillEngine(ports: SkillPorts) {
     },
     busy() { world(); return openerPending || pending.has('attack'); },
     fanFarming() { return fanFarming(world()); },
+    fanVerdict() { return fanVerdict(world()); },
     fanStand(target: Combatant) { return fanStand(world(), target); },
     reset() { epoch++; budget.reset(); auraAt = -Infinity; auraState = ''; },
     stop() { stopped = true; epoch++; },

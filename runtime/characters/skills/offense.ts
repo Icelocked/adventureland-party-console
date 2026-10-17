@@ -4,19 +4,37 @@ import { decision, type Combatant, type SkillDecision, type SkillId, type SkillW
 
 /** A Knife Belt rogue scatter farming mobs that Fan of Knives kills outright. */
 export function fanFarming(w: SkillWorld): boolean {
-  return w.actor.ctype === 'rogue' && w.context.mode === 'scatter' && unlocked(w, 'fanofknives') &&
-    w.context.monsters.some(m => fanLethal(w, m));
+  return fanVerdict(w) === 'lethal';
+}
+/** Fan-farming judged with the gear worn now; `unseen` while scatter fan-farming has no authorized mob in view. */
+export function fanVerdict(w: SkillWorld): 'lethal' | 'weak' | 'unseen' | 'off' {
+  if (w.actor.ctype !== 'rogue' || w.context.mode !== 'scatter' || !unlocked(w, 'fanofknives')) return 'off';
+  const seen = w.context.monsters.filter(m => w.allowed(m, 'fanofknives'));
+  return !seen.length ? 'unseen' : seen.some(m => damage(w, 'fanofknives', m, true) >= m.max_hp) ? 'lethal' : 'weak';
 }
 const fanLethal = (w: SkillWorld, m: Combatant) => w.allowed(m, 'fanofknives') && damage(w, 'fanofknives', m, true) >= m.max_hp;
-/** While fan farming with MP to cast, stand within Fan of Knives range of the target, toward nearby one-shot mobs. */
+/**
+ * While fan farming with MP to cast: the spot within Fan of Knives range of the target that keeps
+ * the most other one-shot mobs in range (up to its five targets), nearest first. A rogue whose
+ * spot already reaches as many stays where it is.
+ */
 export function fanStand(w: SkillWorld, primary: Combatant): { x: number; y: number } | null {
   if (!fanFarming(w) || w.actor.mp - cost(w, 'fanofknives') < reserve(w)) return null;
-  const reach = Math.max(20, (w.skills.fanofknives?.range || 160) - 20);
-  const cluster = [primary, ...w.context.monsters.filter(m => m.id !== primary.id && fanLethal(w, m) &&
-    Math.hypot(m.x - primary.x, m.y - primary.y) <= reach * 2)];
-  const cx = cluster.reduce((n, m) => n + m.x, 0) / cluster.length, cy = cluster.reduce((n, m) => n + m.y, 0) / cluster.length;
-  const d = Math.hypot(cx - primary.x, cy - primary.y);
-  return d <= reach ? { x: cx, y: cy } : { x: primary.x + (cx - primary.x) * reach / d, y: primary.y + (cy - primary.y) * reach / d };
+  const range = w.skills.fanofknives?.range || 160, reach = Math.max(20, range - 20);
+  const cap = w.skills.fanofknives?.max_targets || 5;
+  const near = (p: { x: number; y: number }, m: { x: number; y: number }, r: number) => Math.hypot(m.x - p.x, m.y - p.y) <= r;
+  const others = w.context.monsters.filter(m => m.id !== primary.id && fanLethal(w, m) && near(primary, m, reach * 2));
+  const covered = (p: { x: number; y: number }) => near(p, primary, reach) ? Math.min(cap, 1 + others.filter(m => near(p, m, reach)).length) : 0;
+  const here = { x: w.actor.x, y: w.actor.y };
+  let best = here, most = covered(here), travel = 0;
+  for (const radius of [0, reach / 3, reach * 2 / 3, reach])
+    for (let step = 0; step < (radius ? 16 : 1); step++) {
+      const angle = step * Math.PI / 8;
+      const spot = { x: primary.x + Math.cos(angle) * radius, y: primary.y + Math.sin(angle) * radius };
+      const count = covered(spot), distance = Math.hypot(spot.x - here.x, spot.y - here.y);
+      if (count > most || count === most && best !== here && distance < travel) { best = spot; most = count; travel = distance; }
+    }
+  return best;
 }
 export function attackChoices(w: SkillWorld, primary: Combatant): SkillDecision[] {
   const ids: SkillId[] = w.actor.ctype === 'ranger' ? ['piercingshot', '3shot', '5shot'] :
@@ -35,9 +53,9 @@ export function bestAttack(w: SkillWorld, primary: Combatant, affordable: (d: Sk
   const options = attackChoices(w, primary).filter(affordable).map(d => ({ d,
     score: d.targets.reduce((sum, t) => sum + usefulDamage(w, d.skill, t), 0) }));
   options.sort((a, b) => b.score - a.score || cost(w, a.d.skill) - cost(w, b.d.skill));
-  // Fan farming stands at Fan of Knives range: a lone target beyond basic reach still takes the knives.
-  const reach = fanFarming(w) && !w.range(primary, 'attack');
-  return options[0]?.score > baseline || reach && options[0]?.score >= baseline ? options[0].d : null;
+  // While fan farming, Fan of Knives replaces the basic attack even on a lone target; the MP
+  // reserve and potions keep it affordable, and the basic attack is the fallback below the reserve.
+  return options[0]?.score > baseline || fanFarming(w) && options[0]?.score >= baseline ? options[0].d : null;
 }
 function purifyUseful(w: SkillWorld, target: Combatant): boolean {
   if (damage(w, 'purify', target, true) >= target.hp) return true;

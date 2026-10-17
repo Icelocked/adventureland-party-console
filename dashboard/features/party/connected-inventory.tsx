@@ -57,7 +57,7 @@ export const ConnectedInventory = memo(function ConnectedInventory({
   const heldSlots = useMemo(() => {
     const held: Record<number, string> = {};
     for (const { slot, item } of char?.reservedInventory || []) {
-      const set = (['luck', 'tank', 'gold'] as const).find(id => Object.values(gearSets?.[id]?.slots || {}).some(member =>
+      const set = (['luck', 'tank', 'gold', 'fan'] as const).find(id => Object.values(gearSets?.[id]?.slots || {}).some(member =>
         member.name === item?.name && (member.level ?? 0) === (item?.level ?? 0)));
       held[slot] = set ? `${set[0].toUpperCase()}${set.slice(1)} set` : 'Swapped-out gear';
     }
