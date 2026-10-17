@@ -19,7 +19,7 @@ const COLORS = {
   manasteal: "#353C9C", poison: "#41834A", ability: "#ff9100", gold: "gold", gray: "gray", text: "#C3C3C3",
 };
 
-const WEAPON_TYPES: Record<string, string> = {
+export const WEAPON_TYPES: Record<string, string> = {
   sword: "Sword", short_sword: "Short Sword", great_sword: "Great Sword", axe: "Axe", wblade: "Magical Sword",
   basher: "Basher", dartgun: "Dart Gun", bow: "Bow", crossbow: "Crossbow", rapier: "Rapier", spear: "Spear",
   fist: "Fist Weapon", dagger: "Dagger", stars: "Throwing Stars", mace: "Mace", pmace: "Priest Mace", staff: "Staff",

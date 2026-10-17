@@ -42,6 +42,7 @@ import type { ReactNode } from 'react';
 import type { ExchangeRewardTileData } from './exchange-reward-tile';
 import { itemSlotExtras, onItemCard } from "./item-card-lines";
 import { ItemCard, ItemExtraStats } from "./item-card";
+import { SkillCards } from "./skill-card";
 import type { SkillClass } from "./skill-class";
 import type { SkillEntry } from "./skill-entry";
 
@@ -281,7 +282,7 @@ export function ItemDetails({
           {skillHint(selectedSkill.id) ? (
             <p className="text-sm leading-6 text-emerald-50/80">{skillHint(selectedSkill.id)}</p>
           ) : null}
-          <DefinitionGrid value={selectedSkill.definition} omit={["name", "skin", "explanation"]} />
+          <SkillCards skill={selectedSkill} skillName={skillName} />
         </DialogContent>
       </Dialog>
     );
