@@ -6082,7 +6082,7 @@
     }
   }
 
-  function findUpgradeMarkSlot(mark, used) {
+  function findUpgradeMarkSlot(mark, used, marks) {
     if (!mark || !mark.item) return -1;
     // The requested level is anchored to the original mark, not the level
     // reached before an interruption. Durable automatic passes may follow a
@@ -6100,12 +6100,23 @@
             (Number(candidate.level) || 0) < target &&
             sameItem(Object.assign({},candidate,{level:mark.item.level}),mark.item)) survivors.push(index);
       });
+      // A copy still in another request's slot stays with that request. The other unfinished
+      // copies are interchangeable when they are identical: each has a request of its own.
+      var open = survivors.filter(function (index) { return !anchoredUpgradeSlot(marks, mark, index); });
+      if (open.length === 1 || open.length > 1 && open.every(function (index) { return sameItemState(character.items[index], character.items[open[0]]); })) return open[0];
       if (survivors.length > 1) throw Error("Upgrade inventory recovery ambiguous: " + mark.item.name + " +" + start + " to +" + target +
         "; original slot " + slot + "; unfinished candidates " + survivors.map(function(index){return index + " (+" + (Number(character.items[index].level)||0) + ")";}).join(", "));
       if (survivors.length === 1) return survivors[0];
     }
     return character.items.findIndex(function (candidate, index) {
       return !used[index] && sameItem(candidate, mark.item);
+    });
+  }
+
+  function anchoredUpgradeSlot(marks, mark, index) {
+    return (marks || []).some(function (other) {
+      var slot = other && other !== mark && other.item ? (Number.isInteger(other.liveSlot) ? other.liveSlot : other.slot) : null;
+      return slot === index && sameItem(Object.assign({}, character.items[index], { level: other.item.level }), other.item);
     });
   }
 
@@ -6134,7 +6145,7 @@
   function upgradeOfferingDemand(command,checkpoint,name) {
     var used={},demand=0;
     (command.upgrades || []).forEach(function(mark){
-      var slot=findUpgradeMarkSlot(mark,used);if(slot<0)return;used[slot]=true;
+      var slot=findUpgradeMarkSlot(mark,used,command.upgrades);if(slot<0)return;used[slot]=true;
       var item=character.items[slot],target=(Number(mark.item.level)||0)+(Number(mark.tiers)||1);
       for(var level=Number(item.level)||0;level<target;level++){
         var rule=globalThis.partyResolveUpgradeOffering(checkpoint.upgradeOfferingRules || [],item.name,level,mark.offering);
@@ -6184,7 +6195,7 @@
     if (!(command.upgrades || []).length || command.target && command.target!==character.name) return;
     var checkpoint=await upgradeOfferingCheckpoint(command),used={},seen={};
     for(var index=0;index<command.upgrades.length;index++){
-      var mark=command.upgrades[index],slot=findUpgradeMarkSlot(mark,used);
+      var mark=command.upgrades[index],slot=findUpgradeMarkSlot(mark,used,command.upgrades);
       if(slot<0)continue;used[slot]=true;
       var item=character.items[slot],rule=globalThis.partyResolveUpgradeOffering(checkpoint.upgradeOfferingRules || [],item.name,Number(item.level)||0,mark.offering);
       if(!rule || seen[rule.offering])continue;seen[rule.offering]=true;
@@ -6235,7 +6246,7 @@
       if (purchasedSlot >= 0) { used[purchasedSlot] = true; returns.push(purchasedSlot); }
     }
     for (var i = 0; i < (command.upgrades || []).length; i += 1) {
-      var mark = command.upgrades[i], slot = findUpgradeMarkSlot(mark, used);
+      var mark = command.upgrades[i], slot = findUpgradeMarkSlot(mark, used, command.upgrades);
       if (slot < 0) continue;
       used[slot] = true;
       var targetLevel = Math.min(maximumItemLevel(G.items[mark.item.name]),
@@ -6482,7 +6493,7 @@
     var needs = {}, staged = {}, used = {};
     (command.upgrades || []).forEach(function (mark) {
       if (!mark || !mark.item) return;
-      var slot = findUpgradeMarkSlot(mark, used);
+      var slot = findUpgradeMarkSlot(mark, used, command.upgrades);
       if (slot < 0) return;
       used[slot] = true;
       var liveItem = character.items[slot], start = Number(liveItem.level) || 0;

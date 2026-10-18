@@ -7,16 +7,16 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 | | |
 |---|---|
 | Upstream base | `1.5-feature-branch` @ 3ddec7d, merged as 98f25b5 on 10-18 (branch `adopt/1.5`, from `main`; previous merge 53a3cd6 of 849c38a on 10-16). Carries v1.4.0 (PR #64, b4443e4), the ChronAL simulation harness (7f81f71) and all gameplay E2Es on ChronAL (3ddec7d) |
-| Fork head | `adopt/1.5` @ the commit recording this (after bf58f23), not pushed (d03e538 pushed 10-18); `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
+| Fork head | `adopt/1.5` @ the commit recording this (after 5d550db), not pushed (d03e538 pushed 10-18); `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
 | Divergence | 0 behind; 237 files differ from upstream’s tip (3ddec7d) |
-| Checked | 2026-10-16, against every upstream issue, comment and PR (#13–#131); #136 and #137 filed 10-17, #138 filed 10-17, #142 filed 10-18 |
+| Checked | 2026-10-16, against every upstream issue, comment and PR (#13–#131); #136 and #137 filed 10-17, #138 filed 10-17, #142 and #143 filed 10-18 |
 
 | Status | Count |
 |---|---|
 | New issue | 1 |
 | Update / comment | 9 (2 to do) |
 | Done upstream | 39 |
-| Matches | 19 (all done but #129 and #130, not commented) |
+| Matches | 20 (all done but #129 and #130, not commented) |
 | Open upstream | 21 |
 | Closed | 19 |
 | Fork-only | 7 |
@@ -202,6 +202,7 @@ A comment saying where it's implemented, with the commit link, is enough.
 
 | Issue | Feature | Fork commits | Note |
 |---|---|---|---|
+| [#143](https://github.com/Ryan-Haines/adventureland-party-console/issues/143) filed 10-18 | Manual upgrades of identical items stop as "recovery ambiguous" after the inventory tidy moves them | the commit recording this | `findUpgradeMarkSlot` gets the command's marks: copies still in another request's slot stay with it, and identical remaining copies are interchangeable. Inventory `e2e/manual-upgrade-duplicates-failures.md` |
 | [#142](https://github.com/Ryan-Haines/adventureland-party-console/issues/142) filed 10-18 | E2E global setup fails on Linux with `spawnSync E2BIG` | the commit recording this | `E2E_DASHBOARD_CANDIDATE` carries the directory and the manifest without its per-file hashes (about 248 KB with them, over Linux's 128 KiB per-string limit). Inventory `e2e/dashboard-candidate-env-failures.md` |
 | [#138](https://github.com/Ryan-Haines/adventureland-party-console/issues/138) filed 10-17 | Keep a fighter's elixir active: merchant restock and auto-drink | [b22fcc6](https://github.com/Thefonze74065/adventureland-party-console/commit/b22fcc6) | An `elixir` restock supply (default `elixirluck`, off at max 0) beside HP/MP: `/restock`, default policy, completion check, scheduling, dashboard import and "Luck elixir min/max" controls. The merchant walks to the seller by name (Warin's aisle approach) and withdraws bank gold for a shortfall; `restockPolicies` joins the heartbeat state, and a fighter with no active elixir drinks the one its policy names. `live-elixir-restock.spec.ts`; `live-equipment` and `live-economy` pass |
 | [#137](https://github.com/Ryan-Haines/adventureland-party-console/issues/137) filed 10-17 | Rogue: sustain Fan of Knives while scatter farming mobs it one-shots | [dbadfe7](https://github.com/Thefonze74065/adventureland-party-console/commit/dbadfe7) | Gated on `fanFarming` (Knife Belt rogue, scatter mode, a mob Fan of Knives kills outright): MP potions whenever a whole one fits (no `regen_mp` lockout), no sustained-budget throttle on Fan of Knives (20% reserve kept), Quick Stab/Punch dropped and Mental Burst only when its kill refund covers its cost, no Assassin's Smoke opener, and a stand within Fan of Knives range toward the nearby cluster. `live-rogue-fan-scatter.spec.ts` (native spawn and a declared sparse layout); depends on #136 |

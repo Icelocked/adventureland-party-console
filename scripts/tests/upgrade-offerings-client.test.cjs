@@ -22,7 +22,7 @@ function runtime({rules=[],stock=0,bank=0,manual=false,required=true,survive=fal
    if(survive)return {success:false};character.items[slot].level++;return {success:true};
   },
  });
- const names=['findItem','findInventoryItemByName','findUpgradeMarkSlot','upgradeOfferingCheckpoint','availableOfferingEntries','carriedOffering','carriedOfferingQuantity','upgradeOfferingDemand','requestUpgradeOfferingSupply','retrieveUpgradeOffering','prepareUpgradeOffering','merchantImprove'];
+ const names=['findItem','findInventoryItemByName','findUpgradeMarkSlot','anchoredUpgradeSlot','upgradeOfferingCheckpoint','availableOfferingEntries','carriedOffering','carriedOfferingQuantity','upgradeOfferingDemand','requestUpgradeOfferingSupply','retrieveUpgradeOffering','prepareUpgradeOffering','merchantImprove'];
  vm.runInContext(names.map(n=>namedFunction(source,n)).join('\n'),r);
  const mark={slot:0,item:{name:'sword',level:7},tiers:manual?1:2,...(manual?{offering:'offeringp',requestId:'manual'}:{auto:true})};
  return {r,character,calls,waits,visits,command:{jobId:'job',target:'M',upgrades:[mark]},rules};

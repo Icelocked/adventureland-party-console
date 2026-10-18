@@ -11,7 +11,8 @@ test('displaced manual upgrade selects unfinished stock without treating finishe
  const items=Array(12).fill(null);items[3]={name:'ololipop',level:8};items[5]={name:'ololipop',level:8};items[10]={name:'ololipop',level:5};
  const c=vm.createContext({character:{items},G:{items:{ololipop:{}}},maximumItemLevel:()=>13,
   sameItem:(a,b)=>!!a&&!!b&&a.name===b.name&&(a.level||0)===(b.level||0)});
- vm.runInContext(namedFunction(shared,'findUpgradeMarkSlot'),c);
+ c.sameItemState=c.sameItem;
+ vm.runInContext(namedFunction(shared,'findUpgradeMarkSlot')+'\n'+namedFunction(shared,'anchoredUpgradeSlot'),c);
  const mark={requestId:'manual',slot:7,item:{name:'ololipop',level:5},tiers:3};
  assert.equal(c.findUpgradeMarkSlot(mark,{}),10);
  items[11]={name:'ololipop',level:6};
