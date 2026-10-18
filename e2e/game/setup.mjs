@@ -18,7 +18,10 @@ export default async function setup(config) {
   const candidate=latest?.sourceHash===hash?undefined:await buildCandidate(root,store);
   const verified=await store.verify(candidate?.manifest.id||latest.id);
   if(verified.manifest.sourceHash!==hash)throw Error('E2E dashboard candidate does not match source');
-  process.env.E2E_DASHBOARD_CANDIDATE=JSON.stringify(verified);
+  // The verified per-file hashes stay in the release: with them the variable exceeds Linux's 128 KiB
+  // limit for one environment string, and every child process fails with E2BIG.
+  const {files,...summary}=verified.manifest;
+  process.env.E2E_DASHBOARD_CANDIDATE=JSON.stringify({directory:verified.directory,manifest:summary});
   const accelerated=process.env.E2E_GAMEPLAY_BACKEND!=='native';
   if(liveSelected&&accelerated){
     if(Number(process.versions.node.split('.')[0])<24)throw Error('ChronAL gameplay E2E requires Node 24+; E2E_GAMEPLAY_BACKEND=native selects native parity execution');
