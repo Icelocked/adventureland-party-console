@@ -6,7 +6,7 @@ Read this before touching the fork: pulling upstream, filing or reviewing upstre
 
 - The fork (`Thefonze74065/adventureland-party-console`, checkout `~/Projects/adventureland-party-console`) is **the maintainer’s code plus issue-backed code**. Adoption branches track the upstream branch being adopted: `adopt/bugfix-1.4` for `bugfix-1.4`, `adopt/1.5` (current) for `1.5-feature-branch`. Strongly prefer the maintainer’s solution: when upstream fixes something the fork fixed, take upstream’s version and drop the fork’s code, tests and docs for it.
 
-- Agreed exceptions that stay fork-only: `VINEXT_NO_DEV_LOCK`, the fork release pipeline, plus the features in Fork-only and Matches (gear sets, gapped bank sort, Phoenix split search, boss guard in `runner.ts`, #31 market bank load, #34 WTB sort and Check). PR #25 was dropped for PR #104 by the user’s choice.
+- Agreed exceptions that stay fork-only: the fork release pipeline (`VINEXT_NO_DEV_LOCK` retired 10-18), plus the features in Fork-only and Matches (gear sets, gapped bank sort, Phoenix split search, boss guard in `runner.ts`, #31 market bank load, #34 WTB sort and Check). PR #25 was dropped for PR #104 by the user’s choice.
 
 - Work only in the main checkout. Ask before creating worktrees or folders outside the repo; scratch exports go under `.build/` (ignored).
 
