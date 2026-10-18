@@ -15,7 +15,10 @@ export default async function setup(config) {
   const liveSelected=config.projects.some(project=>project.name==='live')&&(!selectors.length||selectors.some(name=>name==='live'||name.includes('*')));
   const store=new ConsoleBuildStore(root),hash=await sourceFingerprint(root);
   const references=await store.references();
-  const latest=references.latest?await store.describe(references.latest):undefined;
+  const pinned=process.env.E2E_DASHBOARD_CANDIDATE_ID;
+  const selected=pinned||references.latest;
+  const latest=selected?await store.describe(selected):undefined;
+  if(pinned&&latest?.sourceHash!==hash)throw Error('Pinned E2E dashboard candidate does not match source');
   const candidate=latest?.sourceHash===hash?undefined:await buildCandidate(root,store);
   const verified=await store.verify(candidate?.manifest.id||latest.id);
   if(verified.manifest.sourceHash!==hash)throw Error('E2E dashboard candidate does not match source');

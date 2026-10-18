@@ -29,7 +29,7 @@ await build({
           const { readFile } = await import("node:fs/promises");
           return {
             contents:
-              "const process={_tickCallback(){}};const setImmediate=(()=>{let host=globalThis;try{if(globalThis.top?.scheduler)host=globalThis.top;}catch{}const channel=new host.MessageChannel(),queue=[];channel.port1.onmessage=()=>queue.shift()?.();return callback=>{if(host.scheduler?.postTask)return host.scheduler.postTask(callback,{priority:'user-blocking'});queue.push(callback);channel.port2.postMessage(0);};})();\n" +
+              `const process={_tickCallback(){}};const {postTask:setImmediate}=require(${JSON.stringify(path.join(root,"tools/sim/browser-task-queue.cjs"))});\n` +
               (await readFile(args.path, "utf8")).replace(
                 "if (each || promiseActivity) return true;",
                 "return true; // Browser shim: drain microtasks after every timer.",
