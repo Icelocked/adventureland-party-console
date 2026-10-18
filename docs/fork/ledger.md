@@ -7,7 +7,7 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 | | |
 |---|---|
 | Upstream base | `1.5-feature-branch` @ 3ddec7d, merged as 98f25b5 on 10-18 (branch `adopt/1.5`, from `main`; previous merge 53a3cd6 of 849c38a on 10-16). Carries v1.4.0 (PR #64, b4443e4), the ChronAL simulation harness (7f81f71) and all gameplay E2Es on ChronAL (3ddec7d) |
-| Fork head | `adopt/1.5` @ the commit recording this (after 5d550db), not pushed (d03e538 pushed 10-18); `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
+| Fork head | `adopt/1.5` @ the commit recording this (after 5f95203), not pushed (d03e538 pushed 10-18); `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
 | Divergence | 0 behind; 237 files differ from upstream’s tip (3ddec7d) |
 | Checked | 2026-10-16, against every upstream issue, comment and PR (#13–#131); #136 and #137 filed 10-17, #138 filed 10-17, #142 and #143 filed 10-18 |
 
@@ -19,7 +19,7 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 | Matches | 20 (all done but #129 and #130, not commented) |
 | Open upstream | 21 |
 | Closed | 19 |
-| Fork-only | 7 |
+| Fork-only | 8 |
 
 ## New issue: not represented upstream
 
@@ -280,6 +280,10 @@ Every closed upstream issue not covered above. None has fork commits still pendi
 ### Agreed exceptions without an issue
 
 The release pipeline below. `VINEXT_NO_DEV_LOCK` retired on 10-18: upstream's console fixture now serves a built dashboard candidate instead of `vinext dev`. Decided 10-08: everything else in the fork is upstream’s code or backed by an upstream issue.
+
+### PR #87: persistent Metrics dashboard (adopted 10-18)
+
+[PR #87](https://github.com/Ryan-Haines/adventureland-party-console/pull/87) by shaibalmuhtadee, still open upstream, merged as 5f95203 at the user's request (as PR #104 was): a Metrics view with kills (per-monster totals and rates), damage, chest loot, gold, account gold and ping histories stored at `<LOCALSTORAGE_PATH>.metrics.jsonl`, plus a direct-table drop estimator (kills/hour and luck to time and kill milestones). The PR's passing-encounter and combat-queue performance fixes were dropped for upstream's later versions. Adds the `recharts` dashboard dependency. If upstream merges or replaces the PR, take upstream's version.
 
 ### ALNinja trade reports and prices (PR after testing)
 
