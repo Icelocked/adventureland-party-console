@@ -53,3 +53,8 @@ Written before the implementation; each line has a check in
    value and every other column's difference.
 10. The layout breaks. On a narrow viewport the table scrolls inside its own
     box and the dialog does not scroll sideways.
+11. An added item shows no picture. A catalog item can carry its sprite on the
+    catalog entry (`MerchantCatalogItem.sprite`) with none on its `meta`, and
+    the table read only `meta.sprite`, so columns B to D showed an empty box.
+    Every column's header must show its item's sprite, 48px square inside the
+    header's sprite box.

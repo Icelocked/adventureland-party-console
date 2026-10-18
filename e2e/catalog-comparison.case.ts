@@ -80,6 +80,8 @@ async function openComparison(page: Page, app: { url: string }) {
   await picker.getByRole("button", { name: "Compare selected", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Compare catalog items", exact: true });
   await expect(dialog).toBeVisible();
+  // The dialog zooms in as it opens; measure boxes once that settles.
+  await dialog.evaluate((node) => Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished)));
   return dialog;
 }
 
@@ -154,4 +156,23 @@ test("catalog comparison shows each item's stats in the game card style", async 
   await page.setViewportSize({ width: 420, height: 1000 });
   expect(await dialog.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
   await info.attach("catalog-comparison-narrow", { body: await dialog.screenshot(), contentType: "image/png" });
+});
+
+test("every catalog comparison column shows its item's sprite", async ({ page, app }, info) => {
+  const dialog = await openComparison(page, app);
+  const headers = dialog.getByRole("table").locator("thead th[scope=col]");
+  await expect(headers).toHaveCount(4);
+  // 11: A's sprite comes from its meta; B and C carry theirs on the catalog entry only.
+  for (let column = 1; column <= 3; column++) {
+    const sprite = headers.nth(column).locator('span[aria-hidden="true"]');
+    await expect(sprite).toHaveCount(1);
+    expect(await sprite.evaluate((node) => getComputedStyle(node).backgroundImage)).toContain("data:image/svg+xml");
+    const box = (await sprite.boundingBox())!, frame = (await sprite.locator("xpath=../..").boundingBox())!;
+    expect([Math.round(box.width), Math.round(box.height)]).toEqual([48, 48]);
+    expect(box.x).toBeGreaterThanOrEqual(frame.x - 1);
+    expect(box.y).toBeGreaterThanOrEqual(frame.y - 1);
+    expect(box.x + box.width).toBeLessThanOrEqual(frame.x + frame.width + 1);
+    expect(box.y + box.height).toBeLessThanOrEqual(frame.y + frame.height + 1);
+  }
+  await info.attach("catalog-comparison-sprites", { body: await dialog.getByRole("table").locator("thead").screenshot(), contentType: "image/png" });
 });
