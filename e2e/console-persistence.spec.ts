@@ -91,3 +91,40 @@ test('status reports reach the dashboard without waiting for saves', async ({ pa
   }
   await report(info, 'status-dashboard-latency', { dom: summary(latency), statusResponseMs: summary(response.map(ms => Math.round(ms * 100) / 100)) });
 });
+
+// Journal records as [key, JSON text] pairs, in file order.
+function journalRecords(journal: string): [string, string][] {
+  return readFileSync(journal, 'utf8').split('\n').flatMap(line => {
+    const key = /^\{"([^"]+)":/.exec(line)?.[1];
+    return key ? [[key, line] as [string, string]] : [];
+  });
+}
+const saved = (journal: string, key: string) => journalRecords(journal).filter(([name]) => name === key).map(([name, line]) => JSON.parse(line)[name]);
+const settingsKey = 'party_dashboard_settings_state_v1';
+const mailSettings = (page: import('@playwright/test').Page, url: string, settings: { autoCollect: boolean; autoDelete: boolean }) =>
+  page.request.post(`${url}/party-api/mail/settings`, { headers: { Origin: url }, data: settings });
+
+// The mail settings route needs the mailbox fixture's account boundary.
+test.describe('saves through the mail settings route', () => {
+  test.use({ mailbox: true });
+  test('saves that repeat the last record append nothing, and a restart reads the same state', async ({ page, app }, info) => {
+    // P1 items 1 and 4. Native status reports save the roster on every fixture
+    // heartbeat, and each mail settings POST saves settings with unchanged content.
+    await page.waitForTimeout(3000);
+    for (let index = 0; index < 5; index++) expect((await mailSettings(page, app.url, { autoCollect: false, autoDelete: false })).ok()).toBe(true);
+    await page.waitForTimeout(8000);
+    const last = new Map<string, string>(), repeats: string[] = [], appended: Record<string, number> = {};
+    for (const [key, line] of journalRecords(app.journal)) {
+      if (last.get(key) === line) repeats.push(key);
+      last.set(key, line);
+      appended[key] = (appended[key] || 0) + 1;
+    }
+    await report(info, 'journal-records-by-key', { appended, repeats });
+    expect(repeats).toEqual([]);
+    const before = await app.state();
+    await app.restartCoordinator();
+    const after = await app.state();
+    expect(Object.keys(after.characterSnapshots ?? {})).toEqual(Object.keys(before.characterSnapshots ?? {}));
+    expect((await (await page.request.get(`${app.url}/party-api/mail`)).json()).settings).toEqual({ autoCollect: false, autoDelete: false });
+  });
+});

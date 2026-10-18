@@ -35,7 +35,9 @@ export function createCoordinatorPersistence(
   let historyTimer: ReturnType<typeof setTimeout> | undefined;
   let historyDirty = false;
   function write(key: string, value: unknown): void {
-    storage.set(key, structuredClone(value));
+    // KeyValueStorage.set copies or serializes before it returns, so the
+    // snapshot can share arrays with live state.
+    storage.set(key, value);
   }
   function roster(): void {
     write(stateKeys.roster, selectSnapshot(state, rosterFields));

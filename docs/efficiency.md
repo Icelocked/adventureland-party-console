@@ -55,3 +55,40 @@ Failure inventory:
 Tests: `scripts/tests/coordinator-persistence-writer.test.cjs` (1-4, 6-9) and
 `e2e/console-persistence.spec.ts` (2, 3, 5 through the real coordinator and
 dashboard).
+
+### Saves by content (P1)
+
+`write` in `writer.ts` passed `structuredClone(value)` to the store, and
+`CoordinatorJsonlStore.set` skipped the append only when the new value was the
+same object as the stored one, which a fresh clone never is. Every call appended
+the whole document. On a live console 20 of 21 roster saves (one per native
+status report, `status/ingestion.ts`) and 19 of 20 selections saves were
+identical to the record before them.
+
+The store now keeps the JSON text of each key's last record and appends only
+when the new text differs. `set` serializes before it returns, which gives
+callers the isolation the clone gave, so `write` no longer clones. Replay of the
+journal gives the same values, because a skipped record repeats the one before
+it. A value with no JSON form (`undefined`) saves as a deletion; v1.4.0 wrote
+`{}`, which made the next start fail with `Empty storage record`.
+
+The comparison costs one string compare per save on text `append` already
+produced, and it replaces a `structuredClone` of the document (Measurements,
+below).
+
+Failure inventory:
+
+1. An identical save appends a record.
+2. The store skips a save whose content changed, including a change in key
+   order or in an array the caller mutated in place.
+3. The store skips a save of the earlier value after a delete.
+4. The first save after a restart compares against nothing and appends, or
+   compares against the wrong text and skips.
+5. A caller that mutates its object after `set` changes what `get`, `entries`
+   or the next compaction return.
+6. Character `localStorage` strings stop round-tripping.
+7. A value with no JSON form writes a record replay cannot read.
+
+Tests: `scripts/tests/coordinator-jsonl-store.test.cjs` (1-7), including a real
+writer and store for unchanged roster reports, and
+`e2e/console-persistence.spec.ts` (1 and 4 through the real coordinator).

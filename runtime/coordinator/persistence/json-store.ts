@@ -1,5 +1,6 @@
 export interface KeyValueStorage {
   get(key: string): unknown;
+  /** Copies or serializes `value` before it returns; callers keep mutating it. */
   set(key: string, value: unknown): void;
 }
 

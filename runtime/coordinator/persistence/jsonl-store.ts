@@ -3,9 +3,15 @@ import {spawnSync} from 'node:child_process';
 import type {CoordinatorFileStore} from '../infrastructure/platform-contracts.ts';
 import {processLockActive, processLockIdentity} from './process-lock.ts';
 
+/**
+ * One saved value. `json` is the exact text of its last record; replayed
+ * values get it on first comparison. get() parses `value` on first read.
+ */
+interface StoredValue { json?: string; value?: unknown; parsed: boolean }
+
 /** Compatible JSONL store: replay one record at a time, never the entire journal. */
 export class CoordinatorJsonlStore implements CoordinatorFileStore {
-  private values = new Map<string,unknown>();
+  private values = new Map<string,StoredValue>();
   private handle: number | undefined;
   private lock: number | undefined;
   private guard: number | undefined;
@@ -77,15 +83,21 @@ export class CoordinatorJsonlStore implements CoordinatorFileStore {
     const entry=Object.entries(JSON.parse(line) as Record<string,unknown>)[0];
     if(!entry)throw new Error('Empty storage record');
     const [key,value]=entry;
-    if(value===null)this.values.delete(key);else this.values.set(key,value);
+    if(value===null)this.values.delete(key);else this.values.set(key,{value,parsed:true});
+  }
+  private json(stored:StoredValue):string {
+    return stored.json??=JSON.stringify(stored.value);
+  }
+  private static record(key:string,json:string):string {
+    return '{'+JSON.stringify(key)+':'+json+'}\n';
   }
   refactor():void {
     if(this.closed || Date.now()<this.compactRetryAt)return;
     const replacement=fs.openSync(this.replacementPath,'w');
     let bytes=0;
     try {
-      for(const [key,value] of this.values) {
-        const record=JSON.stringify({[key]:value})+'\n';
+      for(const [key,stored] of this.values) {
+        const record=CoordinatorJsonlStore.record(key,this.json(stored));
         fs.writeFileSync(replacement,record);bytes+=Buffer.byteLength(record);
       }
       fs.fsyncSync(replacement);
@@ -103,28 +115,48 @@ export class CoordinatorJsonlStore implements CoordinatorFileStore {
     this.compactRetryAt=Date.now()+30000;
     console.warn('Coordinator journal compaction deferred for 30 seconds: '+code);
   }
-  private append(key:string,value:unknown):void {
+  private append(key:string,json:string):void {
     if(this.closed)throw new Error('Storage is closed');
-    const record=JSON.stringify({[key]:value})+'\n';
+    const record=CoordinatorJsonlStore.record(key,json);
     fs.writeFileSync(this.handle!,record);this.bytes+=Buffer.byteLength(record);
   }
   private compactIfNeeded():void {
     // Bound append history even if a busy event loop delays the periodic timer.
     if(this.bytes>=128*1024*1024)this.refactor();
   }
-  get(key:string):unknown {return this.values.get(key);}
+  get(key:string):unknown {
+    const stored=this.values.get(key);
+    if(stored && !stored.parsed){stored.value=JSON.parse(stored.json!);stored.parsed=true;}
+    return stored?.value;
+  }
+  /**
+   * The store serializes the value before it returns, so callers may keep
+   * mutating their object. Equal content appends nothing; replay would
+   * produce the same value.
+   */
   set(key:string,value:unknown):this {
-    if(this.get(key)===value)return this;
-    this.append(key,value);
-    if(value===null)this.values.delete(key);else this.values.set(key,value);
+    const json=value===null ? undefined : JSON.stringify(value);
+    // undefined and functions have no JSON form; a record without a value
+    // would make the journal unreadable, so they save as a deletion.
+    if(json===undefined){this.delete(key);return this;}
+    return this.setSerialized(key,json);
+  }
+  /** Save text the caller already produced with JSON.stringify. */
+  setSerialized(key:string,json:string):this {
+    const stored=this.values.get(key);
+    if(stored && this.json(stored)===json)return this;
+    this.append(key,json);
+    this.values.set(key,{json,parsed:false});
     this.compactIfNeeded();return this;
   }
   delete(key:string):boolean {
     if(!this.values.has(key))return false;
-    this.append(key,null);const removed=this.values.delete(key);
+    this.append(key,'null');const removed=this.values.delete(key);
     this.compactIfNeeded();return removed;
   }
-  entries():IterableIterator<[string,unknown]> {return this.values.entries();}
+  *entries():IterableIterator<[string,unknown]> {
+    for(const key of [...this.values.keys()])yield [key,this.get(key)];
+  }
   close():void {
     if(this.closed)return;
     this.closed=true;clearInterval(this.timer);

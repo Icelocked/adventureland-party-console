@@ -107,3 +107,49 @@ test('non-sharing rotation failures remain visible and leave the append journal 
  syncBuiltinESMExports();t.after(()=>{t.mock.restoreAll();syncBuiltinESMExports();});
  assert.throws(()=>s.refactor(),/I\/O failure/);s.set('keep',2);assert.equal(s.get('keep'),2);s.close();
 });
+
+// Content-addressed saves: docs/efficiency.md (Persistence), failure inventory P1.
+const journalLines=main=>fs.readFileSync(main,'utf8').split('\n').filter(Boolean);
+test('an identical save appends nothing and a changed save always appends',t=>{
+ const [main,rotation]=fixture(t),s=new Store(main,rotation);
+ const start=journalLines(main).length;
+ s.set('roster',{slots:['F'],owner:'N'});
+ for(let i=0;i<20;i++)s.set('roster',{slots:['F'],owner:'N'});
+ assert.equal(journalLines(main).length,start+1,'equal content is one record');
+ s.set('roster',{slots:['F','G'],owner:'N'});assert.equal(journalLines(main).length,start+2);
+ s.set('roster',{owner:'N',slots:['F','G']});assert.equal(journalLines(main).length,start+3,'key order is content');
+ s.set('text','abc');s.set('text','abc');s.set('text','abd');assert.equal(journalLines(main).length,start+5,'character localStorage strings');
+ s.delete('roster');s.set('roster',{owner:'N',slots:['F','G']});
+ assert.equal(journalLines(main).length,start+7,'delete then the same value appends tombstone and value');
+ assert.deepEqual(s.get('roster'),{owner:'N',slots:['F','G']});s.close();
+});
+test('an unchanged save after restart compares against the replayed value',t=>{
+ const [main,rotation]=fixture(t);let s=new Store(main,rotation);
+ s.set('settings',{a:[1,{b:'猫'}]});s.close();
+ s=new Store(main,rotation);const lines=journalLines(main).length;
+ s.set('settings',{a:[1,{b:'猫'}]});assert.equal(journalLines(main).length,lines);
+ s.set('settings',{a:[2]});assert.equal(journalLines(main).length,lines+1);s.close();
+});
+test('the store keeps the saved content when the caller mutates its object afterwards',t=>{
+ const [main,rotation]=fixture(t),s=new Store(main,rotation);
+ const live={items:[1]};s.set('bank',live);live.items.push(2);
+ assert.deepEqual(s.get('bank'),{items:[1]});
+ assert.deepEqual(Object.fromEntries(s.entries()).bank,{items:[1]});
+ s.set('bank',live);assert.deepEqual(s.get('bank'),{items:[1,2]},'the changed object saves again');
+ live.items.push(3);s.refactor();s.close();
+ const r=new Store(main,rotation);try{assert.deepEqual(r.get('bank'),{items:[1,2]});}finally{r.close();}
+});
+test('a value without a JSON form saves as a deletion instead of an unreadable record',t=>{
+ const [main,rotation]=fixture(t),s=new Store(main,rotation);
+ s.set('gone',{a:1});s.set('gone',undefined);assert.equal(s.get('gone'),undefined);s.close();
+ const r=new Store(main,rotation);try{assert.equal(r.get('gone'),undefined);}finally{r.close();}
+});
+test('an unchanged roster report through the writer appends nothing',t=>{
+ const {createCoordinatorPersistence}=require('../../runtime/coordinator/persistence/writer.ts');
+ const [main,rotation]=fixture(t),s=new Store(main,rotation);
+ const state={aldata:{},headlessSlots:['F'],steamMembers:['N'],nativeOwner:'N',characterAppearances:{F:{skin:'a'}},steamSwitch:null};
+ const writer=createCoordinatorPersistence(state,s);writer.roster();const lines=journalLines(main).length;
+ for(let i=0;i<10;i++)writer.roster();assert.equal(journalLines(main).length,lines);
+ state.headlessSlots.push('G');writer.roster();assert.equal(journalLines(main).length,lines+1,'in-place change is seen');
+ state.headlessSlots.push('H');assert.deepEqual(s.get('party_dashboard_roster_state_v1').headlessSlots,['F','G']);s.close();
+});
