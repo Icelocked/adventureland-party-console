@@ -7,13 +7,13 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 | | |
 |---|---|
 | Upstream base | `1.5-feature-branch` @ 3ddec7d, merged as 98f25b5 on 10-18 (branch `adopt/1.5`, from `main`; previous merge 53a3cd6 of 849c38a on 10-16). Carries v1.4.0 (PR #64, b4443e4), the ChronAL simulation harness (7f81f71) and all gameplay E2Es on ChronAL (3ddec7d) |
-| Fork head | `adopt/1.5` @ the commit recording this (after 5f95203), not pushed (d03e538 pushed 10-18); `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
+| Fork head | `adopt/1.5` @ the commit recording this (after 9c20e03), not pushed (d03e538 pushed 10-18); `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
 | Divergence | 0 behind; 237 files differ from upstream’s tip (3ddec7d) |
 | Checked | 2026-10-16, against every upstream issue, comment and PR (#13–#131); #136 and #137 filed 10-17, #138 filed 10-17, #142 and #143 filed 10-18 |
 
 | Status | Count |
 |---|---|
-| New issue | 1 |
+| New issue | 2 |
 | Update / comment | 9 (2 to do) |
 | Done upstream | 39 |
 | Matches | 20 (all done but #129 and #130, not commented) |
@@ -24,6 +24,13 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 ## New issue: not represented upstream
 
 Implemented on the fork, with no upstream issue or PR describing it yet.
+
+### Skills sharing the attack cooldown lose slots to basic attacks
+
+Not filed yet. Fork fix in the commit recording this (10-18).
+
+- The attack controller swings once the shared attack cooldown has at most 2 ms left (`remaining() <= 2`), but the skill world's `cooldown()` treated `next_skill.attack` and the skill's own entry (`next_skill.fanofknives`, set to the same time) as cooling down to the exact millisecond. `blocked()` returned `cooldown`, `attackChoices` dropped the skill without a diagnostic, and the slot fell to a basic attack. Upstream code at 3ddec7d; affects Fan of Knives and the ranger's 3-shot and 5-shot.
+- Live: FonzeRogue made about 46 basic attacks in 54 s of crab farming with MP to spare. Fix: skills sharing `attack` are ready on the same 2 ms edge. `live-rogue-fan-crab.spec.ts`: control 12–40 basic attacks a minute with MP for a cast; with the fix none, and Fan of Knives casts rose from about 60 to 74 a minute.
 
 ### Dashboard bag keeps items the character no longer has
 

@@ -40,7 +40,11 @@ export function installSkillRuntime(root: CombatRoot) {
       actor, context, skills, now: Date.now(),
       item: name => (G.items as Record<string, { wtype?: string; type?: string; charge?: number }>)[name],
       condition: name => (G.conditions as Record<string, ReturnType<SkillWorld['condition']>>)[name],
-      cooldown: id => id === 'invis' && !!shared.merchantVisibilityActive?.() || Number(host.next_skill?.[id]) > Date.now(),
+      // The attack controller swings up to 2 ms before the attack cooldown ends. A skill sharing that
+      // cooldown (Fan of Knives, 3-shot, 5-shot) must be ready on the same edge, or the slot falls back
+      // to a basic attack; an early cast rejected as `cooldown` retries without a lockout.
+      cooldown: id => id === 'invis' && !!shared.merchantVisibilityActive?.() ||
+        Number(host.next_skill?.[id]) - Date.now() > (id === 'attack' || skills[id]?.share === 'attack' ? 2 : 0),
       damageMultiplier: host.damage_multiplier || mitigation,
       incoming: t => projectiles.incoming(t.id, Date.now()),
       range: (t, id) => skillRange(actor, t, skills[id]),
