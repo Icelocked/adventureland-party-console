@@ -7,16 +7,16 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 | | |
 |---|---|
 | Upstream base | `1.5-feature-branch` @ 3ddec7d, merged as 98f25b5 on 10-18 (branch `adopt/1.5`, from `main`; previous merge 53a3cd6 of 849c38a on 10-16). Carries v1.4.0 (PR #64, b4443e4), the ChronAL simulation harness (7f81f71) and all gameplay E2Es on ChronAL (3ddec7d) |
-| Fork head | `adopt/1.5` @ the commit recording this (after c565101), not pushed (d03e538 pushed 10-18); `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
-| Divergence | 0 behind; 237 files differ from upstream’s tip (3ddec7d) |
-| Checked | 2026-10-16, against every upstream issue, comment and PR (#13–#131); #136 and #137 filed 10-17, #138 filed 10-17, #142, #143 and #144 filed 10-18 |
+| Fork head | `adopt/1.5` @ the commit recording this (after 8d79aff), pushed 10-18; `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
+| Divergence | 0 behind; 279 files differ from upstream’s tip (3ddec7d) |
+| Checked | 2026-10-16, against every upstream issue, comment and PR (#13–#131); #136 and #137 filed 10-17, #138 filed 10-17, #142, #143, #144 and #145 filed 10-18 |
 
 | Status | Count |
 |---|---|
-| New issue | 2 |
+| New issue | 1 |
 | Update / comment | 9 (2 to do) |
 | Done upstream | 39 |
-| Matches | 21 (all done but #129 and #130, not commented) |
+| Matches | 22 (all done but #129 and #130, not commented) |
 | Open upstream | 21 |
 | Closed | 19 |
 | Fork-only | 8 |
@@ -24,13 +24,6 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 ## New issue: not represented upstream
 
 Implemented on the fork, with no upstream issue or PR describing it yet.
-
-### Bank sort swap journal blocks the merchant when the freed cell is refilled
-
-Not filed yet. Fork fix in the commit recording this (10-18).
-
-- `settleBankSortSwap` confirms a journaled swap only when both the inventory buffer slot and the bank cell match the post-swap state exactly. A deposit that refills the freed cell before confirmation (or across a reload, since the journal persists) means it never confirms: every merchant job then fails with `Bank sort swap not confirmed; recovery pending`. Upstream code at 3ddec7d.
-- Live: FonzeMerch's journal expected Talking Skull +0 in slot 11 (it was) and `items3` slot 34 empty (it held a Candy); auto upgrades, compounds, NPC sales and exchanges failed every ~6 s. Fix: the swap counts as confirmed once the incoming item is in the buffer slot and no longer in the cell. `live-bank-sort-journal.spec.ts`: control repeats the error; with the fix the journal clears, the Helmet returns to the bank and the Candy stays.
 
 ### Dashboard bag keeps items the character no longer has
 
@@ -209,6 +202,7 @@ A comment saying where it's implemented, with the commit link, is enough.
 
 | Issue | Feature | Fork commits | Note |
 |---|---|---|---|
+| [#145](https://github.com/Ryan-Haines/adventureland-party-console/issues/145) filed 10-18 | Bank sort swap journal blocks the merchant when the freed cell is refilled | [8d79aff](https://github.com/Thefonze74065/adventureland-party-console/commit/8d79aff) | The swap is confirmed once the incoming item is in the buffer slot and no longer in the cell. Inventory `e2e/bank-sort-journal-failures.md`, journey `live-bank-sort-journal.spec.ts` |
 | [#144](https://github.com/Ryan-Haines/adventureland-party-console/issues/144) filed 10-18 | Skills sharing the attack cooldown lose slots to basic attacks | [85402f9](https://github.com/Thefonze74065/adventureland-party-console/commit/85402f9) | The skill world's `cooldown()` gives skills sharing `attack` the controller's 2 ms swing edge. Inventory `e2e/rogue-fan-crab-failures.md`, journey `live-rogue-fan-crab.spec.ts`. [#137 comment](https://github.com/Ryan-Haines/adventureland-party-console/issues/137#issuecomment-6252090346) links it |
 | [#143](https://github.com/Ryan-Haines/adventureland-party-console/issues/143) filed 10-18 | Manual upgrades of identical items stop as "recovery ambiguous" after the inventory tidy moves them | the commit recording this | `findUpgradeMarkSlot` gets the command's marks: copies still in another request's slot stay with it, and identical remaining copies are interchangeable. Inventory `e2e/manual-upgrade-duplicates-failures.md` |
 | [#142](https://github.com/Ryan-Haines/adventureland-party-console/issues/142) filed 10-18 | E2E global setup fails on Linux with `spawnSync E2BIG` | the commit recording this | `E2E_DASHBOARD_CANDIDATE` carries the directory and the manifest without its per-file hashes (about 248 KB with them, over Linux's 128 KiB per-string limit). Inventory `e2e/dashboard-candidate-env-failures.md` |
