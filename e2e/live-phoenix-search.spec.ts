@@ -234,3 +234,81 @@ test.describe('searcher under attack',()=>{
     expect(samples.every(s=>!/no movement progress/.test(s.retryReason||'')),'Defending must not stall the search into the watchdog').toBe(true);
   });
 });
+
+// Failure 13a: a fighter far from a wandering Phoenix must keep its converge
+// route instead of restarting it (and its town warp) on every sighting.
+test.describe('far fighter converging on a wandering Phoenix',()=>{
+  const strip={x:-1180,y:800}, east={map:'main',x:1100,y:-200};
+  test.use({initialPositions:{[P]:{map:'main',...strip},[W]:east}});
+  test('A fighter across Mainland keeps its converge route while the Phoenix wanders',async({live},info)=>{
+    test.setTimeout(900_000);
+    const timeline:any[]=[];
+    let sampling=true;
+    const sample=async()=>{
+      while(sampling) {
+        try {
+          const [state,positions,phoenix]=await Promise.all([live.state(),world(live),
+            live.admin(`output=Object.values(instances.main?.monsters||{}).filter(m=>m.type==='phoenix'&&!m.dead).map(m=>({x:Math.round(m.x),y:Math.round(m.y)}))[0]||null`)]);
+          timeline.push({at:Date.now(),encounter:state.rareHuntState?.encounter,phoenix,
+            positions:Object.fromEntries([W,P].map(n=>[n,{map:positions.players[n].map,x:Math.round(positions.players[n].x),y:Math.round(positions.players[n].y)}]))});
+        } catch(error) { timeline.push({at:Date.now(),error:String(error)}); }
+        await new Promise(resolve=>setTimeout(resolve,1000));
+      }
+    };
+    let sampler:Promise<void>|undefined;
+    try {
+      await live.post('/formation',{leader:W});
+      await live.post('/formation',{character:P,follow:true});
+      await expect.poll(async()=>(await live.state(true)).monsterChoices?.find((m:any)=>m.id==='phoenix')?.locations?.length,{timeout:120_000}).toBe(5);
+      const order=zones((await live.state(true)).monsterChoices,['phoenix']).map(a=>a.id!);
+      // Declared fixture: the native Phoenix, pinned to the west strip where the
+      // live stall happened. It keeps its native speed and wanders natively.
+      const seeded=await live.admin(`output=(()=>{
+        const found=[];for(const instance of Object.values(instances))for(const m of Object.values(instance.monsters||{}))if(m.type==='phoenix'&&!m.dead)found.push(m);
+        if(found.length!==1)throw Error('Expected one native Phoenix, found '+found.length);
+        const native=found[0],definition=native.map_def,boundaries=definition.boundaries,original=G.monsters.phoenix;
+        remove_monster(native,{nospawn:true,silent:true});
+        try {
+          definition.boundaries=boundaries.filter(b=>b[0]==='main'&&b[1]===-1358);
+          G.monsters.phoenix={...original,hp:2000000,attack:1};
+          const m=new_monster('main',definition,{});
+          return {id:m.id,map:m.map,x:m.x,y:m.y,hp:m.hp,speed:m.speed};
+        } finally {definition.boundaries=boundaries;G.monsters.phoenix=original;}
+      })()`);
+      await live.post('/navigate-to-monster',{monsterId:'phoenix',phoenixRouteOrder:order});
+      sampler=sample();
+      await expect.poll(async()=>(await live.state()).rareHuntState?.encounter?.targetId,{timeout:300_000,intervals:[500],
+        message:'The priest on the strip must spot the seeded Phoenix'}).toBe(seeded.id);
+      const spottedAt=Date.now();
+      const start=await world(live);
+      await expect.poll(async()=>(await live.state()).rareHuntState?.encounter?.gatheredAt||0,{timeout:420_000,intervals:[500],
+        message:'The far fighter must converge on the wandering Phoenix'}).toBeGreaterThan(0);
+      const state=await live.state();
+      const encounter=state.rareHuntState?.encounter;
+      // Whoever the patrol sent away from the strip is the far fighter.
+      const sightedAt=timeline.find(s=>s.at>=spottedAt&&s.phoenix);
+      const away=(name:string)=>{const p=start.players[name],m=sightedAt?.phoenix;return !m||p.map!=='main'?Infinity:Math.hypot(p.x-m.x,p.y-m.y);};
+      const far=away(W)>=away(P)?W:P;
+      const restartsOf=(name:string)=>(state.combatLogs?.[name]?.events||state.combatLogs?.[name]||[]).filter((e:any)=>e.at>=spottedAt&&e.at<=encounter.gatheredAt&&
+        /cancelRarePath/.test(e.details?.failureContext?.stopStack||''));
+      const restarts=restartsOf(far);
+      const warpsInterrupted=restarts.filter((e:any)=>e.details?.progress?.phase==='town warp');
+      const phoenixPath=timeline.filter(s=>s.at>=spottedAt&&s.phoenix).map(s=>({at:s.at,...s.phoenix}));
+      await info.attach('phoenix-far-converge',{body:JSON.stringify({seeded,spottedAt,gatheredAt:encounter.gatheredAt,
+        convergeMs:encounter.gatheredAt-spottedAt,far,distanceAtSighting:{[W]:away(W),[P]:away(P)},
+        restartsByFighter:{[W]:restartsOf(W).length,[P]:restartsOf(P).length},start:{[W]:start.players[W],[P]:start.players[P]},
+        restarts:restarts.map((e:any)=>({at:e.at,phase:e.details?.progress?.phase,destination:e.details?.failureContext?.destination})),
+        warpsInterrupted:warpsInterrupted.length,phoenixPath},null,2),contentType:'application/json'});
+      const wandered=Math.max(0,...phoenixPath.map((p:any)=>Math.hypot(p.x-phoenixPath[0].x,p.y-phoenixPath[0].y)));
+      expect(away(far),'The far fighter must start well away from the Phoenix').toBeGreaterThan(1000);
+      expect(wandered,'The fixture is only meaningful if the Phoenix wanders while the fighter converges').toBeGreaterThan(300);
+      expect(encounter.gatheredWithout,'The far fighter must gather before the deadline').toEqual([]);
+      expect(warpsInterrupted.length,'Re-aiming must never interrupt a town warp').toBe(0);
+      expect(restarts.length,'The far fighter must keep its route while the Phoenix wanders').toBeLessThanOrEqual(10);
+    } finally {
+      sampling=false;
+      await sampler;
+      await info.attach('phoenix-far-converge-timeline',{body:JSON.stringify(timeline,null,2),contentType:'application/json'});
+    }
+  });
+});

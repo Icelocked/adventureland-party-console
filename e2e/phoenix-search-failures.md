@@ -89,7 +89,27 @@ entries marked **live**; others rely on the coordinator design and review.
     a fresh sighting while converging, so the spotter can re-acquire it.
 13. **Phoenix moves while members converge.** Converge and shadow destinations
     follow the latest sighting, and the client re-routes when the destination
-    moves more than 100 units.
+    moves far enough for the remaining trip (entry 13a).
+13a. **Far members restart their route on every sighting (seen live, 10-18).**
+    Written before the fix. The Phoenix (speed 50) moves 100-150 units between
+    sightings, so entry 13's fixed 100-unit rule cancelled every converging
+    member's route about every 2-3 seconds. A far member's new route starts with
+    a town warp, and the next cancel interrupted that warp before it finished, so
+    it restarted the warp over and over. Live on Mainland's west strip: one
+    Phoenix, 126 s from sighting to gather, with the converge routes cancelled 53
+    (priest, starting about 2,400 units away), 58 (warrior) and 81 (spotter)
+    times; every stop stack was `cancelRarePath <- pollRareSearch`. A cross-map
+    member can effectively never arrive. Expected: a member keeps its route while
+    the Phoenix's drift is small compared with the distance still to walk
+    (re-aim only past the larger of 100 units and a third of that distance; a
+    member on another map re-aims only when the Phoenix changes map), and a town
+    warp or transport in progress is never interrupted to re-aim. Ways the fix
+    could fail:
+    - The far member still restarts dozens of times, or still interrupts its warp.
+    - A near member no longer tracks the Phoenix and arrives where it used to be.
+    - A member on another map walks to a stale point after the Phoenix changed map.
+    **live**: a fighter starting on Mainland's east spawn converges on a Phoenix
+    wandering the west strip with few route restarts, and gathers in time.
 14. **Converge never completes.** The deadline is the later of five minutes and
     twice the slowest member's planned travel time. After it passes, the party
     engages with whoever is in range, and the dashboard names the missing members.

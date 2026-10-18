@@ -3575,6 +3575,16 @@
       }).finally(function () { if (rarePath === path) rarePath = null; });
     path.onDone = typeof smart !== "undefined" && smart.on_done;
   }
+  // The Phoenix moves 100-150 units between sightings. Restarting re-plans from
+  // scratch (often a town warp), so a far member that restarts on every sighting
+  // never arrives: re-aim only once the drift is large for the trip still ahead,
+  // and never mid-warp or mid-transport. Another map re-aims on arrival there.
+  function rareDestinationDrifted(path, destination) {
+    if (character.c && character.c.town || is_transporting(character)) return false;
+    var remaining = destination.map === character.map ?
+      Math.hypot(character.x-destination.x, character.y-destination.y) : Infinity;
+    return Math.hypot(path.x-destination.x, path.y-destination.y) > Math.max(100, remaining / 3);
+  }
   // Search, converge and engage legs walk independently. Cross-map trips can take
   // minutes, so only the coordinator's no-progress watchdog ends them.
   function pollRareSearch(control) {
@@ -3594,7 +3604,7 @@
       cancelRarePath(); return true;
     }
     if (rarePath && (rarePath.id !== control.id || rarePath.map !== destination.map ||
-        Math.hypot(rarePath.x-destination.x, rarePath.y-destination.y) > 100)) cancelRarePath();
+        rareDestinationDrifted(rarePath, destination))) cancelRarePath();
     if (convoyTraveling || partyConvoyActive || banking || stocking || upgrading || forceTraveling || townTraveling) return true;
     if (rareNavigation && rareNavigation.id === control.id && rareNavigation.failed) {
       // The coordinator skips a failed search point; converge routes retry.

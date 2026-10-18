@@ -122,6 +122,8 @@ Issues filed before the work landed, features that changed with use, and maintai
 
 - Fixed 10-09 ([5166889](https://github.com/Thefonze74065/adventureland-party-console/commit/5166889)): when the Phoenix already has a target, members still converging kept standing still while a gathered member fought it. A new live journey covers it (231 s stalled before, in range after 38.5 s). [Commented on #56](https://github.com/Ryan-Haines/adventureland-party-console/issues/56#issuecomment-6075671935).
 
+- Fixed 10-18 (this commit): converging members restarted their route, and a far member its town warp, on every sighting, because the Phoenix drifts past the fixed 100-unit re-aim rule every 2-3 s. Re-aim now scales with the trip left and never interrupts a warp or transport. Not yet commented on #56.
+
 ### Live WTB counts bank stock
 
 [#31 · commented 10-11](https://github.com/Ryan-Haines/adventureland-party-console/issues/31#issuecomment-6108961383)
