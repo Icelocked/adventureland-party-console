@@ -997,7 +997,17 @@ test('inventory context menu and upgrade preview stay readable without queueing 
   const merchant = page.locator('article').filter({ has: page.getByRole('heading', { name: 'M', exact: true }) });
   const sword = merchant.getByText('sword', { exact: true });
   await expect(sword).toBeVisible();
-  const before = await app.state();
+  let before = await app.state();
+  const initialReads:unknown[]=[];
+  try{await expect.poll(async()=>{
+    before=await app.state();
+    const observed={upgrades:before.upgrades,merchantQueue:before.merchantQueue,merchantCurrent:before.merchantCurrent};
+    if(initialReads.length>=32)initialReads.splice(8,1);
+    initialReads.push({at:Date.now(),...observed});
+    return observed.upgrades;
+  },{message:'Merchant initialization must publish its exact empty upgrade projection before preview comparison'})
+    .toEqual({M:[]});}
+  finally{await testInfo.attach('preview-initial-readiness',{body:JSON.stringify(initialReads),contentType:'application/json'});}
   await sword.click({ button: 'right' });
   const rootMenu = page.locator('[data-slot="context-menu-content"]');
   await expect(rootMenu).toBeVisible();

@@ -1,5 +1,6 @@
 import type { Response } from '@playwright/test';
 import { test, expect } from './live-fixtures';
+import {nativeWallNow} from './network-clock';
 
 // Failure modes, written before the coordinator fix:
 // - A stale expected version requests an already accepted catalog forever.
@@ -12,7 +13,7 @@ test('accepted native catalogs stop retransmitting on every character heartbeat'
   const names = ['E2EWarrior', 'E2EPriest', 'E2EMerchant'];
   const catalogFields = ['travelPlaces', 'monsterChoices', 'monsterHunterLocation',
     'bestiaryCatalog', 'skillCatalog', 'appearanceChoices', 'merchantCatalog'];
-  type Exchange = { name: string; started: number; finished: number; bytes: number;
+  type Exchange = { name: string; started: number; finished: number; gameplayObservedAt:number;bytes: number;
     catalogFields: string[]; version?: string; needsCatalog: boolean };
   const exchanges: Exchange[] = [];
   const errors: string[] = [];
@@ -26,7 +27,7 @@ test('accepted native catalogs stop retransmitting on every character heartbeat'
       if (!names.includes(body?.name) || body.combatOnly || body.combatWait || !Array.isArray(body.items)) return;
       const reply = await response.json();
       if (typeof reply.needsCatalog !== 'boolean') return;
-      exchanges.push({ name: body.name, started: request.timing().startTime, finished: Date.now(),
+      exchanges.push({ name: body.name, started: request.timing().startTime, finished: nativeWallNow(),gameplayObservedAt:Date.now(),
         bytes: Buffer.byteLength(request.postData() || ''),
         catalogFields: catalogFields.filter(field => Object.hasOwn(body, field)),
         version: body.merchantCatalogVersion, needsCatalog: reply.needsCatalog });

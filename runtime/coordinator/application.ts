@@ -106,7 +106,7 @@ export function startCoordinatorApplication(
     });
     let version = initialVersion;
     let clientRevision = await game_files.get_revision?.(version) || String(version);
-    const movementPlanner = coordinatorPolicies.createPlannerService((platform.codeDirectory || __dirname) + '/../../.build/runtime/movement-planner.cjs');
+    const movementPlanner = coordinatorPolicies.createPlannerService(platform.plannerWorkerFile || (platform.codeDirectory || __dirname) + '/../../.build/runtime/movement-planner.cjs');
     const movementFingerprints = new Map<number, string>();
     let canStand: (x: number, y: number) => boolean = () => false;
     async function prepareMovement(gameVersion: number) {

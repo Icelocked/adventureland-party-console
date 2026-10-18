@@ -111,6 +111,11 @@ test.describe('retired event exit ownership',()=>{
         E.mrpumpkin={live:true,map:m.map,x:m.x,y:m.y,hp:m.hp,max_hp:m.max_hp};broadcast_e();return {id:m.id,map:m.map,x:m.x,y:m.y,portal,scope:'retired exit ownership; native door spawn with collision-safe initial encounter'};
       }finally{G.monsters.mrpumpkin=original;}})()`);
       if(variant==='stale-peer'){
+        await expect.poll(async()=>{
+          const state=await live.state();
+          return fighters.every(name=>state.characters[name]?.dashboardRuntime===started.characters[name].dashboardRuntime&&
+            Date.now()-Number(state.characters[name]?.seenAt||0)<3000);
+        },{timeout:15_000,message:'Original browser runtimes must publish before status loss'}).toBe(true);
         priestSeenAtBeforeHold=Number((await live.state()).characters[P]?.seenAt);
         expect(priestSeenAtBeforeHold).toBeGreaterThan(0);
         holdUntil=Date.now()+20_000;

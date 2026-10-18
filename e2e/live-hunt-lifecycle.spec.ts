@@ -21,15 +21,26 @@ test.describe('native Hunt lifecycle', () => {
     expect(initialClearance.every((p:any)=>p.selfClear)).toBe(true);
     await info.attach('native-booboo-initial-clearance',{body:JSON.stringify(initialClearance),contentType:'application/json'});
     await party(live);
+    let nativeParty:any;
+    try {
+      await expect.poll(async()=>{
+        nativeParty=await live.admin(`output=({at:Date.now(),members:(parties[${JSON.stringify(W)}]||[]).slice(),
+          players:${JSON.stringify(fighters)}.map(name=>{const p=get_player(name);return p&&{name,party:p.party,map:p.map,in:p.in,rip:!!p.rip};})})`);
+        return nativeParty.members.length===fighters.length&&fighters.every(name=>nativeParty.members.includes(name))&&
+          nativeParty.players.every((p:any)=>p&&!p.rip&&p.party===W);
+      },{timeout:30_000,message:'Both native party memberships must acknowledge before seeding shared one-kill quests'}).toBe(true);
+    } finally {
+      await info.attach('native-booboo-party-admission',{body:JSON.stringify(nativeParty??null),contentType:'application/json'});
+    }
     await quests(live,info,{[W]:{id:'booboo',count:1},[P]:{id:'booboo',count:1}});
     const before=await world(live),destination=await start(live,W,'booboo');
     const preparation:any[]=[];
     const observe=(s:any)=>{
-      if(preparation.length>=64)preparation.shift();
       preparation.push({at:Date.now(),stage:profile(s).monsterHunt?.stage,message:profile(s).monsterHunt?.message,
         convoy:s.activeConvoy&&{id:s.activeConvoy.id,phase:s.activeConvoy.phase,returnRouting:s.activeConvoy.returnRouting},
         participants:Object.fromEntries(fighters.map(name=>{const c=s.characters[name];return [name,{map:c?.map,x:c?.x,y:c?.y,
           count:c?.monsterHunt?.count,lastAttackAt:c?.combat?.lastAttackAt,lastAttackTarget:c?.combat?.lastAttackTarget}];}))});
+      if(preparation.length>64)preparation.splice(32,1);
     };
     try{
       await expect.poll(async()=>{

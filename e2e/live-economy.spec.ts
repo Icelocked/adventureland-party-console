@@ -1,3 +1,4 @@
+import {waitForGameplay,nativeWallNow} from './network-clock';
 import {gateNativeAjaxInput} from './native-ajax-input';
 import { test, expect, type LiveGame } from './live-fixtures';
 import type { TestInfo } from '@playwright/test';
@@ -429,6 +430,12 @@ for(const locked of [false,true]) test(`best-effort lucky restoration preserves 
       const game=window as any,runner=(document.getElementById('maincode') as HTMLIFrameElement).contentWindow as any;
       game.start_runner('maincode',`$.getScript(${JSON.stringify(runner.__partyServer+'/CODE/adventure_land/universal-loader.js')});`);
     });
+    // Creating an iframe does not mean its loader has finished fetching from
+    // the coordinator that the next operation deliberately stops.
+    await expect.poll(async()=>{
+      const current=(await live.state()).characters[merchant]?.dashboardRuntime;
+      return !!current&&current!==runtime;
+    },{timeout:60_000,message:'Replacement native CODE must publish before its host restarts'}).toBe(true);
     await live.restartCoordinator();
     await expect.poll(async()=>{
       const current=(await live.state()).characters[merchant]?.dashboardRuntime;
@@ -461,8 +468,9 @@ for(const locked of [false,true]) test(`best-effort lucky restoration preserves 
     expect(inventory.characters[merchant].items.filter(item=>item?.name==='helmet'&&item.level===1)).toHaveLength(2);
     expect(quantity(inventory.characters[merchant].items,'seashell')).toBe(4);
   } finally {
-    await live.clients[merchant].frame.evaluate(()=>{const runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;runner?.__e2eRestoreCheckpointAjax?.();});
-    await info.attach('lucky-best-effort-native-evidence',{body:JSON.stringify({locked,changed,checkpoints,
+    const cleanup=await live.clients[merchant].frame.evaluate(()=>{const runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;runner?.__e2eRestoreCheckpointAjax?.();return {restored:true};})
+      .catch(error=>({captureError:String(error)}));
+    await info.attach('lucky-best-effort-native-evidence',{body:JSON.stringify({locked,changed,checkpoints,cleanup,
       tracking:await live.clients[merchant].frame.evaluate(()=>{
         const game=window as any,stored:Record<string,unknown>={};
         for(let i=0;i<localStorage.length;i++){
@@ -488,6 +496,11 @@ test('merchant finishes native upgrades despite delayed lucky journal storage ec
   // Observe authoritative native roster refreshes without changing online flags.
   await live.restoreHistoricalSettings(() => ({ luckyUpgradeSlots: { [merchant]: 30 } }));
   await catalog(live, 'helmet');
+  // Purchase orders use their native retry allowance, independently of manual
+  // upgrade offering rules. Declare enough initial cycles for this journal case.
+  const cycleCost=await live.clients[merchant].run('Number(G.items.helmet.g)+3*Number(G.items.scroll0.g)');
+  expect(cycleCost).toBeGreaterThan(0);
+  await live.post('/merchant/force-stand',{enabled:true});
   const before = await economy(live);
   await live.clients[merchant].run(`(()=>{const key='party-lucky-upgrade:'+character.name;
     const remove=Storage.prototype.removeItem, set=Storage.prototype.setItem, get=Storage.prototype.getItem;
@@ -496,6 +509,18 @@ test('merchant finishes native upgrades despite delayed lucky journal storage ec
       if(k===key&&old){set.call(this,k,old);globalThis.__e2eStorageEchoes++;}}
     return true})()`);
   const order = await live.post('/merchant/order', { buys: [{ id: 'helmet', quantity: 1, level: 3 }], crafts: [] });
+  let initialAllowance:any;
+  await live.restoreHistoricalSettings(settings=>{
+    if(settings.merchantCurrent?.id===order.jobId)throw Error('Storage echo allowance must precede native order admission');
+    const queued=settings.merchantQueue.find((job:any)=>job.id===order.jobId);
+    if(!queued?.order||queued.order.buys.length!==1)throw Error('Exact initial storage echo order unavailable');
+    const line=queued.order.buys[0];
+    if(line.id!=='helmet'||line.quantity!==1||line.level!==3)throw Error('Storage echo initial order identity changed');
+    initialAllowance={jobId:queued.id,original:{...line},declaredCycles:10,cycleCost,budget:cycleCost*10};
+    return {merchantQueue:settings.merchantQueue.map((job:any)=>job.id===order.jobId?{...job,order:{...job.order,buys:[{...line,attempts:10,budget:cycleCost*10}]}}:job)};
+  });
+  await info.attach('declared-lucky-echo-initial-order-allowance',{body:JSON.stringify(initialAllowance),contentType:'application/json'});
+  await live.post('/merchant/force-stand',{enabled:false});
   await jobFinished(live, order.jobId);
   const after = await economy(live);
   expect(after.characters[merchant].items.filter(item => item?.name === 'helmet' && item.level === 3)).toHaveLength(1);
@@ -637,7 +662,7 @@ test('merchant mass skills use both tiers and passive recovery restores critical
   const context = live.clients[merchant].page.context();
   let hold = true;
   await context.route('**/merchant/checkpoint', async route => {
-    if (hold && route.request().postDataJSON().state?.pendingUpgrade) await new Promise(resolve => setTimeout(resolve, 2000));
+    if (hold && route.request().postDataJSON().state?.pendingUpgrade) await waitForGameplay(2000);
     await route.continue();
   });
   const recovery = await live.post('/merchant/order', { buys: [{ id: 'helmet', quantity: 2, level: 1 }], crafts: [] });
@@ -932,7 +957,7 @@ test.describe('real merchant economy and durable work', () => {
         receipt.results.some(result => result.deliveryId === id && !result.success)),
       { timeout: 45_000, message: 'Native recipient must fail to equip the absent delivery' }).toBe(true);
       await expect.poll(async () => (await live.state()).merchantDeliveries?.[recipient]?.[0]?.equipFailedAt).toBeGreaterThan(0);
-      await live.clients[recipient].page.waitForTimeout(12_000);
+      await waitForGameplay(12_000);
       expect(withheldReports).toBeGreaterThan(0);
       expect((await live.state()).merchantDeliveries[recipient]).toMatchObject([{ id, awaitingEquip: true }]);
       await live.restartCoordinator();
@@ -953,7 +978,7 @@ test.describe('real merchant economy and durable work', () => {
       }
       await restartAndObserve(live);
       const failures = receipts.filter(receipt => receipt.results.some(result => !result.success)).length;
-      await live.clients[recipient].page.waitForTimeout(35_000);
+      await waitForGameplay(35_000);
       expect(receipts.filter(receipt => receipt.results.some(result => !result.success)).length).toBe(failures);
       expect((await live.state()).merchantDeliveries?.[recipient] || []).toEqual([]);
       expect(countCargo(await cargo())).toBe(retained ? 1 : 0);
@@ -1246,6 +1271,24 @@ for (const kind of ['upgrade', 'compound']) test(`auto merchant collects twelve 
   // Declared initial rules reproduce coexisting persisted preferences. Native
   // clients must transfer all copies even though only one result is requested.
   const name=kind==='upgrade'?'helmet':'ringsj', owner='E2EWarrior';
+  const admission:any[]=[],handoffs:any[]=[],handoffResponses:Promise<void>[]=[];
+  const observeHandoff=(request:any)=>{
+    const route=new URL(request.url()).pathname;
+    if(!['/party-api/merchant/handoff','/party-api/merchant/handoff-complete'].includes(route))return;
+    handoffs.push({at:Date.now(),wallAt:nativeWallNow(),route,body:request.postDataJSON()});
+    if(handoffs.length>32)handoffs.splice(1,1);
+  };
+  const observeHandoffResponse=(response:any)=>{
+    const route=new URL(response.url()).pathname;
+    if(!['/party-api/merchant/handoff','/party-api/merchant/handoff-complete'].includes(route))return;
+    handoffResponses.push((async()=>{
+      const body=await response.json().catch((error:unknown)=>({captureError:String(error)}));
+      handoffs.push({at:Date.now(),wallAt:nativeWallNow(),route,status:response.status(),response:body});
+      if(handoffs.length>32)handoffs.splice(1,1);
+    })());
+  };
+  live.clients[merchant].page.on('request',observeHandoff);
+  live.clients[merchant].page.on('response',observeHandoffResponse);
   await catalog(live,'helmet'); // Catalog readiness; ringsj is loot-only stock.
   if(kind==='compound') await live.clients[merchant].run(`(()=>{
     globalThis.__e2eCompoundOutcomes=[];
@@ -1263,6 +1306,14 @@ for (const kind of ['upgrade', 'compound']) test(`auto merchant collects twelve 
     autoUpgradeMarks:kind==='upgrade'?{[merchant]:{[name+'@+0']:{tiers:1,quantity:1}}}:{},
     autoCompounds:kind==='compound'?{[merchant]:[{name,targetTier:1,quantity:1}]}:{}}));
   await expect.poll(async()=>(await live.state()).autoItemMarks?.[merchant]?.[name+'@+0']).toBe('merchant');
+  await expect.poll(async()=>{
+    const state=await live.state();
+    const slots=(state.characters[owner]?.items||[]).filter((entry:any)=>entry?.item?.name===name&&entry.item.level===0).map((entry:any)=>entry.slot).sort((a:number,b:number)=>a-b);
+    const marks=(state.merchantMarked[owner]||[]).filter((mark:any)=>mark?.item?.name===name&&mark.item.level===0).map((mark:any)=>mark.slot).sort((a:number,b:number)=>a-b);
+    admission.push({at:Date.now(),inventorySeenAt:state.characters[owner]?.inventorySeenAt,slots,marks});
+    if(admission.length>32)admission.splice(1,1);
+    return {slots,marks};
+  },{timeout:30_000,message:'Native ingredient inventory and all collection marks must publish before dispatch'}).toEqual({slots:Array.from({length:12},(_,i)=>20+i),marks:Array.from({length:12},(_,i)=>20+i)});
   await live.post('/merchant/routine-priorities',{priorities:{},enabled:{'party collection':true,['auto '+kind]:true}});
   await expect.poll(async()=>(await live.clients[owner].snapshot()).items.filter((i:Item|null)=>i?.name===name).length,
     {timeout:180_000,message:'Every copy must reach the merchant through native collection'}).toBe(0);
@@ -1291,7 +1342,10 @@ for (const kind of ['upgrade', 'compound']) test(`auto merchant collects twelve 
   expect(afterRestart.length).toBe(completed.length);
   expect(afterRestart.filter(item=>item?.level===1).length).toBe(1);
   } finally {
-    await info.attach('auto-merchant-finite-processing-native',{body:JSON.stringify({kind,declaredNativeIngredients:12,state:await live.state(),inventory:await economy(live),
+    live.clients[merchant].page.off('request',observeHandoff);
+    live.clients[merchant].page.off('response',observeHandoffResponse);
+    await Promise.all(handoffResponses);
+    await info.attach('auto-merchant-finite-processing-native',{body:JSON.stringify({kind,declaredNativeIngredients:12,admission,handoffs,state:await live.state(),inventory:await economy(live),
       compoundOutcomes:kind==='compound'?await live.clients[merchant].run('globalThis.__e2eCompoundOutcomes'):undefined,
       events:await live.clients[merchant].events(),ownerEvents:await live.clients[owner].events()}),contentType:'application/json'});
   }

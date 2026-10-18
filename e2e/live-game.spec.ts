@@ -20,6 +20,12 @@ test('Steam-style CODE replacement retires old socket callbacks and pending hear
   // or a changed runner context. Preserve those actual boundaries on failure.
   const loaderObservations:unknown[]=[],deploymentResponses:unknown[]=[];
   const client=live.clients[W],game=client.frame;
+  const animationClock=await game.evaluate(()=>new Promise<{timestamp:number;now:number;backend:string}>(resolve=>requestAnimationFrame(timestamp=>resolve({timestamp,now:performance.now(),backend:(window as any).__e2eChronalClock?.backend||'native'}))));
+  await info.attach('native-animation-clock-domain',{body:JSON.stringify(animationClock),contentType:'application/json'});
+  expect(Number.isFinite(animationClock.timestamp)).toBe(true);
+  if(animationClock.backend==='chronal-network')expect(animationClock.timestamp).toBe(animationClock.now);
+  else expect(animationClock.timestamp).toBeLessThanOrEqual(animationClock.now);
+
   const before=await game.evaluate(()=>{
     const host=window as any,runner=(document.getElementById('maincode') as HTMLIFrameElement).contentWindow as any;
     host.__e2eRetiringRunner=runner;host.__e2eRetiringGame=host;

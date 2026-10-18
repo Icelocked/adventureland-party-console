@@ -3932,16 +3932,41 @@
     root.__partyBankSortJournal = entries;
     root.__partyBankSortBuffers = entries.map(function(entry) { return entry.slot; });
   }
-  function rememberBankSortBuffers(slots, incoming) {
+  function rememberBankSortBuffers(slots, incoming, pending) {
     bankSortRecovered = true;
     saveBankSortBuffers(slots.map(function(slot, index) {
-      return { slot: slot, floor: character.map, identities: [character.items[slot], incoming[index]].filter(Boolean).map(bankStackIdentity) };
+      return { slot: slot, floor: character.map, identities: [character.items[slot], incoming[index]].filter(Boolean).map(bankStackIdentity), pending: pending };
     }));
+  }
+  function bankSortItemState(item) {
+    return item ? JSON.stringify([bankStackIdentity(item), Number(item.q) || 1]) : "null";
+  }
+  async function settleBankSortSwap(entry) {
+    if (!entry.pending) return;
+    var expected = entry.pending, deadline = Date.now() + 5000;
+    for (;;) {
+      if (!runtimeCurrent()) throw new Error("Bank sort runtime replaced while confirming swap");
+      if (character.map !== entry.floor || !character.bank || !Array.isArray(character.bank[expected.pack]))
+        throw new Error("Bank sort floor changed while confirming swap");
+      // Acknowledgement and reactive inventory publication are separate milestones.
+      // Read both sides together, preserving exact identity, lock and quantity.
+      var inventory = bankSortItemState(character.items[entry.slot]);
+      var bank = bankSortItemState(character.bank[expected.pack][expected.slot]);
+      if (inventory === expected.inventory && bank === expected.bank) {
+        delete entry.pending;
+        saveBankSortBuffers(bankSortBufferJournal());
+        return;
+      }
+      if (Date.now() >= deadline) throw new Error("Bank sort swap not confirmed; recovery pending");
+      await sleep(100);
+    }
   }
   async function cleanupBankSortBuffers() {
     var entries = bankSortBufferJournal();
     for (var i = 0; i < entries.length; i += 1) {
-      var entry = entries[i], item = character.items[entry.slot];
+      var entry = entries[i];
+      await settleBankSortSwap(entry);
+      var item = character.items[entry.slot];
       if (!item) continue;
       if (entry.identities.indexOf(bankStackIdentity(item)) < 0) continue;
       if (character.map !== entry.floor) await movement.move(entry.floor);
@@ -4085,20 +4110,20 @@
           }
         }
         if (!swap) break;
-        rememberBankSortBuffers([bufferSlot], [character.bank[swap.pack][swap.slot]]);
-        parent.socket.emit("bank", { operation: "swap", pack: swap.pack, str: swap.slot, inv: bufferSlot });
+        var expected = { pack: swap.pack, slot: swap.slot,
+          inventory: bankSortItemState(character.bank[swap.pack][swap.slot]), bank: bankSortItemState(carried) };
+        rememberBankSortBuffers([bufferSlot], [character.bank[swap.pack][swap.slot]], expected);
+        if (carried) await bank_store(bufferSlot, swap.pack, swap.slot);
+        else await bank_retrieve(swap.pack, swap.slot, bufferSlot);
         operations += 1;
-        await new Promise(function (resolve) { setTimeout(resolve, 220); });
+        await settleBankSortSwap(bankSortBufferJournal()[0]);
       }
       if (operations >= limit) failure = new Error("Bank sorting exceeded its safe operation limit");
     } finally {
-      // Never let a failed/incomplete sort walk away carrying an item that was
-      // pulled out of the bank solely for use as the sorting buffer.
-      if (character.items[bufferSlot]) {
-        try { await bankStoreFully(bufferSlot); }
-        catch (bufferError) { failure = failure || bufferError; }
-      }
-      if (!character.items[bufferSlot]) saveBankSortBuffers([]);
+      // Keep unresolved native operations journaled even if their item has not
+      // reached the reactive inventory yet; departure must await their cleanup.
+      try { await cleanupBankSortBuffers(); }
+      catch (bufferError) { failure = failure || bufferError; }
     }
     if (failure) throw failure;
     var stillMisplaced = packs.some(function (pack) {
