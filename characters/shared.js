@@ -7114,6 +7114,10 @@
     }
     function matchingSlot(item) {
       if (!item) return -1;
+      // Inventory can move between paid cycles without a CODE restart. Remap
+      // the complete owned group before interpreting individual reservations.
+      // Pending native outcomes retain their separate receipt reconciliation.
+      if (!progress.pendingUpgrade) remapCommerceOwnedItems(progress);
       function reserved(slot) {
         return progress.batchItems.concat(progress.results).some(function (entry) { return entry.slot === slot && sameItem(character.items[slot], entry.item); });
       }

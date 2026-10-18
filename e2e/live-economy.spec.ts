@@ -34,13 +34,23 @@ test('unlinked upgrade adopts compatible native intermediate without claiming ex
   test.setTimeout(450_000);
   await catalog(live,'helmet');
   await seed(live,{5:{name:'scroll0',q:20},10:{name:'helmet',level:2},11:{name:'helmet',level:3},12:{name:'helmet',level:3},23:{name:'helmet',level:0},24:{name:'helmet',level:0},25:{name:'helmet',level:0}});
-  const id='unlinked-intermediate-commerce',before=await economy(live),checkpoints:any[]=[];
+  const id='unlinked-intermediate-commerce',before=await economy(live),checkpoints:any[]=[],observations:any[]=[];
   const progress={phase:'leveling',buyIndex:0,attempts:4,spent:4200,completedResults:1,results:[{slot:8,item:{name:'helmet',level:3},buyIndex:0}],activeItem:{name:'helmet',level:1},activeSlot:26,cycleActive:true,batchItems:[20,21,22].map(slot=>({slot,item:{name:'helmet',level:0}})),batchRemaining:0,sequence:2,pendingUpgrade:{level:2}};
-  let held=false,release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});
+  let held=false,codeReplaced=false,release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});
   await live.clients[merchant].page.route('**/party-api/merchant/checkpoint',async route=>{
-    const body=route.request().postDataJSON(),response=await route.fetch();if(body.state&&typeof body.state==='object')checkpoints.push(body.state);
-    if(!held&&body.state?.inventoryAdoption&&!body.state.pendingUpgrade){held=true;await gate;}
-    await route.fulfill({response}).catch(error=>{if(!held)throw error;});
+    const body=route.request().postDataJSON();
+    const observe=()=>{if(body.state&&typeof body.state==='object'){checkpoints.push(body.state);observations.push({at:Date.now(),state:body.state});}};
+    // Only the declared adoption response needs a proxy and interruption. Later
+    // checkpoints must use the browser's ordinary transport and error handling.
+    if(held||!body.state?.inventoryAdoption||body.state.pendingUpgrade){observe();await route.continue();return;}
+    held=true;
+    const response=await route.fetch();
+    expect(response.status()).toBe(200);
+    observe(); // Publish the adoption to the test only after authoritative persistence.
+    observations.push({at:Date.now(),action:'adoption-persisted',status:response.status()});
+    await gate;
+    observations.push({at:Date.now(),action:'adoption-response-released'});
+    await route.fulfill({response}).catch(error=>{if(!codeReplaced)throw error;});
   });
   try{
     await live.restoreHistoricalSettings(()=>({production:{attempts:{'historical-unlinked-receipt':{name:'helmet',level:2,kind:'upgrade',rules:[],completed:true,completedAt:Date.now(),success:true}}},
@@ -52,7 +62,7 @@ test('unlinked upgrade adopts compatible native intermediate without claiming ex
     expect(adoption.batchItems.map((entry:any)=>entry.slot).sort()).toEqual([23,24,25]);
     const oldRuntime=(await live.state()).characters[merchant].dashboardRuntime;
     await live.clients[merchant].frame.evaluate(()=>{const game=window as any,runner=(document.getElementById('maincode') as HTMLIFrameElement).contentWindow as any;game.start_runner('maincode',`$.getScript(${JSON.stringify(runner.__partyServer+'/CODE/adventure_land/universal-loader.js')});`);});
-    release();
+    codeReplaced=true;release();
     await expect.poll(async()=>(await live.state()).characters[merchant]?.dashboardRuntime,{timeout:60_000}).not.toBe(oldRuntime);
     await jobFinished(live,id,300_000);
     const after=await economy(live);
@@ -64,7 +74,7 @@ test('unlinked upgrade adopts compatible native intermediate without claiming ex
     await record(live,info,'native-unlinked-intermediate-adoption',before,{id,adoption,checkpoints,after});
   }finally{
     release();await live.clients[merchant].page.unrouteAll({behavior:'ignoreErrors'});
-    await info.attach('unlinked-commerce-adoption-progress',{body:JSON.stringify({id,progress,checkpoints,state:await live.state()}),contentType:'application/json'});
+    await info.attach('unlinked-commerce-adoption-progress',{body:JSON.stringify({id,progress,checkpoints,observations,state:await live.state()}),contentType:'application/json'});
   }
 });
 
@@ -154,6 +164,50 @@ for (const surplus of [false,true]) test(`restarted upgrade batch ${surplus ? 'h
     expect((await economy(live)).characters[merchant].items.filter(item=>item?.name==='helmet'&&item.level===1)).toHaveLength(3);
   }
   await record(live,info,'compacted-upgrade-batch-ownership',before,{progress,surplus,state:await live.state()});
+});
+
+test('running upgrade batch remaps items moved after its first result',async({live},info)=>{
+  test.setTimeout(240_000);
+  await catalog(live,'helmet');
+  const id='running-relocated-upgrade-batch',item={name:'helmet',level:0};
+  await seed(live,{5:{name:'scroll0',q:6},17:item,18:item,19:item});
+  const before=await economy(live),observations:any[]=[];
+  let relocation:any,moved=false;
+  await live.clients[merchant].page.route('**/party-api/merchant/checkpoint',async route=>{
+    const body=route.request().postDataJSON();
+    if(body.jobId!==id||moved||body.state?.completedResults!==1||body.state.activeItem||body.state.batchItems?.length!==2){await route.continue();return;}
+    moved=true;
+    const response=await route.fetch();
+    expect(response.status()).toBe(200);
+    observations.push({at:Date.now(),action:'first-result-persisted',state:body.state});
+    relocation=await live.admin(`output=(()=>{const p=get_player(${JSON.stringify(merchant)}),moves=${JSON.stringify(body.state.batchItems.map((entry:any,index:number)=>({from:entry.slot,to:26+index})))};
+      for(const m of moves){if(p.items[m.to]||p.items[m.from]?.name!=='helmet'||(p.items[m.from].level||0)!==0)throw Error('Declared remaining batch relocation changed');}
+      for(const m of moves){p.items[m.to]=p.items[m.from];p.items[m.from]=null;}
+      cache_player_items(p);resend(p,'reopen+cid');return moves;})()`);
+    await expect.poll(async()=>{const c=await live.clients[merchant].snapshot();return relocation.every((m:any)=>!c.items[m.from]&&c.items[m.to]?.name==='helmet'&&(c.items[m.to].level||0)===0);},{timeout:15_000}).toBe(true);
+    observations.push({at:Date.now(),action:'native-batch-relocation-observed',relocation});
+    await route.fulfill({response});
+  });
+  try{
+    const progress={phase:'leveling',buyIndex:0,attempts:3,spent:9600,completedResults:0,results:[],activeItem:item,activeSlot:17,
+      cycleActive:true,batchItems:[{slot:18,item},{slot:19,item}],batchRemaining:0,sequence:2};
+    await live.restoreHistoricalSettings(()=>({merchantQueue:[{id,target:merchant,reason:'merchant commerce',queuedAt:Date.now(),commerceOrderId:id,
+      commerceProgressVersion:2,order:{buys:[{id:'helmet',quantity:3,level:1,attempts:3,budget:100000}],crafts:[]},resumeState:progress}]}));
+    await expect.poll(()=>moved,{timeout:90_000}).toBe(true);
+    let outcome='running';
+    await expect.poll(async()=>{const s=await live.state(),job=[s.merchantCurrent,...s.merchantQueue].find((j:any)=>j?.commerceOrderId===id);
+      outcome=job?.lastError?String(job.lastError):job?'running':'completed';return outcome;},{timeout:90_000}).not.toBe('running');
+    expect(outcome).toBe('completed');
+    const after=await economy(live);
+    expect(after.characters[merchant].items.filter(i=>i?.name==='helmet'&&i.level===1)).toHaveLength(3);
+    expect(quantity(after.characters[merchant].items,'scroll0')).toBe(quantity(before.characters[merchant].items,'scroll0')-3);
+    expect((await live.clients[merchant].events()).filter((e:any)=>e.event==='game_response'&&e.data?.response==='upgrade_success')).toHaveLength(3);
+    for(const [slot,entry] of before.characters[merchant].items.entries())if(entry&&entry.name!=='helmet'&&entry.name!=='scroll0')expect(after.characters[merchant].items[slot]).toEqual(entry);
+    await record(live,info,'running-batch-relocation',before,{relocation,observations,after});
+  }finally{
+    await live.clients[merchant].page.unrouteAll({behavior:'ignoreErrors'});
+    await info.attach('running-batch-relocation-progress',{body:JSON.stringify({relocation,observations,state:await live.state()}),contentType:'application/json'});
+  }
 });
 
 test('unavailable upgrade estimate enforces its gold cap across native purchases and restart',async({live},info)=>{
