@@ -1,6 +1,7 @@
 "use client";
 import { ItemWorldInfo } from "./item-world-info";
 import { Sprite } from "./sprite";
+import type { GTitle } from "typed-adventureland";
 
 export type ItemMeta = {
   definition: Record<string, string | number | boolean | unknown[]>;
@@ -18,4 +19,6 @@ export type ItemMeta = {
   };
   world?: ItemWorldInfo;
   sprite: Sprite | null;
+  // G.titles[item.p] for a titled copy, as characters/shared.js reports it. docs/item-titles.md.
+  title?: GTitle | null;
 };

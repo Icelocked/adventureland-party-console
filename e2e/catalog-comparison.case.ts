@@ -15,7 +15,7 @@ const square = (fill: string) => ({
   url: "data:image/svg+xml;base64," + Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="${fill}"/></svg>`).toString("base64"),
   tileSize: 40, columns: 1, rows: 1, x: 0, y: 0,
 });
-const weapon = (definition: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({
+export const weapon = (definition: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({
   definition: { type: "weapon", ...definition }, usage: { classes: [{ id: "ranger", name: "Ranger", hands: 1 }], hands: [1] }, ...extra,
 });
 // A is an inventory Blade +3 with its sprite on the meta. The catalog items keep their
@@ -35,7 +35,7 @@ const catalog = [
       { sprite: null }) },
 ];
 
-async function openComparison(page: Page, app: { url: string }) {
+export async function openComparison(page: Page, app: { url: string }, entry: unknown = source) {
   const bundle = await build({
     bundle: true,
     write: false,
@@ -73,7 +73,7 @@ async function openComparison(page: Page, app: { url: string }) {
   await page.setViewportSize({ width: 1400, height: 1000 });
   await page.goto(app.url + "/catalog-comparison-harness");
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
-  await page.evaluate(([items, entry]) => (window as any).mountCatalog(items, entry), [catalog, source] as const);
+  await page.evaluate(([items, entry]) => (window as any).mountCatalog(items, entry), [catalog, entry] as const);
   const picker = page.getByRole("dialog", { name: "Equipment catalog", exact: true });
   for (const name of ["Bow", "Wand"])
     await picker.getByRole("button", { name: new RegExp(`^${name}\\b`) }).locator("..").getByRole("button", { name: "Add to compare", exact: true }).click();

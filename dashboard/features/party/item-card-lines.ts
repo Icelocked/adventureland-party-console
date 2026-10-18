@@ -1,6 +1,7 @@
 import type { Item } from "./item";
 import type { ItemMeta } from "./item-meta";
 import { STAT_COLORS as S } from "./stat-colors";
+import { titleNote } from "./item-title";
 
 // A port of the game's item card (render_item in the game's js/html.js): its line
 // order, English labels (languages/en/interface.js) and colors (colors in
@@ -298,9 +299,10 @@ function stateLines(item: Item): ItemCardLine[] {
   return lines;
 }
 
-// Quantity and stat scroll for the extras box.
-export function itemSlotExtras(item: Item): [key: string, value: string][] {
+// Quantity, stat scroll and title for the extras box.
+export function itemSlotExtras(item: Item, meta?: ItemMeta | null): [key: string, value: string][] {
   const extras: [string, string][] = [];
+  if (item.p) extras.push(["title", titleNote(item, meta)]);
   if (Number(item.q) > 1) extras.push(["quantity", prettyNum(Number(item.q))]);
   if (item.stat_type) extras.push(["stat_type", STAT_NAMES[item.stat_type] || titleCase(item.stat_type)]);
   return extras;

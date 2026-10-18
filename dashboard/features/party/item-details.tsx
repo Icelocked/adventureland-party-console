@@ -23,6 +23,7 @@ import { durationStat } from "./format-duration";
 import { InventoryEntry } from "./inventory-entry";
 import { EQUIPMENT_TYPES } from "./equipment-types";
 import { propertiesAtLevel } from "./properties-at-level";
+import { titledName } from "./item-title";
 import { Item } from "./item";
 import { ITEM_DETAIL_PROPERTY_RANK } from "./item-detail-property-rank";
 import { effectiveDropRate, formatDropRate as dropRate } from "./drop-rate";
@@ -257,7 +258,7 @@ export function ItemDetails({
   const formatStat = (key: string, value: string | number | boolean | unknown[]) =>
     durationStat(key, value as string | number | boolean, def) ?? (typeof value === "boolean" ? (value ? "Yes" : "No")
       : Array.isArray(value) ? value.map((v) => (Array.isArray(v) ? v.join(" ") : String(v))).join(", ") : String(value));
-  const extraStats = [...(selected ? itemSlotExtras(selected.entry.item) : []),
+  const extraStats = [...(selected ? itemSlotExtras(selected.entry.item, selected.entry.meta) : []),
     ...stats.filter(([key]) => !onItemCard(key, def)).map(([key, value]) => [key, formatStat(key, value)] as [string, string])];
   const usable = !!selected?.entry.meta?.usage?.classes.some((entry) => characters.some((character) => character.ctype === entry.id));
   if (selectedSkill)
@@ -373,7 +374,7 @@ export function ItemDetails({
             )}
             <div className="min-w-0 flex-1">
               <DialogTitle>
-                {String(def.name || selected?.entry.item.name || "Item")}
+                {titledName(String(def.name || selected?.entry.item.name || "Item"), selected?.entry.item || {}, selected?.entry.meta)}
                 {selected?.entry.item.level ? ` +${selected.entry.item.level}` : ""}
               </DialogTitle>
               <DialogDescription className="mt-1 text-emerald-100/55">

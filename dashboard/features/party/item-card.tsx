@@ -89,6 +89,8 @@ export function ItemCard({ meta, item, level, properties, setName, usable, skill
 const EXTRA_COLORS: Record<string, string> = {
   equip_slot: "#7AC0F5", stackable: "#7AC0F5", max_stack_size: "#7AC0F5", tier: "#56A244", scroll: "#B484E5",
   extra_stat: "#B484E5", exclusive: "#FC5F39", id: "#808080", quantity: "#C3C3C3", stat_type: "#B484E5",
+  // The game draws a title in the name's color; gold sets it apart in the extras box.
+  title: "gold",
 };
 const EXTRA_LABELS: Record<string, string> = { stat_type: "Stat Scroll" };
 const extraLabel = (key: string) =>

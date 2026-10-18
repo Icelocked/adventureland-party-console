@@ -1586,6 +1586,8 @@
       // Live inventory/bank reports must never construct the entire drop graph.
       // Until background preparation finishes, the dashboard uses its catalog.
       world: itemWorldCache[item.name],
+      // The copy's title (docs/item-titles.md); the dashboard names it and adds its stats.
+      title: item.p && G.titles && G.titles[item.p] ? safeFields(G.titles[item.p]) : null,
       sprite: pack && position ? {
         url: "https://adventure.land" + pack.file,
         tileSize: pack.size,

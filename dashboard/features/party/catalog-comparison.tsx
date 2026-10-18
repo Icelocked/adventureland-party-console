@@ -10,6 +10,7 @@ import { STAT_SCROLLS } from "./stat-scrolls";
 import { itemCardLines, titleCase, WEAPON_TYPES } from "./item-card-lines";
 import { GAME_FONT } from "./item-card";
 import { GAIN, LOSS } from "./stat-colors";
+import { titledName } from "./item-title";
 
 const GRAY = "gray";
 // The game's card labels both the damage type and the weapon type "Type", so the table qualifies them.
@@ -45,7 +46,7 @@ export function CatalogComparison({ entries, onChange, onRemove }: {
             <th scope="col" className="min-w-32 p-3 text-left">Stat</th>
             {entries.map((value, index) => {
               const { entry, level, stat } = value;
-              const name = String(entry.meta?.definition.name || entry.item.name);
+              const name = titledName(String(entry.meta?.definition.name || entry.item.name), entry.item, entry.meta);
               const label = String.fromCharCode(65 + index);
               return (
                 <th scope="col" key={index} className="min-w-52 border-l border-cyan-900 p-3 align-top text-left font-normal">

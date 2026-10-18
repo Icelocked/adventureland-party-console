@@ -27,6 +27,7 @@ import { propertiesAtLevel } from './properties-at-level';
 import { statBadgeClass } from './stat-badge-class';
 import { STAT_SCROLLS } from './stat-scrolls';
 import { GameBox } from './item-card';
+import { titledName } from './item-title';
 import { GAIN, LOSS, STAT_COLORS as S } from './stat-colors';
 
 // docs/comparison-card.md: stat labels in their game colors, and changes in the game's
@@ -369,7 +370,7 @@ export function GearComparisonDialog({
     (set) => currentSets.counts[set.id] !== proposedSets.counts[set.id],
   );
   const name =
-    String(entry.meta?.definition.name || entry.item.name) + ` +${rightLevel}`;
+    titledName(String(entry.meta?.definition.name || entry.item.name), entry.item, entry.meta) + ` +${rightLevel}`;
   const statButtons = (proposed: boolean) => {
     const meta = proposed ? entry.meta : equipped?.meta;
     if (!meta?.definition.stat) return null;
@@ -449,7 +450,7 @@ export function GearComparisonDialog({
             {proposed
               ? name
               : equipped
-                ? `${String(equipped.meta?.definition.name || equipped.item.name)} +${leftLevel}`
+                ? `${titledName(String(equipped.meta?.definition.name || equipped.item.name), equipped.item, equipped.meta)} +${leftLevel}`
                 : 'Empty slot'}
           </p>
           <p className="font-mono text-[10px] text-emerald-100/45">
