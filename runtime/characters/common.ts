@@ -12,4 +12,5 @@ import "./craft-reservations.ts";
 import "./compound-storage.ts";
 import "./bank-stacks.ts";
 import "./movement.ts";
+import "./metrics.ts";
 import "../../characters/shared.js";

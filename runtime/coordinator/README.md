@@ -420,6 +420,13 @@ Validate the native Boo Boo walking-return communication-hold case and retain
 its actual stop, fresh resume and Daisy reward evidence. This character change
 requires the supported full restart; a coordinator-only restart is insufficient.
 
+The Metrics workspace records durable kills, native damage, chest loot, gold and
+ping history independently of an open dashboard. See [Metrics](../../docs/metrics.md)
+for definitions, retention, reset semantics and estimator limits. Publish
+character, coordinator and dashboard assets together with the full supported
+restart below. A coordinator-only restart does not activate the collector.
+
+
 Merchant settings stores one Main-map stand location for parking, Town-return
 checks and marketplace fallbacks. A fresh settings store chooses integer X/Y
 coordinates independently within -100..100, rejects native collision geometry
