@@ -17,3 +17,7 @@ drafted before the journey; the control run is on the commit before it.
 6. **No bid suggestion.** Added 2026-10-18: the WTB order dialog offers ALNinja's best current bid
    (to match, or beat by 1) and its cheapest seller, from the row for the order's level.
 7. **Level ignored.** Changing the order's selected level must switch to that level's row.
+8. **Step ignores the price.** Added 2026-10-18: the bid and undercut options moved the price by 1 gold,
+   which does nothing at the 100k+ prices most items trade at (Simple vitearring +2: best bid 7m). They
+   step by one unit in the price's third significant digit, at a round number (7,000,000 → 7,010,000;
+   1,250,000 → 1,240,000), and by 1 gold below 1,000.

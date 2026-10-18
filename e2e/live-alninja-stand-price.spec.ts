@@ -6,7 +6,7 @@ import { test, expect, type LiveGame } from './live-fixtures';
 // GET /api/v1/prices/:item. Declared inputs: the stand-in's prices and the merchant's items
 // (an administrative write to the native bag). The dashboard, coordinator and pop-up are native.
 const M = 'E2EMerchant';
-// A price button's name is its label followed by the amount, e.g. "ALNinja best bid +1 601 gold".
+// A price button's name is its label followed by the amount, e.g. "ALNinja outbid 601 gold".
 const button = (label: string) => new RegExp('^' + label.replace(/[+]/g, '\\+') + ' \\d');
 
 async function standIn() {
@@ -19,8 +19,8 @@ async function standIn() {
       { item: 'hpot0', level: 0, variant: '', price: 77, lowest: 70, median: 80, bestBid: 60, sellers: 3, buyers: 2, soldPerDay: 12, stale: false },
       { item: 'hpot0', level: 1, variant: '', price: 5000, lowest: 4000, median: 4500, bestBid: 3000, sellers: 1, buyers: 1, soldPerDay: 1, stale: false },
     ] : match?.[1] === 'helmet' ? [
-      { item: 'helmet', level: 0, variant: '', price: 900, lowest: 850, median: 950, bestBid: 600, sellers: 3, buyers: 2, soldPerDay: 12, stale: false },
-      { item: 'helmet', level: 1, variant: '', price: 4000, lowest: 3500, median: 4200, bestBid: 3000, sellers: 1, buyers: 1, soldPerDay: 1, stale: false },
+      { item: 'helmet', level: 0, variant: '', price: 1_200_000, lowest: 1_250_000, median: 1_300_000, bestBid: 600, sellers: 3, buyers: 2, soldPerDay: 12, stale: false },
+      { item: 'helmet', level: 1, variant: '', price: 7_500_000, lowest: 8_000_000, median: 7_800_000, bestBid: 7_000_000, sellers: 1, buyers: 1, soldPerDay: 1, stale: false },
     ] : [];
     response.writeHead(match ? 200 : 404, { 'Content-Type': 'application/json' });
     response.end(JSON.stringify(match ? { region: match[2], item: match[1], prices: rows } : { error: 'not found' }));
@@ -63,9 +63,9 @@ test('the mark for stand pop-up offers ALNinja prices for the item\'s level in t
     const dialog = page.getByRole('dialog');
     // 3: the merchant's realm is in the US region.
     await expect(dialog.getByText(/ALNinja \(US\): 3 selling · 12\.0 sold\/day/)).toBeVisible({ timeout: 30_000 });
-    // 1, 2: the options use the level 0, no-variant row.
+    // 1, 2: the options use the level 0, no-variant row. 8: the undercut steps in the third significant digit.
     const price = dialog.getByPlaceholder('Price');
-    for (const [label, expected] of [['ALNinja price', '900'], ['ALNinja median', '950'], ['ALNinja lowest −1', '849']] as const) {
+    for (const [label, expected] of [['ALNinja price', '1200000'], ['ALNinja median', '1300000'], ['ALNinja undercut', '1240000']] as const) {
       await dialog.getByRole('button', { name: button(label) }).click();
       await expect(price).toHaveValue(expected);
     }
@@ -94,14 +94,15 @@ test('the WTB order dialog offers ALNinja\'s best bid and cheapest seller for th
   // 6: the buy order uses the level 0, no-variant row's bid and sellers.
   await expect(dialog.getByText(/ALNinja \(US\): 2 buying · 3 selling · 12\.0 sold\/day/)).toBeVisible({ timeout: 30_000 });
   const price = dialog.getByLabel('Maximum price');
-  for (const [label, expected] of [['ALNinja best bid +1', '601'], ['ALNinja best bid', '600'], ['ALNinja lowest seller', '850']] as const) {
+  // 8: below 1,000 the outbid is 1 gold.
+  for (const [label, expected] of [['ALNinja outbid', '601'], ['ALNinja best bid', '600'], ['ALNinja lowest seller', '1250000']] as const) {
     await dialog.getByRole('button', { name: button(label) }).click();
     await expect(price).toHaveValue(expected);
   }
-  // 7: choosing +1 switches to that level's row.
+  // 7: choosing +1 switches to that level's row. 8: a 7m bid is outbid at 7,010,000, not 7,000,001.
   await dialog.getByLabel('Selected +level').fill('1');
   await expect(dialog.getByText(/ALNinja \(US \+1\): 1 buying · 1 selling/)).toBeVisible({ timeout: 15_000 });
-  await dialog.getByRole('button', { name: button('ALNinja best bid +1') }).click();
-  await expect(price).toHaveValue('3001');
+  await dialog.getByRole('button', { name: button('ALNinja outbid') }).click();
+  await expect(price).toHaveValue('7010000');
   await info.attach('alninja-wtb-price', { body: await page.screenshot(), contentType: 'image/png' });
 });

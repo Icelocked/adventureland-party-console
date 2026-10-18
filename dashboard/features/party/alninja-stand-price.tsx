@@ -17,6 +17,11 @@ interface AlninjaPrice {
   stale: boolean;
 }
 
+// Outbid or undercut by one unit in the price's third significant digit, at a round number
+// (7,000,000 → 7,010,000), so the step scales with the price; below 1,000 it is 1 gold.
+const step = (price: number) => 10 ** Math.max(0, Math.floor(Math.log10(price)) - 2);
+const outbid = (price: number) => (Math.floor(price / step(price)) + 1) * step(price);
+const undercut = (price: number) => (Math.ceil(price / step(price)) - 1) * step(price);
 const regionOf = (server?: string | null) => /^(US|EU|ASIA)/.exec(server || "")?.[1] || "ALL";
 // ALNinja keys variants by the item's p and data, joined with "/".
 const variantOf = (item: Item) => [item.p, (item as { data?: unknown }).data].filter(v => typeof v === "string" && v).join("/");
@@ -52,21 +57,21 @@ export function AlninjaStandPrice({ item, server, onApply }: { item: Item; serve
         onClick={() => row?.price && onApply(row.price)} tone="amber" />
       <StandPriceButton label="ALNinja median" value={Number(row?.median)} disabled={!row?.median}
         onClick={() => row?.median && onApply(row.median)} tone="amber" />
-      <StandPriceButton label="ALNinja lowest −1" value={Number(row?.lowest) - 1} disabled={!row?.lowest || row.lowest <= 1}
-        onClick={() => row?.lowest && onApply(row.lowest - 1)} tone="amber" />
+      <StandPriceButton label="ALNinja undercut" value={row?.lowest ? undercut(row.lowest) : 0} disabled={!row?.lowest || row.lowest <= 1}
+        onClick={() => row?.lowest && onApply(undercut(row.lowest))} tone="amber" />
     </div>
   </div>;
 }
 
-/** ALNinja's prices for a buy order: the best current bid to match or beat, and the cheapest seller. */
+/** ALNinja's prices for a buy order: the best current bid to match or outbid, and the cheapest seller. */
 export function AlninjaBidPrice({ item, level, server, onApply }: { item: Item; level: number; server?: string | null; onApply: (price: number) => void }) {
   const { region, row, failure } = useAlninjaPrice(item, level, server);
   const status = failure ?? `${row!.buyers} buying · ${row!.sellers} selling · ${row!.soldPerDay.toFixed(1)} sold/day${row!.stale ? " · stale" : ""}`;
   return <div className="col-span-2 grid gap-2 sm:col-span-4">
     <p className="font-mono text-[10px] text-amber-100/70">ALNinja ({region}{level ? ` +${level}` : ""}): {status}</p>
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-      <StandPriceButton label="ALNinja best bid +1" value={Number(row?.bestBid) + 1} disabled={!row?.bestBid}
-        onClick={() => row?.bestBid && onApply(row.bestBid + 1)} tone="amber" />
+      <StandPriceButton label="ALNinja outbid" value={row?.bestBid ? outbid(row.bestBid) : 0} disabled={!row?.bestBid}
+        onClick={() => row?.bestBid && onApply(outbid(row.bestBid))} tone="amber" />
       <StandPriceButton label="ALNinja best bid" value={Number(row?.bestBid)} disabled={!row?.bestBid}
         onClick={() => row?.bestBid && onApply(row.bestBid)} tone="amber" />
       <StandPriceButton label="ALNinja lowest seller" value={Number(row?.lowest)} disabled={!row?.lowest}
