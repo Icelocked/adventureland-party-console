@@ -7,7 +7,7 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 | | |
 |---|---|
 | Upstream base | `1.5-feature-branch` @ 849c38a, merged as 53a3cd6 on 10-16 (branch `adopt/1.5`, from `main`). Carries v1.4.0 (PR #64, b4443e4) plus the ChronAL simulation harness (7f81f71) and accelerated gameplay E2Es (849c38a) |
-| Fork head | `adopt/1.5` @ the commit recording this (after 688e5cb), not pushed; `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
+| Fork head | `adopt/1.5` @ the commit recording this (after d84ca04), not pushed; `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
 | Divergence | 0 behind; 222 files differ from upstream’s tip (849c38a) |
 | Checked | 2026-10-16, against every upstream issue, comment and PR (#13–#131); #136 and #137 filed 10-17, #138 filed 10-17 |
 
@@ -19,7 +19,7 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 | Matches | 18 (all done but #129 and #130, not commented) |
 | Open upstream | 21 |
 | Closed | 19 |
-| Fork-only | 7 |
+| Fork-only | 8 |
 
 ## New issue: not represented upstream
 
@@ -278,6 +278,14 @@ Every closed upstream issue not covered above. None has fork commits still pendi
 ### Agreed exceptions without an issue
 
 `VINEXT_NO_DEV_LOCK` in the E2E fixture, and the release pipeline below. Decided 10-08: everything else in the fork is upstream’s code or backed by an upstream issue.
+
+### ALNinja trade reports and prices (PR after testing)
+
+The commit recording this (10-18). Not filed upstream by the user's choice: they test it for a while, then it goes up as a PR.
+
+- Reporting: each character sends the stand trades it sees (`"+$$"`) and its new trade-history entries to alninja.trade's `POST /api/v1/observations` through the coordinator: about 2 s after a trade, and once a minute with the open player stands in view (ALNinja joins coverage across reports under 2 minutes apart). Failed reports keep their batch and retry. Credentials: a key generated in Settings → ALNinja and mailed by the merchant to ALNinja's key-mail character (`/api/v1/auth`; reports send `<merchant>:<key>`, held to 11 a minute), or an instance admin `REPORT_TOKEN`. The URL is fixed; journeys set `PARTY_ALNINJA_URL`.
+- Prices: the mark-for-stand pop-up offers ALNinja price, median and lowest −1, and the WTB dialog ALNinja best bid (+1) and lowest seller, for the item's level and variant in the merchant's region (public `/api/v1/prices/:item`, cached a minute).
+- `live-alninja-report.spec.ts` (admin token: witnessed and own trades, 500 retry, 60 s coverage, off; mailed key: native mail, confirmation, `<merchant>:<key>`) and `live-alninja-stand-price.spec.ts` against a local stand-in. Live: both characters' reports accepted on the user's console.
 
 ### Release CI skips upstream's simulation E2Es
 

@@ -19,6 +19,7 @@ import { loadCoordinatorGeometry } from './navigation/planner-geometry.ts';
 import { initializeStandLocation, standLocationRoute } from './merchant/stand-location.ts';
 import { createRareRouteDistance } from './navigation/rare-route-distance.ts';
 import { createRealmHopBlacklistRoute, realmHopAllowed } from './navigation/realm-hop-blacklist.ts';
+import { createAlninja } from './commerce/alninja.ts';
 export function startCoordinatorApplication(
   platform: CoordinatorApplicationPlatform,
 ): Promise<void> {
@@ -592,6 +593,16 @@ export function startCoordinatorApplication(
       persistBank: persistBankState,
       merchantLog,
     });
+    const alninja = createAlninja(party, {
+      baseUrl: () => process.env.PARTY_ALNINJA_URL || "https://alninja.trade",
+      randomKey: () => crypto.randomBytes(24).toString("base64url"),
+      merchant: () => party.merchantCharacter,
+      known: (name) => !!ownedCharacter(name),
+      fetch: (url, options) => fetch(url, options),
+      timeout: (milliseconds) => AbortSignal.timeout(milliseconds),
+      now: () => Date.now(),
+      persist: persistSettings,
+    });
     const { market: aldataRoutes, postage: mailPostageRoute } =
       coordinatorPolicies.createCoordinatorMarketAccountActions(party, {
         now: () => Date.now(),
@@ -1067,6 +1078,7 @@ export function startCoordinatorApplication(
       now: () => Date.now(),
       handoff: publicHandoff,
       aldata: publicALDataState,
+      alninja: () => alninja.snapshot(),
       servers: () => my_acc.response?.servers || [],
       roster: rosterPayload,
       slots: slotPayload,
@@ -2273,6 +2285,7 @@ export function startCoordinatorApplication(
               anniversarySuppliesRoute,
               mailPostageRoute,
               aldataRoutes,
+              alninjaRoutes: alninja,
               characterCreationRoutes,
               bankboiStorageRoutes,
               bankboiDeleteRoute,

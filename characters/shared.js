@@ -9330,6 +9330,34 @@
     nativeStandJournal.receipts[offer.token] = (Number(nativeStandJournal.receipts[offer.token]) || 0) + (Number(event.item.q) || 1);
   };
   if (parent.socket && typeof parent.socket.on === "function") parent.socket.on("ui", parent.__nativeStandListener);
+  // ALNinja trade reports. A reload replaces the previous reporter and its socket listeners.
+  if (parent.__partyAlninja) parent.__partyAlninja.stop();
+  if (parent.socket && parent.__partyAlninjaUi) parent.socket.off("ui", parent.__partyAlninjaUi);
+  if (parent.socket && parent.__partyAlninjaHistory) parent.socket.off("trade_history", parent.__partyAlninjaHistory);
+  var alninjaReporter = root.partyAlninjaReporter = parent.__partyAlninja = root.createPartyAlninjaReporter ? root.createPartyAlninjaReporter({
+    now: function () { return Date.now(); },
+    name: function () { return character.name; },
+    realm: function () { return { region: parent.server_region || null, server: parent.server_identifier || null }; },
+    map: function () { return character.map || null; },
+    inView: function () {
+      var names = Object.values(parent.entities || {}).filter(function (entity) {
+        return entity && entity.player && !entity.npc && entity.type === "character" && entity.stand;
+      })
+        .map(function (entity) { return entity.name; });
+      if (character.stand) names.push(character.name);
+      return names;
+    },
+    requestHistory: function () { if (parent.socket) parent.socket.emit("trade_history"); },
+    send: function (report) { return request("/alninja/observations", { method: "POST", body: report }); },
+    setTimer: function (callback, milliseconds) { return setTimeout(callback, milliseconds); },
+    clearTimer: function (timer) { clearTimeout(timer); },
+  }) : null;
+  if (alninjaReporter && parent.socket && typeof parent.socket.on === "function") {
+    parent.__partyAlninjaUi = alninjaReporter.observeUi;
+    parent.__partyAlninjaHistory = alninjaReporter.observeHistory;
+    parent.socket.on("ui", parent.__partyAlninjaUi);
+    parent.socket.on("trade_history", parent.__partyAlninjaHistory);
+  }
   var nativePurchaseReceipts = root.__nativePurchaseReceipts ||= {};
   async function flushNativePurchaseReceipts() {
     for (var id of Object.keys(nativePurchaseReceipts)) {
@@ -11224,6 +11252,7 @@
       tank = state.designatedTank || null;
       root.partyGearSets = state.gearSets || {};
       root.partyRestockPolicies = state.restockPolicies || {};
+      if (root.partyAlninjaReporter) root.partyAlninjaReporter.configure(state.alninjaReporting === true);
       var followedBeforeRefresh = followLeader;
       followLeader = !!state.followLeader;
       partyTownActive = character.ctype !== "merchant" && !!state.partyTownActive;

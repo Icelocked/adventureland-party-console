@@ -18,7 +18,7 @@ function publicStateRuntime(){
  const funcs={publicHandoff:()=>({phase:'idle'}),publicALDataState:()=>({hasKey:true,listings:[{id:'listing'}],trades:[{id:'trade'}]}),
   rosterPayload:()=>[{name:'P'}],slotPayload:()=>[{character:'P',state:'online'}],publicEventSchedules:()=>[],publicAnniversaryState:()=>({live:false}),
   publicMerchantJob:job=>job&&({...job,priority:50}),mluckScheduleStatus:()=>[],bankboiPublicState:()=>[{name:'B'}],realmControlPayload:()=>({activeRealm:'SR_USII'})};
- const ports={now:()=>now,handoff:()=>funcs.publicHandoff(),aldata:()=>funcs.publicALDataState(),servers:()=>my_acc.response.servers,
+ const ports={now:()=>now,handoff:()=>funcs.publicHandoff(),aldata:()=>funcs.publicALDataState(),alninja:()=>({enabled:false,hasToken:false,hasKey:false,keyOwner:null,reporting:false,reporters:{}}),servers:()=>my_acc.response.servers,
   roster:()=>funcs.rosterPayload(),slots:()=>funcs.slotPayload(),classes:PARTY_CLASSES,eventSchedules:()=>funcs.publicEventSchedules(),
   anniversary:()=>funcs.publicAnniversaryState(),job:job=>funcs.publicMerchantJob(job),luckSchedule:()=>funcs.mluckScheduleStatus(),
   bankbois:()=>funcs.bankboiPublicState(),realmControl:()=>funcs.realmControlPayload()};

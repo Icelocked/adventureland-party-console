@@ -36,6 +36,7 @@ import { abbreviatedGold } from './abbreviated-gold';
 import { npcSaleValue } from './npc-sale-value';
 import { RoutinePrioritiesDialog } from './routine-priorities-dialog';
 import { StandPriceButton } from './stand-price-button';
+import { AlninjaStandPrice } from './alninja-stand-price';
 import type { PartyConsoleModel } from './use-party-console';
 
 import { usePanelModel } from './use-panel-model';
@@ -378,6 +379,13 @@ function PartyManagementPanelsConnected({ base }: { base: PartyConsoleModel }) {
                 }
                 tone="violet"
               />
+              {standItem && (
+                <AlninjaStandPrice
+                  item={standItem.entry.item}
+                  server={state.merchantCharacter ? state.characters[state.merchantCharacter]?.server : null}
+                  onApply={applyStandPrice}
+                />
+              )}
               <StandPriceButton
                 label="Input −5%"
                 value={Number(standItem?.price) * 0.95}

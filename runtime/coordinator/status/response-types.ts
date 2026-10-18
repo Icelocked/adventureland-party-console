@@ -49,6 +49,7 @@ export const heartbeatStateFields = [
   "designatedTank",
   "gearSets",
   "restockPolicies",
+  "alninjaReporting",
   "abtestingStrategy",
   "merchantCharacter",
   "merchantForceStand",

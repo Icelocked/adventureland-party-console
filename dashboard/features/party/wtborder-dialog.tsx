@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Info } from 'lucide-react';
+import type { ReactNode } from 'react';
 import {
   Popover,
   PopoverContent,
@@ -44,6 +45,7 @@ export function WTBOrderDialog({
   history,
   existing,
   onSave,
+  pricing,
 }: {
   item: { item: Item; meta?: ItemMeta | null };
   onOpenChange: (open: boolean) => void;
@@ -51,6 +53,8 @@ export function WTBOrderDialog({
   catalog?: MerchantCatalogItem[];
   history?: StandPriceHistory;
   existing?: StandBid;
+  /** Extra price suggestions for the selected level, such as ALNinja's. */
+  pricing?: (level: number, apply: (price: number) => void) => ReactNode;
   onSave: (
     itemId: string,
     price: number,
@@ -257,6 +261,7 @@ export function WTBOrderDialog({
                   }
                 />
               ))}
+              {pricing?.(previewItem.level, apply)}
             </div>
           </div>
           <DialogFooter className="shrink-0 border-t border-emerald-900 bg-[#081513] pt-3">

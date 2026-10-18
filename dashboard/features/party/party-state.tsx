@@ -196,6 +196,7 @@ export type PartyState = {
     status: string;
   } | null;
   aldata?: ALDataState;
+  alninja?: import("./alninja-settings").AlninjaStatus;
   ponty?: PontyState;
   merchantCatalog?: MerchantCatalog;
   bank?: BankSnapshot | null;

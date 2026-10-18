@@ -18,6 +18,7 @@ import { initialBankState } from "./inventory/initial-bank.ts";
 import { initialSteamRoster } from "./characters/initial-roster.ts";
 import { initialAnniversaryState } from "./anniversary/initial-state.ts";
 import { initialALDataState } from "./commerce/initial-aldata.ts";
+import { initialAlninja } from "./commerce/alninja.ts";
 import type { SavedServiceSettings } from "./persistence/settings-contracts.ts";
 import type { loadCoordinatorBankVaults } from "./infrastructure/game-data.ts";
 import type { ResourceBlock } from "./merchant/queue.ts";
@@ -97,6 +98,8 @@ export function createInitialCoordinatorState<Merchant extends string | null = s
     characterLocations: persistedSettings.characterLocations || {},
     navigationIntents: persistedSettings.navigationIntents || {},
     restockPolicies: persistedSettings.restockPolicies || {},
+    alninja: initialAlninja(persistedSettings.alninja),
+    alninjaReporting: false,
     ...initialMerchantRuntime<Merchant>(persistedSettings, ports.merchantDefault),
     ...initialCoordinatorHistory(persistedHistory, persistedSettings),
     ...initialMarketObservations(),

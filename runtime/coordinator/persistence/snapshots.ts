@@ -104,6 +104,7 @@ export const settingsFields = [
   "townCycle",
   "returnProgress",
   "restockPolicies",
+  "alninja",
   "merchantCharacter",
   "merchantRealmRequests",
   "merchantForceStand",

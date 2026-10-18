@@ -1,6 +1,7 @@
 "use client";
 import type { PartyConsoleModel } from "./use-party-console";
 import { WTBOrderDialog } from "./wtborder-dialog";
+import { AlninjaBidPrice } from "./alninja-stand-price";
 
 import { usePanelModel } from "./use-panel-model";
 export function PartyWTBOrderDialog({ model }: { model: PartyConsoleModel }) {
@@ -20,6 +21,8 @@ function PartyWTBOrderDialogConnected({ base }: { base: PartyConsoleModel }) {
       buyable={state.merchantCatalog?.buyable || []}
       history={wtbItem ? state.standPriceHistory?.[wtbItem.item.name] : undefined}
       existing={wtbItem ? state.standBids?.[wtbItem.item.name] : undefined}
+      pricing={(level, apply) => <AlninjaBidPrice item={wtbItem.item} level={level} onApply={apply}
+        server={state.merchantCharacter ? state.characters[state.merchantCharacter]?.server : null} />}
       onSave={async (itemId, price, quantity, level, priorityOverride, options) => {
         await saveStandBid(itemId, price, quantity, level, false, priorityOverride, options);
         setWtbItem(null);

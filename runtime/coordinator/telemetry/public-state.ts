@@ -146,6 +146,7 @@ function fullPayload(
     merchantCurrent: ports.job(state.merchantCurrent),
     mluckSchedule: ports.luckSchedule(),
     aldata,
+    alninja: ports.alninja(),
     ...(dashboardCore ? {} : { bank: state.bankSnapshot, bankVaults: state.bankVaults || [] }),
     ...catalog,
     ...(dashboardCore ? {} : { ponty: state.ponty }),

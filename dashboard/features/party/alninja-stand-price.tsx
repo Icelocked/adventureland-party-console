@@ -1,0 +1,76 @@
+"use client";
+import { useQuery } from "@tanstack/react-query";
+import { API } from "./api";
+import { StandPriceButton } from "./stand-price-button";
+import type { Item } from "./item";
+
+interface AlninjaPrice {
+  level: number;
+  variant: string;
+  price: number | null;
+  lowest: number | null;
+  median: number | null;
+  bestBid: number | null;
+  sellers: number;
+  buyers: number;
+  soldPerDay: number;
+  stale: boolean;
+}
+
+const regionOf = (server?: string | null) => /^(US|EU|ASIA)/.exec(server || "")?.[1] || "ALL";
+// ALNinja keys variants by the item's p and data, joined with "/".
+const variantOf = (item: Item) => [item.p, (item as { data?: unknown }).data].filter(v => typeof v === "string" && v).join("/");
+
+/** ALNinja's current price row for an item at one level (and its variant), in the merchant's region. */
+export function useAlninjaPrice(item: Item, level: number, server?: string | null) {
+  const region = regionOf(server);
+  const query = useQuery({
+    queryKey: ["alninja-price", item.name, region],
+    queryFn: async () => {
+      const response = await fetch(`${API}/alninja/price?item=${encodeURIComponent(item.name)}&region=${region}`);
+      const body = await response.json() as { error?: string; prices?: AlninjaPrice[]; source?: string };
+      if (!response.ok) throw new Error(body?.error || `HTTP ${response.status}`);
+      return body;
+    },
+    staleTime: 60_000,
+    retry: false,
+  });
+  const variant = variantOf(item);
+  const row = query.data?.prices?.find(entry => entry.level === level && entry.variant === variant);
+  const failure = query.isPending ? "loading…" : query.error ? query.error.message : !row ? `no ${region} listings` : null;
+  return { region, row, failure };
+}
+
+/** ALNinja's prices for the item being listed on the stand. */
+export function AlninjaStandPrice({ item, server, onApply }: { item: Item; server?: string | null; onApply: (price: number) => void }) {
+  const { region, row, failure } = useAlninjaPrice(item, Number(item.level) || 0, server);
+  const status = failure ?? `${row!.sellers} selling · ${row!.soldPerDay.toFixed(1)} sold/day${row!.stale ? " · stale" : ""}`;
+  return <div className="col-span-2 grid gap-2 sm:col-span-3">
+    <p className="font-mono text-[10px] text-amber-100/70">ALNinja ({region}): {status}</p>
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <StandPriceButton label="ALNinja price" value={Number(row?.price)} disabled={!row?.price}
+        onClick={() => row?.price && onApply(row.price)} tone="amber" />
+      <StandPriceButton label="ALNinja median" value={Number(row?.median)} disabled={!row?.median}
+        onClick={() => row?.median && onApply(row.median)} tone="amber" />
+      <StandPriceButton label="ALNinja lowest −1" value={Number(row?.lowest) - 1} disabled={!row?.lowest || row.lowest <= 1}
+        onClick={() => row?.lowest && onApply(row.lowest - 1)} tone="amber" />
+    </div>
+  </div>;
+}
+
+/** ALNinja's prices for a buy order: the best current bid to match or beat, and the cheapest seller. */
+export function AlninjaBidPrice({ item, level, server, onApply }: { item: Item; level: number; server?: string | null; onApply: (price: number) => void }) {
+  const { region, row, failure } = useAlninjaPrice(item, level, server);
+  const status = failure ?? `${row!.buyers} buying · ${row!.sellers} selling · ${row!.soldPerDay.toFixed(1)} sold/day${row!.stale ? " · stale" : ""}`;
+  return <div className="col-span-2 grid gap-2 sm:col-span-4">
+    <p className="font-mono text-[10px] text-amber-100/70">ALNinja ({region}{level ? ` +${level}` : ""}): {status}</p>
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <StandPriceButton label="ALNinja best bid +1" value={Number(row?.bestBid) + 1} disabled={!row?.bestBid}
+        onClick={() => row?.bestBid && onApply(row.bestBid + 1)} tone="amber" />
+      <StandPriceButton label="ALNinja best bid" value={Number(row?.bestBid)} disabled={!row?.bestBid}
+        onClick={() => row?.bestBid && onApply(row.bestBid)} tone="amber" />
+      <StandPriceButton label="ALNinja lowest seller" value={Number(row?.lowest)} disabled={!row?.lowest}
+        onClick={() => row?.lowest && onApply(row.lowest)} tone="amber" />
+    </div>
+  </div>;
+}

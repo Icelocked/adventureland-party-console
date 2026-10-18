@@ -141,6 +141,7 @@ export interface PublicStatePorts {
   now(): number;
   handoff(): unknown;
   aldata(): Record<string, unknown>;
+  alninja(): unknown;
   servers(): { key?: string }[];
   roster(): unknown;
   slots(): unknown;

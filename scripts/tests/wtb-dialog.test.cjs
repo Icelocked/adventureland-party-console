@@ -89,6 +89,7 @@ test('new dialog sessions use their selected level and retain only matching exis
     if (name === 'react/jsx-runtime') return require('../../dashboard/node_modules/react/jsx-runtime');
     if (name === './use-panel-model') return { usePanelModel: model => model };
     if (name === './wtborder-dialog') return { WTBOrderDialog: () => null };
+    if (name === './alninja-stand-price') return { AlninjaBidPrice: () => null };
     throw new Error('Unexpected component dependency: ' + name);
   } });
   vm.runInContext(wrapper, context);

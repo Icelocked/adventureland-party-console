@@ -76,6 +76,7 @@ export const actionDomains = {
   '/mail/delete': ['mail'],
   '/mail/refresh': ['mail'],
   '/aldata/key': core,
+  '/alninja': ['core', 'config'],
   '/aldata/refresh': ['market', 'core', 'config'],
   '/anniversary/chat-advertise': core,
 } satisfies Record<string, readonly Domain[]>;

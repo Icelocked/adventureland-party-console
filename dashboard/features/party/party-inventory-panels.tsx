@@ -1,5 +1,6 @@
 "use client";
 import { HostingSettings } from "./hosting-settings";
+import { AlninjaSettings } from "./alninja-settings";
 import { automaticCommerceRuleKey } from './automatic-commerce-rule-key';
 import { ConsoleUpdateSettings } from './console-updates';
 import { AccountSettings } from "./account-settings";
@@ -551,6 +552,9 @@ function PartyInventoryPanelsConnected({ base }: { base: PartyConsoleModel }) {
               <p className="mt-2 text-xs text-rose-300">{state.aldata.error}</p>
             ) : null}
           </div>
+          <AlninjaSettings status={state.alninja} onPrepareMail={(draft) => {
+            model.setMailDraft(draft); setSettingsOpen(false); model.setMailOpen(true);
+          }} />
           <HostingSettings />
           <ConsoleUpdateSettings />
         </DialogContent>
