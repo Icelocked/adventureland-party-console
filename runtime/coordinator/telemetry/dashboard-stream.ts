@@ -248,7 +248,8 @@ export function createDashboardStream<Timer>(ports: Ports<Timer>) {
       return response.status(409).json({ error: "outdated telemetry" });
     }
     const session = sessions.get(name)!;
-    if (!clients.size) return response.json({ accepted: false });
+    // Samples are changes against the last accepted one, so apply them even
+    // between viewers: the next viewer's snapshot must include every removal.
     const current = records.get(name)!;
     const data = requestObject(body.data);
     const itemChanges = compactSlots(data.items),

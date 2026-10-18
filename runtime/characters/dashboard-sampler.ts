@@ -64,7 +64,7 @@ export function createDashboardSampler(ports: Ports) {
     if (!Object.values(data).some((value) => Object.keys(value).length)) return;
     busy = true;
     try {
-      await ports.send({
+      const result = await ports.send({
         name: ports.name(),
         runtime: ports.runtime(),
         epoch: sentLease.epoch,
@@ -73,7 +73,7 @@ export function createDashboardSampler(ports: Ports) {
         sampledAt: next.at,
         data,
       });
-      if (sameLease(sentLease)) confirmed = next.data;
+      if (accepted(sentLease, result)) confirmed = next.data;
     } catch {
       /* The next sample retries the latest state, never an action. */
     } finally {
@@ -83,6 +83,10 @@ export function createDashboardSampler(ports: Ports) {
   }
   function sameLease(sent: Lease) {
     return lease?.generation === sent.generation && lease?.epoch === sent.epoch;
+  }
+  /** Only an accepted sample becomes the base for the next change set. */
+  function accepted(sent: Lease, result: unknown) {
+    return sameLease(sent) && (result as { accepted?: unknown } | null)?.accepted === true;
   }
   function pulse() {
     if (!ports.current() || ports.now() >= expires) {

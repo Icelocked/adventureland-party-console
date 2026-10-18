@@ -7,13 +7,13 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 | | |
 |---|---|
 | Upstream base | `1.5-feature-branch` @ 849c38a, merged as 53a3cd6 on 10-16 (branch `adopt/1.5`, from `main`). Carries v1.4.0 (PR #64, b4443e4) plus the ChronAL simulation harness (7f81f71) and accelerated gameplay E2Es (849c38a) |
-| Fork head | `adopt/1.5` @ the commit recording this (after b22fcc6), pushed to origin; `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
+| Fork head | `adopt/1.5` @ the commit recording this (after 688e5cb), not pushed; `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
 | Divergence | 0 behind; 222 files differ from upstream’s tip (849c38a) |
 | Checked | 2026-10-16, against every upstream issue, comment and PR (#13–#131); #136 and #137 filed 10-17, #138 filed 10-17 |
 
 | Status | Count |
 |---|---|
-| New issue | 0 |
+| New issue | 1 |
 | Update / comment | 9 (2 to do) |
 | Done upstream | 39 |
 | Matches | 18 (all done but #129 and #130, not commented) |
@@ -25,7 +25,12 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 
 Implemented on the fork, with no upstream issue or PR describing it yet.
 
-Nothing unfiled. The Fan farm gear set was commented on #39 (10-17).
+### Dashboard bag keeps items the character no longer has
+
+Not filed yet. Fork fix in the commit recording this (10-17).
+
+- A character's dashboard sampler sends only changed slots; with no dashboard connected, `/dashboard-telemetry` answered `{accepted: false}` and discarded the sample, but the sampler treated any answer as delivered. A slot emptied while the viewer reconnected kept its old item until the character's runtime or the coordinator restarted. Live: FonzeRogue showed about 27/42 at its lowest while heartbeats reported 11–20 items.
+- Fix: the coordinator applies samples between viewers, and the sampler only advances its base on `accepted: true`. `live-dashboard-bag.spec.ts`: control kept a removed ring on the first trial; with the fix 5 of 5 trials match the game's bag.
 
 ## Update / comment: the issue doesn't match the fork's work
 

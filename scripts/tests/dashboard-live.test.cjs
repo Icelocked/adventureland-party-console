@@ -98,9 +98,9 @@ test('sampler keeps newest pending state, builds metadata only for changes, and 
   sampler.pulse(); assert.equal(samples, 0);
   sampler.renew({ epoch: 'e', generation: 'g', duration: 3000 }); sampler.pulse();
   current.vitals.hp = 80; sampler.pulse(); current.vitals.hp = 60; sampler.pulse();
-  assert.equal(sent.length, 1); resolve(); await new Promise(done => setImmediate(done));
+  assert.equal(sent.length, 1); resolve({ accepted: true }); await new Promise(done => setImmediate(done));
   assert.equal(sent.length, 2); assert.equal(sent[1].data.vitals.hp, 60); assert.deepEqual(sent[1].data.items, {});
-  assert.equal(builds, 1); resolve(); await new Promise(done => setImmediate(done));
+  assert.equal(builds, 1); resolve({ accepted: true }); await new Promise(done => setImmediate(done));
   sampler.pulse(); assert.equal(sent.length, 2);
   now += 3001; sampler.pulse(); assert.equal(samples, 4);
 });
