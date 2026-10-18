@@ -21,3 +21,11 @@ drafted before the journey; the control run is on the commit before it.
    which does nothing at the 100k+ prices most items trade at (Simple vitearring +2: best bid 7m). They
    step by one unit in the price's third significant digit, at a round number (7,000,000 → 7,010,000;
    1,250,000 → 1,240,000), and by 1 gold below 1,000.
+9. **No suggestion without listings.** Added 2026-10-18: with no ALNinja listing at the item's level
+   (Throwing Stars +8 live), the pop-up offered nothing. ALNinja's `GET /api/v1/value/:item` suggests
+   one selling price from asks, sales, the last price, the cost to make or the NPC price; the pop-up
+   offers it as "ALNinja value" even when the price buttons are disabled.
+10. **Priced against itself.** The value lookup must send `exclude=<the party's merchant>`, the item's
+    level and variant, and the merchant's region, so the merchant's own listing is not its competition.
+11. **Unexplained number.** The suggestion says what it is based on (cheapest other seller, 30-day
+    sales, last asking price, cost to make, best bid or NPC price).

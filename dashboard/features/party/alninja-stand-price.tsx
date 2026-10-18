@@ -46,13 +46,44 @@ export function useAlninjaPrice(item: Item, level: number, server?: string | nul
   return { region, row, failure };
 }
 
+// What ALNinja's suggestion is based on, in the order it picks them.
+const basisLabel: Record<string, string> = {
+  asks: "the cheapest other seller", sales: "30-day sales", history: "the last asking price",
+  cost_to_make: "the cost to make", bid: "the best bid", npc: "the NPC price",
+};
+
+/** ALNinja's one suggested selling price at a level, also when nobody lists it there. */
+function useAlninjaValue(item: Item, level: number, region: string) {
+  const variant = variantOf(item);
+  const query = useQuery({
+    queryKey: ["alninja-value", item.name, level, variant, region],
+    queryFn: async () => {
+      const params = new URLSearchParams({ item: item.name, level: String(level), variant, region });
+      const response = await fetch(`${API}/alninja/value?${params}`);
+      const body = await response.json() as { error?: string; suggested?: number; basis?: string };
+      if (!response.ok) throw new Error(body?.error || `HTTP ${response.status}`);
+      return body;
+    },
+    staleTime: 60_000,
+    retry: false,
+  });
+  const suggested = Number(query.data?.suggested) > 0 ? Number(query.data!.suggested) : null;
+  const note = query.isPending ? "loading…" : query.error ? query.error.message
+    : suggested ? `from ${basisLabel[query.data!.basis!] || query.data!.basis}` : "no suggestion";
+  return { suggested, note };
+}
+
 /** ALNinja's prices for the item being listed on the stand. */
 export function AlninjaStandPrice({ item, server, onApply }: { item: Item; server?: string | null; onApply: (price: number) => void }) {
   const { region, row, failure } = useAlninjaPrice(item, Number(item.level) || 0, server);
+  const value = useAlninjaValue(item, Number(item.level) || 0, region);
   const status = failure ?? `${row!.sellers} selling · ${row!.soldPerDay.toFixed(1)} sold/day${row!.stale ? " · stale" : ""}`;
   return <div className="col-span-2 grid gap-2 sm:col-span-3">
     <p className="font-mono text-[10px] text-amber-100/70">ALNinja ({region}): {status}</p>
+    <p className="font-mono text-[10px] text-amber-100/70">ALNinja value {value.note}</p>
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <StandPriceButton label="ALNinja value" value={value.suggested ?? 0} disabled={!value.suggested}
+        onClick={() => value.suggested && onApply(value.suggested)} tone="amber" />
       <StandPriceButton label="ALNinja price" value={Number(row?.price)} disabled={!row?.price}
         onClick={() => row?.price && onApply(row.price)} tone="amber" />
       <StandPriceButton label="ALNinja median" value={Number(row?.median)} disabled={!row?.median}

@@ -30,7 +30,7 @@ export interface AnniversaryAndCommerceHandlers<Handler> {
     sendAuth: Handler;
     refresh: Handler;
   };
-  alninjaRoutes: { settings: Handler; report: Handler; price: Handler; generateKey: Handler; revealKey: Handler; auth: Handler };
+  alninjaRoutes: { settings: Handler; report: Handler; price: Handler; value: Handler; generateKey: Handler; revealKey: Handler; auth: Handler };
 }
 
 export function installAnniversaryAndCommerceRoutes<Handler>(
@@ -73,6 +73,7 @@ export function installAnniversaryAndCommerceRoutes<Handler>(
   router.post("/party-api/alninja", handlers.alninjaRoutes.settings);
   router.post("/party-api/alninja/observations", handlers.alninjaRoutes.report);
   router.get("/party-api/alninja/price", handlers.alninjaRoutes.price);
+  router.get("/party-api/alninja/value", handlers.alninjaRoutes.value);
   router.get("/party-api/alninja/key", handlers.alninjaRoutes.revealKey);
   router.post("/party-api/alninja/key", handlers.alninjaRoutes.generateKey);
   router.get("/party-api/alninja/auth", handlers.alninjaRoutes.auth);

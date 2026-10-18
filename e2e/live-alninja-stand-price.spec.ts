@@ -13,6 +13,13 @@ async function standIn() {
   const requests: { url: string; auth?: string }[] = [];
   const server: Server = createServer((request, response) => {
     requests.push({ url: request.url || '', auth: request.headers.authorization });
+    const value = /^\/api\/v1\/value\/(\w+)\?(.*)$/.exec(request.url || '');
+    if (value) {
+      // 9: ALNinja's suggested selling price, also for an item with no listing at that level.
+      const suggestion = value[1] === 'shoes' ? { suggested: 45_000, basis: 'cost_to_make' } : value[1] === 'helmet' ? { suggested: 1_245_000, basis: 'asks' } : null;
+      response.writeHead(suggestion ? 200 : 404, { 'Content-Type': 'application/json' });
+      return response.end(JSON.stringify(suggestion ? { item: value[1], ...Object.fromEntries(new URLSearchParams(value[2])), ...suggestion } : { error: 'Unknown item' }));
+    }
     const match = /^\/api\/v1\/prices\/(\w+)\?region=(\w+)$/.exec(request.url || '');
     const rows = match?.[1] === 'hpot0' ? [
       { item: 'hpot0', level: 0, variant: 'shiny', price: 999, lowest: 990, median: 995, bestBid: 900, sellers: 1, buyers: 1, soldPerDay: 0, stale: false },
@@ -70,6 +77,12 @@ test('the mark for stand pop-up offers ALNinja prices for the item\'s level in t
       await expect(price).toHaveValue(expected);
     }
     expect(alninja.requests.map(r => r.url)).toContain('/api/v1/prices/helmet?region=US');
+    // 9, 11: ALNinja's suggestion, with its basis. 10: the merchant's own listing is excluded.
+    await expect(dialog.getByText('ALNinja value from the cheapest other seller')).toBeVisible({ timeout: 30_000 });
+    await dialog.getByRole('button', { name: button('ALNinja value') }).click();
+    await expect(price).toHaveValue('1245000');
+    const valueQuery = new URLSearchParams(alninja.requests.find(r => r.url.startsWith('/api/v1/value/helmet?'))!.url.split('?')[1]);
+    expect(Object.fromEntries(valueQuery)).toEqual({ level: '0', variant: '', region: 'US', exclude: M });
     expect(alninja.requests.every(r => !r.auth), 'Price lookups must not send a token').toBe(true);
     await info.attach('alninja-stand-price', { body: await page.screenshot(), contentType: 'image/png' });
     // 5: an item with no ALNinja listing disables the options and says why.
@@ -79,6 +92,10 @@ test('the mark for stand pop-up offers ALNinja prices for the item\'s level in t
     await page.getByRole('menuitem', { name: 'Mark for stand', exact: true }).click();
     await expect(dialog.getByText('ALNinja (US): no US listings')).toBeVisible({ timeout: 30_000 });
     await expect(dialog.getByRole('button', { name: /^ALNinja price/ })).toBeDisabled();
+    // 9: with no listing, ALNinja still suggests a price from the cost to make.
+    await expect(dialog.getByText('ALNinja value from the cost to make')).toBeVisible({ timeout: 30_000 });
+    await dialog.getByRole('button', { name: button('ALNinja value') }).click();
+    await expect(dialog.getByPlaceholder('Price')).toHaveValue('45000');
   } finally {
     await info.attach('alninja-price-requests', { body: JSON.stringify(alninja.requests), contentType: 'application/json' });
   }

@@ -102,30 +102,45 @@ export function createAlninja(state: AlninjaState, ports: AlninjaPorts) {
       return res.json({ accepted: false, reporting: true });
     }
   }
+  /** One public ALNinja GET, shared and cached for a minute. */
+  async function cached(res: HttpResponse, path: string): Promise<unknown> {
+    const base = ports.baseUrl(), key = `${base}\u0000${path}`;
+    let entry = prices.get(key);
+    if (!entry || ports.now() - entry.at > priceLifetimeMs) {
+      const value = ports.fetch(`${base}${path}`, { signal: ports.timeout(requestTimeoutMs) }).then(async (response) => {
+        if (!response.ok) throw new Error("ALNinja returned HTTP " + response.status);
+        return response.json();
+      });
+      entry = { at: ports.now(), value };
+      if (prices.size > 500) prices.clear();
+      prices.set(key, entry);
+      value.catch(() => prices.delete(key));
+    }
+    try {
+      return res.json({ source: base, ...requestObject(await entry.value) });
+    } catch (error) {
+      return res.status(502).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  const regionOf = (query: Record<string, unknown>) => regions.includes(requestText(query.region)) ? requestText(query.region) : "ALL";
+  const itemPattern = /^[A-Za-z0-9_]{1,64}$/;
   /** Current ALNinja prices for one item (every level and variant), from its public API. Prices
    * need no token, so lookups work before reporting is set up. */
   async function price(req: HttpRequest, res: HttpResponse): Promise<unknown> {
     const query = requestObject(req.query), item = requestText(query.item);
-    const region = regions.includes(requestText(query.region)) ? requestText(query.region) : "ALL";
-    if (!/^[A-Za-z0-9_]{1,64}$/.test(item)) return res.status(400).json({ error: "item: an item id" });
-    const base = ports.baseUrl(), key = `${base}\u0000${region}\u0000${item}`;
-    let cached = prices.get(key);
-    if (!cached || ports.now() - cached.at > priceLifetimeMs) {
-      const value = ports.fetch(`${base}/api/v1/prices/${encodeURIComponent(item)}?region=${region}`,
-        { signal: ports.timeout(requestTimeoutMs) }).then(async (response) => {
-        if (!response.ok) throw new Error("ALNinja returned HTTP " + response.status);
-        return response.json();
-      });
-      cached = { at: ports.now(), value };
-      if (prices.size > 500) prices.clear();
-      prices.set(key, cached);
-      value.catch(() => prices.delete(key));
-    }
-    try {
-      return res.json({ source: base, ...requestObject(await cached.value) });
-    } catch (error) {
-      return res.status(502).json({ error: error instanceof Error ? error.message : String(error) });
-    }
+    if (!itemPattern.test(item)) return res.status(400).json({ error: "item: an item id" });
+    return cached(res, `/api/v1/prices/${encodeURIComponent(item)}?region=${regionOf(query)}`);
+  }
+  /** ALNinja's suggested selling price for one item at a level and variant. The party's merchant is
+   * excluded, so its own listing is not priced as competition. */
+  async function value(req: HttpRequest, res: HttpResponse): Promise<unknown> {
+    const query = requestObject(req.query), item = requestText(query.item), level = Number(query.level);
+    if (!itemPattern.test(item)) return res.status(400).json({ error: "item: an item id" });
+    if (!Number.isInteger(level) || level < 0 || level > 20) return res.status(400).json({ error: "level: 0 to 20" });
+    const params = new URLSearchParams({ level: String(level), variant: requestText(query.variant).slice(0, 64), region: regionOf(query) });
+    const merchant = ports.merchant();
+    if (merchant) params.set("exclude", merchant);
+    return cached(res, `/api/v1/value/${encodeURIComponent(item)}?${params}`);
   }
   function update(next: AlninjaSettings) {
     state.alninja = next;
@@ -163,5 +178,5 @@ export function createAlninja(state: AlninjaState, ports: AlninjaPorts) {
       return res.status(502).json({ error: error instanceof Error ? error.message : String(error) });
     }
   }
-  return { snapshot, settings, report, price, generateKey, revealKey, auth };
+  return { snapshot, settings, report, price, value, generateKey, revealKey, auth };
 }
