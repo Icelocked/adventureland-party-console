@@ -3,9 +3,10 @@
 Runs the party console's coordinator and every character's real CODE against the real
 game server at faster than real time, for problems that need hours of play to show up:
 long travel, slow state growth, and bugs that only appear after many fights. It is a
-standalone soak tool. Seven existing gameplay E2Es now also use this host through
-the [accelerated fixture](../../docs/testing-simulation.md) in `npm test`; browser,
-deployment and native-only journeys retain their original fixtures.
+standalone soak tool. All gameplay E2Es use the pinned ChronAL clock through the
+[shared network fixture](../../docs/testing-simulation.md) in `npm test`, preserving
+real browser, deployment, persistence and realm coverage. The network fixture
+uses the same virtual-clock library with actual Socket.IO and MongoDB boundaries.
 
 ## How it works
 
@@ -128,7 +129,7 @@ build/boot); `evidence.json` hashes the reports, timelines, logs and traced requ
 Results live under `.build/sim-benchmarks/`; underlying runs remain in `.build/sim-results/`.
 `--paced` is a benchmark baseline for this virtual-clock host, not a measurement of
 Playwright. The long scenarios remain opt-in soak coverage; this tool does not make
-the unmigrated Playwright journeys faster or replace browser, Steam, deployment or live networking assertions.
+Playwright journeys faster by itself. The shared network fixture supplies those clocks while preserving browser, Steam, deployment and live networking assertions.
 Use `npm run test:e2e:benchmark` to measure the actual migrated E2Es.
 
 Scenario API steps fail on HTTP errors. Every run requires completed virtual duration,

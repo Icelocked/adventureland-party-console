@@ -1,4 +1,5 @@
 import { test as base, expect } from '@playwright/test';
+import {cleanupWorkspace} from './workspace';
 import { fork, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { appendFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
@@ -71,17 +72,17 @@ export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantCo
     const directory = path.join(root, '.build/e2e', `dashboard-${randomUUID()}`);
     mkdirSync(directory, { recursive: true });
     const port = await unusedPort(), log = path.join(directory, 'dashboard.log');
-    const process = child(path.join(root, 'dashboard/node_modules/vinext/dist/cli.js'),
-      ['dev', '--hostname', '127.0.0.1', '--port', String(port)], path.join(root, 'dashboard'),
-      // vinext's dev-server lock is keyed by directory, not port: it would otherwise
-      // refuse to start here whenever a real `vinext dev` is already running from the
-      // same dashboard/ checkout. VINEXT_NO_DEV_LOCK is vinext's own documented escape
-      // hatch for exactly this (ephemeral/test) case, not a workaround for our harness.
-      environment({ AL_DASHBOARD_PORT: String(port), AL_WATCH_POLL: '1', VINEXT_NO_DEV_LOCK: '1' }), log);
+    const candidate=JSON.parse(globalThis.process.env.E2E_DASHBOARD_CANDIDATE||'null');
+    if(!candidate||!candidate.directory.startsWith(path.join(root,'.build/console/releases')+path.sep))throw Error('Verified E2E dashboard candidate required');
+    const process = child(path.join(candidate.directory,'tools/dashboard/node-server.mts'),
+      [String(port),path.join(candidate.directory,'dashboard/.build/container')],path.join(candidate.directory,'dashboard'),
+      environment({NODE_ENV:'production',AL_DASHBOARD_PORT:String(port)}),log);
+    let used=false;
     try {
       await ready(process, `http://127.0.0.1:${port}`, log);
       await use({ port, log });
-    } finally { await stop(process); }
+      used=true;
+    } finally { await stop(process);if(used)cleanupWorkspace(root,directory); }
   }, { scope: 'worker', timeout: 120_000 }],
   app: async ({ dashboard, merchantDialogs, merchantConnected, merchantManaged, playerInventory, marketStand, bankboiOfferings, mapCapture, standBuyOrders }, use, testInfo) => {
     const directory = path.join(root, '.build/e2e', `scenario-${randomUUID()}`);
@@ -170,13 +171,14 @@ export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantCo
       for (const file of [log, dashboard.log, path.join(directory, 'state.jsonl')]) {
         if (existsSync(file)) await testInfo.attach(path.basename(file), { path: file, contentType: 'text/plain' });
       }
+      await testInfo.attach('workspace-cleanup',{body:JSON.stringify(cleanupWorkspace(root,directory)),contentType:'application/json'});
     }
   },
   baseURL: async ({ app }, use) => { await use(app.url); },
   context: async ({ context }, use) => {
     await context.route('**/*', route => {
       const url = new URL(route.request().url());
-      return ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(url.hostname) || ['data:', 'blob:'].includes(url.protocol)
+      return ['127.0.0.1', '127.0.0.2', '127.0.0.3', '127.0.0.4', 'localhost', '::1', '[::1]'].includes(url.hostname) || ['data:', 'blob:'].includes(url.protocol)
         ? route.continue() : route.abort('blockedbyclient');
     });
     await use(context);

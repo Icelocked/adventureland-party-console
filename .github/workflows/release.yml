@@ -26,15 +26,8 @@ jobs:
       - run: npm --prefix .caracal ci
       - run: node scripts/ci/restore-game-fixtures.cjs
       - run: npx playwright install --with-deps chromium
-      - uses: actions/cache@v4
-        with:
-          path: .build/sim/chronal
-          key: simulation-${{ runner.os }}-node24-${{ hashFiles('tools/sim/pins.json', 'package-lock.json') }}
-      # Fork-only: upstream's accelerated simulation E2Es time out at startup on GitHub runners
-      # ("Simulation IPC startup timed out", also on upstream 849c38a). Restore --project=simulation
-      # once upstream fixes the harness; see docs/fork/ledger.md.
-      - name: Console E2E
-        run: npm run test:e2e -- --project=console && npm run test:e2e:verify
+      - name: Console, deployment and debug E2E
+        run: npm test -- --project=console --project=debug && npm run test:e2e:verify
       - name: Retained isolated regression exceptions
         shell: bash
         run: |
@@ -56,8 +49,50 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 14
+  gameplay:
+    runs-on: ubuntu-latest
+    env:
+      E2E_MONGO_IMAGE: mirror.gcr.io/library/mongo@sha256:c630c59342c1493d50345136df2af14a76b9e827dd5316bfabee07a0880a5f3a
+      E2E_NODE_IMAGE: mirror.gcr.io/library/node@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.0'
+          cache: npm
+      - run: npm ci
+      - run: npm --prefix dashboard ci
+      - run: node tools/caracal/setup.mts
+      - run: npm --prefix .caracal ci
+      - run: node scripts/ci/restore-game-fixtures.cjs
+      - run: npx playwright install --with-deps chromium
+      - uses: actions/cache@v4
+        with:
+          path: .build/sim/chronal
+          key: simulation-${{ runner.os }}-node24-${{ hashFiles('tools/sim/pins.json', 'package-lock.json') }}
+      - name: Complete ChronAL gameplay allocation
+        run: npm run test:e2e:live -- --workers=1 --shard=${{ matrix.shard }}/16
+      - name: Verify gameplay evidence
+        if: always()
+        run: npm run test:e2e:verify
+      - name: Preserve gameplay evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chronal-gameplay-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.shard }}
+          path: |
+            .build/e2e-report/
+            .build/e2e-results/
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
   version:
-    needs: validate
+    needs: [validate, gameplay]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
@@ -130,28 +165,24 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # The image lives under the repository named in distribution.json (GHCR requires lowercase).
-      - id: image
-        run: echo "repository=$(node -p "require('./distribution.json').repository.toLowerCase()")" >> "$GITHUB_OUTPUT"
       - id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/${{ steps.image.outputs.repository }}:${{ needs.version.outputs.version }}
+          tags: ghcr.io/ryan-haines/adventureland-party-console:${{ needs.version.outputs.version }}
           build-args: |
             RELEASE_VERSION=${{ needs.version.outputs.version }}
-            RELEASE_REPOSITORY=${{ steps.image.outputs.repository }}
             RELEASE_COMMIT=${{ github.sha }}
       - name: Smoke-test both architectures
         run: |
           for arch in amd64 arm64; do
-            docker run --rm --platform linux/$arch --entrypoint node ghcr.io/${{ steps.image.outputs.repository }}@${{ steps.build.outputs.digest }} --check .build/runtime/coordinator-application.cjs
-            bash scripts/ci/smoke-docker.sh ghcr.io/${{ steps.image.outputs.repository }}@${{ steps.build.outputs.digest }} "$arch"
+            docker run --rm --platform linux/$arch --entrypoint node ghcr.io/ryan-haines/adventureland-party-console@${{ steps.build.outputs.digest }} --check .build/runtime/coordinator-application.cjs
+            bash scripts/ci/smoke-docker.sh ghcr.io/ryan-haines/adventureland-party-console@${{ steps.build.outputs.digest }} "$arch"
             # The runner's classic image store cannot retain two architectures
             # under one manifest digest. Remove only this completed local test image.
-            docker image rm ghcr.io/${{ steps.image.outputs.repository }}@${{ steps.build.outputs.digest }}
+            docker image rm ghcr.io/ryan-haines/adventureland-party-console@${{ steps.build.outputs.digest }}
           done
   publish:
     needs: [version, windows, docker]
@@ -182,6 +213,4 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/setup-buildx-action@v3
       - name: Promote validated image
-        run: |
-          image="ghcr.io/$(node -p "require('./distribution.json').repository.toLowerCase()")"
-          docker buildx imagetools create --tag "$image:latest" "$image@${{ needs.docker.outputs.digest }}"
+        run: docker buildx imagetools create --tag ghcr.io/ryan-haines/adventureland-party-console:latest ghcr.io/ryan-haines/adventureland-party-console@${{ needs.docker.outputs.digest }}

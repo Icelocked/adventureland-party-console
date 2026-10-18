@@ -1272,6 +1272,14 @@ the whole floor. A full bank falls back to the packed layout. The checkpoint
 returns the layout with the mode. Failure inventory:
 `e2e/bank-sort-gaps-failures.md`; validate `live-bank-sort-gaps.spec.ts`.
 
+Cosmetic bank sorting confirms each native swap before selecting another mutation.
+The buffer journal records the expected bank and inventory identities and quantities
+before emission; native acknowledgement alone does not prove reactive publication.
+Unconfirmed swaps remain journaled, and departure waits for confirmed cleanup,
+including after cancellation or reload. Validate the native bank collection and NPC
+sale E2Es with ChronAL; they retain locked-stock conservation and exact sale counts.
+Build character and coordinator assets together and leave activation explicit.
+
 Bank sorting defaults to `bankSortMode: "automatic"`. Merchant settings can select
 `"request"`; the bank window then queues/cancels a durable, uniquely identified
 sort without dispatching travel. All cosmetic sorting callers in the shared
@@ -2218,3 +2226,18 @@ full kept-item handoff receipt releases the merchant exchange, including after
 restart. Validate `live-exchange-collection.spec.ts`; see
 `docs/testing-party-exchange.md`. Coordinator/dashboard-only activation requires
 the explicitly requested supported CoordinatorOnly restart.
+
+A valid current convoy arrival received before the coordinator departure clock
+remains waiting and retryable. Zero-distance routes can finish on a client before
+that clock boundary; invalid owners still reject and early arrivals never complete.
+Validate the Halloween staging/restart/combat E2Es with ChronAL and native parity.
+Disposable application hosts can provide `plannerWorkerFile` independently of
+their isolated CODE directories; installed launchers retain the existing path.
+Build and stage the candidate; activation requires an explicit console load.
+
+When current Hunt policy clears an already-dispatched deferred checkpoint, a
+retained checkpoint command must not keep its return-cycle ownership alive.
+Fresh, alive native Main-town presence permits retirement of only that old
+cycle's command/walk and matching event trip. Other navigation remains owned.
+Validate the native Anniversary restart/return-to-Hunt journeys; preserve their
+physical arrival and reward checks. Build and stage; activate only by explicit load.

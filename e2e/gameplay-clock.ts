@@ -1,4 +1,4 @@
-import { expect } from "@playwright/test";
+import { expect } from "./network-clock";
 import type { LiveGame } from "./live-fixtures";
 import type { LiveClient } from "./live-game-client";
 
