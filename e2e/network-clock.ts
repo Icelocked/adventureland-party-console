@@ -5,6 +5,15 @@ const require = createRequire(import.meta.url);
 export const clockRate = () => Number(process.env.E2E_CLOCK_RATE || 1);
 /** Native browser/CDP network timing has a wall epoch, independent of gameplay. */
 export const nativeWallNow = () => performance.timeOrigin + performance.now();
+/** CI may advance below native speed; a stall means no virtual progress. */
+function clockStalled() {
+  let observed=Date.now(),progressAt=performance.now();
+  return () => {
+    const current=Date.now(),wall=performance.now();
+    if(current>observed){observed=current;progressAt=wall;}
+    return wall-progressAt>=30000;
+  };
+}
 export function gameplayTimers(): Pick<typeof globalThis, 'setTimeout'|'clearTimeout'|'setInterval'|'clearInterval'> | undefined {
   return require("../tools/sim/network-clock.cjs").install({ dateOnly: true }).timers;
 }
@@ -14,10 +23,9 @@ export async function waitForGameplay(milliseconds: number) {
     await new Promise((resolve) => setTimeout(resolve, milliseconds));
     return;
   }
-  const deadline = Date.now() + milliseconds,
-    watchdog = performance.now() + milliseconds + 30000;
+  const deadline = Date.now() + milliseconds, stalled=clockStalled();
   while (Date.now() < deadline) {
-    if (performance.now() >= watchdog)
+    if (stalled())
       throw Error("ChronAL gameplay clock stalled during observation window");
     await new Promise((resolve) =>
       setTimeout(resolve, Math.min(50, (deadline - Date.now()) / clockRate())),
@@ -41,8 +49,7 @@ export const expect: typeof nativeExpect = new Proxy(nativeExpect, {
               if (name === "then") return undefined;
               return async (...args: unknown[]) => {
                 const timeout = options.timeout ?? 15000,
-                  deadline = Date.now() + timeout,
-                  watchdog = performance.now() + timeout + 30000;
+                  deadline = Date.now() + timeout, stalled=clockStalled();
                 const intervals = options.intervals ?? [100, 250, 500, 1000];
                 let attempt = 0,
                   failure: unknown;
@@ -58,7 +65,7 @@ export const expect: typeof nativeExpect = new Proxy(nativeExpect, {
                   } catch (error) {
                     failure = error;
                   }
-                  if (Date.now() >= deadline || performance.now() >= watchdog)
+                  if (Date.now() >= deadline || stalled())
                     throw new Error(
                       `${options.message || "ChronAL gameplay poll expired"}: ${String(failure)}`,
                     );
