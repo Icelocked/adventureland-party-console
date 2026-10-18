@@ -90,3 +90,7 @@ npm run test:e2e -- --project=live --grep 'armadillo Hunt kills passing goos out
 ```
 
 Each `browser-rendering-cpu` attachment records the actual GL renderer, GPU driver/features and native process CPU counters. Compare summed CPU seconds divided by summed native elapsed seconds. `averageMachinePercent` additionally divides by the logical processor count. Reject incomplete measurements if a baseline process exited. Clear the measurement/expected-GPU environment variables after diagnostics.
+
+## Linux CI bootstrap metadata
+
+Global setup verifies the completed console candidate, then passes only its app directory and immutable manifest path in E2E_DASHBOARD_CANDIDATE. Reporters read the full manifest from disk so artifact hashes and benchmark provenance remain complete. Do not serialize the full candidate into subprocess environments: the current manifest exceeds Linux's 128 KiB per-entry limit and causes E2BIG before ChronAL setup starts, even when the same run succeeds on Windows. Use the direct test:e2e npm script when forwarding project selectors through CI; nested npm test invocations can consume those flags and accidentally run all gameplay cases again in the console/debug job.

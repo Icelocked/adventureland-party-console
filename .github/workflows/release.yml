@@ -27,7 +27,7 @@ jobs:
       - run: node scripts/ci/restore-game-fixtures.cjs
       - run: npx playwright install --with-deps chromium
       - name: Console, deployment and debug E2E
-        run: npm test -- --project=console --project=debug && npm run test:e2e:verify
+        run: npm run test:e2e -- --project=console --project=debug && npm run test:e2e:verify
       - name: Retained isolated regression exceptions
         shell: bash
         run: |

@@ -18,12 +18,13 @@ const git = (...args) => gitRaw(...args).trim();
 class ArtifactReporter {
   onBegin(config, suite) {
     this.started = new Date().toISOString(); this.tests = [];
+    const candidate=JSON.parse(process.env.E2E_DASHBOARD_CANDIDATE||'null');
     this.provenance = {
       revision: git('rev-parse', 'HEAD'), branch: git('branch', '--show-current'),
       dirty: git('status', '--porcelain').length > 0,
       node: process.version, platform: process.platform,
       workers:config.workers,
-      dashboardCandidate:JSON.parse(process.env.E2E_DASHBOARD_CANDIDATE||'null')?.manifest,
+      dashboardCandidate:candidate?JSON.parse(fs.readFileSync(candidate.manifestPath,'utf8')):null,
       gamePools:JSON.parse(process.env.E2E_GAME_POOLS||'[]').map(({host,project})=>({host,project})),
       playwright: require('@playwright/test/package.json').version,
       gameplayBackend:process.env.E2E_GAMEPLAY_BACKEND==='native'?'native':'chronal-network',

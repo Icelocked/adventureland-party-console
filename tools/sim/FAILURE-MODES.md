@@ -129,3 +129,12 @@ Hardware rendering validation plan (before implementation)
 - Keep native graphics, canvases, animation frames, video settings, browser/deployment assertions and gameplay behavior intact. Changing time acceleration or removing graphics would invalidate the rendering-only comparison.
 - Default local runs to hardware; CI stays software unless explicitly overridden. Validate renderer mode input and document the override. Add optional retained measurement receipts to the existing live fixture; do not create unit tests after implementation.
 - After the full benchmark ends and changes are applied, typecheck and run the existing armadillo passing-Goo Hunt focused case repeatedly on software and hardware. Verify evidence hashes, exact case identities, actual RTX5090 renderer, stable process accounting and CPU reduction. Complete and verify a matching immutable console candidate without activating it.
+
+
+CI bootstrap failure modes and validation plan, before implementation:
+- Whole verified candidate manifests exceed Linux's per-environment-entry limit and break every inherited subprocess, not just ChronAL install. Export only directory + immutable manifest path before spawning anything. Do not merely move the oversized assignment later.
+- Dashboard serving still requires the verified candidate app directory. Keep its scoped-path validation and preserve global setup verification/source matching.
+- Reports and benchmark provenance still require the complete manifest, including all file hashes. Read it from the immutable verified artifact; missing/corrupt files must not silently remove provenance.
+- A warm ChronAL cache can conceal the cold setup spawn, and Windows does not reproduce Linux's limit. Validate actual compact metadata inherited by Node24.14 Linux child processes, including a read of the complete real manifest; retain the preceding E2BIG reproduction as negative evidence.
+- Nested npm test scripts discard project-selection flags in current CI validate job, duplicating the full gameplay suite instead of console/debug only. Use the direct test:e2e script, and validate actual discovery/invocation without dropping browser or deployment scenarios. Gameplay remains on all16 dedicated shards.
+- Run a focused existing console E2E and an existing ChronAL real-game/CODE-restart E2E with one worker, verify complete report metadata/evidence, and finish a matching immutable console candidate without activation. Push to the existing PR branch and inspect CI startup/results.

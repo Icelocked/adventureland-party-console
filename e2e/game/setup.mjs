@@ -2,6 +2,7 @@ import { up, down, logs } from './manage.mjs';
 import {execFileSync} from 'node:child_process';
 import {readFileSync,existsSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
+import path from 'node:path';
 import {ConsoleBuildStore} from '../../tools/console-build/store.ts';
 import {buildCandidate,sourceFingerprint} from '../../tools/console-build/builder.ts';
 import {gameHosts} from './addresses.cjs';
@@ -18,7 +19,10 @@ export default async function setup(config) {
   const candidate=latest?.sourceHash===hash?undefined:await buildCandidate(root,store);
   const verified=await store.verify(candidate?.manifest.id||latest.id);
   if(verified.manifest.sourceHash!==hash)throw Error('E2E dashboard candidate does not match source');
-  process.env.E2E_DASHBOARD_CANDIDATE=JSON.stringify(verified);
+  // Linux limits each environment entry to 128 KiB. Keep the verified full
+  // manifest on disk; child processes inherit only its immutable location.
+  process.env.E2E_DASHBOARD_CANDIDATE=JSON.stringify({directory:verified.directory,
+    manifestPath:path.resolve(verified.directory,'../manifest.json')});
   const accelerated=process.env.E2E_GAMEPLAY_BACKEND!=='native';
   if(liveSelected&&accelerated){
     if(Number(process.versions.node.split('.')[0])<24)throw Error('ChronAL gameplay E2E requires Node 24+; E2E_GAMEPLAY_BACKEND=native selects native parity execution');
