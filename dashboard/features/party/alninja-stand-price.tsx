@@ -110,3 +110,35 @@ export function AlninjaBidPrice({ item, level, server, onApply }: { item: Item; 
     </div>
   </div>;
 }
+
+/** Warns (never blocks) when an item marked for NPC sale really sells for far more: at least
+ * `minUnits` sold in the last week at this level and variant, at a median at least `minAbove` gold
+ * over the NPC price. Unsold asks don't count. */
+export function AlninjaNpcSaleWarning({ item, npcPrice, server, settings }: {
+  item: Item; npcPrice: number; server?: string | null; settings?: { minUnits: number; minAbove: number };
+}) {
+  const region = regionOf(server), level = Number(item.level) || 0, variant = variantOf(item);
+  const { minUnits, minAbove } = settings || { minUnits: 3, minAbove: 1_000_000 };
+  const query = useQuery({
+    queryKey: ["alninja-sales", item.name, level, variant, region],
+    queryFn: async () => {
+      const params = new URLSearchParams({ item: item.name, level: String(level), variant, region });
+      const response = await fetch(`${API}/alninja/sales?${params}`);
+      const body = await response.json() as { error?: string; units?: number; median?: number | null };
+      if (!response.ok) throw new Error(body?.error || `HTTP ${response.status}`);
+      return body;
+    },
+    staleTime: 60_000,
+    retry: false,
+  });
+  const units = Number(query.data?.units) || 0, median = Number(query.data?.median) || 0;
+  const warn = units >= minUnits && median >= npcPrice + minAbove;
+  const check = query.isPending ? "pending" : warn ? "warn" : "clear";
+  return <span data-alninja-npc-check={check} className={warn ? "block" : "hidden"}>
+    {warn && <span role="status" className="block rounded border border-amber-500/70 bg-amber-950/40 p-3 text-sm text-amber-100">
+      <span className="font-semibold">Players pay well over the NPC price.</span>{" "}
+      ALNinja ({region}): {units.toLocaleString()} sold in the last 7 days at a median of {Math.round(median).toLocaleString()} gold,
+      against {Math.round(npcPrice).toLocaleString()} gold each from the NPC. Consider the stand instead.
+    </span>}
+  </span>;
+}

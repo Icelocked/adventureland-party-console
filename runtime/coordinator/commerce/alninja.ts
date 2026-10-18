@@ -10,7 +10,11 @@ export interface AlninjaSettings {
   token: string;
   key: string;
   keyOwner: string | null;
+  /** NPC-sale dialogs warn when at least `minUnits` sold in the last week at a median at least
+   * `minAbove` gold over the NPC price. */
+  npcWarning: NpcWarning;
 }
+export interface NpcWarning { minUnits: number; minAbove: number }
 interface AlninjaState {
   alninja: AlninjaSettings;
   alninjaReporting: boolean;
@@ -40,10 +44,18 @@ const regions = ["ALL", "US", "EU", "ASIA"];
 // ALNinja accepts 12 reports a minute per key; the admin token is not limited.
 const keyReportsPerMinute = 11;
 
+const defaultNpcWarning: NpcWarning = { minUnits: 3, minAbove: 1_000_000 };
+const whole = (value: unknown, min: number, max: number) =>
+  Number.isSafeInteger(Number(value)) && Number(value) >= min && Number(value) <= max ? Number(value) : null;
+function npcWarningOf(value: unknown): NpcWarning | null {
+  const input = requestObject(value), minUnits = whole(input.minUnits, 1, 100_000), minAbove = whole(input.minAbove, 0, 1e13);
+  return minUnits === null || minAbove === null ? null : { minUnits, minAbove };
+}
+
 export function initialAlninja(saved: unknown): AlninjaSettings {
   const value = requestObject(saved);
   return { enabled: value.enabled === true, token: requestText(value.token), key: requestText(value.key),
-    keyOwner: requestText(value.keyOwner) || null };
+    keyOwner: requestText(value.keyOwner) || null, npcWarning: npcWarningOf(value.npcWarning) || { ...defaultNpcWarning } };
 }
 
 const credential = (settings: AlninjaSettings) =>
@@ -57,8 +69,8 @@ export function createAlninja(state: AlninjaState, ports: AlninjaPorts) {
   let keyReports: number[] = [];
 
   function snapshot() {
-    const { enabled, token, key, keyOwner } = state.alninja;
-    return { enabled, hasToken: !!token, hasKey: !!key, keyOwner, reporting: state.alninjaReporting, reporters };
+    const { enabled, token, key, keyOwner, npcWarning } = state.alninja;
+    return { enabled, hasToken: !!token, hasKey: !!key, keyOwner, npcWarning, reporting: state.alninjaReporting, reporters };
   }
   function settings(req: HttpRequest, res: HttpResponse): unknown {
     const body = requestObject(req.body), next = { ...state.alninja };
@@ -68,6 +80,11 @@ export function createAlninja(state: AlninjaState, ports: AlninjaPorts) {
       next.token = token;
     }
     if (body.enabled !== undefined) next.enabled = body.enabled === true;
+    if (body.npcWarning !== undefined) {
+      const npcWarning = npcWarningOf(body.npcWarning);
+      if (!npcWarning) return res.status(400).json({ error: "npcWarning: minUnits 1 or more, minAbove 0 or more, whole numbers" });
+      next.npcWarning = npcWarning;
+    }
     update(next);
     return res.json(snapshot());
   }
@@ -103,7 +120,7 @@ export function createAlninja(state: AlninjaState, ports: AlninjaPorts) {
     }
   }
   /** One public ALNinja GET, shared and cached for a minute. */
-  async function cached(res: HttpResponse, path: string): Promise<unknown> {
+  async function cached(res: HttpResponse, path: string, shape: (body: Record<string, unknown>) => Record<string, unknown> = (body) => body): Promise<unknown> {
     const base = ports.baseUrl(), key = `${base}\u0000${path}`;
     let entry = prices.get(key);
     if (!entry || ports.now() - entry.at > priceLifetimeMs) {
@@ -117,7 +134,7 @@ export function createAlninja(state: AlninjaState, ports: AlninjaPorts) {
       value.catch(() => prices.delete(key));
     }
     try {
-      return res.json({ source: base, ...requestObject(await entry.value) });
+      return res.json({ source: base, ...shape(requestObject(await entry.value)) });
     } catch (error) {
       return res.status(502).json({ error: error instanceof Error ? error.message : String(error) });
     }
@@ -141,6 +158,21 @@ export function createAlninja(state: AlninjaState, ports: AlninjaPorts) {
     const merchant = ports.merchant();
     if (merchant) params.set("exclude", merchant);
     return cached(res, `/api/v1/value/${encodeURIComponent(item)}?${params}`);
+  }
+  /** Last week's recorded sales of one item at a level and variant: units, trades and the median
+   * price per unit, for the NPC-sale warning. */
+  async function sales(req: HttpRequest, res: HttpResponse): Promise<unknown> {
+    const query = requestObject(req.query), item = requestText(query.item), level = Number(query.level), variant = requestText(query.variant);
+    if (!itemPattern.test(item)) return res.status(400).json({ error: "item: an item id" });
+    if (!Number.isInteger(level) || level < 0 || level > 20) return res.status(400).json({ error: "level: 0 to 20" });
+    return cached(res, `/api/v1/sales?item=${encodeURIComponent(item)}&hours=168&limit=2000&region=${regionOf(query)}`, (body) => {
+      const rows = (Array.isArray(body.sales) ? body.sales : []).map(requestObject)
+        .filter((sale) => Number(sale.level) === level && requestText(sale.variant) === variant && Number(sale.price) > 0);
+      const prices = rows.flatMap((sale) => Array<number>(Math.max(1, Math.floor(Number(sale.quantity) || 1))).fill(Number(sale.price)))
+        .sort((a, b) => a - b);
+      const median = prices.length ? (prices.length % 2 ? prices[(prices.length - 1) / 2] : (prices[prices.length / 2 - 1] + prices[prices.length / 2]) / 2) : null;
+      return { item, level, variant, hours: 168, units: prices.length, trades: rows.length, median };
+    });
   }
   function update(next: AlninjaSettings) {
     state.alninja = next;
@@ -178,5 +210,5 @@ export function createAlninja(state: AlninjaState, ports: AlninjaPorts) {
       return res.status(502).json({ error: error instanceof Error ? error.message : String(error) });
     }
   }
-  return { snapshot, settings, report, price, value, generateKey, revealKey, auth };
+  return { snapshot, settings, report, price, value, sales, generateKey, revealKey, auth };
 }

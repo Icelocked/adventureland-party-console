@@ -36,7 +36,7 @@ import { abbreviatedGold } from './abbreviated-gold';
 import { npcSaleValue } from './npc-sale-value';
 import { RoutinePrioritiesDialog } from './routine-priorities-dialog';
 import { StandPriceButton } from './stand-price-button';
-import { AlninjaStandPrice } from './alninja-stand-price';
+import { AlninjaNpcSaleWarning, AlninjaStandPrice } from './alninja-stand-price';
 import type { PartyConsoleModel } from './use-party-console';
 
 import { usePanelModel } from './use-panel-model';
@@ -509,6 +509,9 @@ function PartyManagementPanelsConnected({ base }: { base: PartyConsoleModel }) {
                 </p>
               </div>
             ) : null}
+            {autoNpcSaleItem && <AlninjaNpcSaleWarning item={autoNpcSaleItem.item}
+              npcPrice={npcSaleValue(autoNpcSaleItem.item, autoNpcSaleItem.meta)}
+              server={state.merchantCharacter ? state.characters[state.merchantCharacter]?.server : null} settings={state.alninja?.npcWarning} />}
             {autoNpcSaleItem && !autoNpcSaleItem.character ? (
               <label htmlFor="auto-npc-sale-keep" className="grid gap-1 text-sm text-orange-100">
                 <span>Keep in storage</span>
@@ -620,6 +623,9 @@ function PartyManagementPanelsConnected({ base }: { base: PartyConsoleModel }) {
                 </span>
               </div>
             ) : null}
+            {npcSaleItem && <AlninjaNpcSaleWarning item={npcSaleItem.entry.item}
+              npcPrice={npcSaleValue(npcSaleItem.entry.item, npcSaleItem.entry.meta)}
+              server={state.merchantCharacter ? state.characters[state.merchantCharacter]?.server : null} settings={state.alninja?.npcWarning} />}
             {npcSaleItem &&
             (Number(npcSaleItem.entry.item.level || 0) > 0 ||
               npcSaleItem.entry.item.stat_type ||

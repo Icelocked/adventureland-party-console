@@ -14,6 +14,7 @@ export interface AlninjaStatus {
   hasToken: boolean;
   hasKey: boolean;
   keyOwner: string | null;
+  npcWarning?: { minUnits: number; minAbove: number };
   reporting: boolean;
   reporters: Record<string, LastReport>;
 }
@@ -40,6 +41,9 @@ export function AlninjaSettings({ status, onPrepareMail }: { status?: AlninjaSta
   const [keyVisible, setKeyVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [minUnits, setMinUnits] = useState<string | null>(null);
+  const [minAbove, setMinAbove] = useState<string | null>(null);
+  const warning = status?.npcWarning || { minUnits: 3, minAbove: 1_000_000 };
   // Until ALNinja confirms the mailed key, check every 15 seconds while settings are open.
   const auth = useQuery({
     queryKey: ["party", "alninja-auth", status?.hasKey, status?.keyOwner],
@@ -106,6 +110,23 @@ export function AlninjaSettings({ status, onPrepareMail }: { status?: AlninjaSta
       the usual mail fee. ALNinja picks it up within a minute; reporting starts once it confirms the key. Each character then
       reports the stand trades it sees and its own trades, within seconds of a trade and at least once a minute.
     </p>
+    <div className="mt-4 border-t border-slate-800 pt-3 text-xs text-slate-300">
+      <p className="font-semibold text-slate-100">NPC-sale warning</p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        Warn when at least
+        <Input inputMode="numeric" aria-label="Units sold in the last week" className="h-8 w-20 border-slate-800 bg-black/40 font-mono text-xs"
+          value={minUnits ?? String(warning.minUnits)} onChange={event => setMinUnits(event.target.value.replace(/[^0-9]/g, ""))} />
+        sold in the last 7 days at
+        <Input inputMode="numeric" aria-label="Gold over the NPC price" className="h-8 w-32 border-slate-800 bg-black/40 font-mono text-xs"
+          value={minAbove ?? String(warning.minAbove)} onChange={event => setMinAbove(event.target.value.replace(/[^0-9]/g, ""))} />
+        gold or more over the NPC price
+        <Button size="sm" disabled={minUnits === null && minAbove === null} className="bg-slate-700 text-white hover:bg-slate-600"
+          onClick={() => { action.reset(); action.mutate({ path: "/alninja", body: { npcWarning: {
+            minUnits: Number(minUnits ?? warning.minUnits), minAbove: Number(minAbove ?? warning.minAbove) } } },
+            { onSuccess: () => { setMinUnits(null); setMinAbove(null); } }); }}>Save</Button>
+      </div>
+      <p className="mt-1 text-slate-400">Shown in the Sell to NPC and auto-sale dialogs, from ALNinja&rsquo;s recorded sales at the item&rsquo;s level. It never stops a sale.</p>
+    </div>
     <details className="mt-3 text-xs text-slate-400">
       <summary className="cursor-pointer">Instance admin token</summary>
       <div className="mt-2 flex gap-2">

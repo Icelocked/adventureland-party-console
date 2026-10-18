@@ -20,6 +20,20 @@ async function standIn() {
       response.writeHead(suggestion ? 200 : 404, { 'Content-Type': 'application/json' });
       return response.end(JSON.stringify(suggestion ? { item: value[1], ...Object.fromEntries(new URLSearchParams(value[2])), ...suggestion } : { error: 'Unknown item' }));
     }
+    const sales = /^\/api\/v1\/sales\?(.*)$/.exec(request.url || '');
+    if (sales) {
+      // Last week's sales. Helmet +0: 4 units at 2.4–2.6m (plus a +1 and an old sale that must not count).
+      // Shoes +0: 5 units at 400k, regular but under the default 1m margin.
+      const q = new URLSearchParams(sales[1]), now = Date.now(), hour = 3_600_000;
+      const rows = q.get('item') === 'helmet' ? [
+        { level: 0, variant: '', price: 2_400_000, quantity: 1, at: now - 2 * hour }, { level: 0, variant: '', price: 2_500_000, quantity: 2, at: now - 30 * hour },
+        { level: 0, variant: '', price: 2_600_000, quantity: 1, at: now - 100 * hour }, { level: 1, variant: '', price: 9_000_000, quantity: 5, at: now - hour },
+        { level: 0, variant: 'shiny', price: 9_000_000, quantity: 5, at: now - hour },
+      ] : q.get('item') === 'shoes' ? [{ level: 0, variant: '', price: 400_000, quantity: 5, at: now - 5 * hour }] : [];
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      return response.end(JSON.stringify({ region: q.get('region'), since: now - Number(q.get('hours')) * hour,
+        sales: rows.map(r => ({ source: 'estimated', item: q.get('item'), side: 'sell', merchant: 'Other', region: 'US', ...r })) }));
+    }
     const match = /^\/api\/v1\/prices\/(\w+)\?region=(\w+)$/.exec(request.url || '');
     const rows = match?.[1] === 'hpot0' ? [
       { item: 'hpot0', level: 0, variant: 'shiny', price: 999, lowest: 990, median: 995, bestBid: 900, sellers: 1, buyers: 1, soldPerDay: 0, stale: false },
@@ -122,4 +136,55 @@ test('the WTB order dialog offers ALNinja\'s best bid and cheapest seller for th
   await dialog.getByRole('button', { name: button('ALNinja outbid') }).click();
   await expect(price).toHaveValue('7010000');
   await info.attach('alninja-wtb-price', { body: await page.screenshot(), contentType: 'image/png' });
+});
+
+test('NPC sale dialogs warn when an item sells for millions over the NPC price, with configurable thresholds', async ({ live, page }, info) => {
+  test.setTimeout(240_000);
+  // 6: defaults, then a lowered margin.
+  await live.post('/alninja', { npcWarning: { minUnits: 3, minAbove: 1_000_000 } });
+  await seed(live, 'helmet');
+  await page.goto(live.url);
+  // 1, 5: the Sell to NPC dialog shows last week's units and median against the NPC price.
+  await (await inventoryItem(page, 'Helmet')).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Sell to NPC…', exact: true }).click();
+  let dialog = page.getByRole('dialog', { name: 'Sell to NPC?' });
+  const warning = dialog.getByRole('status').filter({ hasText: 'Players pay well over the NPC price' });
+  await expect(warning).toBeVisible({ timeout: 30_000 });
+  // 3: only this level and variant count.
+  await expect(warning).toContainText('4 sold in the last 7 days at a median of 2,500,000');
+  // 4: the sale stays available.
+  await expect(dialog.getByRole('button', { name: 'Sell to NPC', exact: true })).toBeEnabled();
+  await info.attach('alninja-npc-warning', { body: await page.screenshot(), contentType: 'image/png' });
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  // 1: the automatic NPC sale dialog warns too.
+  await (await inventoryItem(page, 'Helmet')).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Auto sell to NPC…', exact: true }).click();
+  dialog = page.getByRole('dialog', { name: 'Automatically sell to NPC?' });
+  await expect(dialog.getByRole('status').filter({ hasText: 'Players pay well over the NPC price' })).toBeVisible({ timeout: 30_000 });
+  await expect(dialog.getByRole('button', { name: 'Enable auto sale' })).toBeEnabled();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  // 2: 400k a unit sells regularly but is under the 1m margin.
+  await seed(live, 'shoes');
+  const shoesWarning = async () => {
+    await (await inventoryItem(page, 'Shoes')).click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Sell to NPC…', exact: true }).click();
+    const sale = page.getByRole('dialog', { name: 'Sell to NPC?' });
+    await expect(sale.locator('[data-alninja-npc-check]:not([data-alninja-npc-check="pending"])')).toHaveCount(1, { timeout: 30_000 });
+    const shown = await sale.getByText('Players pay well over the NPC price').count();
+    await sale.getByRole('button', { name: 'Cancel' }).click();
+    return shown;
+  };
+  expect(await shoesWarning()).toBe(0);
+  // 6: the margin is set in Settings → ALNinja, survives a coordinator restart and applies to the next dialog.
+  await page.getByRole('button', { name: 'Interface settings' }).click();
+  const settings = page.getByRole('dialog');
+  await expect(settings.getByLabel('Units sold in the last week')).toHaveValue('3');
+  await settings.getByLabel('Gold over the NPC price').fill('300000');
+  await settings.getByText('NPC-sale warning').locator('..').getByRole('button', { name: 'Save' }).click();
+  await expect.poll(async () => (await live.state()).alninja.npcWarning.minAbove, { timeout: 15_000 }).toBe(300_000);
+  await page.keyboard.press('Escape');
+  await live.restartCoordinator();
+  expect((await live.state()).alninja.npcWarning).toEqual({ minUnits: 3, minAbove: 300_000 });
+  await page.reload();
+  expect(await shoesWarning()).toBe(1);
 });
