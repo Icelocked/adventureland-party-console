@@ -7,16 +7,16 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 | | |
 |---|---|
 | Upstream base | `1.5-feature-branch` @ 849c38a, merged as 53a3cd6 on 10-16 (branch `adopt/1.5`, from `main`). Carries v1.4.0 (PR #64, b4443e4) plus the ChronAL simulation harness (7f81f71) and accelerated gameplay E2Es (849c38a) |
-| Fork head | `adopt/1.5` @ the commit recording this (after ab0c3f3), pushed to origin; `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
-| Divergence | 0 behind; 214 files differ from upstream’s tip (849c38a) |
-| Checked | 2026-10-16, against every upstream issue, comment and PR (#13–#131); #136 and #137 filed 10-17 |
+| Fork head | `adopt/1.5` @ the commit recording this (after b22fcc6), pushed to origin; `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
+| Divergence | 0 behind; 222 files differ from upstream’s tip (849c38a) |
+| Checked | 2026-10-16, against every upstream issue, comment and PR (#13–#131); #136 and #137 filed 10-17, #138 filed 10-17 |
 
 | Status | Count |
 |---|---|
 | New issue | 0 |
 | Update / comment | 9 (2 to do) |
 | Done upstream | 39 |
-| Matches | 17 (all done but #129 and #130, not commented) |
+| Matches | 18 (all done but #129 and #130, not commented) |
 | Open upstream | 21 |
 | Closed | 19 |
 | Fork-only | 7 |
@@ -197,6 +197,7 @@ A comment saying where it's implemented, with the commit link, is enough.
 
 | Issue | Feature | Fork commits | Note |
 |---|---|---|---|
+| [#138](https://github.com/Ryan-Haines/adventureland-party-console/issues/138) filed 10-17 | Keep a fighter's elixir active: merchant restock and auto-drink | [b22fcc6](https://github.com/Thefonze74065/adventureland-party-console/commit/b22fcc6) | An `elixir` restock supply (default `elixirluck`, off at max 0) beside HP/MP: `/restock`, default policy, completion check, scheduling, dashboard import and "Luck elixir min/max" controls. The merchant walks to the seller by name (Warin's aisle approach) and withdraws bank gold for a shortfall; `restockPolicies` joins the heartbeat state, and a fighter with no active elixir drinks the one its policy names. `live-elixir-restock.spec.ts`; `live-equipment` and `live-economy` pass |
 | [#137](https://github.com/Ryan-Haines/adventureland-party-console/issues/137) filed 10-17 | Rogue: sustain Fan of Knives while scatter farming mobs it one-shots | [dbadfe7](https://github.com/Thefonze74065/adventureland-party-console/commit/dbadfe7) | Gated on `fanFarming` (Knife Belt rogue, scatter mode, a mob Fan of Knives kills outright): MP potions whenever a whole one fits (no `regen_mp` lockout), no sustained-budget throttle on Fan of Knives (20% reserve kept), Quick Stab/Punch dropped and Mental Burst only when its kill refund covers its cost, no Assassin's Smoke opener, and a stand within Fan of Knives range toward the nearby cluster. `live-rogue-fan-scatter.spec.ts` (native spawn and a declared sparse layout); depends on #136 |
 | [#136](https://github.com/Ryan-Haines/adventureland-party-console/issues/136) filed 10-17 | Multi-target skills never add extra targets: combat context copies lose x/y | [dbadfe7](https://github.com/Thefonze74065/adventureland-party-console/commit/dbadfe7) | `combatContext()` copied monsters with `Object.assign`, which skips the PIXI `x`/`y` accessors, so farm-area authorization rejected every extra Fan of Knives / 3-shot / 5-shot target. The copy now carries `x`/`y`. Found during the #137 control run |
 | [#130](https://github.com/Ryan-Haines/adventureland-party-console/issues/130) maintainer, not commented | Stand item with "Purchase outcome unconfirmed; reconciliation required" | [bf5da1b](https://github.com/Thefonze74065/adventureland-party-console/commit/bf5da1b) | The unconfirmed-purchase state that #124 filed: the fork's `resolve-purchase` flow and the WTB row's "It was bought / It wasn't" controls clear it. Comment pointing to #124 |
@@ -307,4 +308,4 @@ These belong with the features they split.
 
 Removed on 10-08 when adopting 1.4, because no upstream issue represents it. A faster character kept walking its path, and `afterCombat` got an escape option for event return, travel and party assembly.
 
-This ledger was built from `git log upstream/bugfix-1.4..adopt/bugfix-1.4` (upstream at 9273ecb, merged as 400fb81), and all upstream issues #13–#131, comments and PRs as of 2026-10-16 (#136 and #137 filed by the fork on 10-17). Icelocked opened #28, #47, #59–#63 and #86, and [PR #131](https://github.com/Ryan-Haines/adventureland-party-console/pull/131) (replacing #89); comment on those rather than editing them.
+This ledger was built from `git log upstream/bugfix-1.4..adopt/bugfix-1.4` (upstream at 9273ecb, merged as 400fb81), and all upstream issues #13–#131, comments and PRs as of 2026-10-16 (#136, #137 and #138 filed by the fork on 10-17). Icelocked opened #28, #47, #59–#63 and #86, and [PR #131](https://github.com/Ryan-Haines/adventureland-party-console/pull/131) (replacing #89); comment on those rather than editing them.
