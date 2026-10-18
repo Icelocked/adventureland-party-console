@@ -7,16 +7,16 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 | | |
 |---|---|
 | Upstream base | `1.5-feature-branch` @ 3ddec7d, merged as 98f25b5 on 10-18 (branch `adopt/1.5`, from `main`; previous merge 53a3cd6 of 849c38a on 10-16). Carries v1.4.0 (PR #64, b4443e4), the ChronAL simulation harness (7f81f71) and all gameplay E2Es on ChronAL (3ddec7d) |
-| Fork head | `adopt/1.5` @ the commit recording this (after 9c20e03), not pushed (d03e538 pushed 10-18); `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
+| Fork head | `adopt/1.5` @ the commit recording this (after 85402f9), not pushed (d03e538 pushed 10-18); `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
 | Divergence | 0 behind; 237 files differ from upstream’s tip (3ddec7d) |
-| Checked | 2026-10-16, against every upstream issue, comment and PR (#13–#131); #136 and #137 filed 10-17, #138 filed 10-17, #142 and #143 filed 10-18 |
+| Checked | 2026-10-16, against every upstream issue, comment and PR (#13–#131); #136 and #137 filed 10-17, #138 filed 10-17, #142, #143 and #144 filed 10-18 |
 
 | Status | Count |
 |---|---|
-| New issue | 2 |
+| New issue | 1 |
 | Update / comment | 9 (2 to do) |
 | Done upstream | 39 |
-| Matches | 20 (all done but #129 and #130, not commented) |
+| Matches | 21 (all done but #129 and #130, not commented) |
 | Open upstream | 21 |
 | Closed | 19 |
 | Fork-only | 8 |
@@ -24,13 +24,6 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 ## New issue: not represented upstream
 
 Implemented on the fork, with no upstream issue or PR describing it yet.
-
-### Skills sharing the attack cooldown lose slots to basic attacks
-
-Not filed yet. Fork fix in the commit recording this (10-18).
-
-- The attack controller swings once the shared attack cooldown has at most 2 ms left (`remaining() <= 2`), but the skill world's `cooldown()` treated `next_skill.attack` and the skill's own entry (`next_skill.fanofknives`, set to the same time) as cooling down to the exact millisecond. `blocked()` returned `cooldown`, `attackChoices` dropped the skill without a diagnostic, and the slot fell to a basic attack. Upstream code at 3ddec7d; affects Fan of Knives and the ranger's 3-shot and 5-shot.
-- Live: FonzeRogue made about 46 basic attacks in 54 s of crab farming with MP to spare. Fix: skills sharing `attack` are ready on the same 2 ms edge. `live-rogue-fan-crab.spec.ts`: control 12–40 basic attacks a minute with MP for a cast; with the fix none, and Fan of Knives casts rose from about 60 to 74 a minute.
 
 ### Dashboard bag keeps items the character no longer has
 
@@ -209,6 +202,7 @@ A comment saying where it's implemented, with the commit link, is enough.
 
 | Issue | Feature | Fork commits | Note |
 |---|---|---|---|
+| [#144](https://github.com/Ryan-Haines/adventureland-party-console/issues/144) filed 10-18 | Skills sharing the attack cooldown lose slots to basic attacks | [85402f9](https://github.com/Thefonze74065/adventureland-party-console/commit/85402f9) | The skill world's `cooldown()` gives skills sharing `attack` the controller's 2 ms swing edge. Inventory `e2e/rogue-fan-crab-failures.md`, journey `live-rogue-fan-crab.spec.ts`. [#137 comment](https://github.com/Ryan-Haines/adventureland-party-console/issues/137#issuecomment-6252090346) links it |
 | [#143](https://github.com/Ryan-Haines/adventureland-party-console/issues/143) filed 10-18 | Manual upgrades of identical items stop as "recovery ambiguous" after the inventory tidy moves them | the commit recording this | `findUpgradeMarkSlot` gets the command's marks: copies still in another request's slot stay with it, and identical remaining copies are interchangeable. Inventory `e2e/manual-upgrade-duplicates-failures.md` |
 | [#142](https://github.com/Ryan-Haines/adventureland-party-console/issues/142) filed 10-18 | E2E global setup fails on Linux with `spawnSync E2BIG` | the commit recording this | `E2E_DASHBOARD_CANDIDATE` carries the directory and the manifest without its per-file hashes (about 248 KB with them, over Linux's 128 KiB per-string limit). Inventory `e2e/dashboard-candidate-env-failures.md` |
 | [#138](https://github.com/Ryan-Haines/adventureland-party-console/issues/138) filed 10-17 | Keep a fighter's elixir active: merchant restock and auto-drink | [b22fcc6](https://github.com/Thefonze74065/adventureland-party-console/commit/b22fcc6) | An `elixir` restock supply (default `elixirluck`, off at max 0) beside HP/MP: `/restock`, default policy, completion check, scheduling, dashboard import and "Luck elixir min/max" controls. The merchant walks to the seller by name (Warin's aisle approach) and withdraws bank gold for a shortfall; `restockPolicies` joins the heartbeat state, and a fighter with no active elixir drinks the one its policy names. `live-elixir-restock.spec.ts`; `live-equipment` and `live-economy` pass |
