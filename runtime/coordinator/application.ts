@@ -1123,6 +1123,7 @@ export function startCoordinatorApplication(
         owned: ownedCharacter,
         now: () => Date.now(),
         persistHistory,
+        persistHistoryNow: () => persistence.historyNow(),
         data: gameDataPorts,
         every: (callback, milliseconds) => setInterval(callback, milliseconds),
         cancel: (timer: ReturnType<typeof setInterval>) => clearInterval(timer),
