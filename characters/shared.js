@@ -4218,7 +4218,9 @@
       // Read both sides together, preserving exact identity, lock and quantity.
       var inventory = bankSortItemState(character.items[entry.slot]);
       var bank = bankSortItemState(character.bank[expected.pack][expected.slot]);
-      if (inventory === expected.inventory && bank === expected.bank) {
+      // A later deposit can refill the freed bank cell before the swap is confirmed: the swap
+      // happened once the incoming item is in the buffer slot and no longer in that cell.
+      if (inventory === expected.inventory && (bank === expected.bank || bank !== expected.inventory)) {
         delete entry.pending;
         saveBankSortBuffers(bankSortBufferJournal());
         return;

@@ -7,13 +7,13 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 | | |
 |---|---|
 | Upstream base | `1.5-feature-branch` @ 3ddec7d, merged as 98f25b5 on 10-18 (branch `adopt/1.5`, from `main`; previous merge 53a3cd6 of 849c38a on 10-16). Carries v1.4.0 (PR #64, b4443e4), the ChronAL simulation harness (7f81f71) and all gameplay E2Es on ChronAL (3ddec7d) |
-| Fork head | `adopt/1.5` @ the commit recording this (after 85402f9), not pushed (d03e538 pushed 10-18); `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
+| Fork head | `adopt/1.5` @ the commit recording this (after c565101), not pushed (d03e538 pushed 10-18); `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
 | Divergence | 0 behind; 237 files differ from upstream’s tip (3ddec7d) |
 | Checked | 2026-10-16, against every upstream issue, comment and PR (#13–#131); #136 and #137 filed 10-17, #138 filed 10-17, #142, #143 and #144 filed 10-18 |
 
 | Status | Count |
 |---|---|
-| New issue | 1 |
+| New issue | 2 |
 | Update / comment | 9 (2 to do) |
 | Done upstream | 39 |
 | Matches | 21 (all done but #129 and #130, not commented) |
@@ -24,6 +24,13 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 ## New issue: not represented upstream
 
 Implemented on the fork, with no upstream issue or PR describing it yet.
+
+### Bank sort swap journal blocks the merchant when the freed cell is refilled
+
+Not filed yet. Fork fix in the commit recording this (10-18).
+
+- `settleBankSortSwap` confirms a journaled swap only when both the inventory buffer slot and the bank cell match the post-swap state exactly. A deposit that refills the freed cell before confirmation (or across a reload, since the journal persists) means it never confirms: every merchant job then fails with `Bank sort swap not confirmed; recovery pending`. Upstream code at 3ddec7d.
+- Live: FonzeMerch's journal expected Talking Skull +0 in slot 11 (it was) and `items3` slot 34 empty (it held a Candy); auto upgrades, compounds, NPC sales and exchanges failed every ~6 s. Fix: the swap counts as confirmed once the incoming item is in the buffer slot and no longer in the cell. `live-bank-sort-journal.spec.ts`: control repeats the error; with the fix the journal clears, the Helmet returns to the bank and the Candy stays.
 
 ### Dashboard bag keeps items the character no longer has
 
