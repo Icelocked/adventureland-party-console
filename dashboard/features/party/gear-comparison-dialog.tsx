@@ -27,7 +27,7 @@ import { propertiesAtLevel } from './properties-at-level';
 import { statBadgeClass } from './stat-badge-class';
 import { STAT_SCROLLS } from './stat-scrolls';
 import { GameBox } from './item-card';
-import { STAT_COLORS as S } from './stat-colors';
+import { GAIN, LOSS, STAT_COLORS as S } from './stat-colors';
 
 // docs/comparison-card.md: stat labels in their game colors, and changes in the game's
 // success and failure colors.
@@ -38,7 +38,6 @@ const STAT_COLORS: Record<string, string> = {
   lifesteal: S.lifesteal, manasteal: S.manasteal, apiercing: S.armor, rpiercing: S.resistance, crit: S.crit,
   dreturn: S.dreturn, mp_cost: S.mp, output: S.output,
 };
-const GAIN = '#85C76B', LOSS = '#E13758';
 
 export function GearComparisonDialog({
   comparison,

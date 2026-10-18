@@ -9,6 +9,7 @@ import './comparison-card.case';
 import './skill-card.case';
 import './monster-card.case';
 import './stat-colors.case';
+import './catalog-comparison.case';
 import { createServer } from 'node:http';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { transform, build } from 'esbuild';

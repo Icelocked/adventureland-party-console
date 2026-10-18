@@ -1,8 +1,9 @@
 # Stat colors
 
 Every game-style card (`docs/item-card.md`, `character-card.md`,
-`comparison-card.md`, `skill-card.md`, `monster-card.md`) colors a stat from
-one palette, `dashboard/features/party/stat-colors.ts`, so a stat reads the
+`comparison-card.md`, `catalog-comparison-card.md`, `skill-card.md`,
+`monster-card.md`) colors a stat from one palette,
+`dashboard/features/party/stat-colors.ts`, so a stat reads the
 same color in every menu.
 
 The palette keeps the game's hue for each stat (`colors` in the game's

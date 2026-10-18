@@ -40,3 +40,6 @@ export const STAT_COLORS = {
   cooldown: "#4EB7DE",
   duration: "#E1924D",
 } as const;
+
+// The game's success and failure colors, for a change that raises or lowers a stat.
+export const GAIN = "#85C76B", LOSS = "#E13758";

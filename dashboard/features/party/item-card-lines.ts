@@ -50,7 +50,7 @@ export const prettyFloat = (value: number) => (0 + Math.trunc((value || 0) * 100
 export const prettyNum = (value: number) => (Math.floor(value || 0) + 0).toLocaleString("en-US");
 const hundredths = (value: number) => (Math.round(value * 100) / 100).toLocaleString("en-US", { maximumFractionDigits: 2 });
 const signed = (value: number, text = String(value)) => (value > 0 ? "+" : "") + text;
-const titleCase = (value: string) => value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+export const titleCase = (value: string) => value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 // calculate_item_grade in the game's js/old_common_functions.js.
 export function itemGrade(definition: Values, level: number): number {

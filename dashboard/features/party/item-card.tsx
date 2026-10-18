@@ -4,6 +4,8 @@ import type { Item } from "./item";
 import type { ItemMeta } from "./item-meta";
 import { itemCardLines, type ItemCardLine } from "./item-card-lines";
 
+export const GAME_FONT = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+
 // The game's item box: black, a 5px gray border and a dashed underline under the
 // title (render_item in the game's js/html.js). docs/item-card.md.
 // A box inside a dialog that already has regions can be a labelled group (a fieldset) instead.
@@ -13,7 +15,7 @@ export function GameBox({ label, className = "", group = false, children }: {
   const props = {
     "aria-label": label,
     className: `min-w-0 border-[5px] border-[#808080] bg-black px-4 py-3 text-[13px] leading-5 text-[#E4E4E4] ${className}`,
-    style: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" },
+    style: { fontFamily: GAME_FONT },
   };
   return group ? <fieldset {...props}>{children}</fieldset> : <section {...props}>{children}</section>;
 }
