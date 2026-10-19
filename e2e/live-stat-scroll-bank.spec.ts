@@ -10,7 +10,7 @@ const native = (live: { admin(code: string): Promise<any> }) => live.admin(`outp
   return {helmet:p.items[20],gold:p.gold+(Number(u.gold)||0),carried:scrolls(p.items),
     bank:Object.entries(u).filter(([k,v])=>/^items\\d+$/.test(k)&&Array.isArray(v)).reduce((n,[,v])=>n+scrolls(v),0)};})()`);
 
-test('a merchant stat scroll comes from the bank instead of being bought again', async ({ live }, info) => {
+for (const deliver of [false, true]) test(`a merchant stat scroll comes from the bank${deliver ? ' before higher priority delivery' : ' instead of being bought again'}`, async ({ live }, info) => {
   test.setTimeout(300_000);
   const observations: any[] = [];
   try {
@@ -31,8 +31,15 @@ test('a merchant stat scroll comes from the bank instead of being bought again',
     const before = await native(live);
     expect(before).toMatchObject({ carried: 0, bank: 1 });
 
+    await live.post('/merchant/force-stand', {enabled:true});
     await live.post('/command', { character: merchant, type: 'stat-scroll-mark', slot: 20, item: { name: 'helmet', level: 0, stat_type: 'dex' }, statType: 'str' });
-    await expect.poll(async () => { const n = await native(live); observations.push({ at: Date.now(), n }); return n.helmet?.stat_type; },
+    if(deliver){
+      await live.post('/merchant/routine-priorities',{priorities:{deliveries:100,'manual upgrades':1},enabled:{}});
+      await live.post('/command',{character:merchant,type:'give',slot:20,item:seeded.item,target:'E2EWarrior'});
+      expect((await live.state()).statScrolls[merchant]).toHaveLength(1);
+    }
+    await live.post('/merchant/force-stand',{enabled:false});
+    await expect.poll(async () => { const n = await native(live); observations.push({ at: Date.now(), n }); return deliver ? await live.admin(`output=get_player('E2EWarrior').items.find(i=>i&&i.name==='helmet'&&i.stat_type==='str')?.stat_type`) : n.helmet?.stat_type; },
       { timeout: 240_000, intervals: [500, 1000] }).toBe('str');
     const after = await native(live);
     // 1: the banked scroll was used; nothing was bought. A bank visit may deposit

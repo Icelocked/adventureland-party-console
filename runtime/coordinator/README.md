@@ -2094,3 +2094,5 @@ Fresh, alive native Main-town presence permits retirement of only that old
 cycle's command/walk and matching event trip. Other navigation remains owned.
 Validate the native Anniversary restart/return-to-Hunt journeys; preserve their
 physical arrival and reward checks. Build and stage; activate only by explicit load.
+
+Merchant bank manual compound marks bind three unlocked native bank sources, including different packs, before admission. The ordinary improvement command withdraws those sources and reports separate native withdrawal receipts; a failed later stage retains confirmed withdrawals for retry. Auto-compound uses the shared bank rules. Stat-scroll marks fence delivery payloads for the exact item regardless of priorities; native completion advances its retained delivery fingerprint. Replacement fishing and mining tools have separate default-off merchant settings; opted-in missing tools use the ordinary durable crafting order and material reservations. Validate the bank triplet, stat-bank/delivery, native gathering miss/hit and tool-setting journeys before staging a complete console artifact.

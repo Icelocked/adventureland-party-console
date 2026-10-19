@@ -11,3 +11,5 @@ and nothing was ever withdrawn. Live journey: `e2e/live-stat-scroll-bank.spec.ts
    "Missing N × scroll in merchant or bank inventory" even when the bank has enough.
 3. **Over-withdrawal.** Only the visit's required count is withdrawn; a fully
    stocked inventory makes no bank trip.
+
+Delivery dependencies (#103): a higher priority delivery can steal an unmodified item; an exact stat mutation can invalidate its reserved fingerprint; removing the queue before telemetry may hide a stranded order. Queue both marks before releasing the merchant, retain the stat mark, and observe the recipient receive only the requested STR item without spending.

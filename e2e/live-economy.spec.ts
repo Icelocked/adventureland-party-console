@@ -1404,3 +1404,20 @@ for (const kind of ['upgrade', 'compound']) test(`auto merchant collects twelve 
       events:await live.clients[merchant].events(),ownerEvents:await live.clients[owner].events()}),contentType:'application/json'});
   }
 });
+
+test('manual compound from native bank withdraws exactly its reserved triplet',async({live},info)=>{
+ test.setTimeout(300_000);
+ await live.post('/merchant/force-stand',{enabled:true});
+ await live.admin(`output=(async()=>{const p=get_player('E2EMerchant'),u=await db.collection('user').findOne({_id:p.owner}),b=p.user||u.info; b.items0=b.items0||[];for(const slot of [30,31,32]){if(b.items0[slot])throw Error('Bank fixture occupied');b.items0[slot]={name:'strring',level:0};}if(!p.user)await db.collection('user').replaceOne({_id:u._id},u);return true;})()`);
+ // Refresh native bank observation before issuing storage-bound intent.
+ await live.post('/command',{character:'E2EMerchant',type:'bank'});
+ await live.post('/merchant/force-stand',{enabled:false});
+ await expect.poll(async()=>(await live.state()).bankSnapshot?.packs?.items0?.some((e:any)=>e?.item?.name==='strring'),{timeout:90_000}).toBe(true);
+ await live.post('/merchant/force-stand',{enabled:true});
+ const selected=(await live.state()).bankSnapshot.packs.items0.find((entry:any)=>entry?.item?.name==='strring');
+ await live.post('/command',{character:'E2EMerchant',type:'compound-mark',pack:'items0',slot:selected.slot,item:selected.item});
+ const before=await economy(live);
+ await live.post('/merchant/force-stand',{enabled:false});
+ await expect.poll(async()=>{const state=await live.state(),n=await economy(live);return !(state.compounds?.E2EMerchant||[]).length&&bankQuantity(n,'strring')===bankQuantity(before,'strring')-3;},{timeout:240_000}).toBe(true);
+ await record(live,info,'native-manual-bank-compound',before);
+});

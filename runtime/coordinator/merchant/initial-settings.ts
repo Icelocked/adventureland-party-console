@@ -75,6 +75,8 @@ export function defaultMerchantRoutinePriorities(): Record<string, number> {
 }
 export function defaultMerchantAutomations(): Record<string, boolean> {
   return {
+    'craft fishing tools': false,
+    'craft mining tools': false,
     deliveries: true,
     withdrawals: true,
     "merchant luck": true,

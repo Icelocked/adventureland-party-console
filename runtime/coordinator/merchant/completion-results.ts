@@ -1,4 +1,4 @@
-import { acknowledgeDelivery } from './delivery-recovery.ts';
+import { acknowledgeDelivery, deliveryMatches } from './delivery-recovery.ts';
 import { requestObject, requestText } from "../http/contracts.ts";
 import { receiveBankDeconstruction } from "./bank-deconstruction.ts";
 import { receiveBankUpgrades } from '../inventory/bank-upgrade-receipts.ts';
@@ -53,6 +53,18 @@ export function createCompletionResults(state: CompletionState, ports: Completio
   }
   function successfulImprovements(name: string | null, body: CompletionReport): void {
     upgrades(name, body);
+    // A native stat mutation changes the delivery fingerprint. Advance only the
+    // delivery bound to this exact completed merchant mark, retaining its identity.
+    if (name === state.merchantCharacter) for (const raw of body.statScrollsResolved || []) {
+      const mark = requestObject(raw), item = requestObject(mark.item);
+      if (mark.equipped || !Number.isSafeInteger(mark.slot) || typeof mark.statType !== 'string') continue;
+      for (const deliveries of Object.values(state.merchantDeliveries)) for (const delivery of deliveries || []) {
+        if (delivery.slot === mark.slot && deliveryMatches(delivery.item, item)) {
+          delivery.item = {...delivery.item, stat_type: mark.statType};
+          if (delivery.blocked === 'Reserved delivery item missing') delete delivery.blocked;
+        }
+      }
+    }
     removeMatching(state.statScrolls[String(name)], body.statScrollsResolved);
     if (
       body.statScrollsReady &&
@@ -142,6 +154,14 @@ export function createCompletionResults(state: CompletionState, ports: Completio
     receiveBankDeconstruction(state, name, body.confirmedWithdrawals, ports.now());
     receiveBankUpgrades(state, state.merchantCharacter, body.merchantWithdrawalsDelivered);
     receiveBankUpgrades(state, name, body.confirmedWithdrawals);
+    const receipts = Array.isArray(body.merchantWithdrawalsDelivered) ? body.merchantWithdrawalsDelivered : [];
+    for (const raw of state.compounds[String(state.merchantCharacter)] || []) {
+      const group=requestObject(raw);
+      for(const value of Array.isArray(group.items)?group.items:[]) {
+        const mark=requestObject(value),source=requestObject(mark.storage);
+        if(mark.storage && receipts.some(value=>{const receipt=requestObject(value);return receipt.pack===source.pack && receipt.slot===source.slot && deliveryMatches(requestObject(receipt.item),requestObject(mark.item)) && deliveryMatches(requestObject(mark.item),requestObject(receipt.item));})) mark.storageReceived=true;
+      }
+    }
   }
   function realmFailure(body: CompletionReport): boolean {
     return !body.success && requestText(body.error || "").startsWith("merchant job failed: wrong realm");

@@ -553,6 +553,7 @@
   var realmPlayers = [];
   var gatheringMode = null;
   var gatheringModes = [];
+  var gatheringAutoCraft = {};
   if (root.__merchantGatheringTimer) clearInterval(root.__merchantGatheringTimer);
   root.__merchantGatheringTimer = null;
   root.__merchantGatheringGeneration = (Number(root.__merchantGatheringGeneration) || 0) + 1;
@@ -6859,6 +6860,26 @@
     return true;
   }
 
+  async function prepareBankCompounds(command, activity) {
+    var groups=(command.compounds||[]).filter(function(group){return (group.items||[]).some(function(mark){return mark.storage;});});
+    if (!groups.length) return;
+    await merchantVisitBank(command,activity);
+    for(var gi=0;gi<groups.length;gi++) for(var mi=0;mi<groups[gi].items.length;mi++) {
+      var mark=groups[gi].items[mi],source=mark.storage;
+      if(!source || mark.storageReceived) continue;
+      var bankItem=character.bank && character.bank[source.pack] && character.bank[source.pack][source.slot];
+      if(!bankItem || bankItem.l || !sameItemState(bankItem,mark.item)) throw Error('Reserved bank compound item changed');
+      var before=character.items.filter(function(item){return sameItemState(item,mark.item);}).length;
+      await bank_retrieve(source.pack,source.slot);
+      var deadline=Date.now()+2500;
+      while(character.items.filter(function(item){return sameItemState(item,mark.item);}).length<=before && Date.now()<deadline) await sleep(100);
+      if(character.items.filter(function(item){return sameItemState(item,mark.item);}).length<=before) throw Error('Bank compound withdrawal unconfirmed');
+      mark.storageReceived=true;
+      (command._merchantWithdrawalsCompleted ||= []).push({pack:source.pack,slot:source.slot,item:mark.item});
+    }
+    activity.push({level:'info',message:'Withdrew reserved bank compound triplets'});
+  }
+
   async function prepareBankUpgrades(command, activity) {
     if (!(command.bankUpgradeRules || []).length) return;
     await merchantVisitBank(command, activity);
@@ -6951,6 +6972,7 @@
         if (typeof statMark.slot === "string" && sameItemState(character.slots[statMark.slot], statMark.item))
           await unequip(statMark.slot);
       }
+      await prepareBankCompounds(command, activity);
       if ((command.bankUpgradeRules || []).length) await prepareBankUpgrades(command, activity);
       await preloadUpgradeOfferings(command, activity);
       await preloadStatScrolls(command, activity);
@@ -9377,6 +9399,14 @@
       session.baseline = gatheringBaseline();
       return true;
     }
+    if (gatheringAutoCraft[session.mode] === true) {
+      var toolOrder = await request('/merchant/order', {method:'POST', body:{
+        buys:[], crafts:[{id:session.tool,quantity:1,level:0}]
+      }});
+      gatheringRetryAt = Date.now() + 5000;
+      gatheringStatus('Crafting replacement ' + session.tool, 'info', {jobId:toolOrder.jobId});
+      return false;
+    }
     await request("/merchant/gather-status", { method: "POST", body: {
       character: character.name, mode: session.mode, noTool: true,
       message: (session.mode === "fishing" ? "Fishing" : "Mining") + " off: no tool in inventory or bank",
@@ -10902,6 +10932,7 @@
       statusPhase = "apply merchant settings";
       bankboiStorage = state.bankboiStorage === true;
       bankStaging = state.bankStaging !== false;
+      gatheringAutoCraft = state.gatheringAutoCraft || {};
       var nextStandListings = state.standListings || gatheringStandListings;
       if (JSON.stringify(nextStandListings) !== JSON.stringify(gatheringStandListings) && gatheringSession)
         gatheringSession.atStandForCooldown = false;

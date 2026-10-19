@@ -1,3 +1,4 @@
+import {waitForGameplay} from './network-clock';
 import { test, expect, type LiveGame } from './live-fixtures';
 
 // Failure inventory: e2e/gathering-cooldown-failures.md. The game server resolves a finished
@@ -91,7 +92,7 @@ test('a missed fishing or mining channel is recast at once; a success waits for 
         (mode === 'fishing' ? 2_880_000 : 7_440_000))) < 15_000);
     }, { timeout: 30_000, message: 'Recorded cooldowns follow the game after a success' }).toBe(true);
     const settled = (await rolls(live)).length;
-    await new Promise(resolve => setTimeout(resolve, 60_000));
+    await waitForGameplay(60_000);
     expect((await rolls(live)).length, 'No cast while the game cooldown runs').toBe(settled);
 
     // 4. The success cooldowns survive a coordinator restart.
