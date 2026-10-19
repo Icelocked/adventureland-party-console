@@ -58,7 +58,7 @@ async function ready(process: ChildProcess, url: string, log: string) {
   }
   throw new Error(`E2E service failed readiness at ${url}\n${existsSync(log) ? readFileSync(log, 'utf8').slice(-12000) : 'No output'}`);
 }
-type App = { url: string; journal: string; restartCoordinator(): Promise<void>; state(): Promise<any>; deliverStatus(report: unknown): Promise<unknown>; deliverMerchantCompletion(report: unknown): Promise<unknown> };
+type App = { url: string; journal: string; restartCoordinator(): Promise<void>; crashCoordinator(whileDown?: () => unknown): Promise<void>; state(): Promise<any>; deliverStatus(report: unknown): Promise<unknown>; deliverMerchantCompletion(report: unknown): Promise<unknown> };
 
 export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantConnected: boolean; merchantManaged: boolean; playerInventory: boolean; marketStand: boolean; bankboiOfferings: boolean; mapCapture: boolean; standBuyOrders: boolean; mailbox:boolean; savedRecords: Record<string, unknown>[]; stateFields: string }, { dashboard: { port: number; log: string } }>({
   // Journal records a scenario saved before this start, appended after the other seeds.
@@ -142,6 +142,11 @@ export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantCo
         // The scenario's own journal, read only by assertions about saved state.
         journal: path.join(directory, 'state.jsonl'),
         async restartCoordinator() { await stop(coordinator!, true); await start(); },
+        // SIGKILL runs no shutdown handler, so nothing pending reaches the journal.
+        async crashCoordinator(whileDown) {
+          const crashed = coordinator!, exited = new Promise<void>(resolve => crashed.once('exit', () => resolve()));
+          crashed.kill('SIGKILL'); await exited; await whileDown?.(); await start();
+        },
         // External game observations enter the coordinator's private status
         // boundary, just like the scenario's recurring fixture heartbeats.
         async deliverStatus(report: unknown) {

@@ -61,6 +61,10 @@ export function installPartyMetrics(ports: Ports) {
     }
   } catch { journal.lost = true; }
   let active: Frame | undefined, busy = false, previousAt = ports.now(), previousServer = ports.context().server;
+  // The coordinator commit that will write each accepted frame, by sequence.
+  // Not persisted: a reload sends every queued frame again.
+  const acceptedIn = new Map<number, number>();
+  let coordinatorEpoch: string | undefined;
   const seen = new Map<string, number>();
   const targets = new Map<string, { target: MonsterTarget; at: number; context: string }>();
   const observedDeaths = new Map<string, number>();
@@ -187,19 +191,44 @@ export function installPartyMetrics(ports: Ports) {
       else current.partial = true;
     });
   }
+  // The coordinator answers before its commit writes a frame (docs/efficiency.md,
+  // Metrics history). A frame stays in the outbox until an answer from the
+  // process that accepted it names a durableCommit at or above the commit that
+  // took the frame. flush sends each frame once and, while accepted frames wait,
+  // an empty batch that reads durableCommit. An answer from another process
+  // (commitEpoch) means a restart may have lost the waiting frames, so flush
+  // sends them again; the coordinator ignores a frame it already holds by its
+  // receipt.
   async function flush() {
     if (busy || !journal.queue.length || !ports.current() || !ports.connected()) return;
     busy = true;
-    const server = journal.queue[0].server;
+    const due = journal.queue.filter(next => !acceptedIn.has(next.sequence));
+    const server = (due[0] || journal.queue[0]).server;
     const frames: Frame[] = [];
-    for (const next of journal.queue) { if (next.server !== server || frames.length >= 6) break; frames.push(next); }
+    for (const next of due) { if (next.server !== server || frames.length >= 6) break; frames.push(next); }
     try {
       const result = await ports.send({ character: ports.name(), server, runtime: journal.runtime, frames });
       if (!ports.current()) return;
       if (result && typeof result === 'object' && 'expired' in result && typeof result.expired === 'number' && result.expired > 0) journal.lost = true;
-      journal.queue.splice(0, frames.length);
-      persist();
-    } catch { /* Original frames remain journaled for the next pulse. */ }
+      const durable = result && typeof result === 'object' && 'commitEpoch' in result && typeof result.commitEpoch === 'string' &&
+        'commit' in result && typeof result.commit === 'number' && 'durableCommit' in result && typeof result.durableCommit === 'number'
+        ? { epoch: result.commitEpoch, commit: result.commit, through: result.durableCommit } : undefined;
+      const before = journal.queue.length;
+      if (!durable) {
+        // A coordinator built before commitEpoch wrote each frame before it answered.
+        journal.queue.splice(0, journal.queue.length, ...journal.queue.filter(next => !frames.includes(next)));
+      } else {
+        if (durable.epoch !== coordinatorEpoch) acceptedIn.clear();
+        coordinatorEpoch = durable.epoch;
+        for (const next of frames) acceptedIn.set(next.sequence, durable.commit);
+        journal.queue.splice(0, journal.queue.length, ...journal.queue.filter(next => {
+          const commit = acceptedIn.get(next.sequence);
+          return commit === undefined || commit > durable.through;
+        }));
+      }
+      for (const sequence of acceptedIn.keys()) if (!journal.queue.some(next => next.sequence === sequence)) acceptedIn.delete(sequence);
+      if (journal.queue.length !== before) persist();
+    } catch { /* Original frames remain journaled and go out again on the next pulse. */ }
     finally { busy = false; }
   }
   function pulse() {

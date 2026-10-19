@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { test, expect } from './fixtures';
 
 // Failure inventory: docs/efficiency.md (Persistence). These journeys cover the
@@ -192,3 +192,114 @@ test('offline snapshots save on an inventory change, not on each 30 s refresh', 
   await expect.poll(() => saved(app.journal, rosterKey).slice(before)
     .some(record => record.characterSnapshots?.P?.items?.[5]?.item?.name === 'coat')).toBe(true);
 });
+
+test('metrics frames answer at once, reach disk within one commit and survive a restart', async ({ page, app }, info) => {
+  // Metrics history (docs/efficiency.md, Persistence): a POST answers without
+  // waiting for the commit, and one shared commit writes each bucket once.
+  const journal = app.journal + '.metrics.jsonl', characters = ['W', 'P', 'M'];
+  const lines = () => existsSync(journal) ? readFileSync(journal, 'utf8').split('\n').filter(Boolean) : [];
+  const receipts = () => new Set(lines().flatMap(line => Object.values(JSON.parse(line))
+    .flatMap((bucket: any) => Array.isArray(bucket?.receipts) ? bucket.receipts : [])));
+  await page.waitForTimeout(1000);
+  // Every frame lands in the bucket that is open now, so all nine share it.
+  while (Date.now() % 10_000 > 4000) await page.waitForTimeout(200);
+  const start = Date.now(), at = Math.floor(start / 10_000) * 10_000, before = lines().length;
+  const frame = (sequence: number) => {
+    const sample = { at: Math.min(at + 9000, Date.now()), gold: 1_000_000, luck: 100, ping: 40, level: 80, xp: 1000 + sequence, maxXp: 90_000_000 };
+    return { at, sequence, observedMs: 1000, partial: false, first: sample, last: sample,
+      damage: [{ monster: 'goo', skill: 'attack', amount: 100, hits: 1 }], credits: [{ monster: 'goo', count: 1 }], kills: [], loot: [] };
+  };
+  const ackMs: number[] = [], acknowledged: string[] = [];
+  for (let sequence = 1; sequence <= 3; sequence++) {
+    await Promise.all(characters.map(async character => {
+      const sent = Date.now(), runtime = 'e2e-metrics-' + character;
+      const response = await page.request.post(`${app.url}/party-api/metrics`, { headers: { Origin: app.url },
+        data: { character, server: 'USII', runtime, frames: [frame(sequence)] } });
+      expect(response.status(), await response.text()).toBe(200);
+      ackMs.push(Date.now() - sent);
+      acknowledged.push(JSON.stringify([character, runtime, sequence]));
+    }));
+    await page.waitForTimeout(300);
+  }
+  // Each acknowledged frame reaches the journal within one 750 ms commit.
+  await expect.poll(() => { const held = receipts(); return acknowledged.filter(receipt => !held.has(receipt)); },
+    { timeout: 2000, intervals: [100] }).toEqual([]);
+  const appended = lines().length - before;
+  await report(info, 'metrics-acknowledgement', { ...summary(ackMs), appended, frames: 9 });
+  // A POST no longer waits for the commit window.
+  expect(Math.max(...ackMs)).toBeLessThan(500);
+  // Frames that wait for the same commit share one write of their bucket.
+  expect(appended).toBeLessThan(9);
+  await app.restartCoordinator();
+  const metrics = await (await page.request.get(`${app.url}/party-api/metrics?from=${at - 60_000}&to=${Date.now()}`)).json();
+  const samples = Object.fromEntries(characters.map(character => [character, metrics.points
+    .flatMap((point: any) => point.values).filter((row: any) => row.character === character)
+    .reduce((total: number, row: any) => total + row.samples, 0)]));
+  expect(samples).toEqual({ W: 3, P: 3, M: 3 });
+});
+
+test('the metrics collector keeps acknowledged frames until a commit writes them, across a coordinator crash', async ({ page, app }, info) => {
+  // Failure modes: the collector drops a frame on the acknowledgement while its
+  // commit is still waiting, so a crash in the 750 ms window loses it; the
+  // collector never sends a frame again after the restart; a resent frame counts
+  // twice; a POST waits for the commit.
+  test.setTimeout(120_000);
+  const { installPartyMetrics } = await import('../runtime/characters/metrics.ts');
+  const journal = app.journal + '.metrics.jsonl', runtime = { value: '' };
+  const receipts = () => new Set((existsSync(journal) ? readFileSync(journal, 'utf8').split('\n').filter(Boolean) : [])
+    .flatMap(line => Object.values(JSON.parse(line)).flatMap((bucket: any) => Array.isArray(bucket?.receipts) ? bucket.receipts : [])));
+  const storage = new Map<string, string>(), exchanges: any[] = [], crash: any = {};
+  let running = true, crashing: Promise<void> | undefined;
+  installPartyMetrics({
+    now: () => Date.now(), current: () => running, connected: () => true, name: () => 'W',
+    own: actor => actor === 'W', ownedCharacter: name => ['W', 'P', 'M'].includes(name),
+    context: () => ({ server: 'USII', map: 'main', instance: 'main', party: ['W', 'P', 'M'] }),
+    sample: () => ({ gold: 1_000_000, luck: 100, ping: 40, level: 80, xp: 1000, maxXp: 90_000_000 }),
+    storage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => { storage.set(key, value); }, removeItem: key => { storage.delete(key); } },
+    async send(batch) {
+      runtime.value = batch.runtime;
+      const sent = Date.now();
+      const response = await fetch(`${app.url}/party-api/metrics`, { method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: app.url }, body: JSON.stringify(batch) });
+      const body = await response.json();
+      exchanges.push({ sent, ms: Date.now() - sent, status: response.status, sequences: batch.frames.map(frame => frame.sequence), body });
+      if (!response.ok) throw Error(`metrics POST ${response.status}`);
+      // Crash right after the first acknowledgement whose commit has not run yet.
+      if (!crashing && batch.frames.length && body.commit > body.durableCommit) {
+        crash.acknowledged = batch.frames.map(frame => JSON.stringify(['W', batch.runtime, frame.sequence]));
+        crashing = app.crashCoordinator(() => {
+          const held = receipts();
+          crash.onDiskAfterKill = crash.acknowledged.filter((receipt: string) => held.has(receipt));
+        });
+      }
+      return body;
+    },
+  });
+  const header = () => JSON.parse(storage.get('party-metrics-v1:W') || '{"sequence":0,"queue":[]}') as { sequence: number; queue: number[] };
+  let sealed = 0;
+  try {
+    await expect.poll(() => !!crashing, { timeout: 20_000 }).toBe(true);
+    await crashing;
+    // The crash came inside the commit window: the acknowledged frames were not on disk.
+    expect(crash.onDiskAfterKill).toEqual([]);
+    // Every frame sealed by a moment after the restart reaches the journal and leaves the outbox.
+    await page.waitForTimeout(3000);
+    sealed = header().sequence;
+    await expect.poll(() => header().queue.filter(sequence => sequence <= sealed),
+      { timeout: 30_000, intervals: [250] }).toEqual([]);
+  } finally { running = false; }
+  const expected = Array.from({ length: sealed }, (_, index) => JSON.stringify(['W', runtime.value, index + 1]));
+  const held = receipts();
+  await report(info, 'metrics-crash-durability', { sealed, crash, missing: expected.filter(receipt => !held.has(receipt)),
+    ackMs: summary(exchanges.map(exchange => exchange.ms)), exchanges });
+  expect(expected.filter(receipt => !held.has(receipt))).toEqual([]);
+  // A frame sent to both coordinator processes counts once: the query returns one sample per frame on disk.
+  await page.waitForTimeout(2000);
+  const onDisk = [...receipts()].filter(receipt => JSON.parse(receipt)[0] === 'W').length;
+  const metrics = await (await page.request.get(`${app.url}/party-api/metrics?from=${Date.now() - 600_000}&to=${Date.now()}`)).json();
+  const samples = metrics.points.flatMap((point: any) => point.values).filter((row: any) => row.character === 'W')
+    .reduce((total: number, row: any) => total + row.samples, 0);
+  expect(samples).toBe(onDisk);
+  expect(Math.max(...exchanges.filter(exchange => exchange.status === 200).map(exchange => exchange.ms))).toBeLessThan(500);
+});
+
