@@ -458,7 +458,7 @@ test.describe('farming focus changed during native event attendance',()=>{
  test.use({initialPosition:{map:'main',x:0,y:0}});
  test('new farming focus resumes after natural Halloween completion',async({live},info)=>{
   test.setTimeout(480_000);
-  let seed:any,changedAt=0,endedAt=0;const samples:any[]=[];
+  let seed:any,changedAt=0,endedAt=0,focusOwnership:any;const samples:any[]=[];
   try{
    await live.post('/formation',{leader:W});await live.post('/formation',{character:P,follow:true});
    const catalog=(await live.state(true)).monsterChoices,oldFarm=catalog.find((choice:any)=>choice.id==='goo').locations.find((point:any)=>point.map==='main');
@@ -470,9 +470,13 @@ test.describe('farming focus changed during native event attendance',()=>{
    await live.post('/formation',{character:W,eventSelections:['mrpumpkin']});
    await expect.poll(async()=>{const s=await live.state(),events=await live.clients[W].events();return fighters.every(name=>s.characters[name]?.joinedEvent==='mrpumpkin'&&events.some((packet:any)=>packet.event==='hit'&&String(packet.data?.id)===seed.id&&packet.data?.hid===name&&packet.data?.damage>0));},{timeout:150_000}).toBe(true);
    changedAt=Date.now();
+   const beforeFocus=await Promise.all(fighters.map(name=>live.clients[name].run('globalThis.__partyNavigationIntent && globalThis.__partyNavigationIntent.revision')));
    // Same public action as MonsterFocusPicker, without an explicit travel override.
    await live.post('/focus',{character:W,monsterFocus:['bee']});
    await expect.poll(async()=>{const s=await live.state();return s.monsterFocus?.length===1&&s.monsterFocus[0]==='bee'&&fighters.every(name=>s.characters[name]?.joinedEvent==='mrpumpkin');},{timeout:30_000}).toBe(true);
+   const afterFocus=await Promise.all(fighters.map(name=>live.clients[name].run('globalThis.__partyNavigationIntent && globalThis.__partyNavigationIntent.revision')));
+   expect(afterFocus,'Changing the future farm must preserve the active event navigation ownership').toEqual(beforeFocus);
+   focusOwnership={beforeFocus,afterFocus};
    const bees=await live.admin(`output=Object.values(instances.main.monsters).filter(m=>m.type==='bee').map(m=>String(m.id))`);
    expect(bees.length).toBeGreaterThan(0);
    // Declare the remaining boss HP; its real next native attack must end the encounter.
@@ -485,7 +489,7 @@ test.describe('farming focus changed during native event attendance',()=>{
     return !s.eventReturn&&fighters.every(name=>s.characters[name]?.map==='main'&&!s.characters[name]?.joinedEvent&&events.some((packet:any)=>packet.at>=endedAt&&packet.event==='hit'&&bees.includes(String(packet.data?.id))&&packet.data?.hid===name&&packet.data?.damage>0));
    },{timeout:240_000,message:'After the event, both native fighters must resume the newly selected bee focus instead of parking in town'}).toBe(true);
   }finally{
-   await info.attach('native-event-farming-focus-change',{body:JSON.stringify({seed,changedAt,endedAt,samples,state:await live.state(),events:await live.clients[W].events()}),contentType:'application/json'});
+   await info.attach('native-event-farming-focus-change',{body:JSON.stringify({seed,changedAt,endedAt,focusOwnership,samples,state:await live.state(),events:await live.clients[W].events()}),contentType:'application/json'});
    await live.post('/formation',{character:W,eventSelections:[]}).catch(()=>{});
    if(seed)await live.admin(`output=(()=>{const m=instances.halloween.monsters[${JSON.stringify(seed.id)}];if(m?.e2eChangedFarmEvent)remove_monster(m,{silent:true});G.monsters.mrpumpkin=${JSON.stringify(seed.original)};delete E.mrpumpkin;broadcast_e();return true;})()`).catch(()=>{});
   }

@@ -134,7 +134,7 @@ test(`explicit ${entry} travel skips only the current native event occurrence`,a
     }
     if(entry==='monster') {
       await expect.poll(async()=>{const s=await live.state(),native=await world(),packets=await live.clients[W].events();
-        return !s.activeConvoy && members.every(name=>contains(destination,native[name],150,500) && packets.some((event:any)=>event.at>=issuedAt&&event.event==='hit'&&event.data?.hid===name&&event.data?.damage>0));
+        return !s.activeConvoy && members.every(name=>native[name].map==='main' && !native[name].rip && !s.characters[name]?.joinedEvent && packets.some((event:any)=>event.at>=issuedAt&&event.event==='hit'&&event.data?.hid===name&&event.data?.damage>0));
       },{timeout:120_000,message:'Selecting a new farm during the event must resume actual native farming for both members'}).toBe(true);
     }
     const arrivedAt=Date.now();

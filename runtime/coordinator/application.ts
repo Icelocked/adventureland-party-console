@@ -678,6 +678,7 @@ export function startCoordinatorApplication(
     } = coordinatorPolicies.createCoordinatorPartyConfiguration(party, character_manage, {
       dungeon: dungeons,
       changed: previous => coordinatorPolicies.reconcileFarmingMembership(party, farmingScopes, previous),
+      focusChanged: () => farmAreaNavigation.focusChanged(),
       now: () => Date.now(),
       owned: ownedCharacter,
       members: () => farmingNavigation.members(),
@@ -1909,6 +1910,7 @@ export function startCoordinatorApplication(
         abort: finishAnniversaryAbort, begin: beginEventReturn, snapshot: publicAnniversaryState,
       });
       const focusRoute = coordinatorPolicies.createFocusRoute(party, {
+        focusChanged: () => farmAreaNavigation.focusChanged(),
         owned: ownedCharacter, members: () => [name], invalidate: (...args) => farmingNavigation.invalidate(...args), persist: persistSettings,
       });
     const {
