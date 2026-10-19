@@ -1,5 +1,6 @@
 "use client";
 import { ExchangeItemSelection } from './exchange-item-selection';
+import {loadCharacterInspection} from "./load-character-inspection";
 import { lazy } from "react";
 import { DeferredPanel } from "./deferred-panel";
 const ItemDetails = lazy(() =>
@@ -48,6 +49,8 @@ function PartyItemDetailsConnected({ base }: { base: PartyConsoleModel }) {
                 (saved) => !chars.some((live) => live.name === saved.name),
               ),
             ]}
+        offlineCharacters={(state.roster || []).filter(member=>!chars.some(live=>live.name===member.name) && !state.characterSnapshots?.[member.name])}
+        onLoadCharacter={loadCharacterInspection}
         achievements={monsterAchievements}
         standFull={standIsFull(state.standListings || [], state.standBids || {})}
         onNavigate={(monster) => setMonsterNavigateTarget(monster)}

@@ -1,3 +1,4 @@
+import {characterInspectionRoute} from "./characters/inspection.ts";
 import { observeEventAttendance, eventInstanceAllowed } from "./events/attendance-limits.ts";
 import { createDungeons } from './dungeons/service.ts';
 import { dungeonOwns } from '../dungeons/contracts.ts';
@@ -2311,6 +2312,12 @@ export function startCoordinatorApplication(
                   consoleMaintenance:report.consoleMaintenance,map:report.map,in:report.in,x:report.x,y:report.y,
                   dungeon:{cave:{run:coordinatorPolicies.requestObject(coordinatorPolicies.requestObject(report.dungeon).cave).run}},
                 }]))}));
+                router.get('/party-api/characters/:name/inspection', characterInspectionRoute({
+                  owned:name=>!!ownedCharacter(name), now:Date.now, version:()=>version, directory:__dirname,
+                  read:file=>fs_regular.readFileSync(file,'utf8'),
+                  catalog:()=>{const entries=coordinatorPolicies.requestObject(party.merchantCatalog).allItems;return Array.isArray(entries)?entries:[];},
+                  fetch:async name=>{const fetch=await platform.loadFetch();const response=await fetch('https://adventure.land/api/mainframe_get_character',{method:'POST',headers:{Cookie:'auth='+sess,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({character:name}).toString(),signal:AbortSignal.timeout(10000)});if(!response.ok)throw Error('Could not read saved character from the game');return response.json();},
+                }));
                 coordinatorPolicies.installMovementRoutes(router, movementPlanner, ownedCharacter);
                 installProductionRoutes(router, party, () => persistence.settings(), merchantLog);
                 router.post('/party-api/market/ignored-items',marketIgnoredItemsRoute(party,persistSettings));

@@ -513,7 +513,7 @@ export function GearComparisonDialog({
       ) : null}
       </div>
       <GameBox group label={proposed ? 'Proposed stats' : 'Equipped stats'}>
-        {rows.map(([label, key, format]) => {
+        {character.inspection && !character.inspection.calculated ? <p>{character.inspection.note}</p> : rows.map(([label, key, format]) => {
           const value = Number(
             (candidate as unknown as Record<string, unknown>)[key] || 0,
           );
@@ -549,6 +549,7 @@ export function GearComparisonDialog({
             red reduces it. Nothing in inventory is changed.
           </DialogDescription>
         </DialogHeader>
+        {character.inspection && <p className="text-sm text-slate-300">{character.inspection.note}</p>}
         <div className="grid gap-x-4 md:grid-cols-2">
           {panel(currentPreview, false)}
           {panel(projected, true)}

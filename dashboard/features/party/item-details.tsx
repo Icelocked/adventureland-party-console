@@ -56,6 +56,8 @@ export function ItemDetails({
   monsters,
   skills = [],
   characters,
+  offlineCharacters = [],
+  onLoadCharacter,
   achievements,
   standFull,
   onNavigate,
@@ -73,6 +75,8 @@ export function ItemDetails({
   // The skill catalog, so a granted skill links to its details.
   skills?: SkillClass[];
   characters: Char[];
+  offlineCharacters?: {name:string;ctype:string}[];
+  onLoadCharacter?: (name:string)=>Promise<Char>;
   achievements: Record<string, { score: number; owner: string | null }>;
   standFull: boolean;
   onNavigate: (monster: BestiaryMonster) => void;
@@ -89,6 +93,7 @@ export function ItemDetails({
   const [trail, setTrail] = useState<DetailNode[]>([]);
   const [compareOpen, setCompareOpen] = useState(false);
   const [dropSort, setDropSort] = useState<"name" | "percentage">("percentage");
+  const [comparisonLoading,setComparisonLoading]=useState<string|null>(null),[comparisonError,setComparisonError]=useState('');
   const [compareCharacter, setCompareCharacter] = useState<Char | null>(null);
   const draftIdentity1 = [
     initialSelected?.character,
@@ -572,6 +577,8 @@ export function ItemDetails({
                                 </span>
                               </button>
                             ))}
+                            {offlineCharacters.map(character=><button type="button" key={character.name} disabled={!!comparisonLoading || !onLoadCharacter} onClick={async()=>{setComparisonLoading(character.name);setComparisonError('');try{chooseComparisonCharacter(await onLoadCharacter!(character.name));}catch(error){setComparisonError(error instanceof Error?error.message:String(error));}finally{setComparisonLoading(null);}}} className="flex items-center justify-between border border-cyan-900 bg-black px-3 py-2 text-left text-xs text-cyan-50 hover:border-cyan-400 hover:bg-cyan-950"><span>{character.name}</span><span>{comparisonLoading===character.name?'Loading…':`${character.ctype} · offline`}</span></button>)}
+                            {comparisonError && <p role="alert" className="text-rose-200">{comparisonError}</p>}
                             <button
                               type="button"
                               onClick={() => {

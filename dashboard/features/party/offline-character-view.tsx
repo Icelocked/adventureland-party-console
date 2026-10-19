@@ -45,6 +45,7 @@ export function OfflineCharacterView({
               ? ` · ${new Date(character.updatedAt).toLocaleString()}`
               : ''}
           </p>
+          {character.inspection && <p className="text-sm text-slate-300">{character.inspection.note}<br/>Last game sync: {character.inspection.synchronizedAt ? new Date(character.inspection.synchronizedAt).toLocaleString() : 'unknown'}</p>}
           <button
             className={`${button} relative h-24 w-20`}
             aria-label={`View ${character.name} stats`}
@@ -116,15 +117,7 @@ export function OfflineCharacterView({
           )}
         </DialogContent>
       </Dialog>
-      {stats && (
-        <CharacterStatsDialog
-          offline={offline}
-          character={character}
-          onOpenChange={(open) => {
-            if (!open) setStats(false);
-          }}
-        />
-      )}
+      {stats && (character.inspection && !character.inspection.calculated ? <Dialog open onOpenChange={open=>{if(!open)setStats(false);}}><DialogContent className="border-slate-600 bg-[#0b1916] text-white"><DialogHeader><DialogTitle>{character.name} saved stats</DialogTitle></DialogHeader><p>{character.inspection.note}</p><p>Level: {character.level}</p><p>XP: {character.xp.toLocaleString()}</p><p>HP: {character.hp}</p><p>MP: {character.mp}</p><p>Gold: {character.gold.toLocaleString()}</p><p>Maximum HP/MP, attack, armor, resistance and attributes: unavailable</p></DialogContent></Dialog> : <CharacterStatsDialog offline={offline} character={character} onOpenChange={open=>{if(!open)setStats(false);}}/>)}
       <GearComparisonDialog
         comparison={comparison ? { character, entry: comparison } : null}
         currentCharacter={character}

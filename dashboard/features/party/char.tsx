@@ -14,6 +14,7 @@ import { SkillClass } from "./skill-class";
 import { Sprite } from "./sprite";
 
 export type Char = {
+  inspection?: {source:"account-snapshot";calculated:boolean;synchronizedAt:string|null;note:string};
   luckySlotTracking?: LuckySlotTracking;
   tracktrix?: { active: boolean; bonuses: Record<string, number> | null; sprite?: Sprite | null;
   };
