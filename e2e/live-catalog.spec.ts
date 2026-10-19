@@ -75,7 +75,8 @@ test('native tracker home rewards refresh monster and item discovery after later
   try {
   for(const rate of [0.004,0.008]){
     const receipt=await live.admin(`output=(()=>{const p=get_player('E2EWarrior'),home=Object.assign({},D.drops.monsters_home_server||{},{goo:[[${rate},'helmet',2]]});
-      p.socket.emit('tracker',{monsters:{},drops:D.drops.monsters,maps:D.drops.maps,drops_home:home,tables:{}});return {name:p.name,id:p.id,socketId:p.socket.id,connected:p.socket.connected,rate:${rate},item:'helmet',quantity:2};})()`);
+      p.socket.emit('tracker',{monsters:p.p.stats.monsters,monsters_diff:p.p.stats.monsters_diff,exchanges:p.p.stats.exchanges,max:p.max_stats,
+        drops:D.drops.monsters,maps:D.drops.maps,monsters_home_server:home,drops_home:home,tables:{}});return {name:p.name,id:p.id,socketId:p.socket.id,connected:p.socket.connected,rate:${rate},item:'helmet',quantity:2};})()`);
     await expect.poll(async()=>{const s=await live.state(true),monster=s.bestiaryCatalog?.find((m:any)=>m.id==='goo'),item=s.merchantCatalog?.allItems?.find((i:any)=>i.id==='helmet');
       const client=await live.clients.E2EWarrior.run('({name:character.name,trackerHome:parent.tracker?.drops_home?.goo,trackerAlias:parent.tracker?.monsters_home_server?.goo,diagnostic:globalThis.__partyCatalogDiagnostic?.("goo","helmet")})');
       observations.push({at:Date.now(),rate,receipt,client,home:monster?.homeRewards,source:item?.meta?.world?.drops?.filter((d:any)=>d.monsterId==='goo')});
