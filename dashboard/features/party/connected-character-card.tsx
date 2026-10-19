@@ -170,6 +170,10 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
     },
     [post, name],
   );
+  const restockControls = useMemo(
+    () => <RestockControls character={name} value={state.restockPolicies?.[name]} onSave={saveRestock}/>,
+    [name, state.restockPolicies?.[name], saveRestock],
+  );
   const merchantCatalogAllItems = useMemo(
     () => state.merchantCatalog?.allItems || emptyArray<MerchantCatalogItem>(),
     [state.merchantCatalog],
@@ -462,9 +466,7 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
           </div>
         </div>
       )}
-      <ConnectedInventory name={char.name} model={inventoryModel} restock={
-        <RestockControls character={char.name} value={state.restockPolicies?.[char.name]} onSave={saveRestock}/>
-      }/>
+      <ConnectedInventory name={char.name} model={inventoryModel} restock={restockControls}/>
     </article>
   );
 });
