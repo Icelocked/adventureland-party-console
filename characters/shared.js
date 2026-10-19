@@ -12532,6 +12532,17 @@
   }
 
   function eventMonsterTypes(eventName) {
+    // activeCombatEvent derives this for every event on each target check, many
+    // times per combat tick. The list depends only on the game data, and a game
+    // update loads a new G object, so eventMonsterTypes caches it per G and
+    // event name. Callers get a copy.
+    var cache = eventMonsterTypes.cache;
+    if (!cache || cache.game !== G) cache = eventMonsterTypes.cache = { game: G, types: new Map() };
+    if (!cache.types.has(eventName)) cache.types.set(eventName, deriveEventMonsterTypes(eventName));
+    return cache.types.get(eventName).slice();
+  }
+
+  function deriveEventMonsterTypes(eventName) {
     var definition = G.events && G.events[eventName];
     var candidates = [];
     if (definition && definition.sprite) candidates.push(definition.sprite);
