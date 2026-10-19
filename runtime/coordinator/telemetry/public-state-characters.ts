@@ -86,6 +86,7 @@ const metadataFields = [
   "scaling",
   "maxLevel",
   "sprite",
+  "title",
 ] as const;
 
 export function fastCharacters(statuses: Readonly<Record<string, PresentationStatus>>) {
