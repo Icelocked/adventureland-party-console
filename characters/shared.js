@@ -3347,10 +3347,19 @@
   /** Visible, living bosses from the coordinator's avoid list. */
   function visibleAvoidedBosses() {
     if (!avoidMonsters.length) return [];
-    return Object.keys(parent.entities || {}).map(function (id) { return parent.entities[id]; }).filter(function (e) {
+    // One targeting pass checks every candidate against the bosses, so the fighter lists
+    // the entities once per synchronous pass. The game updates parent.entities from socket
+    // events between passes, and the list expires in a microtask after the pass that
+    // built it (docs/achievement-hunt.md failure modes 36 and 37).
+    if (avoidedBossPass && avoidedBossPass.list === avoidMonsters) return avoidedBossPass.bosses;
+    var pass = { list: avoidMonsters, bosses: Object.keys(parent.entities || {}).map(function (id) { return parent.entities[id]; }).filter(function (e) {
       return e && e.type === "monster" && e.visible && !e.dead && avoidMonsters.indexOf(e.mtype) >= 0;
-    });
+    }) };
+    avoidedBossPass = pass;
+    Promise.resolve().then(function () { if (avoidedBossPass === pass) avoidedBossPass = null; });
+    return pass.bosses;
   }
+  var avoidedBossPass = null;
   // A pull this close to a boss risks drawing it in: twice its attack range plus a margin.
   function avoidedBossNear(target) {
     return visibleAvoidedBosses().some(function (boss) {

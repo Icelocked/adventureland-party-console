@@ -41,3 +41,27 @@ test('the status reports visible bosses and whom they attack, for the coordinato
  const r=fixture({s:{...stompy,target:'Icelocked'},w:wolf('w',50)});
  assert.deepEqual(JSON.parse(JSON.stringify(r.avoidSightings())),[{id:'s',mtype:'stompy',x:0,y:0,target:'Icelocked'}]);
 });
+
+// Counts how often the fighter lists parent.entities.
+function countedEntities(entities){
+ const scans={count:0};
+ return {scans,entities:new Proxy(entities,{ownKeys(target){scans.count++;return Reflect.ownKeys(target);}})};
+}
+test('one targeting pass lists the entities once for every candidate and the status (failure mode 36)',()=>{
+ const wolves=Array.from({length:10},(_,i)=>wolf('w'+i,300+10*i));
+ const counted=countedEntities(Object.fromEntries([['s',stompy],...wolves.map(w=>[w.id,w])]));
+ const r=fixture(counted.entities);
+ for(const w of wolves)assert.equal(r.isAllowedTarget(w),true);
+ assert.equal(r.avoidSightings().length,1);
+ assert.equal(counted.scans.count,1);
+});
+test('the next pass sees a boss that appeared, and an avoid list change applies at once (failure mode 37)',async()=>{
+ const entities={};
+ const r=fixture(entities),near=wolf('near',100);
+ assert.equal(r.isAllowedTarget(near),true);
+ entities.s=stompy;
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(r.isAllowedTarget(near),false);
+ r.avoidMonsters=[];
+ assert.equal(r.isAllowedTarget(near),true);
+});

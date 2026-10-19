@@ -286,6 +286,17 @@ Found in the efficiency review, written before the change:
 35. **A caller editing the kept list.** Every tick reads the same list, so an
     edit would leak into later ticks. The list is `readonly`, and the compiler
     rejects an edit.
+36. **Rescanning every entity per candidate.** `isAllowedTarget` checks each
+    candidate against the avoided bosses, and `visibleAvoidedBosses` walked all
+    of `parent.entities` for every check. One targeting pass on a crowded map
+    cost entities times candidates. The fighter collects the visible avoided
+    bosses once per synchronous pass and reuses them for every candidate and
+    for `avoidSightings`.
+37. **A boss list older than the entities.** The game client updates
+    `parent.entities` from socket events, which run between passes. The kept
+    list expires in a microtask after the pass that built it, so the next pass
+    sees a boss that appeared, died or left sight. A change to the avoid list
+    drops the kept list at once.
 
 ## Tests
 
