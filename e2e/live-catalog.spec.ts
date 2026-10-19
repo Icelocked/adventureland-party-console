@@ -70,7 +70,7 @@ test('native tracker home rewards refresh monster and item discovery after later
     const work=(async()=>{const body=response.request().postDataJSON();if(!body?.name||body.combatOnly||body.combatWait)return;
       const reply=await response.json(),monster=body.bestiaryCatalog?.find((m:any)=>m.id==='goo'),item=body.merchantCatalog?.allItems?.find((i:any)=>i.id==='helmet');
       exchanges.push({at:Date.now(),name:body.name,hasCatalog:!!body.merchantCatalog,home:monster?.homeRewards,source:item?.meta?.world?.drops?.filter((d:any)=>d.monsterId==='goo'),needsCatalog:reply.needsCatalog});
-    })().catch(error=>exchanges.push({at:Date.now(),error:String(error)}));pending.add(work);void work.finally(()=>pending.delete(work));
+    })().catch(error=>{exchanges.push({at:Date.now(),error:String(error)});});pending.add(work);void work.finally(()=>pending.delete(work));
   };context.on('response',observe);
   try {
   for(const rate of [0.004,0.008]){
