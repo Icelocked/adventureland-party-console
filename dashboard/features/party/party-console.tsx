@@ -20,7 +20,6 @@ function PartyConsole() {
   const model = usePartyConsole();
   const [logsOpen,setLogsOpen]=useSessionState('logs-open',false),[logsWidth,setLogsWidth]=useSessionState('logs-width',440);
   useEffect(()=>{const saved=sessionStorage.getItem('party-console-scroll');if(saved!==null){sessionStorage.removeItem('party-console-scroll');const y=Number(saved);const timer=setTimeout(()=>window.scrollTo(0,y),500);return()=>clearTimeout(timer);}},[]);
-  const [logsOpen,setLogsOpen]=useState(false),[logsWidth,setLogsWidth]=useState(440);
   const [view, setView] = useState<PartyView>('characters');
   const positions = useRef({ characters: 0, metrics: 0 });
   const navigate = (next: PartyView) => {
