@@ -367,7 +367,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
       const bodyClockSnapshot=async()=>{
         const url=new URL('/diagnostics',process.env.E2E_CLOCK_BROKER);url.searchParams.set('token',process.env.E2E_CLOCK_TOKEN||'');
         const ownership=await live!.state();
-        return {broker:await (await fetch(url)).json(),frames:await Promise.all(Object.entries(clients).map(async([name,client])=>{
+        return {host:{now:observationClock.now(),errors:observationClock.errors,observations:observationClock.observations},broker:await (await fetch(url)).json(),frames:await Promise.all(Object.entries(clients).map(async([name,client])=>{
           const runtime=ownership.characters[name]?.runtime;
           // Managed headless migration/logout legitimately retires the browser frame.
           // Its clock remains represented by the broker's actual participants.

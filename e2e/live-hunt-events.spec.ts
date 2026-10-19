@@ -75,9 +75,13 @@ test('disabled anniversary selection leaves native Hunt fighting and creates no 
         [W,P].every(name=>{const p=current.players[name];return p.map===mission.destination.map&&
           p.x>=bounds[0]&&p.x<=bounds[2]&&p.y>=bounds[1]&&p.y<=bounds[3];});
     },{timeout:90_000,message:'Disabled Anniversary must leave both native fighters at the current Hunt mission'}).toBe(true);
-    const mission=(await live.state()).monsterHunt.missions[(await live.state()).monsterHunt.currentIndex];
+    const missionState=await live.state(),mission=missionState.monsterHunt.missions[missionState.monsterHunt.currentIndex];
     const encounter=await live.admin(`output=(()=>{const p=get_player(${JSON.stringify(W)}),destination=${JSON.stringify(mission.destination)},bounds=destination.boundary;
-      for(const [dx,dy] of [[35,0],[-35,0],[0,35],[0,-35]]){const x=p.x+dx,y=p.y+dy;
+      if(p.map!==destination.map)throw Error('Native Hunt actor left its declared mission map');
+      const points=[[35,0],[-35,0],[0,35],[0,-35]].map(([dx,dy])=>({x:p.x+dx,y:p.y+dy}));
+      for(let x=bounds[0];x<=bounds[2];x+=20)for(let y=bounds[1];y<=bounds[3];y+=20)points.push({x,y});
+      points.sort((a,b)=>Math.hypot(a.x-p.x,a.y-p.y)-Math.hypot(b.x-p.x,b.y-p.y));
+      for(const {x,y} of points){
         if(x<bounds[0]||x>bounds[2]||y<bounds[1]||y>bounds[3]||!can_move({map:p.map,x:p.x,y:p.y,going_x:x,going_y:y,base:p.base}))continue;
         const m=new_monster(p.in,{type:'goo',position:[x,y],radius:0,count:1},{temp:1});m.e2eHunt=true;
         return {id:String(m.id),map:m.map,x:m.x,y:m.y,hp:m.hp,destination};}

@@ -114,6 +114,7 @@ function install({ dateOnly = false } = {}) {
   }
   let stopped = false,
     first = true;
+  const observations = { requests: 0, consecutiveFailures: 0, retries: [] };
   let readyResolve, readyReject;
   const ready = new Promise((resolve, reject) => {
     readyResolve = resolve;
@@ -122,13 +123,25 @@ function install({ dateOnly = false } = {}) {
   async function pump() {
     if (stopped) return;
     try {
+      observations.requests++;
       const next = await request("/observe", clock.now);
       await clock.run({ until: next.now });
+      if (observations.consecutiveFailures)
+        for (const retry of observations.retries.slice(-observations.consecutiveFailures)) retry.recoveredAt = realDate.now();
+      observations.consecutiveFailures = 0;
       readyResolve();
       if (!stopped) {
         realTimeout(pump, 10).unref();
       }
     } catch (error) {
+      const transient = ["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT"].includes(error.code) ||
+        error.message === "ChronAL broker unavailable";
+      if (transient && ++observations.consecutiveFailures < 3) {
+        observations.retries.push({ at: realDate.now(), error: String(error), attempt: observations.consecutiveFailures });
+        if (observations.retries.length > 64) observations.retries.shift();
+        realTimeout(pump, 50 * observations.consecutiveFailures).unref();
+        return;
+      }
       errors.push(String(error.stack || error));
       readyReject(error);
       console.error("[ChronAL broker]", error);
@@ -221,6 +234,7 @@ function install({ dateOnly = false } = {}) {
     dateOnly,
     windowMode:dateOnly?"observe":"node-sync-inclusive",
     errors,
+    observations,
     timers,
     ready,
     now: () => Math.floor(clock.now),

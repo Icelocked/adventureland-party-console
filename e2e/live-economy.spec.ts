@@ -96,7 +96,8 @@ test('completed native upgrade receipt restores commerce after a lost completion
     if(body.action==='checkpoint'&&body.journal?.phase==='complete'&&body.journal.success===true&&body.journal.commerce)journal=body.journal;
     const response=await route.fetch();
     if(body.action==='complete'&&journal?.id===body.id&&!held){
-      held=true;receipt=await response.json();faults.push({at:Date.now(),action:'held-real-completed-receipt',id:body.id});
+      receipt=await response.json();faults.push({at:Date.now(),action:'held-real-completed-receipt',id:body.id});
+      held=true; // Publish only after the authoritative receipt has been parsed.
       await gate;
       await route.abort('failed').catch(()=>{});return;
     }

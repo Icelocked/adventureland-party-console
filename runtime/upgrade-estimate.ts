@@ -199,7 +199,11 @@ async function upgradeOne(
   for (let level = 1; level <= policy.target; level++) {
     if (!budget.remaining) return null;
     if (budget.remaining % 32768 === 0) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      // Node's zero-delay timers can still wait a Windows timer quantum on
+      // every batch. Yield to I/O directly; browsers retain their task yield.
+      await new Promise<void>((resolve) =>
+        typeof setImmediate === "function" ? setImmediate(resolve) : setTimeout(resolve, 0),
+      );
       budget.signal?.throwIfAborted();
     }
     budget.remaining--;

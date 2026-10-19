@@ -80,6 +80,15 @@ test('one deployment barrier covers the native browser and real headless workers
     const final=await live.state();expect(final.characters[W].runtime).toBe('native');expect(final.characters[P].runtime).toBe('headless');expect(final.characters[M].runtime).toBe('headless');
     expect((await store.references()).active).toBe(next.manifest.id);expect(samples.some(sample=>names.every(name=>sample.reports[name].hold?.ready===true))).toBe(true);
     expect(final.characters[W].rip).toBe(false);
+    // Journal completion releases the host lease; client telemetry publishes
+    // that release separately. Do not issue the next journey into a held CODE
+    // generation and confuse its release with native planner readiness.
+    await expect.poll(async()=>{
+      const state=await live.state();
+      const released=Object.fromEntries(names.map(name=>[name,{runtime:state.characters[name]?.runtime,seenAt:state.characters[name]?.seenAt,maintenance:state.characters[name]?.consoleMaintenance}]));
+      samples.push({at:Date.now(),maintenanceRelease:released});
+      return names.every(name=>state.characters[name]?.seenAt&&Date.now()-state.characters[name].seenAt<3000&&!state.characters[name].consoleMaintenance);
+    },{timeout:60000,message:'Fresh native and headless reports must acknowledge maintenance release before the next journey'}).toBe(true);
     await expect.poll(()=>live.admin(`output=(()=>{const p=get_player('${P}');return !!p&&!p.moving;})()`),{timeout:10000,message:'Native headless movement must settle before declaring the post-retirement leg'}).toBe(true);
     const postRetirementDestination=await live.admin(`output=(()=>{const p=get_player('${P}');if(!p||p.moving)throw Error('Headless Priest is not settled');for(const [dx,dy] of [[75,0],[-75,0],[0,75],[0,-75]]){const point={map:p.map,x:p.x+dx,y:p.y+dy};if(can_move({...p,going_x:point.x,going_y:point.y})&&can_move({...p,x:point.x,y:point.y,going_x:point.x,going_y:point.y}))return point;}throw Error('No native post-retirement collision-clear endpoint');})()`);
     await nativeWalking(postRetirementDestination,'after CODE retirement');

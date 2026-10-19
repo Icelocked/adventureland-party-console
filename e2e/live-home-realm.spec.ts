@@ -47,8 +47,13 @@ test('home realm change confirms every active character including merchant', asy
       if (!await settings.isVisible()) await page.getByRole('button', {name:'Interface settings',exact:true}).click();
       await expect(settings).toBeVisible({timeout:1000});
     }).toPass({timeout:20_000});
-    await page.getByLabel('Change realm', {exact:true}).click();
-    await page.getByRole('option', {name:/US I \(/}).click();
+    const destination=page.getByRole('option', {name:/US I \(/});
+    await expect(async()=>{
+      // Settings data can publish after the dialog opens and remount its picker.
+      if(!await destination.isVisible())await page.getByLabel('Change realm', {exact:true}).click();
+      await expect(destination).toBeVisible({timeout:1000});
+    }).toPass({timeout:20_000});
+    await destination.click();
     await page.getByRole('button', {name:'Change realm',exact:true}).click();
     await page.getByText('Set as home realm', {exact:true}).click();
     const modal = page.getByRole('dialog', {name:'Change home realm?',exact:true});

@@ -1290,12 +1290,12 @@ test('expanded character and Cave maps capture real canvas pixels with map and c
         element.addEventListener('click',event=>{
           if(!(event.target instanceof Element)||!event.target.closest('button[aria-label="Capture map screenshot"]'))return;
           const c=element.querySelector('canvas')!;
-          (globalThis as typeof globalThis & {mapCaptureObserved?:unknown}).mapCaptureObserved={width:c.width,height:c.height,ratio:Math.max(1,c.width/c.clientWidth),pixels:Array.from(c.getContext('2d')!.getImageData(0,0,c.width,c.height).data)};
+          (globalThis as typeof globalThis & {mapCaptureObserved?:unknown}).mapCaptureObserved={width:c.width,height:c.height,ratio:Math.max(1,c.width/c.clientWidth),png:c.toDataURL('image/png')};
         },{capture:true,once:true});
       });
       const popupPromise=page.waitForEvent('popup');
       await dialog.getByRole('button',{name:'Capture map screenshot',exact:true}).click();
-      const original=await page.evaluate(()=>(globalThis as typeof globalThis & {mapCaptureObserved:{width:number;height:number;ratio:number;pixels:number[]}}).mapCaptureObserved);
+      const original=await page.evaluate(()=>(globalThis as typeof globalThis & {mapCaptureObserved:{width:number;height:number;ratio:number;png:string}}).mapCaptureObserved);
       const popup=await popupPromise;
       const center=mode==='full-floor'?'200.00, 100.00':'31.00, 47.00';
       await expect(popup.locator('img')).toHaveAttribute('alt',`Map: ${map}. Center: ${center}`);
@@ -1304,10 +1304,16 @@ test('expanded character and Cave maps capture real canvas pixels with map and c
         const image=element as HTMLImageElement;await image.decode();
         const c=document.createElement('canvas');c.width=image.naturalWidth;c.height=image.naturalHeight;
         const context=c.getContext('2d')!;context.drawImage(image,0,0);
+        // Keep exact whole-image equality while transporting a compact,
+        // lossless reference instead of millions of CDP numeric arguments.
+        const reference=new Image();reference.src=source.png;await reference.decode();
+        const referenceCanvas=document.createElement('canvas');referenceCanvas.width=source.width;referenceCanvas.height=source.height;
+        const referenceContext=referenceCanvas.getContext('2d')!;referenceContext.drawImage(reference,0,0);
+        const expectedPixels=referenceContext.getImageData(0,0,source.width,source.height).data;
         const pixels=context.getImageData(0,0,source.width,source.height).data;
         const footer=context.getImageData(0,source.height,c.width,c.height-source.height).data;
         let textPixels=0;for(let i=0;i<footer.length;i+=4)if(footer[i]===236&&footer[i+1]===253&&footer[i+2]===245)textPixels++;
-        return {width:c.width,height:c.height,identical:source.pixels.every((value,index)=>value===pixels[index]),textPixels,png:image.src};
+        return {width:c.width,height:c.height,identical:expectedPixels.every((value,index)=>value===pixels[index]),textPixels,png:image.src};
       },original);
       await info.attach(`map-capture-${mode}`,{body:Buffer.from(result.png.split(',')[1],'base64'),contentType:'image/png'});
       expect(result.width).toBe(original.width);expect(result.height).toBe(original.height+Math.ceil(64*original.ratio));

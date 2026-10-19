@@ -26,17 +26,16 @@ test(`explicit ${entry} travel skips only the current native event occurrence`,a
       const [sample,s]=await Promise.all([
         live.clients[P].frame.evaluate(()=>{
           const runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
-          return {movement:runner?.__partyMovement?.report?.(),trace:runner?.sharedRoutine?.combatTraceSnapshot?.(),
+          return {movement:runner?.__partyMovement?.report?.(),navigation:runner?.convoyNavigationReport?.(),trace:runner?.sharedRoutine?.combatTraceSnapshot?.(),
             revision:runner?.__partyNavigationIntent?.revision,commandId:runner?.__partyLastCommand};
         }),live.state()]);
       const c=s.activeConvoy,expected=c?.expected?.[P],rally=c?.rally;
-      const owner={id:sample.trace?.convoy,epoch:sample.trace?.convoyEpoch,phase:sample.trace?.convoyPhase,
-        commandId:sample.commandId,navigationRevision:sample.revision,runtimeId:expected?.runtimeId};
+      const owner=sample.navigation;
       if(faultArmed&&planningFaults.length===0&&Date.now()-started<1500&&sample.movement?.id===body.id&&
         !sample.movement.done&&String(body.id).startsWith(P+':'+expected?.runtimeId+':')&&
         c?.phase==='assemble'&&c.purpose==='party-travel'&&!c.runtimes&&expected?.phase==='assemble'&&
         rally&&body.to?.map===rally.map&&body.to.x===rally.x&&body.to.y===rally.y&&
-        owner.phase==='assembling'&&owner.id===c.id&&owner.epoch===c.epoch&&
+        owner?.phase==='assembling'&&owner.id===c.id&&owner.epoch===c.epoch&&owner.runtimeId===expected.runtimeId&&
         owner.commandId===expected.commandId&&owner.navigationRevision===expected.revision){
         planningFaults.push({at:Date.now(),request:body,movement:sample.movement,owner,convoy:c,elapsedMs:Date.now()-started});
         await route.abort('connectionreset');return;

@@ -1111,6 +1111,7 @@ async ({ live, page }, info) => {
   })()`);
   await acceptRoom(stairs);
   let answeredFarewell=false;
+  let farewellChoiceId='';
   const stairReplies:{id:string;title:string;option:string;room:string;run:string}[]=[];
   const stairNativeChoices:any[]=[];
   const stairSamples:any[]=[];
@@ -1127,7 +1128,11 @@ async ({ live, page }, info) => {
     if(body?.name!=='E2EWarrior')return route.fallback();
     if(displacingStairArrival)return route.abort('failed');
     const receipt=body.dungeon?.action;
-    if(!answeredFarewell||stairDisplacement||receipt?.status!=='complete'||receipt.command?.action!=='move'||
+    // The UI click promise can settle after native resolution already admitted
+    // stairs. Intercept the exact resolved native vote's first completion
+    // report, before its stale position can authorize that transport.
+    const resolvedFarewell=!!farewellChoiceId&&body.dungeon?.cave?.choice?.id===farewellChoiceId&&body.dungeon.cave.choice.resolved;
+    if(!resolvedFarewell||stairDisplacement||receipt?.status!=='complete'||receipt.command?.action!=='move'||
       receipt.command?.target?.id!==stairs.id)return route.fallback();
     displacingStairArrival=true;
     stairDisplacement={at:Date.now(),receipt};
@@ -1207,6 +1212,7 @@ async ({ live, page }, info) => {
       const identity=await live.admin(`output=(()=>{const p=get_player('E2EWarrior'),run=generated_entry(p).record,vote=run.cave.vote;return {run:run.key,id:vote?.id,room:vote?.room?.id,map:vote?.room?.map,x:vote?.room?.x,y:vote?.room?.y,resolved:vote?.resolved,players:cave_players(run).map(p=>({name:p.name,map:p.map,x:p.x,y:p.y,hp:p.hp}))};})()`);
       stairNativeChoices.push({at:Date.now(),advertised:c.choice.id,...identity});if(stairNativeChoices.length>100)stairNativeChoices.splice(5,1);
       if(identity.run!==c.run||identity.id!==c.choice.id||identity.resolved)return false;
+      if(identity.run===farewellDeclaration.run&&identity.room===farewellDeclaration.room)farewellChoiceId=c.choice.id;
       const reply=c.choice.options.find((o:any)=>!o.unavailable&&!o.cost&&!o.amber);
       if(!stairMoveFlags.length&&identity.run===farewellDeclaration.run&&identity.room===farewellDeclaration.room){
         stairMoveFlags=await Promise.all(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].frame.evaluate(name=>{
