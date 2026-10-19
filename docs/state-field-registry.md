@@ -143,7 +143,10 @@ Mode switching and speed:
   mode, fast sends every stored field except v1.4.0's omit list.
 - Failures 12 and 13: the proxy is off unless `localStorage` or the E2E
   binding enables it, it caches one proxy per object, and it wraps the hook
-  outputs and every merge site the static scan lists as a spread.
+  outputs and the merge sites the static scan lists as spreads. The copy in
+  `gear-comparison-dialog.tsx`'s `project` stays unwrapped because
+  `scripts/tests/gear-comparison.test.cjs` runs that function as extracted
+  source; the manual review below covers its reads.
 - Failure 14: the speed table below.
 
 ## Readers inventory
@@ -192,7 +195,8 @@ Dynamic sites, reviewed by hand:
   `send-to-party-control.tsx` take `Object.keys` of the character record
   (names only); `gear-comparison-dialog.tsx` reads `character[primary]`
   (`str`, `int` or `dex`) and `candidate[key]` over its stat rows, all
-  whitelisted; the remaining spreads merge cache kinds into one `Char`
+  whitelisted, and it copies the character before adding gear deltas; the
+  remaining spreads merge cache kinds into one `Char`
   (`connected-character-card.tsx`, `character-map-section.tsx`,
   `connected-farming-area-picker.tsx`, `merchant-card-controls.tsx`,
   `character-stats-trigger.tsx`, `stand-count.tsx`). The audit proxy wraps

@@ -3,7 +3,7 @@
 // registry's shadow rollout (docs/state-field-registry.md). It is off unless
 // localStorage 'party-field-audit' is '1' or the E2E fixture installs
 // window.__partyFieldAudit; when off, audited() returns its input unchanged.
-import { characterFields, sectionFields, streamFields as liveFields } from '../../../runtime/coordinator/telemetry/character-fields';
+import { characterFields, sectionFields, streamFields as liveFields } from '../../../runtime/coordinator/telemetry/character-fields.ts';
 
 export type AuditKind = 'vitals' | 'position' | 'inventory' | 'diagnostics' | 'presence' | 'core' | 'merged';
 export interface FieldAuditRecord {
