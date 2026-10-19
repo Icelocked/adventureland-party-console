@@ -9614,6 +9614,16 @@
     send: function (report) { return request("/alninja/observations", { method: "POST", body: report }); },
     setTimer: function (callback, milliseconds) { return setTimeout(callback, milliseconds); },
     clearTimer: function (timer) { clearTimeout(timer); },
+    // Survives the code reload of a realm hop, which follows a marketplace purchase within 150 ms.
+    load: function () {
+      try { return JSON.parse(root.localStorage.getItem("party-alninja:" + character.name) || "null"); } catch (_) { return null; }
+    },
+    save: function (state) {
+      try {
+        if (state) root.localStorage.setItem("party-alninja:" + character.name, JSON.stringify(state));
+        else root.localStorage.removeItem("party-alninja:" + character.name);
+      } catch (_) { /* storage unavailable: reports still go out from memory */ }
+    },
   }) : null;
   if (alninjaReporter && parent.socket && typeof parent.socket.on === "function") {
     parent.__partyAlninjaUi = alninjaReporter.observeUi;

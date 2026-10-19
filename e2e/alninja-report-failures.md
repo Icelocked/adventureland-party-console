@@ -46,3 +46,20 @@ accepts `Authorization: Bearer <Character>:<key>` with at most 12 reports a minu
 Not exercised by the journeys: item 7 (a code reload replacing the reporter) and item 15 (three
 characters report about three times a minute, well under the limit). The journey checks
 that each trade is reported once per character, but does not reload the character code.
+
+Added 2026-10-19: two Rings of Courage +2 that FonzeMerch bought through an ALData marketplace
+itinerary never reached ALNinja, while its other trades that hour did. The itinerary buys, then
+asks for the home realm at once, and the coordinator restarts the merchant 150 ms later.
+
+16. **Lost to a reload.** The `"+$$"` a character saw waits 2 s for its report; a reload or realm
+    hop sooner discards it. Expected: a trade seen just before the character's code reloads is
+    reported after it starts again.
+17. **History reset by a reload.** After a reload the first trade-history read is the starting
+    point, so purchases made just before the reload count as old. Expected: the character's last
+    read survives a reload for a few minutes, and the trades added since are reported, once.
+18. **Reported from the wrong realm.** A trade seen on one realm and reported after moving to
+    another must keep the realm and map where it happened, without claiming the old realm's
+    stands are in view.
+
+The journey reloads the fighter's client right after its purchases on the same realm, so it checks
+16 and 17 and that the realm and map are the original ones, but not a report sent from a second realm.

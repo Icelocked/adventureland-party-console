@@ -171,3 +171,42 @@ test('a regular user\'s merchant mails a generated key to ALNinja, and reports u
     await info.attach('alninja-key', { body: JSON.stringify({ mail: mail && { fro: mail.fro, to: mail.to, subject: mail.info?.subject }, reports: alninja.reports.slice(from) }), contentType: 'application/json' });
   }
 });
+
+test('trades made just before a character reloads are still reported, under the realm where they happened', async ({ live }, info) => {
+  test.setTimeout(360_000);
+  const from = alninja.reports.length, timeline: any[] = [];
+  try {
+    await live.post('/alninja', { enabled: true, token });
+    await expect.poll(() => (live.state()).then(s => s.alninja?.reporting), { timeout: 30_000 }).toBe(true);
+    await stock(live);
+    const potions = await live.clients[M].run(`character.items.findIndex(x=>x&&x.name==='hpot0')`);
+    await live.post('/merchant/stand', { slot: potions, item: { name: 'hpot0', q: 10 }, price: 100, quantity: 10 });
+    const listing = `Object.entries(get_player('${M}')?.slots||{}).find(([k,v])=>k.startsWith('trade')&&v&&v.name==='hpot0'&&!v.b)?.[0]??null`;
+    await expect.poll(() => live.clients[W].run(listing), { timeout: 120_000, message: 'The fighter must see the listed potions' }).toMatch(/^trade\d+$/);
+    // The fighter has reported (so its trade history has a starting point) before it buys.
+    await expect.poll(() => accepted(alninja.reports.slice(from), W).length, { timeout: 90_000 }).toBeGreaterThan(0);
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    const realm = accepted(alninja.reports.slice(from), W).at(-1)!.body;
+    // 16, 17: two purchases, then the client goes away at once, as a realm hop restarts it 150 ms later.
+    const result = await live.clients[W].run(`(async()=>{const bought=[];
+      for(let n=0;n<2;n++){for(let tries=0;;tries++){const m=get_player('${M}'),slot=Object.entries(m?.slots||{}).find(([k,v])=>k.startsWith('trade')&&v&&v.name==='hpot0'&&!v.b)?.[0];
+        if(slot){bought.push(slot);await trade_buy(m,slot,1);break;}if(tries>40)throw Error('listing gone');await new Promise(r=>setTimeout(r,250));}}
+      return bought})()`);
+    const boughtAt = Date.now(), before = alninja.reports.length;
+    await live.reconnectClient(W);
+    timeline.push({ result, boughtAt, reportsBeforeReload: before, reconnectedAt: Date.now() });
+    const fresh = () => accepted(alninja.reports.slice(from), W).filter(r => r.at >= boughtAt);
+    await expect.poll(() => sold(fresh(), W).length, { timeout: 120_000, message: 'The fighter must report the trades it saw before the reload' }).toBe(2);
+    await expect.poll(() => bought(fresh()).reduce((n: number, h: any) => n + (h.item.q || 1), 0), { timeout: 150_000,
+      message: 'The fighter must report its purchases from trade history after the reload' }).toBe(2);
+    // 18: reported with the realm and map where they happened, and nothing claimed in view for them.
+    for (const report of fresh().filter(r => r.body.sales.length || r.body.history.length))
+      expect(report.body).toMatchObject({ region: realm.region, server: realm.server, map: realm.map });
+    // Each once, also after more reports.
+    await new Promise(resolve => setTimeout(resolve, 70_000));
+    expect(sold(fresh(), W), 'Each witnessed trade reported once').toHaveLength(2);
+    expect(bought(fresh()).reduce((n: number, h: any) => n + (h.item.q || 1), 0), 'Trade history reported once').toBe(2);
+  } finally {
+    await info.attach('alninja-reload', { body: JSON.stringify({ timeline, reports: alninja.reports.slice(from) }), contentType: 'application/json' });
+  }
+});
