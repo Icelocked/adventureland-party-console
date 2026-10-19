@@ -366,10 +366,17 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
       }
       const bodyClockSnapshot=async()=>{
         const url=new URL('/diagnostics',process.env.E2E_CLOCK_BROKER);url.searchParams.set('token',process.env.E2E_CLOCK_TOKEN||'');
-        return {broker:await (await fetch(url)).json(),frames:await Promise.all(Object.entries(clients).map(async([name,client])=>({name,clocks:await client.frame.evaluate(()=>{
-          const w=window as any,r=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
-          return [w.__e2eChronalClock,r?.__e2eChronalClock].map(c=>c&&({timing:c.timing,taskStats:c.taskStats}));
-        })})))};
+        const ownership=await live!.state();
+        return {broker:await (await fetch(url)).json(),frames:await Promise.all(Object.entries(clients).map(async([name,client])=>{
+          const runtime=ownership.characters[name]?.runtime;
+          // Managed headless migration/logout legitimately retires the browser frame.
+          // Its clock remains represented by the broker's actual participants.
+          if(runtime!=='native')return {name,runtime:runtime||'offline',clocks:[],source:'broker-participants'};
+          return {name,runtime,clocks:await client.frame.evaluate(()=>{
+            const w=window as any,r=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+            return [w.__e2eChronalClock,r?.__e2eChronalClock].map(c=>c&&({timing:c.timing,taskStats:c.taskStats}));
+          })};
+        }))};
       };
       const bodyClockBefore=observationClock.backend==='chronal-network'&&process.env.E2E_MEASURE_BROWSER_CPU==='1'?await bodyClockSnapshot():undefined;
       const rendering=process.env.E2E_MEASURE_BROWSER_CPU==='1'?await measureBrowserRendering(browser,()=>observationClock.now()):undefined;
@@ -405,11 +412,25 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
         }
         for (const [name, client] of Object.entries(clients)) {
           if(observationClock.backend==='chronal-network'&&!client.page.isClosed()){
-            const clocks=await diagnostic((async()=>client.frame.evaluate(()=>{
-              const w=window as any,r=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
-              return [w.__e2eChronalClock,r?.__e2eChronalClock].map(c=>c&&({backend:c.backend,now:c.now(),errors:c.errors,epoch:c.epoch,rate:c.rate,state:c.state,timing:c.timing,taskStats:c.taskStats}));
-            }))());await attach(name+'-final-clock',clocks);
-            if(Array.isArray(clocks))for(const clock of clocks){expect(clock?.backend).toBe('chronal-network');expect(clock?.errors).toEqual([]);}
+            const ownership=live&&await live.state();
+            if(ownership?.characters[name]?.runtime==='native'){
+              let latest:unknown,observations:Array<{at:number;ready:boolean}>=[];
+              const clocks=await diagnostic((async()=>{
+                await expect.poll(async()=>{
+                  latest=await client.frame.evaluate(()=>{
+                    const w=window as any,r=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+                    return [w.__e2eChronalClock,r?.__e2eChronalClock].map(c=>c&&({backend:c.backend,now:c.now(),errors:c.errors,epoch:c.epoch,rate:c.rate,state:c.state,timing:c.timing,taskStats:c.taskStats}));
+                  });
+                  const ready=Array.isArray(latest)&&latest.length===2&&latest.every(c=>c?.backend==='chronal-network'&&c.state?.ticks>0);
+                  if(observations.length>=32)observations.shift();observations.push({at:Date.now(),ready});return ready;
+                },{timeout:15_000,message:'Current native game and CODE clocks must finish joining after realm/client replacement'}).toBe(true);
+                return latest;
+              })());
+              await attach(name+'-final-clock',clocks);
+              await attach(name+'-final-clock-readiness',{observations,latest});
+              expect(Array.isArray(clocks),'Browser-owned characters must retain both final clock observations').toBe(true);
+              if(Array.isArray(clocks))for(const clock of clocks){expect(clock?.backend).toBe('chronal-network');expect(clock?.errors).toEqual([]);}
+            }else await attach(name+'-final-clock',{runtime:ownership?.characters[name]?.runtime||'offline',source:'broker-participants'});
           }
           await attach(name + '-native-disconnects', client.disconnects());
           await attach(name + '-native-events', await diagnostic(client.events()));

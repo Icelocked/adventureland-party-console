@@ -1422,9 +1422,14 @@ for(const automatic of [false,true]) test(`${automatic?'automatic':'manual'} com
    if(!p.user)await db.collection('user').replaceOne({_id:u._id},u);return true;})()`);
   await live.post('/command',{character:merchant,type:'bank'});
   await live.post('/merchant/force-stand',{enabled:false});
-  await expect.poll(async()=>(await live.state()).bank?.packs?.items0?.filter((entry:any)=>entry?.item?.name==='strring').length,{timeout:90_000}).toBe(4);
+  await expect.poll(async()=>{
+   const state=await live.state();
+   return {rings:state.bank?.packs?.items0?.filter((entry:any)=>entry?.item?.name==='strring').length,
+     bankJobPending:[state.merchantCurrent,...state.merchantQueue].some(job=>job?.reason==='manual bank exchange')};
+  },{timeout:90_000,message:'The native bank visit must finish publishing its final slot layout before selecting the reserved triplet'}).toEqual({rings:4,bankJobPending:false});
   await live.post('/merchant/force-stand',{enabled:true});
-  const selected=(await live.state()).bank.packs.items0.find((entry:any)=>entry?.item?.name==='strring'&&!entry.item.l);
+  const selectionState=await live.state(),selected=selectionState.bank.packs.items0.find((entry:any)=>entry?.item?.name==='strring'&&!entry.item.l);
+  observations.push({at:Date.now(),phase:'bank-selection',selected:{slot:selected.slot,item:selected.item},bank:selectionState.bank.packs.items0.map((entry:any)=>entry&&({slot:entry.slot,item:entry.item}))});
   await live.clients[merchant].run(`(()=>{globalThis.__manualBankCompoundReceipts=[];parent.socket.on('game_response',data=>{const response=typeof data==='string'?data:data&&data.response;if(response==='compound_success'||response==='compound_fail')globalThis.__manualBankCompoundReceipts.push({at:Date.now(),response,data});});return true;})()`);
   await live.admin(`output=(()=>{const p=get_player('${merchant}'),socket=p.socket,handlers=socket.listeners('compound');
    if(handlers.length!==1)throw Error('Expected one native compound handler');

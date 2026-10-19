@@ -77,10 +77,10 @@ test.describe('retired event exit ownership',()=>{
     const exitOwnerSamples:any[]=[];
     const communicationFaults:any[]=[];
     const context=live.clients[P].page.context();
-    let holdUntil=0;
+    let holdingPriest=false;
     let priestSeenAtBeforeHold=0;
     const intercept=async(route:Route)=>{
-      if(Date.now()<holdUntil&&route.request().method()==='POST'&&route.request().postDataJSON()?.name===P){
+      if(holdingPriest&&route.request().method()==='POST'&&route.request().postDataJSON()?.name===P){
         if(communicationFaults.length<128)communicationFaults.push({at:Date.now(),action:'dropped-priest-status'});
         await route.abort('failed');return;
       }
@@ -118,9 +118,14 @@ test.describe('retired event exit ownership',()=>{
         },{timeout:15_000,message:'Original browser runtimes must publish before status loss'}).toBe(true);
         priestSeenAtBeforeHold=Number((await live.state()).characters[P]?.seenAt);
         expect(priestSeenAtBeforeHold).toBeGreaterThan(0);
-        holdUntil=Date.now()+20_000;
+        holdingPriest=true;
         await context.route('**/party-api/status',intercept);
-        await expect.poll(async()=>Date.now()-Number((await live.state()).characters[P]?.seenAt||priestSeenAtBeforeHold),{timeout:8_000}).toBeGreaterThan(3500);
+        await expect.poll(async()=>{
+          const seenAt=Number((await live.state()).characters[P]?.seenAt||priestSeenAtBeforeHold),age=Date.now()-seenAt;
+          // Pre-fault requests may already be in flight; capture the accepted
+          // timestamp only once the exact stale observation is established.
+          if(age>3500)priestSeenAtBeforeHold=seenAt;return age;
+        },{timeout:8_000}).toBeGreaterThan(3500);
       }
       retiredAt=Date.now();
       await live.restoreHistoricalSettings(settings=>{
@@ -133,9 +138,9 @@ test.describe('retired event exit ownership',()=>{
       });
       if(variant==='stale-peer'){
         await expect.poll(async()=>{const s=await live.state();return !s.deferredEventReturns[W]&&!!s.farmingProfiles[W].eventSessions[W];},{timeout:12_000}).toBe(true);
-        expect(Date.now()).toBeLessThan(holdUntil);
         const admission=await live.state();
         const priestSeenAt=Number(admission.characters[P]?.seenAt||priestSeenAtBeforeHold);
+        expect(priestSeenAt).toBe(priestSeenAtBeforeHold);
         const priestNative=await live.clients[P].snapshot();
         expect(priestNative.name).toBe(P);
         expect(priestNative.connected).toBe(true);
@@ -144,7 +149,7 @@ test.describe('retired event exit ownership',()=>{
         communicationFaults.push({at:Date.now(),action:'released-after-warrior-admission',priestSeenAt,priestSeenAtBeforeHold,
           priestNative:{name:priestNative.name,connected:priestNative.connected,runtimeGeneration:priestNative.runtimeGeneration},
           warriorSession:admission.farmingProfiles[W].eventSessions[W],priestDeferred:admission.deferredEventReturns[P]});
-        holdUntil=0;
+        holdingPriest=false;
       }
       await expect.poll(async()=>{
         const observationStartedAt=Date.now();
@@ -185,7 +190,7 @@ test.describe('retired event exit ownership',()=>{
         e.event==='hit'&&String(e.data?.id)===String(seed.id)&&e.data?.hid===name&&e.at>retiredAt));
       },{timeout:180_000}).toBe(true);
     }finally{
-      holdUntil=0;
+      holdingPriest=false;
       await context.unroute('**/party-api/status',intercept);
       await info.attach('native-retired-event-exit',{body:JSON.stringify({oldCycle,deferred,variant,communicationFaults,started,retiredAt,seed,exitOwnerSamples,final:await live.state().catch(error=>({error:String(error)})),events:await live.clients[W].events()}),contentType:'application/json'});
       await live.post('/formation',{character:W,eventSelections:[]});
@@ -489,7 +494,8 @@ test.describe('farming focus changed during native event attendance',()=>{
     return !s.eventReturn&&fighters.every(name=>s.characters[name]?.map==='main'&&!s.characters[name]?.joinedEvent&&events.some((packet:any)=>packet.at>=endedAt&&packet.event==='hit'&&bees.includes(String(packet.data?.id))&&packet.data?.hid===name&&packet.data?.damage>0));
    },{timeout:240_000,message:'After the event, both native fighters must resume the newly selected bee focus instead of parking in town'}).toBe(true);
   }finally{
-   await info.attach('native-event-farming-focus-change',{body:JSON.stringify({seed,changedAt,endedAt,focusOwnership,samples,state:await live.state(),events:await live.clients[W].events()}),contentType:'application/json'});
+   const native=await Promise.all(fighters.map(async name=>({name,observation:await live.clients[name].run(`(()=>{const r=window,s=r.sharedRoutine;return {at:Date.now(),target:r.__partyGroupedCombat,encounter:r.__partyFarmingEngagement,trace:s.combatTraceSnapshot(),approach:s.independentApproachPorts().context(),occupied:s.isOccupied(),entities:Object.values(parent.entities).filter(e=>e.mtype==='bee').map(e=>({id:e.id,x:e.x,y:e.y,hp:e.hp,visible:e.visible,target:e.target}))};})()`).catch(String)})));
+   await info.attach('native-event-farming-focus-change',{body:JSON.stringify({seed,changedAt,endedAt,focusOwnership,samples,native,state:await live.state(),events:await live.clients[W].events()}),contentType:'application/json'});
    await live.post('/formation',{character:W,eventSelections:[]}).catch(()=>{});
    if(seed)await live.admin(`output=(()=>{const m=instances.halloween.monsters[${JSON.stringify(seed.id)}];if(m?.e2eChangedFarmEvent)remove_monster(m,{silent:true});G.monsters.mrpumpkin=${JSON.stringify(seed.original)};delete E.mrpumpkin;broadcast_e();return true;})()`).catch(()=>{});
   }

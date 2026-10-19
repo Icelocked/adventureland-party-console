@@ -16368,7 +16368,7 @@
       // before either fighter can commit; unrelated convoy targets stay fenced.
       var encounter=root.__partyFarmingEngagement;
       var farmingHandoff=!!(coordinated && encounter && !encounter.finished && encounter.target && String(encounter.target.id)===String(t.id));
-      var allowed=!!(!foreignOwned && (!partyConvoyActive || farmingHandoff) && !convoyTraveling && !root.sharedRoutine.isOccupied() && (coordinated || !groupedFarming()) && runtimeCurrent() && (!parent.socket || parent.socket.connected!==false) && !dungeonOwned() && !eventTraveling && character.ctype!=='merchant' &&
+      var allowed=!!(!foreignOwned && (!partyConvoyActive || farmingHandoff) && (!convoyTraveling || farmingHandoff && convoyTraveling.defensePaused) && !root.sharedRoutine.isOccupied() && (coordinated || !groupedFarming()) && runtimeCurrent() && (!parent.socket || parent.socket.connected!==false) && !dungeonOwned() && !eventTraveling && character.ctype!=='merchant' &&
         !navigationIntent.cancelled && !character.rip && !consoleMovementPaused() && !root.__partyMovementPaused &&
         !knownDead && (!observed || !observed.dead && !(Number(observed.hp)<=0)) && Number.isFinite(e.x) && Number.isFinite(e.y) &&
         (coordinated || e.visible && !e.dead && e.hp>0) && (!coordinated || t.map===character.map && t.in===character.in && t.server===reunionRealm()) &&

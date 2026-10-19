@@ -11,7 +11,7 @@ if (config && config.rate > 1) {
     NativeWebSocket = WebSocket;
   const nativeFrame = requestAnimationFrame,
     nativeCancelFrame = cancelAnimationFrame;
-  const id = "browser-" + nativeRandom().toString(36).slice(2) + "-" + nativePerformance.now();
+  let id = "browser-" + nativeRandom().toString(36).slice(2) + "-" + nativePerformance.now();
   const url = (route) => {
     const u = new URL(route, config.broker);
     u.searchParams.set("id", id);
@@ -51,9 +51,18 @@ if (config && config.rate > 1) {
   };
   globalThis.cancelAnimationFrame = nativeCancelFrame;
   let first = true;
-  const state = { phase: "initial", ticks: 0 };
+  const state = { phase: "initial", ticks: 0, connectionAttempts: 0, connections: [] };
   const timing = { windows: 0, events: 0, wallMs: 0, maxWindowMs: 0 };
+  function failedConnection(record,error) {
+    record.error=String(error);record.phase='failed';
+    if(state.connectionAttempts<3)nativeTimeout(connect,50*state.connectionAttempts);
+    else errors.push('ChronAL clock connection failed: '+record.error);
+  }
   async function connect() {
+    state.connectionAttempts++;
+    if(state.connectionAttempts>1)id='browser-'+nativeRandom().toString(36).slice(2)+'-'+nativePerformance.now();
+    const record={attempt:state.connectionAttempts,at:NativeDate.now(),url:location.href,phase:'connecting'};
+    state.connections.push(record);state.phase='connecting';
     try {
       if (typeof globalThis.__e2eChronalFrame === "function")
         await globalThis.__e2eChronalFrame(id);
@@ -70,6 +79,8 @@ if (config && config.rate > 1) {
       };
       const endpoint=url('/clock');endpoint.protocol=endpoint.protocol==='https:'?'wss:':'ws:';
       const socket=new NativeWebSocket(endpoint);
+      let opened=false;
+      socket.onopen=()=>{opened=true;record.phase='open';record.openedAt=NativeDate.now();};
       let queue=Promise.resolve();
       socket.onmessage=event=>{
         const receivedWall=NativeDate.now();
@@ -79,13 +90,15 @@ if (config && config.rate > 1) {
         }).catch(error=>{errors.push(String(error.stack||error));console.error('[ChronAL clock]',error);});
       };
       socket.onerror = () => {
-        errors.push("ChronAL clock connection failed");
+        record.error='WebSocket handshake/transport failed';
+        if(opened)errors.push('ChronAL clock connection failed after opening');
       };
       socket.onclose = () => {
         state.phase = "closed";
+        if(!opened)failedConnection(record,record.error||'WebSocket closed before opening');
       };
     } catch (error) {
-      errors.push(String(error.stack || error));
+      failedConnection(record,error.stack||error);
       console.error("[ChronAL clock broker]", error);
     }
   }

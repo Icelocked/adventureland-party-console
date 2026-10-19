@@ -89,6 +89,11 @@ const adapters = {
   // Map references resolve against the launcher directory. Read the same pinned
   // catalog from this scenario, without modifying the installed game cache.
   'node:fs': { ...fs, readFileSync(file, ...args) {
+    const installedCache=path.resolve(launcherDirectory,'../game_files',String(version));
+    // This console fixture declares catalog-only offline profiles. Never let an
+    // installed stats cache silently change the fallback case's input boundary.
+    if(typeof file==='string'&&path.dirname(path.resolve(file))===installedCache&&path.basename(file)!=='data.js')
+      throw Error('Native derived-stat sources intentionally unavailable in this console fixture');
     const installedCatalog = path.resolve(launcherDirectory, '../game_files', String(version), 'data.js');
     const scenarioFile = typeof file === 'string' && path.resolve(file) === installedCatalog
       ? path.join(directory, 'game_files', String(version), 'data.js') : file;
