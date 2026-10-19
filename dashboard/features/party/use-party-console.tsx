@@ -49,6 +49,9 @@ export function usePartyConsole() {
     [standOpen, setStandOpen] = useState(false),
     [marketOpen, setMarketOpen] = useState(false),
     [settingsOpen, setSettingsOpen] = useState(false),
+    // Character cards can briefly disappear before a restarted coordinator
+    // receives its first reports. Keep dialog ownership above those cards.
+    [farmingSettingsCharacter, setFarmingSettingsCharacter] = useState<string | null>(null),
     [realmDestination, setRealmDestinationState] = useState(""),
     [realmConfirmOpen, setRealmConfirmOpenState] = useState(false),
     [realmSetHome, setRealmSetHomeState] = useState(false),
@@ -877,6 +880,7 @@ export function usePartyConsole() {
     setMarketOpen,
     setBankOpen,
     setSettingsOpen,
+    setFarmingSettingsCharacter,
     setRealmDestination,
     aldataKey,
     aldataAction,
@@ -984,6 +988,7 @@ export function usePartyConsole() {
     buyPontyListing,
     sellALDataOrder,
     settingsOpen,
+    farmingSettingsCharacter,
     realmDestination,
     setRealmSetHome,
     setRealmConfirmOpen,

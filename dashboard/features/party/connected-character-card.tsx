@@ -94,7 +94,12 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
     itemCollectionThreshold,
     editItemCollectionThreshold,
     saveItemCollectionThreshold,
+    farmingSettingsCharacter,
+    setFarmingSettingsCharacter,
   } = model;
+  const onFarmingSettingsOpenChange = useCallback((open: boolean) => {
+    setFarmingSettingsCharacter(current => open ? name : current === name ? null : current);
+  }, [name, setFarmingSettingsCharacter]);
   // MonsterFocusPicker is memoized, but formation={state} would hand it the
   // whole (frequently-changing) state object even though routing only needs
   // leader/followers; narrowing it lets unrelated state churn skip a re-render.
@@ -374,6 +379,8 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
         <ConnectedCombatLog character={char.name} />
         {char.ctype !== 'merchant' ? (
           <FarmingModeControl
+            settingsOpen={farmingSettingsCharacter === name}
+            onSettingsOpenChange={onFarmingSettingsOpenChange}
             farmArea={farming.farmArea}
             radius={state.monsterSearchRadiusByCharacter?.[char.name] || 400}
             radiusContext={

@@ -465,3 +465,22 @@ Both lucky-slot browser journeys pass three consecutive repetitions after this
 interaction correction: six passes, 72 evidence hashes verified. Stop the known
 failed full run and preserve its partial evidence before replacing it with a clean
 full run of the corrected commit. A cancelled partial run is not a passing suite.
+
+Run 39255854708 passes the lucky-slot case but exposes a real dashboard state
+loss during direct coordinator restart. The blacklist remains durable; a successful
+core response briefly contains desired slots and zero character reports, unmounting
+the card and discarding its locally held Farming settings dialog. The trace records
+empty core at 831994.569ms, fresh fast reports at 832019.059ms, then the missing
+dialog at Clear all. Before implementation, extend that existing browser journey
+with two declared post-restart empty-character core responses. Preserve the open
+dialog, manual reason/death count, exact saved blacklist and both clear/cancel
+confirmation paths. Keep dialog ownership in the stable console model so transient
+card removal does not discard it; preserve ordinary explicit close and owner identity.
+
+The previous immutable UI reproduces that dialog loss with the declared reconnect
+responses; all 16 red evidence hashes verify. The first added recovery barrier
+incorrectly expected configuration inside the core payload. Check fresh character
+reports there and retain the existing exact blacklist checks through full state.
+With stable model-owned dialog state, both the reconnect and blacklist export/import
+journeys pass three repetitions: six passes, 81 evidence hashes verified. The visible
+post-reconnect dialog screenshot confirms its owner and manually added Goo entry.

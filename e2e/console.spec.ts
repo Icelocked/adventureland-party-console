@@ -480,6 +480,31 @@ test('Hunt blacklist picker adds unseen monsters manually and survives restart',
   await app.restartCoordinator();
   expect((await app.state()).farmingProfiles.W.huntBlacklist).toEqual(before.farmingProfiles.W.huntBlacklist);
   await info.attach('manual-blacklist-state',{body:JSON.stringify({before,after:await app.state()}),contentType:'application/json'});
+  // A restarting coordinator can publish desired slots before its first
+  // character reports. Keep the open dialog through these real core responses;
+  // no gameplay, persistence, other status request or timing is substituted.
+  let emptyCoreSnapshots=0,recoveredCore=false;
+  const observeReconnect=async(route:import('@playwright/test').Route)=>{
+    if(new URL(route.request().url()).searchParams.get('section')!=='core')return route.continue();
+    const response=await route.fetch();
+    if(!response.ok())return route.fulfill({response});
+    const state=await response.json();
+    if(emptyCoreSnapshots<2){
+      await route.fulfill({response,json:{...state,characters:{}}});
+      emptyCoreSnapshots++;
+    }else{
+      await route.fulfill({response});
+      // Blacklist configuration is checked through full state above; core
+      // intentionally contains only live operational reports.
+      recoveredCore=!!state.characters?.W;
+    }
+  };
+  await page.route('**/party-api/state?**',observeReconnect);
+  try{
+    await expect.poll(()=>emptyCoreSnapshots===2&&recoveredCore,{timeout:15_000}).toBe(true);
+    await expect(settings.getByText('manually added',{exact:false})).toBeVisible();
+    await info.attach('blacklist-dialog-after-empty-reconnect-snapshots',{body:await page.screenshot(),contentType:'image/png'});
+  }finally{await page.unroute('**/party-api/state?**',observeReconnect);}
   await settings.getByRole('button',{name:'Clear all',exact:true}).click();
   const confirmation=page.getByRole('dialog',{name:'Clear Hunt blacklist?',exact:true});
   await expect(confirmation).toContainText('for W');
