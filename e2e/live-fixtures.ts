@@ -25,12 +25,12 @@ const bootstrap = require('./game/bootstrap.cjs');
 export type LiveGame = {
   url: string;
   clients: Record<string, LiveClient>;
-  state(catalogs?: boolean): Promise<any>;
+  state(catalogs?: boolean | 'fast'): Promise<any>;
   savedTownCycle(): {id:string;pending:string[];revisions?:Record<string,number>} | null;
   post(route: string, body: unknown): Promise<any>;
   admin(code: string): Promise<any>;
   adminRealm(realm:'USI'|'USII', code:string):Promise<any>;
-  holdMerchantStatus(hold:boolean):void;
+  holdMerchantStatus(hold:boolean,options?:{inventoryOnly?:boolean}):void;
   consoleDrainLease(id: string | null, expires?: number, options?:{loadMode?:'now'|'safe'|'main';phase?:string}): void;
   restartCoordinator(): Promise<void>;
   restartCoordinatorIdentity(artifactId:string,hash:string):Promise<void>;
@@ -176,7 +176,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
         async state(catalogs = false) {
           // Match the dashboard's existing catalog-free polling API. Catalog checks
           // explicitly request the full projection; never cache or synthesize state.
-          const response = await fetch(url + '/party-api/state' + (catalogs ? '' : '?catalog=0'), { signal: AbortSignal.timeout(15_000) });
+          const response = await fetch(url + '/party-api/state' + (catalogs === 'fast' ? '?section=fast' : catalogs ? '' : '?catalog=0'), { signal: AbortSignal.timeout(15_000) });
           if (!response.ok) throw Error('Live state failed: ' + response.status);
           return response.json();
         },
@@ -207,8 +207,8 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           exchanges.push({at:Date.now(),administrative:true,realm,code,result});
           return result;
         },
-        holdMerchantStatus(hold) {
-          const marker=path.join(directory,'hold-merchant-status');
+        holdMerchantStatus(hold, options={}) {
+          const marker=path.join(directory,options.inventoryOnly?'hold-merchant-inventory':'hold-merchant-status');
           if(hold) writeFileSync(marker,'Declared missing merchant arrival reports');
           else rmSync(marker,{force:true});
           exchanges.push({at:Date.now(),transportFault:'merchant-status',hold});
@@ -389,6 +389,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
       }
     } finally {
       rmSync(path.join(directory,'hold-merchant-status'),{force:true});
+      rmSync(path.join(directory,'hold-merchant-inventory'),{force:true});
       const attach = async (name: string, body: unknown) => testInfo.attach(name, { body: JSON.stringify(body, null, 2), contentType: 'application/json' });
       const diagnostic = async (work: Promise<unknown>) => {
         let timer: ReturnType<typeof setTimeout>;

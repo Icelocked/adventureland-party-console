@@ -215,3 +215,50 @@ splash=true. Later splash packets are ignored correctly, but that first packet
 already stole the convoy for defense. Apply the existing outside-party-target
 guard to explicitly unintentional stacked victims too. Direct, unknown-target
 and actual party-target attacks must retain defense; validate both native cases.
+
+Focused eight-worker result: 13/17 pass, including both Targetron ownership
+variants, capped commerce, retained cargo, mixed deployment, both home changes,
+walking-return reuse/reward and final-exit loss. Four fixture boundaries remain:
+holding all merchant status starves unrelated heartbeat/Steam restoration;
+initial maintenance intentionally prevents focus updates; CDP ownership reads
+consume 1.5s of a 2s virtual planner deadline. Before changing these: withhold only
+full inventory at ingress, declare and acknowledge the manual geometry waypoint
+before selecting focus, and observe real current ownership synchronously at the
+native ajax call via a Playwright binding. Do not change the native wire body,
+request deadline, exact owner guards, focus/geometry or replay assertions.
+
+Repeat the retained sandbox performance comparison from the repository root with
+`node docs/compare-estimator-sandbox.mts` after installing the pinned ChronAL
+fixture (`node tools/sim/setup.mts`). It uses real authenticated clock sockets,
+a fresh Node sandbox for each revision, no gameplay containers, and requires
+exact result JSON equality. The original cfc61bd calculation takes 79.271s;
+the exact precomputed calculation takes 15.677s (5.06x). Results are retained in
+`testing-estimator-sandbox-results.json`; ordinary targets 1/5/8/12 also retain
+their exact attempts, gold, scrolls, completions and roll counts.
+
+The next focused run passes the original four fixture fixes but finds two more
+setup assumptions: movement retries use a new job ID with the same durable
+commerceOrderId, and an unnamed focus mutation does not set a character's search
+radius. Require exactly one matching owned commerce continuation and explicitly
+set the leader's existing 600-unit search radius; retain every budget, geometry
+and native damage assertion. Gate later durable checkpoint progress after the
+first accepted paid checkpoint until restart, keeping unrelated probes/status free.
+This run also overlapped a deep artifact verification with gameplay. Its native
+heartbeat receipts show a 3.75s virtual gap and repeated return recovery; future
+expensive build/hash/archive operations finish before gameplay starts. Keep the
+Halloween return's original deadline and physical-arrival assertions.
+
+With unrelated verification removed, 17/18 focused cases pass. The remaining
+entry test attempts four refusals because its full dashboard state read consumes
+1.25s of a native two-second request deadline before response delivery. Use the
+existing public fast state projection for current convoy ownership in both fault
+handlers; it carries the identical activeConvoy without inventory/combat history.
+Keep all exact owner guards, native request deadline and strict three-refusal count.
+
+Fast ownership fixes the strict three-refusal case. The remaining exit fault
+pins an expired pre-barrier: its proxy fetch returns ready=true, but the real
+client is still in Cyberland, never issued leave, and already retired that request.
+Before implementation: forward the actual pre-barrier normally, arm only after
+the real browser receives its matching successful ready response, and permit an
+unreleased candidate to be replaced by a genuine retry. Preserve current native
+journey/plot/geometry ownership and the exact one-leave/one-ack assertions.

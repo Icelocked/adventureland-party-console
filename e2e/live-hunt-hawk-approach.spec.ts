@@ -12,7 +12,7 @@ const ringProbe=`(e)=>{const c=character,origin={x:c.real_x,y:c.real_y},clear=(a
  const ring=r=>Array.from({length:16},(_,i)=>({x:e.x+Math.cos(angle+i*Math.PI/8)*r,y:e.y+Math.sin(angle+i*Math.PI/8)*r})).filter(p=>clear(p,p)).map(p=>({...p,direct:clear(origin,p),distance:Math.hypot(p.x-origin.x,p.y-origin.y)})).sort((a,b)=>a.distance-b.distance);
  return {name:c.name,range:c.range,position:origin,nativeMoving:!!c.moving,activeJourney:globalThis.__partyMovement?.report?.()?.id,body:{width:get_width(c),height:get_height(c)},centerDistance:length,vision:c.vision||parent.character.vision,base:c.base,speed:c.speed,radius,padding,corrected,attackDistance,enemy:{id:e.id,type:e.type,mtype:e.mtype,map:e.map,in:e.in,x:e.x,y:e.y,real_x:e.real_x,real_y:e.real_y,width:get_width(e),height:get_height(e),rawWidth:e.width,rawHeight:e.height,awidth:e.awidth,aheight:e.aheight,mscale:e.mscale},ring:ring(radius),half:ring(Math.max(1,c.range-10)/2+padding),goalClear:clear(origin,origin),directToEnemy:clear(origin,e)};}`;
 
-test.use({loadout:'combat-follow-range',extraFighter:'mage',initialPositions:starts,initialConsoleHold:true});
+test.use({loadout:'combat-follow-range',extraFighter:'mage',initialPositions:starts,initialConsoleHold:false});
 const monster='bigbird',positions=starts;
 for(const scene of [{name:'direct alternate',target:[1140,240],direct:true},{name:'all blocked ring',target:[1280,300],direct:false}]){
 test(`planned Main hawks recover ranged actors from disconnected approach ring points: ${scene.name}`,async({live},info)=>{
@@ -24,7 +24,14 @@ test(`planned Main hawks recover ranged actors from disconnected approach ring p
   await isolateNativeMapAmbient(live,'main');
   for(const name of fighters)await live.clients[name].frame.evaluate(()=>{const p=window as any;p.__e2eObserveMoves=true;p.__e2eObservedMoveCount=0;p.__e2eIndependentObservedAttackCount=0;p.__e2eIndependentObservedTargets={};});
   await live.post('/formation',{leader:W});for(const name of [P,M])await live.post('/formation',{character:name,follow:true});
-  await live.post('/focus',{monsterFocus:[monster],monsterPriorities:{[monster]:999},monsterSearchRadius:600});
+  // A manual waypoint preserves this geometry when focus changes; a catalog
+  // farming waypoint would legitimately schedule an unrelated farm relocation.
+  await live.post('/travel',{map:'main',...leaderPoint});
+  await expect.poll(async()=>{
+    const state=await live.state();
+    return !state.activeConvoy&&fighters.every(name=>Math.hypot(state.characters[name]?.x-leaderPoint.x,state.characters[name]?.y-leaderPoint.y)<4);
+  },{timeout:45000,message:'The manual native geometry waypoint must be acknowledged before focus selection'}).toBe(true);
+  await live.post('/focus',{character:W,monsterFocus:[monster],monsterPriorities:{[monster]:999},monsterSearchRadius:600});
   await live.post('/farming-mode',{character:W,mode:'default'});
   await expect.poll(async()=>{
    const roles=await Promise.all(fighters.map(name=>live.clients[name].run(`(()=>{const s=globalThis.sharedRoutine,g=globalThis.__partyGroupedCombat,focus=s?.getMonsterFocus?.(),nomination=globalThis.__partyNomination?.focus;return {name:character.name,grouped:!!s?.usesGroupedCombat(),leader:s?.isLeader()===${name===W},groupLeader:g?.leader===${JSON.stringify(W)},members:${JSON.stringify(fighters)}.every(n=>g?.members?.includes(n)),independent:g?.independentApproach===true,focus,nomination,focusReady:!!focus?.includes(${JSON.stringify(monster)}),nominationReady:!nomination||nomination.includes(${JSON.stringify(monster)})};})()`)));

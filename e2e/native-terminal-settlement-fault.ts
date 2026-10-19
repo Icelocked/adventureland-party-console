@@ -10,6 +10,8 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
   const pendingHolds=new Set<Promise<void>>(),samples:Record<string,unknown>[]=[];
   const forwardingErrors:string[]=[];let forwarded=0,acceptedObservations=0;
   const peerReceipts:any[]=[];
+  const preBarrierRequests=new WeakMap<Request,{began:number;value:any;actual:any}>();
+  let preBarrierReleased=false;
   let dropping=false,closed=false,peerReleased:any,receipt:any,nativeIssued:any,faultArmedAt:number|undefined,alignedNative:any,nativeAcknowledgement:any,nativeScatter:any;
   let arming:Promise<boolean>|undefined;
   const retiredRequests=new WeakSet<Request>(),pendingConvoyHolds=new Set<Promise<void>>(),pendingBarrierHolds=new Set<Promise<void>>();
@@ -29,7 +31,7 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
     return value;
   }
   async function armNaturalSettlement(sample:any){
-    if(!pendingConvoyHolds.size)return false;
+    if(!preBarrierReleased||!pendingConvoyHolds.size)return false;
     const value=terminalReceipt(sample);if(!value)return false;
     const state=await live.state(),convoy=state.activeConvoy,member=state.characters[W],expected=convoy?.expected?.[W],now=Date.now();
     if(!convoy || convoy.id!==owner.convoyId || convoy.epoch!==owner.epoch || convoy.routeVersion!==owner.routeVersion ||
@@ -91,7 +93,7 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
       const sample=await nativeSnapshot();if(samples.length<32)samples.push({at:Date.now(),stage:'alignment-before-fault',...sample});
       if(await armNaturalSettlement(sample))return true;
       const native=sample.native,current=sample.active;
-      if(!owner || !pendingBarrierHolds.size || !current || current.id!==nativeIssued.report.id || current.progress?.phase!=='barrier' ||
+      if(!preBarrierReleased || !owner || !pendingBarrierHolds.size || !current || current.id!==nativeIssued.report.id || current.progress?.phase!=='barrier' ||
         !['convoyId','epoch','commandId','navigationRevision','routeVersion'].every(key=>current.owner?.[key]===owner[key]) ||
         sample.remaining!==1 || sample.paused || !native || native.rip || !(native.hp>0) || native.moving ||
         !Number.isFinite(native.x)||!Number.isFinite(native.y)||native.map!=='main' || String(native.in??native.map)!=='main' ||
@@ -128,7 +130,7 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
   };
   const barrier=async(route:Route)=>{
     const value=body(route);
-    if(!owner && value?.character===W && value.completed===false && value.destination?.method==='leave' && value.destination.map==='main'){
+    if((!owner||!preBarrierReleased) && value?.character===W && value.completed===false && value.destination?.method==='leave' && value.destination.map==='main'){
       const began=Date.now();
       const sample=await nativeSnapshot(),actual={...sample,report:sample.active};
       const last=actual.plot?.[0],goal=actual.goal,current=actual.report?.owner;
@@ -136,12 +138,14 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
         (['map','x','y'] as const).every(key=>last[key]===value.destination[key] && goal?.[key]===last[key]) &&
         ['convoyId','epoch','commandId','navigationRevision','routeVersion'].every(key=>current?.[key]===value[key]);
       if(!final){if(ledger.length<128)ledger.push({at:Date.now(),action:'intermediate-leave-not-faulted',actual});await route.fallback();return;}
-      const response=await route.fetch({maxRetries:0,maxRedirects:0,timeout:5000}),result=await response.json();
-      if(response.ok() && result.ready===true && !owner){
-        owner={...value};nativeIssued=actual;holdGate=new Promise<void>(resolve=>{release=resolve;});completionGate=new Promise<void>(resolve=>{releaseCompletion=resolve;});
-        ledger.push({at:Date.now(),action:'genuine-final-pre-barrier-released-response-delivered',began,owner,response:{status:response.status(),ready:result.ready}});
-      }
-      await route.fulfill({response});
+      // Capture the exact native candidate, but a proxy receipt cannot prove
+      // delivery. The real browser response below confirms readiness. Avoid
+      // another fetch/fulfill round trip inside the client's short deadline.
+      release?.();releaseCompletion?.();
+      owner={...value};nativeIssued=actual;
+      holdGate=new Promise<void>(resolve=>{release=resolve;});completionGate=new Promise<void>(resolve=>{releaseCompletion=resolve;});
+      preBarrierRequests.set(route.request(),{began,value,actual});
+      await route.fallback();
     }else if(owner && value?.character===W && value.completed===true && same(value)){
       held=route;ledger.push({at:Date.now(),action:'completion-held-unforwarded'});
       const task=(async()=>{await holdGate;try{await route.abort('failed');ledger.push({at:Date.now(),action:'completion-aborted-without-forwarding'});}finally{if(held===route)held=undefined;}})();
@@ -166,6 +170,15 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
   const response=(res:Response)=>{
     if(!res.url().endsWith('/party-api/movement-barrier'))return;
     const value=res.request().postDataJSON();
+    if(value?.character===W&&value.completed===false){
+      const candidate=preBarrierRequests.get(res.request());if(!candidate)return;
+      void res.json().then(result=>{
+        if(res.ok()&&result.ready===true&&candidate.actual===nativeIssued&&same(candidate.value)&&!retiredRequests.has(res.request())&&!res.request().failure()){
+          preBarrierReleased=true;
+          ledger.push({at:Date.now(),action:'genuine-final-pre-barrier-released-response-delivered',began:candidate.began,owner,response:{status:res.status(),ready:true}});
+        }
+      },()=>{});return;
+    }
     if(value?.character!==P||value.completed!==true)return;
     void res.json().then(result=>{if(res.ok()&&result.ready===true){
       peerReceipts.push({at:Date.now(),request:value,response:result});if(peerReceipts.length>32)peerReceipts.shift();acceptPeerReceipt();
@@ -198,7 +211,7 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
   await context.route('**/party-api/convoy-complete',complete);context.on('response',response);context.on('requestfailed',requestFailed);
   return {
     async prove(deadline:number){
-      await expect.poll(()=>!!owner&&!!nativeIssued,{timeout:Math.max(1,deadline-Date.now()),message:'Fault must deliver the genuinely released native final leave pre-barrier'}).toBe(true);
+      await expect.poll(()=>!!owner&&!!nativeIssued&&preBarrierReleased,{timeout:Math.max(1,deadline-Date.now()),message:'Fault must deliver the genuinely released native final leave pre-barrier'}).toBe(true);
       await expect.poll(armAfterAlignment,{intervals:[50,100],timeout:Math.max(1,deadline-Date.now()),message:'Only a genuine held completion request and acknowledged stopped owned native endpoint may arm response loss'}).toBe(true);
       try{
         await expect.poll(async()=>{

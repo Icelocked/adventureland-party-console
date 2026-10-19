@@ -77,7 +77,8 @@ fixtureExpress.json = (...args) => {
       };
     }
     if (req.method === 'POST' && req.originalUrl.split('?')[0] === '/party-api/status' &&
-        req.body?.name === 'E2EMerchant' && fs.existsSync(path.join(directory, 'hold-merchant-status')))
+        req.body?.name === 'E2EMerchant' && (fs.existsSync(path.join(directory, 'hold-merchant-status')) ||
+          Array.isArray(req.body.items) && fs.existsSync(path.join(directory, 'hold-merchant-inventory'))))
       return res.status(503).json({error:'Declared E2E merchant status transport hold'});
     next();
   });

@@ -19,44 +19,27 @@ test(`native event entry recovers ${fault}`,async({live},info)=>{
   })()`);
   const context=live.clients[W].page.context(), requests:any[]=[], samples:any[]=[], unmatched:any[]=[];
   const observer=observeNativePlanner(context);
-  // Acquire coordinator ownership outside the native request's two-second
-  // lifetime. An extra HTTP round trip while holding that request can turn a
-  // declared 409 into a transport timeout under parallel load.
-  let observing=true,latest={at:Date.now(),state:await live.state()};
-  const observationFailures:Array<{at:number;error:string}>=[];
-  const observations=(async()=>{
-    while(observing){
-      try{const state=await live.state();latest={at:Date.now(),state};}
-      catch(error){
-        // This scenario intentionally restarts the coordinator after recovery.
-        // Never inject using the old snapshot while that read boundary is down.
-        latest={...latest,at:-Infinity};
-        observationFailures.push({at:Date.now(),error:String(error)});
-        if(observationFailures.length>64)observationFailures.shift();
-      }
-      await new Promise(resolve=>setTimeout(resolve,100));
-    }
-  })();
+  const restoreObservation=await observer.install(live.clients[W]);
+  // The native binding observes current ownership before ajax sends. Read the
+  // coordinator once in parallel; no CDP round trip or cached prior epoch.
   let refusals=0;
   const rejectEntry=async(route:Route)=>{
     const req=route.request(),body=req.method()==='POST'?req.postDataJSON():null;
     if(body?.character!==W||body.to?.map!==seed.map||body.to?.x!==seed.x||body.to?.y!==seed.y)return route.fallback();
-    const started=Date.now(),sample=await live.clients[W].frame.evaluate(()=>{
-      const runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
-      return {movement:runner?.__partyMovement?.report?.(),navigation:runner?.sharedRoutine?.convoyNavigationReport?.()};
-    });
-    const snapshot=latest,s=snapshot.state,c=s.activeConvoy;
+    const started=Date.now(),[observed,s]=await Promise.all([observer.sample(body),live.state('fast')]);
+    const sample={movement:observed?.body.movement,navigation:observed?.body.convoyNavigation};
+    const c=s.activeConvoy;
     const owner=sample.navigation,expected=c?.expected?.[W];
     if(sample.movement?.id!==body.id||sample.movement.done||!owner||owner.communication||owner.phase==='communication-hold'||
       !String(body.id).startsWith(W+':'+owner.runtimeId+':')||
-      Date.now()-snapshot.at>=1000||c?.walkingActivity!=='event'||c.walkingEvent!=='mrpumpkin'||owner.id!==c.id||owner.epoch!==c.epoch||
+      c?.walkingActivity!=='event'||c.walkingEvent!=='mrpumpkin'||owner.id!==c.id||owner.epoch!==c.epoch||
       owner.commandId!==expected?.commandId||owner.navigationRevision!==expected?.revision||owner.runtimeId!==expected?.runtimeId||
       body.to?.map!==c.location?.map||body.to.x!==c.location.x||body.to.y!==c.location.y||Date.now()-started>=1500){
       unmatched.push({at:Date.now(),body,owner,expected,elapsedMs:Date.now()-started});return route.fallback();
     }
     const rejected=fault==='entry unavailable until exhausted'||refusals===0;
     requests.push({at:Date.now(),body,convoy:c.id,revision:c.walkingParents?.[W]?.revision,
-      recoveryAttempts:c.recoveryAttempts,disableTown:c.disableTown,rejected,owner,snapshotAgeMs:Date.now()-snapshot.at,elapsedMs:Date.now()-started});
+      recoveryAttempts:c.recoveryAttempts,disableTown:c.disableTown,rejected,owner,elapsedMs:Date.now()-started});
     if(!rejected)return route.fallback();
     refusals++;
     // Declared failure at the planner HTTP boundary. All recovery movement,
@@ -93,9 +76,9 @@ test(`native event entry recovers ${fault}`,async({live},info)=>{
     }
   }finally{
     await context.unroute('**/party-api/movement-plan',rejectEntry);
-    observing=false;await observations;
     observer.dispose();
-    await info.attach('native-event-entry-recovery',{body:JSON.stringify({fault,seed,requests,unmatched,requestFailures:observer.failures,observationFailures,samples,final:await live.state(),events:await live.clients[W].events()}),contentType:'application/json'});
+    await restoreObservation();
+    await info.attach('native-event-entry-recovery',{body:JSON.stringify({fault,seed,requests,unmatched,requestFailures:observer.failures,samples,final:await live.state(),events:await live.clients[W].events()}),contentType:'application/json'});
     await live.post('/formation',{character:W,eventSelections:[]});
     await live.admin(`output=(()=>{const m=get_monster('mrpumpkin');if(String(m?.id)===${JSON.stringify(seed.id)})remove_monster(m,{silent:true});G.monsters.mrpumpkin=globalThis.__entryRecoveryOriginalPumpkin;delete globalThis.__entryRecoveryOriginalPumpkin;delete E.mrpumpkin;broadcast_e();return true;})()`);
   }

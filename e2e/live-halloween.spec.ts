@@ -352,11 +352,11 @@ for (const original of [{ id: 'mrgreen',terminalFault:false }, { id: 'mrpumpkin'
       await info.attach('native-halloween-death-and-reentry', { body: JSON.stringify({ death, native: await world(live, encounter.id), coordinator: await live.state() }), contentType: 'application/json' });
       const navigationHttp=encounter.id==='mrpumpkin'?observeNativeNavigationHttp(live.clients[W].page):null;
       const terminalFault=original.terminalFault?await installTerminalSettlementFault(live,live.clients[W].page):null;
-      try{
       const returnPhases:{deselectedAt:number;replacementRequestedAt?:number;replacementAcknowledgedAt?:number;recoveryStartedAt:number;recoveryDeadline:number;arrivalObservedAt?:number}={
         deselectedAt:Date.now(),recoveryStartedAt:Date.now(),recoveryDeadline:0};
       let returnDeadline = returnPhases.deselectedAt + (encounter.id === 'mrgreen' ? 240_000 : 180_000);
       returnPhases.recoveryDeadline=returnDeadline;
+      try{
       await live.post('/formation', { character: W, eventSelections: [] });
       if (encounter.id === 'mrgreen') {
         let before:any, after:any;
@@ -409,8 +409,11 @@ for (const original of [{ id: 'mrgreen',terminalFault:false }, { id: 'mrpumpkin'
       }));
       await info.attach('halloween-saved-checkpoint-return', { body: JSON.stringify({savedCheckpoint,phases:returnPhases,nativeArrivalReceipts, native: await world(live, encounter.id), coordinator: await live.state() }), contentType: 'application/json' });
       }finally{
+        try{await info.attach('native-event-return-phase-timing',{body:JSON.stringify({phases:returnPhases,observedAt:Date.now(),native:await world(live,encounter.id)}),contentType:'application/json'});}
+        finally{
         try{if(terminalFault)await info.attach('native-terminal-settlement-fault-final',{body:JSON.stringify(await terminalFault.finish()),contentType:'application/json'});}
         finally{if(navigationHttp)await info.attach('native-pumpkin-return-http',{body:JSON.stringify(await navigationHttp.finish()),contentType:'application/json'});}
+        }
       }
     });
   });

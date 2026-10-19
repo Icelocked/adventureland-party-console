@@ -244,17 +244,21 @@ test('unavailable upgrade estimate enforces its gold cap across native purchases
   const gate=new Promise<void>(resolve=>{release=resolve;});
   try {
   await live.clients[merchant].page.route('**/party-api/merchant/checkpoint',async route=>{
-    const body=route.request().postDataJSON(),response=await route.fetch();
+    const body=route.request().postDataJSON();
+    if(held&&body.state&&typeof body.state==='object')await gate;
+    const response=await route.fetch();
     if(body.state&&typeof body.state==='object') {
       checkpoints.push(body.state);
-      if(!held&&Number(body.state.spent)>0&&!body.state.pendingPurchase){held=true;await gate;}
+      if(response.ok()&&!held&&Number(body.state.spent)>0&&!body.state.pendingPurchase){held=true;await gate;}
     }
     await route.fulfill({response});
   });
   const order=await live.post('/merchant/order',{buys:[{id:item,quantity:1,level:12,acknowledgeUnavailable:true,goldCap:cap}],crafts:[]});
   await expect.poll(()=>held,{timeout:120_000}).toBe(true);
   const before=await live.state();
-  const job=[before.merchantCurrent,...before.merchantQueue].find((entry:any)=>entry?.id===order.jobId);
+  const jobs=[before.merchantCurrent,...before.merchantQueue].filter((entry:any)=>entry?.id===order.jobId||entry?.commerceOrderId===order.jobId);
+  expect(jobs,'Exactly one durable commerce owner must survive a native movement retry').toHaveLength(1);
+  const job=jobs[0];
   expect(job.order.buys[0]).toMatchObject({goldCap:cap,budget:cap,estimateUnavailable:true});
   expect(job.order.buys[0].attempts).toBeUndefined();
   expect(job.resumeState.spent).toBeGreaterThan(0);
@@ -1008,7 +1012,7 @@ test.describe('real merchant economy and durable work', () => {
       // Arm ingress before replacing the coordinator: an already-dispatched
       // browser report must not cross the intended missing-inventory boundary.
       holdInventory = true;
-      live.holdMerchantStatus(true);
+      live.holdMerchantStatus(true, {inventoryOnly:true});
       await live.restoreHistoricalSettings(() => ({ merchantDeliveries: {
         [recipient]: [{ id, item, slot: 10, equipOnDelivery: true, awaitingEquip: true }],
       } }));
@@ -1021,7 +1025,7 @@ test.describe('real merchant economy and durable work', () => {
       expect((await live.state()).merchantDeliveries[recipient]).toMatchObject([{ id, awaitingEquip: true }]);
       await live.restartCoordinator();
       expect((await live.state()).merchantDeliveries[recipient]).toMatchObject([{ id, awaitingEquip: true }]);
-      live.holdMerchantStatus(false);
+      live.holdMerchantStatus(false, {inventoryOnly:true});
       holdInventory = false;
       await expect.poll(async () => {
         const marks = (await live.state()).merchantDeliveries?.[recipient] || [];
