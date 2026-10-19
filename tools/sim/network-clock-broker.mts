@@ -17,12 +17,12 @@ function clockRequest(raw: string | undefined) {
 }
 /** One bounded gameplay timeline; real network/storage callbacks run between acknowledgements. */
 export async function startNetworkClock(rate: number) {
-  if (!Number.isFinite(rate) || rate <= 1 || rate > 8) throw Error("ChronAL clock rate must be greater than 1 and at most 8; use E2E_GAMEPLAY_BACKEND=native for real time");
+  if (!Number.isFinite(rate) || rate <= 1 || rate > 1024) throw Error("ChronAL clock rate must be greater than 1 and at most 1024; use E2E_GAMEPLAY_BACKEND=native for real time");
   const windowMs=Number(process.env.E2E_CLOCK_WINDOW_MS||250);
   if(!Number.isInteger(windowMs)||windowMs<25||windowMs>250)throw Error('ChronAL network window must be 25–250 ms');
   const epoch = Date.now(),
     token = randomUUID(),
-    members = new Map<string, { now: number; scope: string; label: string; sent: number; count: number; total: number; max: number }>();
+    members = new Map<string, { now: number; scope: string; label: string; sent: number; count: number; total: number; max: number; timing?: {count:number;receiveMs:number;workMs:number;returnMs:number} }>();
   const retired = new Set<string>();
   let now = epoch,
     closed = false,
@@ -89,7 +89,7 @@ export async function startNetworkClock(rate: number) {
       sockets.set(id, connection);
       members.set(id, { now, scope: url.searchParams.get("scope") || "", label: url.searchParams.get("label") || id, sent: Date.now(), count: 0, total: 0, max: 0 });
       connection.on("message", (bytes: Buffer) => {
-        let value: { now: number };
+        let value: { now: number; receivedWall?:number; completedWall?:number; workMs?:number };
         try {
           value = JSON.parse(bytes.toString());
         } catch {
@@ -107,6 +107,11 @@ export async function startNetworkClock(rate: number) {
           member.count++;
           member.total += elapsed;
           member.max = Math.max(member.max, elapsed);
+          if([value.receivedWall,value.completedWall,value.workMs].every(Number.isFinite)){
+            const timing=member.timing??={count:0,receiveMs:0,workMs:0,returnMs:0};
+            timing.count++;timing.receiveMs+=value.receivedWall!-member.sent;
+            timing.workMs+=value.workMs!;timing.returnMs+=Date.now()-value.completedWall!;
+          }
         }
       });
       connection.on("close", () => {

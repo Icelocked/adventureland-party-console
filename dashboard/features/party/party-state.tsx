@@ -42,10 +42,13 @@ import { UpgradeMark } from "./upgrade-mark";
 import { Withdrawal } from "./withdrawal";
 
 export type PartyState = {
+  characterSnapshots?: Record<string, Char & { updatedAt: number }>;
   upgradeOfferingRules?: import("../../../runtime/upgrade-offerings").UpgradeOfferingRule[];
   upgradeOfferingStock?: Partial<Record<import("../../../runtime/upgrade-offerings").UpgradeOffering, number>>;
-  characterAppearances?: Record<string, Pick<Char, "skin" | "characterSprite" | "characterDollHtml"> & {updatedAt:number}>;
-  merchantRules?: import("../../../runtime/coordinator/inventory/shared-rules").SharedRules | null;
+  characterAppearances?: Record<string, Pick<Char, "skin" | "characterSprite" | "characterDollHtml"> & {updatedAt:number;
+    }>;
+  merchantRules?:
+    | import("../../../runtime/coordinator/inventory/shared-rules").SharedRules | null;
   gameVersion?: number;
   gameLogs?: Record<string, import("../../../runtime/game-log-filters").GameLog[]>;
   bankboiPrefix?: string;
@@ -53,7 +56,8 @@ export type PartyState = {
   referenceRevision?: string;
   accountId?: string | null;
   passiveHunting?: import("../../../runtime/coordinator/navigation/passive-settings").PassiveSettings;
-  passiveRareHunts?: { tinyp: boolean; phoenix: boolean; goldenbat?: boolean; cutebee?: boolean; hen?: boolean; rooster?: boolean };
+  passiveRareHunts?: { tinyp: boolean; phoenix: boolean; goldenbat?: boolean; cutebee?: boolean; hen?: boolean; rooster?: boolean;
+  };
   phoenixRouteOrder?: string[];
   rareHuntState?: {
     message?: string | null;
@@ -131,7 +135,8 @@ export type PartyState = {
   huntFailures?: Record<string, {deaths: number; expirations: number}>;
   huntBlacklist?: Record<
     string,
-    { monsterId: string; at: number; deaths: number; expirations?: number; reason?: string; characters?: string[] }
+    { monsterId: string; at: number; deaths: number; expirations?: number; reason?: string; characters?: string[];
+    }
   >;
   farmingProfiles?: Record<string, {
     farmAreaState?: PartyState["farmAreaState"];
@@ -162,7 +167,8 @@ export type PartyState = {
     legIndex?: number;
     returnLegs?: { type: "walk" | "town"; location: Location }[];
     blockers?: Record<string, { reason: string; expectedCommandId: number | null;
-      reportedCommandId: number | null; expectedPhase: string; reportedPhase: string | null }>;
+      reportedCommandId: number | null; expectedPhase: string; reportedPhase: string | null;
+      }>;
   } | null;
   characterLocations?: Record<string, Location>;
   partyLocation?: Location | null;

@@ -60,7 +60,7 @@ async function setupState(req: IncomingMessage, options: Options) {
   const secure = options.tls?.trusted(req);
   const origin = options.publicUrl || (secure ? requestOrigin(req, options) : undefined);
   const tls = options.tls ? { tls: await options.tls.status(), secure, httpPort: Number(process.env.AL_HTTP_PUBLIC_PORT || process.env.AL_PORT || 3010) } : {};
-  return { configured: options.configured(), requirePairing: options.access.required, ...(options.access.required ? { accessCodeExpiresAt: options.access.accessCodeExpiry } : {}), canConfigureAccount: !!options.configure, serverAddress: setupAddress(req, origin), steamPreferences: await options.steam?.preferences.read(), ...await options.realms, ...tls };
+  return { configured: options.configured(), requirePairing: options.access.required, ...(options.access.required && validBrowser(req, options) ? { accessCodeExpiresAt: options.access.accessCodeExpiry } : {}), canConfigureAccount: !!options.configure, serverAddress: setupAddress(req, origin), steamPreferences: await options.steam?.preferences.read(), ...await options.realms, ...tls };
 }
 async function readSetup(
   req: IncomingMessage,

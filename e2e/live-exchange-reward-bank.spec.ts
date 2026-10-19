@@ -9,7 +9,7 @@ const rewards: Record<string, number> = { armorbox: 2, weaponbox: 2, offering: 1
 const native = (live: { admin(code: string): Promise<any> }) => live.admin(`output=(async()=>{const p=get_player('${merchant}');
   const u=p.user||(await db.collection('user').findOne({_id:p.owner})).info;
   const count=(list,test)=>(list||[]).filter(i=>i&&test(i)).reduce((n,i)=>n+(i.q||1),0);
-  const bank=Object.entries(u).filter(([k,v])=>/^items\\d+$/.test(k)&&Array.isArray(v)).flatMap(([,v])=>v);
+  const bank=Object.entries(u).filter(([k,v])=>/^items[0-9]+$/.test(k)&&Array.isArray(v)).flatMap(([,v])=>v);
   const names=${JSON.stringify(Object.keys(rewards))}.concat(['gem0','beewings']);
   return {carried:Object.fromEntries(names.map(n=>[n,count(p.items,i=>i.name===n&&!i.l)])),
     locked:p.items.filter(i=>i&&i.l).map(i=>({name:i.name,q:i.q,l:i.l})),

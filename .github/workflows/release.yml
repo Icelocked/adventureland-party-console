@@ -4,13 +4,28 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      self_hosted:
+        description: 'Run manually on the local RTX 5090 runner instead of hosted CI'
+        type: boolean
+        default: false
+      local_project:
+        description: 'Local E2E project (all includes browser, deployment, debug and gameplay)'
+        type: choice
+        options: [console, live, debug, all]
+        default: console
+      local_grep:
+        description: 'Optional local title filter; clear to run the complete selected project'
+        type: string
+        default: 'character sections collapse independently'
 permissions:
   contents: read
 concurrency:
-  group: public-release-${{ github.ref }}
+  group: public-release-${{ github.ref }}-${{ inputs.self_hosted && 'local' || 'hosted' }}
   cancel-in-progress: false
 jobs:
   validate:
+    if: ${{ !inputs.self_hosted }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -27,7 +42,7 @@ jobs:
       - run: node scripts/ci/restore-game-fixtures.cjs
       - run: npx playwright install --with-deps chromium
       - name: Console, deployment and debug E2E
-        run: npm test -- --project=console --project=debug && npm run test:e2e:verify
+        run: npm run test:e2e -- --project=console --project=debug && npm run test:e2e:verify
       - name: Retained isolated regression exceptions
         shell: bash
         run: |
@@ -50,6 +65,7 @@ jobs:
           include-hidden-files: true
           retention-days: 14
   gameplay:
+    if: ${{ !inputs.self_hosted }}
     runs-on: ubuntu-latest
     env:
       E2E_MONGO_IMAGE: mirror.gcr.io/library/mongo@sha256:c630c59342c1493d50345136df2af14a76b9e827dd5316bfabee07a0880a5f3a
@@ -85,6 +101,72 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: chronal-gameplay-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.shard }}
+          path: |
+            .build/e2e-report/
+            .build/e2e-results/
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+  local-e2e:
+    # Never send pull-request code or automatic pushes to the personal machine.
+    if: github.event_name == 'workflow_dispatch' && inputs.self_hosted && github.actor == github.repository_owner && github.ref == 'refs/heads/1.5-feature-branch'
+    runs-on: [party-console-manual-windows]
+    timeout-minutes: 180
+    concurrency:
+      group: party-console-personal-runner
+      cancel-in-progress: false
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      E2E_BROWSER_RENDERING: hardware
+      E2E_EXPECT_GPU: NVIDIA GeForce RTX 5090
+      E2E_MEASURE_BROWSER_CPU: '1'
+      E2E_GAMEPLAY_BACKEND: chronal
+      E2E_CLOCK_RATE: '4'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Dedicated runner checkout; retain only ignored dependency/build caches.
+          clean: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.0'
+          cache: npm
+      - name: Prepare isolated runner checkout
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm --prefix dashboard ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node tools/caracal/setup.mts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node tools/hosting/install-caddy.mts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm --prefix .caracal ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/ci/restore-game-fixtures.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npx playwright install chromium
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Run selected E2Es with one worker
+        env:
+          LOCAL_PROJECT: ${{ inputs.local_project }}
+          LOCAL_GREP: ${{ inputs.local_grep }}
+        run: |
+          $testArgs = @('run', 'test:e2e', '--', '--workers=1')
+          if ($env:LOCAL_PROJECT -ne 'all') { $testArgs += "--project=$env:LOCAL_PROJECT" }
+          if ($env:LOCAL_GREP) { $testArgs += @('--grep', $env:LOCAL_GREP) }
+          & npm @testArgs
+          exit $LASTEXITCODE
+      - name: Verify repeatable evidence
+        if: always()
+        run: npm run test:e2e:verify
+      - name: Preserve local runner evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: self-hosted-e2e-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             .build/e2e-report/
             .build/e2e-results/

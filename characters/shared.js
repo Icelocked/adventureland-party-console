@@ -590,6 +590,7 @@
   var realmPlayers = [];
   var gatheringMode = null;
   var gatheringModes = [];
+  var gatheringAutoCraft = {};
   if (root.__merchantGatheringTimer) clearInterval(root.__merchantGatheringTimer);
   root.__merchantGatheringTimer = null;
   root.__merchantGatheringGeneration = (Number(root.__merchantGatheringGeneration) || 0) + 1;
@@ -689,6 +690,7 @@
   var merchantCatalogVersion = "exchange-rewards-v4";
   var trackerDropData = typeof tracker !== "undefined" && tracker && Object.keys(tracker).length ? tracker : null;
   var trackerCatalogInitialized = !!trackerDropData;
+  var trackerTablesSignature = trackerCatalogSignature(trackerDropData);
   // The native game updates parent.tracker before calling render_tracker.
   // Silence automatic responses without hiding unrelated modals or blocking
   // deliberate clicks. Manual requests use the normal socket.emit entrypoint.
@@ -749,12 +751,14 @@
   };
   var trackerCatalogListener = function (data) {
     if (!data || typeof data !== "object") return;
+    var signature = trackerCatalogSignature(data);
+    var tablesChanged = signature !== trackerTablesSignature;
     trackerDropData = data;
+    trackerTablesSignature = signature;
     scheduleTrackerSnapshot(30000);
-    // Drop tables are account-wide and effectively static during a game-data
-    // version. Rebuild the large catalog only for the first live Tracktrix
-    // response; later polls merely refresh kill progress.
-    if (!trackerCatalogInitialized) {
+    // Kill counters change often; only actual discovery-table changes rebuild
+    // the catalogs, including home rewards learned after the initial response.
+    if (!trackerCatalogInitialized || tablesChanged) {
       trackerCatalogInitialized = true;
       itemWorldCache = {};
       itemDropCache = {};
@@ -848,8 +852,29 @@
     mapTelemetryEvents.push({ kind: kind, at: Date.now(), data: safeFields(data) });
     if (mapTelemetryEvents.length > 40) mapTelemetryEvents.splice(0, mapTelemetryEvents.length - 40);
   }
-  var mapActionListener = function (data) { rememberMapEvent("action", data); };
-  var mapHitListener = function (data) { rememberMapEvent("hit", data); };
+  var mapTelemetryProjectiles = {};
+  var mapActionListener = function (data) {
+    rememberMapEvent("action", data);
+    if (!mapTelemetryEnabled || !parent.no_graphics || !data || !root.projectPartyHeadlessAction) return;
+    var attacker = parent.get_entity && parent.get_entity(data.attacker);
+    if (!attacker || attacker.map && attacker.map !== character.map) return;
+    var target = parent.get_entity && parent.get_entity(data.target);
+    var origin = parent.projectile_origin && parent.projectile_origin(attacker, target || {x:data.x,y:data.y}, data.origin_offset || 0);
+    var projectile = G.projectiles && G.projectiles[data.projectile];
+    var animation = projectile && G.animations && G.animations[projectile.animation || projectile.ray];
+    if (!origin || !animation) return;
+    var end = {x:target && parent.get_x ? parent.get_x(target) : data.x,y:target && parent.get_y ? parent.get_y(target) - (parent.get_height ? parent.get_height(target)/2 : 0) : data.y};
+    var ray = !projectile.animation && !!projectile.ray;
+    if (ray) origin = {x:parent.get_x ? parent.get_x(attacker) : attacker.x,y:(parent.get_y ? parent.get_y(attacker) : attacker.y) - (parent.get_height ? parent.get_height(attacker)/2 : 0)};
+    var projection = root.projectPartyHeadlessAction(data, origin, end, animation, Date.now(), ray);
+    if (projection) {
+      var keys = Object.keys(mapTelemetryProjectiles);
+      if(keys.length>=64)delete mapTelemetryProjectiles[keys[0]];
+      projection.map = character.map;
+      mapTelemetryProjectiles[data.pid] = projection;
+    }
+  };
+  var mapHitListener = function (data) { rememberMapEvent("hit", data); if(data && mapTelemetryProjectiles[data.pid] && !mapTelemetryProjectiles[data.pid].ray) delete mapTelemetryProjectiles[data.pid]; };
 
   function inventoryTotals() {
     return (character.items || []).reduce(function (totals, item) {
@@ -1298,17 +1323,59 @@
       .filter(function (hands, index, all) { return hands && all.indexOf(hands) === index; }) };
   }
 
+  // Class-only and map-only bonuses sit in nested fields that safeItemDefinition
+  // drops, such as Scorpion Seal's warrior field or Graveglass's halloween field.
+  function itemBonuses(definition) {
+    var bonuses = [];
+    Object.keys(definition || {}).forEach(function (key) {
+      var value = definition[key];
+      var kind = G.classes && G.classes[key] ? "class" : G.maps && G.maps[key] ? "map" : null;
+      if (!kind || !value || typeof value !== "object" || Array.isArray(value)) return;
+      var stats = {};
+      Object.keys(value).forEach(function (stat) { if (typeof value[stat] === "number") stats[stat] = value[stat]; });
+      var name = kind === "map" ? G.maps[key].name || key : key.charAt(0).toUpperCase() + key.slice(1);
+      bonuses.push({ kind: kind, id: key, name: name, stats: stats });
+    });
+    return bonuses;
+  }
+
   function maximumItemLevel(definition) {
     return definition && definition.compound ? 7 : definition && definition.upgrade ? 13 : 0;
+  }
+
+  function trackerCatalogSignature(data) {
+    if (!data) return "";
+    return JSON.stringify([data.drops || null, data.drops_home || null, data.monsters_home_server || null,
+      data.maps || null, data.tables || null]);
+  }
+
+  function nativeMonsterDropTables() {
+    return Object.assign({}, G.drops && G.drops.monsters || {}, trackerDropData && trackerDropData.drops || {});
+  }
+
+  function nativeHomeDropTables() {
+    return Object.assign({}, G.drops && G.drops.monsters_home_server || {},
+      trackerDropData && trackerDropData.monsters_home_server || {}, trackerDropData && trackerDropData.drops_home || {});
+  }
+
+  // Bounded read-only diagnostics for discovery publication and cache ownership.
+  root.__partyCatalogDiagnostic = function (monsterId, itemId) {
+    return { generation: catalogGeneration, known: catalogKnown, prepared: catalogPrepared, preparing: catalogPreparing,
+      trackerHome: nativeHomeDropTables()[monsterId], itemCached: !!itemWorldCache[itemId],
+      cachedSources: itemWorldCache[itemId] && itemWorldCache[itemId].drops.filter(function (source) { return source.monsterId === monsterId; }).slice(0, 24) };
+  };
+
+  function nativeLootTable(name) {
+    return trackerDropData && trackerDropData.tables && trackerDropData.tables[name] || G.drops && G.drops[name];
   }
 
   function lootTableOutcome(tableName, itemName, seen) {
     var cacheKey = tableName + ":" + itemName;
     if (lootOutcomeCache[cacheKey]) return lootOutcomeCache[cacheKey];
     seen = seen || {};
-    if (seen[tableName] || !Array.isArray(G.drops && G.drops[tableName])) return null;
+    if (seen[tableName] || !Array.isArray(nativeLootTable(tableName))) return null;
     var nextSeen = Object.assign({}, seen); nextSeen[tableName] = true;
-    var table = G.drops[tableName], total = table.reduce(function (sum, drop) {
+    var table = nativeLootTable(tableName), total = table.reduce(function (sum, drop) {
       return sum + (Array.isArray(drop) ? Number(drop[0]) || 0 : 0);
     }, 0);
     if (total <= 0) return null;
@@ -1333,7 +1400,7 @@
       return opened && { probability: opened.probability, paths: ["open " + drop[2]].concat(opened.paths || []) };
     }
     var exchangeCount = G.items && G.items[reward] && Number(G.items[reward].e);
-    if (exchangeCount > 0 && G.drops && Array.isArray(G.drops[reward])) {
+    if (exchangeCount > 0 && Array.isArray(nativeLootTable(reward))) {
       var exchanged = lootTableOutcome(reward, itemName, seen);
       // For multi-item exchanges this is the long-run rolls-per-drop rate. It
       // avoids claiming that one leather immediately opens a 40-leather table.
@@ -1355,14 +1422,13 @@
   function itemDropSources(itemName) {
     if (itemDropCache[itemName]) return itemDropCache[itemName];
     var drops = [];
-    var trackedMonsterDrops = trackerDropData && (trackerDropData.drops || trackerDropData.monsters);
-    var monsterDrops = trackedMonsterDrops && Object.keys(trackedMonsterDrops).length
-      ? trackedMonsterDrops : G.drops && G.drops.monsters || {};
+    var monsterDrops = nativeMonsterDropTables();
     var trackedMapDrops = trackerDropData && trackerDropData.maps;
     var mapDropsById = trackedMapDrops && Object.keys(trackedMapDrops).length
       ? trackedMapDrops : G.drops && G.drops.maps || {};
-    Object.keys(monsterDrops).forEach(function (monsterId) {
-      (monsterDrops[monsterId] || []).forEach(function (drop) {
+    function addMonsterSources(tables, sourceType) {
+    Object.keys(tables).forEach(function (monsterId) {
+      (Array.isArray(tables[monsterId]) ? tables[monsterId] : []).forEach(function (drop) {
         var outcome = resolvedDropOutcome(drop, itemName);
         if (!outcome) return;
         var monsterDefinition = G.monsters[monsterId] || {};
@@ -1373,10 +1439,13 @@
           sprite: monsterSpriteDefinition(monsterDefinition.skin),
           rate: outcome.rate, originRate: outcome.originRate, quantity: outcome.quantity, acquisitionPath: outcome.path,
           threat: (Number(monsterDefinition.attack) || 0) * (Number(monsterDefinition.frequency) || 0),
-          sourceType: "monster",
+          sourceType: sourceType,
           goldPerKill: goldValues.length ? Math.min.apply(Math, goldValues) : null });
       });
     });
+    }
+    addMonsterSources(monsterDrops, "monster");
+    addMonsterSources(nativeHomeDropTables(), "home");
     Object.keys(mapDropsById).forEach(function (mapId) {
       if (mapId === "global" || mapId === "global_static" || !G.maps[mapId]) return;
       var mapDefinition = G.maps[mapId] || {};
@@ -1530,7 +1599,8 @@
         if (!Array.isArray(material) || material[1] !== itemName) return;
         uses.push({ id: craftedId, name: craftedDefinition.name || craftedId,
           quantity: Number(material[0]) || 0, level: Number(material[2]) || 0,
-          cost: Number(recipe.cost) || 0, sprite: spriteDefinition(craftedDefinition.skin || craftedId) });
+          cost: Number(recipe.cost) || 0, quest: recipe.quest || null,
+          sprite: spriteDefinition(craftedDefinition.skin || craftedId) });
       });
       return uses;
     }, []).sort(function (a, b) { return a.name.localeCompare(b.name); });
@@ -1607,9 +1677,12 @@
       scaling: safeFields(definition.upgrade || definition.compound || {}),
       maxLevel: maximumItemLevel(definition),
       usage: itemUsage(definition),
+      bonuses: itemBonuses(definition),
       // Live inventory/bank reports must never construct the entire drop graph.
       // Until background preparation finishes, the dashboard uses its catalog.
       world: itemWorldCache[item.name],
+      // The copy's title (docs/item-titles.md); the dashboard names it and adds its stats.
+      title: item.p && G.titles && G.titles[item.p] ? safeFields(G.titles[item.p]) : null,
       sprite: pack && position ? {
         url: "https://adventure.land" + pack.file,
         tileSize: pack.size,
@@ -1830,21 +1903,24 @@
 
   function bestiaryCatalog() {
     var spawns = {};
+    var monsterTables = nativeMonsterDropTables(), homeTables = nativeHomeDropTables();
     monsterChoices().forEach(function (choice) { spawns[choice.id] = choice.spawnRecords; });
     return Object.keys(G.monsters || {}).map(function (id) {
       var definition = G.monsters[id] || {};
-      var drops = (G.drops && G.drops.monsters && G.drops.monsters[id] || []).map(function (drop) {
+      function rewards(table) { return (Array.isArray(table) ? table : []).map(function (drop) {
         if (!Array.isArray(drop) || typeof drop[1] !== "string" || !G.items[drop[1]]) return null;
         var item = G.items[drop[1]] || {};
         return { rate: Number(drop[0]) || 0, id: drop[1], name: item.name || drop[1],
           quantity: Number(drop[2]) || 1, sprite: spriteDefinition(item.skin || drop[1]) };
-      }).filter(Boolean);
+      }).filter(Boolean); }
+      var drops = rewards(monsterTables[id]);
+      var homeRewards = rewards(homeTables[id]);
       return { id: id, name: definition.name || id, sprite: monsterSpriteDefinition(definition.skin),
         hp: Number(definition.hp) || 0,
         attack: Number(definition.attack) || 0, xp: Number(definition.xp) || 0,
         range: Number(definition.range) || 0,
         threat: (Number(definition.attack) || 0) * (Number(definition.frequency) || 0),
-        definition: catalogValue(definition), drops: drops, spawnRecords: spawns[id] };
+        definition: catalogValue(definition), drops: drops, homeRewards: homeRewards, spawnRecords: spawns[id] };
     });
   }
 
@@ -2036,7 +2112,7 @@
         meta: { definition: safeItemDefinition(definition), world: itemWorldInfo(id),
           upgradeable: !!definition.upgrade, compoundable: !!definition.compound,
           buyable: !!itemSeller(id), scaling: safeFields(definition.upgrade || definition.compound || {}),
-          maxLevel: maximumItemLevel(definition), usage: itemUsage(definition),
+          maxLevel: maximumItemLevel(definition), usage: itemUsage(definition), bonuses: itemBonuses(definition),
           sprite: spriteDefinition(definition.skin || id) } };
     }).sort(function (a, b) { return a.name.localeCompare(b.name); });
     var buyable = Object.keys(G.items || {}).map(function (id) {
@@ -2272,7 +2348,7 @@
     try {
       return dashboardDollHtml(renderSprite.call(parent, entity.skin, {
         cx: JSON.parse(JSON.stringify(entity.cx || {})), width: 27, height: 38,
-        scale: 1, j: Number(direction) || 0,
+        scale: 1, overflow: true, j: Number(direction) || 0,
       }));
     } catch (_error) { return null; }
   }
@@ -2924,6 +3000,7 @@
       monsterAchievements: monsterAchievementProgress(),
       tracktrix: tracktrixBonuses(),
       donationXpPerGold: donationXpPerGold,
+      donationLevelXp: Object.keys(G.levels || {}).reduce(function(levels,key) { levels[Number(key)] = Number(G.levels[key]); return levels; }, []),
       inventoryStackRetryAt: Number(root.__merchantStackRetryAt) || 0,
       inventoryStackError: root.__merchantStackError || null,
       gatheringActive: gatheringActive,
@@ -3728,11 +3805,14 @@
     }).finally(function () { rareLootPending = false; });
   }
 
+  var mapSpriteLayerBudget = 192, mapSpriteEntityBudget = 64;
   function mapEntity(entity, id) {
     if (!entity || entity.dead) return null;
     var type = entity.type || (entity.mtype ? "monster" : null);
     if (["character", "monster", "npc"].indexOf(type) < 0) return null;
     var skin = entity.skin || entity.mtype;
+    var layers = mapSpriteEntityBudget-- > 0 && mapSpriteLayerBudget > 0 && root.capturePartyMapLayers ? root.capturePartyMapLayers(entity).slice(0,mapSpriteLayerBudget) : [];
+    mapSpriteLayerBudget -= layers.length;
     return {
       id: String(entity.id || id), name: entity.name || entity.mtype || String(id),
       type: type, ctype: entity.ctype || null, mtype: entity.mtype || null,
@@ -3744,13 +3824,14 @@
       angle: Number(entity.angle) || 0, direction: Number(entity.direction) || 0,
       going_x: Number(entity.going_x) || 0, going_y: Number(entity.going_y) || 0,
       sprite: skin ? spriteDefinition(skin) : null,
-      dollHtml: type === "character" || entity.cx ? mapDollHtml(entity, entity.direction) : null,
+      layers: layers.length ? layers : undefined,
+      dollHtml: !layers.length && (type === "character" || entity.cx) ? mapDollHtml(entity, entity.direction) : null,
       stand: entity.stand || null,
       standSprite: entity.stand ? (spriteDefinition(typeof entity.stand === "string" ? entity.stand : "stand0") || spriteDefinition("stand0")) : null,
-      weapons: entity.cave ? ['mainhand','offhand'].map(function (hand) {
+      weapons: ['mainhand','offhand'].map(function (hand) {
         var item = entity.slots && entity.slots[hand], definition = item && G.items[item.name];
         return definition ? {hand:hand,name:item.name,sprite:spriteDefinition(definition.skin_c || definition.skin)} : null;
-      }).filter(Boolean) : undefined,
+      }).filter(Boolean),
     };
   }
 
@@ -3773,6 +3854,8 @@
   function publishMapFrame() {
     if (!mapTelemetryEnabled || mapTelemetryBusy) return;
     mapTelemetryBusy = true;
+    mapSpriteLayerBudget = 192;
+    mapSpriteEntityBudget = 64;
     var self = mapEntity(character, character.name);
     if (self) { self.id = character.name; self.name = character.name; self.type = "character"; }
     var entities = Object.keys(parent.entities || {}).map(function (id) {
@@ -3785,7 +3868,7 @@
       data: JSON.stringify({ name: character.name, map: character.map, definition: liveCaveMapDefinition(), at: Date.now(),
         x: Number(character.real_x !== undefined ? character.real_x : character.x) || 0,
         y: Number(character.real_y !== undefined ? character.real_y : character.y) || 0,
-        target: character.target || combatTargetId || null, eventCombat: eventTargetTypes.length>0, queue: queueMarkers(), queueRevision: groupedCombat && groupedCombat.queueRevision, grouped: groupedFarming(), entities: entities, events: events }),
+        projectilesAt: Date.now(), projectiles: Object.keys(mapTelemetryProjectiles).filter(function(id){var p=mapTelemetryProjectiles[id];if(p.expiresAt<=Date.now() || p.map!==character.map){delete mapTelemetryProjectiles[id];return false;}return true;}).slice(0,64).map(function(id){return mapTelemetryProjectiles[id];}), target: character.target || combatTargetId || null, eventCombat: eventTargetTypes.length>0, queue: queueMarkers(), queueRevision: groupedCombat && groupedCombat.queueRevision, grouped: groupedFarming(), entities: entities, visuals: root.capturePartyMapVisuals ? root.capturePartyMapVisuals(parent.map_animations || {},64) : [], events: events }),
     }).always(function () { mapTelemetryBusy = false; });
   }
 
@@ -6408,11 +6491,15 @@
       if (!group.items || group.items.length !== 3) continue;
       var slots = [], localUsed = {};
       group.items.forEach(function (mark) {
-        var slot = character.items.findIndex(function (item, index) { return !localUsed[index] && sameItem(item, mark.item); });
+        var slot = mark.storage ? (Number.isInteger(mark.slot) && !localUsed[mark.slot] && sameItemState(character.items[mark.slot],mark.item) ? mark.slot : -1)
+          : character.items.findIndex(function (item, index) { return !localUsed[index] && sameItem(item, mark.item); });
         if (slot >= 0) localUsed[slot] = true;
         slots.push(slot);
       });
-      if (slots.some(function (slot) { return slot < 0; })) continue;
+      if (slots.some(function (slot) { return slot < 0; })) {
+        if (group.items.some(function(mark){return mark.storage;})) throw Error('Reserved bank compound input moved before production');
+        continue;
+      }
       var cscroll = "cscroll" + item_grade(character.items[slots[0]]), cscrollSlot = findInventoryItemByName(cscroll);
       if (cscrollSlot < 0) {
         await ensureOwnedItemQuantity(cscroll, 1, command, activity);
@@ -6737,6 +6824,7 @@
   async function applyStatScrolls(command, activity) {
     var returns = [], resolved = [];
     command._statReturns = [];
+    command._statScrollsApplied = [];
     for (var i = 0; i < (command.statScrolls || []).length; i += 1) {
       var mark = command.statScrolls[i];
       // A partial name/level match can select an otherwise identical item that
@@ -6757,6 +6845,11 @@
       try {
         await smart_move(find_npc("newupgrade"));
         await upgrade(itemSlot, scrollSlot);
+        var appliedDeadline=Date.now()+2500;
+        while ((!character.items[itemSlot] || character.items[itemSlot].stat_type!==mark.statType) && Date.now()<appliedDeadline) await sleep(100);
+        if (!character.items[itemSlot] || character.items[itemSlot].stat_type!==mark.statType)
+          throw Error('Native stat-scroll outcome was not confirmed');
+        command._statScrollsApplied.push({mark:mark,slot:itemSlot,item:fingerprint(character.items[itemSlot])});
         if (character.items[itemSlot]) {
           var completed = fingerprint(character.items[itemSlot]);
           returns.push(completed);
@@ -7335,6 +7428,29 @@
     return true;
   }
 
+  async function prepareBankCompounds(command, activity) {
+    var groups=(command.compounds||[]).filter(function(group){return (group.items||[]).some(function(mark){return mark.storage;});});
+    if (!groups.length) return;
+    await merchantVisitBank(command,activity);
+    for(var gi=0;gi<groups.length;gi++) for(var mi=0;mi<groups[gi].items.length;mi++) {
+      var mark=groups[gi].items[mi],source=mark.storage;
+      if(!source || mark.storageReceived) continue;
+      var bankItem=character.bank && character.bank[source.pack] && character.bank[source.pack][source.slot];
+      if(!bankItem || bankItem.l || !sameItemState(bankItem,mark.item)) throw Error('Reserved bank compound item changed');
+      var beforeSlots=character.items.map(function(item){return item ? JSON.stringify(fingerprint(item)) : null;});
+      var before=character.items.filter(function(item){return sameItemState(item,mark.item);}).length;
+      await bank_retrieve(source.pack,source.slot);
+      var deadline=Date.now()+2500;
+      while(character.items.filter(function(item){return sameItemState(item,mark.item);}).length<=before && Date.now()<deadline) await sleep(100);
+      if(character.items.filter(function(item){return sameItemState(item,mark.item);}).length<=before) throw Error('Bank compound withdrawal unconfirmed');
+      var receivedSlot=character.items.findIndex(function(item,index){return !beforeSlots[index] && sameItemState(item,mark.item);});
+      if(receivedSlot<0) throw Error('Bank compound destination was not uniquely observed');
+      mark.slot=receivedSlot;mark.storageReceived=true;
+      (command._merchantWithdrawalsCompleted ||= []).push({pack:source.pack,slot:source.slot,item:mark.item,inventorySlot:receivedSlot});
+    }
+    activity.push({level:'info',message:'Withdrew reserved bank compound triplets'});
+  }
+
   async function prepareBankUpgrades(command, activity) {
     if (!(command.bankUpgradeRules || []).length) return;
     await merchantVisitBank(command, activity);
@@ -7427,6 +7543,7 @@
         if (typeof statMark.slot === "string" && sameItemState(character.slots[statMark.slot], statMark.item))
           await unequip(statMark.slot);
       }
+      await prepareBankCompounds(command, activity);
       if ((command.bankUpgradeRules || []).length) await prepareBankUpgrades(command, activity);
       await preloadUpgradeOfferings(command, activity);
       await preloadStatScrolls(command, activity);
@@ -7474,6 +7591,7 @@
         upgradesResolved: (command.upgrades || []).length > 0,
         upgradeMarksResolved: (command.upgrades || []).filter(function(mark) { return (command._offeringWaits || []).indexOf(mark) < 0; }),
         statScrollsResolved: command._statScrollsResolved || [],
+        statScrollsApplied: command._statScrollsApplied || [],
         compoundsResolved: (command.compounds || []).length > 0,
         autoCompoundsResolved: command.sharedBankImprovements ? [] : command._autoCompoundsResolved || [],
         purchasesResolved: (command.purchases || []).length > 0,
@@ -7495,6 +7613,7 @@
         await request("/merchant/complete", { method: "POST", body: {
           jobId: command.jobId, success: false,
           error: String(error.reason || error.message || error),
+          statScrollsApplied: command._statScrollsApplied || [],
           merchantWithdrawalsDelivered: command._merchantWithdrawalsCompleted || [],
           merchantBanked: command._merchantBankedCompleted || [], activity: activity,
         }});
@@ -7590,6 +7709,10 @@
     }
     function matchingSlot(item) {
       if (!item) return -1;
+      // Inventory can move between paid cycles without a CODE restart. Remap
+      // the complete owned group before interpreting individual reservations.
+      // Pending native outcomes retain their separate receipt reconciliation.
+      if (!progress.pendingUpgrade) remapCommerceOwnedItems(progress);
       function reserved(slot) {
         return progress.batchItems.concat(progress.results).some(function (entry) { return entry.slot === slot && sameItem(character.items[slot], entry.item); });
       }
@@ -9933,6 +10056,14 @@
       session.baseline = gatheringBaseline();
       return true;
     }
+    if (gatheringAutoCraft[session.mode] === true) {
+      var toolOrder = await request('/merchant/order', {method:'POST', body:{
+        buys:[], crafts:[{id:session.tool,quantity:1,level:0}]
+      }});
+      gatheringRetryAt = Date.now() + 5000;
+      gatheringStatus('Crafting replacement ' + session.tool, 'info', {jobId:toolOrder.jobId});
+      return false;
+    }
     await request("/merchant/gather-status", { method: "POST", body: {
       character: character.name, mode: session.mode, noTool: true,
       message: (session.mode === "fishing" ? "Fishing" : "Mining") + " off: no tool in inventory or bank",
@@ -11287,9 +11418,15 @@
       statusPhase = "snapshot";
       var statusSentAt = Date.now();
       var statusBody = snapshot();
+      var statusCatalogGeneration = catalogGeneration;
+      var statusCarriedCatalog = !!statusBody.merchantCatalog;
       statusPhase = "request status";
       var state = await request("/status", { method: "POST", body: statusBody });
       if (!runtimeCurrent()) return;
+      // A response accepting the coordinator's old catalog cannot acknowledge a
+      // newer local discovery that is still warming, or an in-flight newer table.
+      if (state.needsCatalog) catalogKnown = false;
+      else if (statusCarriedCatalog && statusCatalogGeneration === catalogGeneration) catalogKnown = true;
       receiveConsoleMaintenance(state.consoleMaintenance || null, state.serverNow);
       if(consoleMainTick()){
         root.__partyStatusSuccessAt=Date.now();if(dashboardSampler)dashboardSampler.renew(state.dashboardLease);
@@ -11306,6 +11443,7 @@
         return;
       }
       mapTelemetryEnabled = !!state.mapTelemetry;
+      if (!mapTelemetryEnabled) mapTelemetryProjectiles = {};
       dungeonRuntime().receive(state.dailyDungeon);
       if (root.installCaveRecovery) caveRecovery().receive(state.dailyDungeon && state.dailyDungeon.recovery);
       if (dungeonRuntime().owns()) {
@@ -11376,6 +11514,7 @@
       root.__partyRareControlAt = Math.max(Number(root.__partyRareControlAt || 0),Number(state.serverNow || 0));
       if (!rareControlState) cancelRarePath();
       mapTelemetryEnabled = !!state.mapTelemetry;
+      if (!mapTelemetryEnabled) mapTelemetryProjectiles = {};
       partyLocation = state.partyLocation || null;
       farmTravelPaused = !!state.farmTravelPaused;
       bankQueued = !!state.bankQueued;
@@ -11475,6 +11614,7 @@
       statusPhase = "apply merchant settings";
       bankboiStorage = state.bankboiStorage === true;
       bankStaging = state.bankStaging !== false;
+      gatheringAutoCraft = state.gatheringAutoCraft || {};
       var nextStandListings = state.standListings || gatheringStandListings;
       if (JSON.stringify(nextStandListings) !== JSON.stringify(gatheringStandListings) && gatheringSession)
         gatheringSession.atStandForCooldown = false;
@@ -11568,7 +11708,6 @@
       farmingMode = character.ctype !== "merchant" && state.partyFarmingMode === "scatter" ? "scatter" : "default";
       partyFarmingMonsterType = typeof state.partyFarmingMonsterType === "string" ? state.partyFarmingMonsterType : null;
       scatterBreakTarget = state.scatterBreakTarget && state.scatterBreakTarget.id ? state.scatterBreakTarget : null;
-      catalogKnown = !state.needsCatalog;
       void prepareCatalog();
       flushStatusDiagnostics();
       statusPhase = "dispatch command";
@@ -16924,7 +17063,12 @@
       var e=observed && observed.visible?observed:t;
       var knownDead=root.partyRoleRunner && typeof root.partyRoleRunner.isKnownDead==='function' && root.partyRoleRunner.isKnownDead(t.id);
       var route=movement.report(),foreignOwned=route && route.owner && !independentApproachOwnsJourney();
-      var allowed=!!(!foreignOwned && !partyConvoyActive && !convoyTraveling && !root.sharedRoutine.isOccupied() && (coordinated || !groupedFarming()) && runtimeCurrent() && (!parent.socket || parent.socket.connected!==false) && !dungeonOwned() && !eventTraveling && character.ctype!=='merchant' &&
+      // A coordinator-owned farming encounter has released convoy walking to
+      // grouped combat. Its selected target still needs native range reports
+      // before either fighter can commit; unrelated convoy targets stay fenced.
+      var encounter=root.__partyFarmingEngagement;
+      var farmingHandoff=!!(coordinated && encounter && !encounter.finished && encounter.target && String(encounter.target.id)===String(t.id));
+      var allowed=!!(!foreignOwned && (!partyConvoyActive || farmingHandoff) && !convoyTraveling && !root.sharedRoutine.isOccupied() && (coordinated || !groupedFarming()) && runtimeCurrent() && (!parent.socket || parent.socket.connected!==false) && !dungeonOwned() && !eventTraveling && character.ctype!=='merchant' &&
         !navigationIntent.cancelled && !character.rip && !consoleMovementPaused() && !root.__partyMovementPaused &&
         !knownDead && (!observed || !observed.dead && !(Number(observed.hp)<=0)) && Number.isFinite(e.x) && Number.isFinite(e.y) &&
         (coordinated || e.visible && !e.dead && e.hp>0) && (!coordinated || t.map===character.map && t.in===character.in && t.server===reunionRealm()) &&

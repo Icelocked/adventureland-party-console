@@ -42,7 +42,7 @@ function configuration(env = process.env) {
   const rate = Number(env.E2E_CLOCK_RATE || 1);
   const wall = Number(env.E2E_CLOCK_WALL_EPOCH);
   const epoch = Number(env.E2E_CLOCK_VIRTUAL_EPOCH);
-  if (!Number.isFinite(rate) || rate < 1 || rate > 8) throw Error("Invalid E2E clock rate");
+  if (!Number.isFinite(rate) || rate < 1 || rate > 1024) throw Error("Invalid E2E clock rate");
   if (rate > 1 && (!Number.isSafeInteger(wall) || !Number.isSafeInteger(epoch)))
     throw Error("Accelerated E2E requires a shared clock epoch");
   return { rate, wall, epoch };
@@ -50,7 +50,7 @@ function configuration(env = process.env) {
 
 function install({ dateOnly = false } = {}) {
   const config = configuration();
-  if (config.rate === 1) return { backend: "native", rate: 1 };
+  if (config.rate === 1) return { backend: "native", rate: 1, now: () => realDate.now() };
   if (globalThis.__e2eChronalClock) return globalThis.__e2eChronalClock;
   const directory = chronalDirectory();
   const { VirtualClock } = require(path.join(directory, "sim/vclock.js"));

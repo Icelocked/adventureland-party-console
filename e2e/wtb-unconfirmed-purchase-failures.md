@@ -17,3 +17,5 @@ the message asks for. Live journey: `e2e/live-wtb-unconfirmed-purchase.spec.ts`.
    not be resolvable; its normal confirmation path stays in charge.
 5. **Other items touched.** Resolving one item leaves other items' purchases and bids
    alone.
+
+Release 1.5 follow-up: pending queued work must reject both manual outcomes without changing either bid; cancelling the owned job permits exactly one resolution. A replay or coordinator restart must not decrement a confirmed order twice. Poll the purchase ledger and both exact bid quantities together after browser resolution.

@@ -419,7 +419,6 @@ the ordinary route installation checks. Stale reports still stop movement.
 Validate the native Boo Boo walking-return communication-hold case and retain
 its actual stop, fresh resume and Daisy reward evidence. This character change
 requires the supported full restart; a coordinator-only restart is insufficient.
-
 The Metrics workspace records durable kills, native damage, chest loot, gold and
 ping history independently of an open dashboard. See [Metrics](../../docs/metrics.md)
 for definitions, retention, reset semantics and estimator limits. Publish
@@ -2248,3 +2247,34 @@ Fresh, alive native Main-town presence permits retirement of only that old
 cycle's command/walk and matching event trip. Other navigation remains owned.
 Validate the native Anniversary restart/return-to-Hunt journeys; preserve their
 physical arrival and reward checks. Build and stage; activate only by explicit load.
+
+Merchant bank manual compound marks bind three unlocked native bank sources, including different packs, before admission. The ordinary improvement command withdraws those sources and reports separate native withdrawal receipts; a failed later stage retains confirmed withdrawals for retry. Auto-compound uses the shared bank rules. Stat-scroll marks fence delivery payloads for the exact item regardless of priorities; native completion advances its retained delivery fingerprint. Replacement fishing and mining tools have separate default-off merchant settings; opted-in missing tools use the ordinary durable crafting order and material reservations. Validate the bank triplet, stat-bank/delivery, native gathering miss/hit and tool-setting journeys before staging a complete console artifact.
+
+Mailbox automation settings persist independently. Native attachment collection remains merchant-owned; auto-delete waits for account mail taken=true and no matching active collection job. Confirmed send completions produce local, durable outbox records; deleting a record cannot recall native mail. Opening the mailbox acknowledges incoming message IDs for its new-mail indicator. Validate mailbox-enhancements.case.ts and live-mailbox.spec.ts, retaining native inventory and mailbox receipts. Coordinator/dashboard changes require an explicitly requested supported coordinator-only activation; building alone does not activate them.
+
+Unconfirmed external stand purchases remain durable reservations until their owned
+job ends and a player explicitly resolves the outcome. The native-stand
+resolve-purchase action refuses current or queued jobs; bought uses the ordinary
+bid fulfillment path, not bought only releases the reservation. Repeated decisions
+cannot fill twice. The WTB row displays unresolved ledger entries independently of
+recomputed stand problems. Validate the native dashboard bought/not-bought,
+queued-job refusal and restart journeys in live-wtb-unconfirmed-purchase.spec.ts.
+Build a completed candidate after integrating the dashboard and coordinator; leave
+activation to an explicit console load.
+
+Replacing a farming focus schedules a normal revision-fenced farm relocation when
+the old catalog-tagged area contains none of the new selected species. Compatible
+focus additions and untagged manual waypoints retain their area. During event
+attendance, do not invalidate navigation revisions or replace the saved return
+checkpoint: pending relocation waits for native event/return ownership and combat
+to finish, then authorizes the newly selected catalog area. A later manual
+navigation revision supersedes the pending relocation. Validate the natural
+Halloween focus-change journey and retain its native Bee hits for both fighters.
+
+A farm-relocation convoy's unfinished farming engagement releases its selected
+coordinated target to independent approach, including native range confirmation.
+The coordinator convoy flag remains set until the encounter finishes; it must not
+suppress those readiness reports. Local convoy walking, foreign movement owners,
+unrelated targets and cancelled navigation remain exclusive. Validate the natural
+Halloween completion and changed Bee focus journey in
+`live-event-runtime-recovery.spec.ts`, retaining native damage from both fighters.

@@ -1,8 +1,20 @@
+import './character-sections.case';
+import './map-sprites.case';
+import './drop-rewards.case';
+import './release-ui.case';
 import './market-preferences.case';
 import { test, expect } from './fixtures';
 import './gear-comparison.case';
 import './steam-audio.case';
 import './tracktrix-drilldown.case';
+import './item-card.case';
+import './character-card.case';
+import './comparison-card.case';
+import './skill-card.case';
+import './monster-card.case';
+import './stat-colors.case';
+import './catalog-comparison.case';
+import './item-titles.case';
 import { createServer } from 'node:http';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { transform, build } from 'esbuild';
@@ -1619,3 +1631,7 @@ test.describe('stand buy order item levels',()=>{
 });
 
 });
+
+import './metrics-history.case';
+
+import './mailbox-enhancements.case';

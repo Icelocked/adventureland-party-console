@@ -364,9 +364,21 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
       if(observationClock.backend==='chronal-network')for(const receipt of [...clockReceipts.realms,...clockReceipts.clients.flatMap(c=>[c.game,c.code])]){
         expect(receipt?.backend).toBe('chronal-network');expect(receipt.rate).toBe(observationClock.rate);expect(receipt.wall).toBe(observationClock.wall);expect(receipt.epoch).toBe(observationClock.epoch);expect(receipt.errors).toEqual([]);
       }
-      const rendering=process.env.E2E_MEASURE_BROWSER_CPU==='1'?await measureBrowserRendering(browser):undefined;
+      const bodyClockSnapshot=async()=>{
+        const url=new URL('/diagnostics',process.env.E2E_CLOCK_BROKER);url.searchParams.set('token',process.env.E2E_CLOCK_TOKEN||'');
+        return {broker:await (await fetch(url)).json(),frames:await Promise.all(Object.entries(clients).map(async([name,client])=>({name,clocks:await client.frame.evaluate(()=>{
+          const w=window as any,r=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+          return [w.__e2eChronalClock,r?.__e2eChronalClock].map(c=>c&&({timing:c.timing,taskStats:c.taskStats}));
+        })})))};
+      };
+      const bodyClockBefore=observationClock.backend==='chronal-network'&&process.env.E2E_MEASURE_BROWSER_CPU==='1'?await bodyClockSnapshot():undefined;
+      const rendering=process.env.E2E_MEASURE_BROWSER_CPU==='1'?await measureBrowserRendering(browser,()=>observationClock.now()):undefined;
+      const cpuProfile=process.env.E2E_PROFILE_BROWSER_CPU==='1'?await context.newCDPSession(clients[primaryName].page):undefined;
+      if(cpuProfile){await cpuProfile.send('Profiler.enable');await cpuProfile.send('Profiler.start');}
       try {await use(live);} finally {
+        if(cpuProfile)try{const {profile}=await cpuProfile.send('Profiler.stop');await testInfo.attach('native-browser-cpu-profile',{body:JSON.stringify(profile),contentType:'application/json'});}finally{await cpuProfile.detach();}
         if(rendering)await testInfo.attach('browser-rendering-cpu',{body:JSON.stringify(await rendering(),null,2),contentType:'application/json'});
+        if(bodyClockBefore)await testInfo.attach('gameplay-clock-body-timing',{body:JSON.stringify({before:bodyClockBefore,after:await bodyClockSnapshot()}),contentType:'application/json'});
       }
     } finally {
       rmSync(path.join(directory,'hold-merchant-status'),{force:true});
@@ -395,7 +407,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           if(observationClock.backend==='chronal-network'&&!client.page.isClosed()){
             const clocks=await diagnostic((async()=>client.frame.evaluate(()=>{
               const w=window as any,r=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
-              return [w.__e2eChronalClock,r?.__e2eChronalClock].map(c=>c&&({backend:c.backend,now:c.now(),errors:c.errors,epoch:c.epoch,rate:c.rate}));
+              return [w.__e2eChronalClock,r?.__e2eChronalClock].map(c=>c&&({backend:c.backend,now:c.now(),errors:c.errors,epoch:c.epoch,rate:c.rate,state:c.state,timing:c.timing,taskStats:c.taskStats}));
             }))());await attach(name+'-final-clock',clocks);
             if(Array.isArray(clocks))for(const clock of clocks){expect(clock?.backend).toBe('chronal-network');expect(clock?.errors).toEqual([]);}
           }

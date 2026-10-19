@@ -1,3 +1,4 @@
+import {characterInspectionRoute} from "./characters/inspection.ts";
 import { observeEventAttendance, eventInstanceAllowed } from "./events/attendance-limits.ts";
 import { createDungeons } from './dungeons/service.ts';
 import { dungeonOwns } from '../dungeons/contracts.ts';
@@ -340,7 +341,7 @@ export function startCoordinatorApplication(
     const shutdownCoordinator = coordinatorPolicies.createShutdown({
       log: (message) => console.log(message),
       stopCharacters: () => characterManager.stopAll(),
-      closeStorage: () => { persistence.flush(); movementPlanner.dispose(); metrics.close(); localStorage.close(); },
+      closeStorage: async () => { persistence.flush(); movementPlanner.dispose(); await metrics.close(); localStorage.close(); },
       exit: () => process.exit(),
     });
     const { dispatcher: merchantDispatcher, idle: merchantIdle } =
@@ -692,6 +693,7 @@ export function startCoordinatorApplication(
     } = coordinatorPolicies.createCoordinatorPartyConfiguration(party, character_manage, {
       dungeon: dungeons,
       changed: previous => coordinatorPolicies.reconcileFarmingMembership(party, farmingScopes, previous),
+      focusChanged: () => farmAreaNavigation.focusChanged(),
       now: () => Date.now(),
       owned: ownedCharacter,
       members: () => farmingNavigation.members(),
@@ -1966,6 +1968,7 @@ export function startCoordinatorApplication(
         abort: finishAnniversaryAbort, begin: beginEventReturn, snapshot: publicAnniversaryState,
       });
       const focusRoute = coordinatorPolicies.createFocusRoute(party, {
+        focusChanged: () => farmAreaNavigation.focusChanged(),
         owned: ownedCharacter, members: () => [name], invalidate: (...args) => farmingNavigation.invalidate(...args), persist: persistSettings,
       });
     const {
@@ -2380,6 +2383,12 @@ export function startCoordinatorApplication(
                   consoleMaintenance:report.consoleMaintenance,map:report.map,in:report.in,x:report.x,y:report.y,
                   dungeon:{cave:{run:coordinatorPolicies.requestObject(coordinatorPolicies.requestObject(report.dungeon).cave).run}},
                 }]))}));
+                router.get('/party-api/characters/:name/inspection', characterInspectionRoute({
+                  owned:name=>!!ownedCharacter(name), now:Date.now, version:()=>version, directory:__dirname,
+                  read:file=>fs_regular.readFileSync(file,'utf8'),
+                  catalog:()=>{const entries=coordinatorPolicies.requestObject(party.merchantCatalog).allItems;return Array.isArray(entries)?entries:[];},
+                  fetch:async name=>{const fetch=await platform.loadFetch();const response=await fetch('https://adventure.land/api/mainframe_get_character',{method:'POST',headers:{Cookie:'auth='+sess,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({character:name}).toString(),signal:AbortSignal.timeout(10000)});if(!response.ok)throw Error('Could not read saved character from the game');return response.json();},
+                }));
                 coordinatorPolicies.installMovementRoutes(router, movementPlanner, ownedCharacter);
                 installProductionRoutes(router, party, () => persistence.settings(), merchantLog);
                 router.post('/party-api/market/ignored-items',marketIgnoredItemsRoute(party,persistSettings));
@@ -2418,6 +2427,7 @@ export function startCoordinatorApplication(
               },
               startMail: () =>
                 coordinatorPolicies.startCoordinatorMail(party, my_acc, {
+                  persist: persistSettings,
                   session: sess,
                   loadFetch: () => platform.loadFetch(),
                   timeout: (milliseconds) => AbortSignal.timeout(milliseconds),
