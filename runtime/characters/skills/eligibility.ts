@@ -31,6 +31,16 @@ export function unlocked(w: SkillWorld, id: SkillId): boolean {
   return Object.entries(s.requirements || {}).every(([key, value]) =>
     Number(Reflect.get(w.actor, key)) >= Number(value));
 }
+/**
+ * A fan-farming Mental Burst that kills a target with at least its cost left: the server returns the
+ * HP it removed as MP, so the burst ends with more MP than it started and needs no reserve or budget.
+ */
+export function burstRefunds(w: SkillWorld, d: SkillDecision): boolean {
+  return d.skill === 'mentalburst' && fanFarming(w) && d.targets.length > 0 && d.targets.every(t => {
+    const remaining = t.hp - w.incoming(t);
+    return remaining >= cost(w, d.skill) && damage(w, d.skill, t, true) >= remaining;
+  });
+}
 export const fanLethal = (w: SkillWorld, m: Combatant) => w.allowed(m, 'fanofknives') && damage(w, 'fanofknives', m, true) >= m.max_hp;
 /** Fan-farming judged with the gear worn now; `unseen` while scatter fan-farming has no authorized mob in view. */
 export function fanVerdict(w: SkillWorld): 'lethal' | 'weak' | 'unseen' | 'off' {
@@ -87,6 +97,7 @@ function manaBlock(w: SkillWorld, d: SkillDecision, pending: number): string | n
   const remaining = w.actor.mp - pending - cost(w, d.skill);
   if (remaining < 0) return 'insufficient MP';
   // A rogue outspends even back-to-back MP potions while fan-farming; Fan of Knives may dip into the reserve.
-  if (d.category !== 'survival' && remaining < reserve(w) && !(d.skill === 'fanofknives' && fanFarming(w))) return 'survival MP reserved';
+  if (d.category !== 'survival' && remaining < reserve(w) && !(d.skill === 'fanofknives' && fanFarming(w)) && !burstRefunds(w, d))
+    return 'survival MP reserved';
   return null;
 }

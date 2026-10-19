@@ -59,9 +59,9 @@ function independentUseful(w: SkillWorld, id: SkillId, target: Combatant): boole
   const remaining = target.hp - w.incoming(target);
   if (remaining <= 0) return false;
   if (id === 'purify') return purifyUseful(w, target);
-  // Fan of Knives needs the MP. Mental Burst refunds its damage on a kill, capped at
-  // the target's remaining HP, so it only pays for itself on mobs with at least its cost left.
-  if (fanFarming(w)) return id === 'mentalburst' && damage(w, id, target, true) >= remaining && remaining >= cost(w, id);
+  // Fan of Knives needs the MP, so only Mental Burst is used, on any mob it kills; it refunds the HP it
+  // removes, and a burst that refunds less than its cost keeps the reserve and budget (burstRefunds).
+  if (fanFarming(w)) return id === 'mentalburst' && damage(w, id, target, true) >= remaining;
   if (id === 'huntersmark') return markUseful(w, target, remaining);
   if (id === 'supershot') return remaining >= damage(w, id, target) * .5;
   return true;
@@ -72,7 +72,20 @@ function markUseful(w: SkillWorld, target: Combatant, remaining: number): boolea
   return owner?.name === w.actor.name && !target.s?.marked &&
     remaining >= damage(w, 'attack', target) * Math.max(1, w.actor.frequency) * 3;
 }
+/**
+ * While fan farming, Mental Burst goes to any mob within its reach that it kills, not only the
+ * scatter primary (just the nearest): the most HP left first, the largest refund and the mob Fan of
+ * Knives is least likely to be finishing already.
+ */
+export function burstChoices(w: SkillWorld, primary?: Combatant): SkillDecision[] {
+  const left = (m: Combatant) => m.hp - w.incoming(m);
+  const mobs = primary ? [primary, ...w.context.monsters.filter(m => m.id !== primary.id)] : w.context.monsters;
+  return mobs.filter(m => independentUseful(w, 'mentalburst', m))
+    .map(m => decision('mentalburst', [m])).filter(d => !blocked(w, d))
+    .sort((a, b) => left(b.targets[0]) - left(a.targets[0]) || a.targets[0].id.localeCompare(b.targets[0].id));
+}
 export function damageChoices(w: SkillWorld, target: Combatant): SkillDecision[] {
+  if (w.actor.ctype === 'rogue' && fanFarming(w)) return burstChoices(w, target);
   const classes: Partial<Record<ActorClass, SkillId[]>> = {
     ranger: ['huntersmark', 'supershot'], rogue: ['mentalburst', 'quickstab', 'quickpunch'],
     paladin: ['purify', 'shield_slam', 'smash'],

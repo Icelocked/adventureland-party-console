@@ -82,11 +82,27 @@ export function installSkillRuntime(root: CombatRoot) {
     return bossExcluded.has(id) || !!world().skills[id]?.hostile &&
       targets.some(t => t.type !== 'monster' || !shared.bossTargetAllowed?.(t as Target) || !shared.skillTargetAllowed?.(t as Target));
   }
+  // While fan farming, the next Mental Burst is tried the moment its cooldown ends instead of on the
+  // next support tick (a median 350 ms later); with no mob to kill then, the support tick keeps trying.
+  let burstTimer: ReturnType<typeof setTimeout> | null = null;
+  function scheduleBurst(castAt: number) {
+    if (burstTimer) clearTimeout(burstTimer);
+    const ready = Math.max(Number(host.next_skill?.mentalburst) || 0, castAt + (G.skills.mentalburst?.cooldown || 900));
+    burstTimer = setTimeout(() => {
+      burstTimer = null;
+      // The client's cooldown can end a little after the estimate; wait for it rather than give up.
+      const left = Number(host.next_skill?.mentalburst) - Date.now();
+      if (left > 0) return void (burstTimer = setTimeout(() => { burstTimer = null; void engine.burst().catch(() => false); }, left));
+      void engine.burst().catch(() => false);
+    }, Math.max(0, ready - Date.now()));
+  }
   function castSkill(d:SkillDecision):Promise<unknown> {
     if (bossSkillBlocked(d.skill, d.targets)) return Promise.reject(new Error('Skill conflicts with boss-only combat'));
     if(returnCastBlocked(d))return Promise.reject(new Error('Skill conflicts with return movement or attacker-only policy'));
     const argument=d.argument ?? (d.targets.length>1 || world().skills[d.skill]?.multi ? d.targets.map(t=>t.id) : d.targets[0]?.id || d.targets[0]?.name);
-    return host.use_skill(d.skill,argument);
+    const castAt = Date.now(), cast = host.use_skill(d.skill,argument);
+    if (d.skill === 'mentalburst') void cast.then(() => scheduleBurst(castAt), () => undefined);
+    return cast;
   }
   const engine = createSkillEngine({
     world,
@@ -123,6 +139,7 @@ export function installSkillRuntime(root: CombatRoot) {
     endangeredSelf: () => endangered(world(), world().actor as unknown as Combatant),
     reset() { engine.reset(); projectiles.clear(); },
     stop() {
+      if (burstTimer) clearTimeout(burstTimer);
       engine.stop(); projectiles.clear();
       host.socket?.off?.('action', action); host.socket?.off?.('hit', hit);
     },

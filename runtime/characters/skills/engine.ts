@@ -1,7 +1,7 @@
 import { createManaBudget } from './budget.ts';
 import { errorReason } from '../roles/types.ts';
-import { blocked, cost, reserve, unlocked } from './eligibility.ts';
-import { bestAttack, damageChoices, fanFarming, fanStand, fanVerdict } from './offense.ts';
+import { blocked, burstRefunds, cost, reserve, unlocked } from './eligibility.ts';
+import { bestAttack, burstChoices, damageChoices, fanFarming, fanStand, fanVerdict } from './offense.ts';
 import { absorbDecision, paladinSupport, rogueSupport, combatBuffSupport, opener } from './protection.ts';
 import type { Combatant, SkillDecision, SkillDiagnostic, SkillId, SkillWorld } from './types.ts';
 
@@ -37,7 +37,7 @@ export function createSkillEngine(ports: SkillPorts) {
       .map(id => cost(w, id)));
     const credit = budget.observe(w.now, w.actor.mp, w.actor.mp - reserve(w), cap);
     // Fan of Knives one-shots while scatter farming: spend down to the reserve; MP potions refill it.
-    const sustained = d.skill === 'fanofknives' && fanFarming(w);
+    const sustained = d.skill === 'fanofknives' && fanFarming(w) || burstRefunds(w, d);
     if (d.category === 'damage' && w.context.mode !== 'event' && !sustained && credit < cost(w, d.skill)) {
       report(w, d, 'skipped', 'sustained farming MP budget'); return false;
     }
@@ -85,8 +85,11 @@ export function createSkillEngine(ports: SkillPorts) {
     } catch (error) {
       rejectActions(d, actions);
       if (epoch !== token.epoch || stopped) return false;
-      // A cooldown race at the attack cooldown's edge retries on the next attack instead of a lockout.
-      if (errorReason(error) !== 'cooldown') failures.set(d.skill, ports.world().now + 1000);
+      // A cooldown race at the attack cooldown's edge retries on the next attack instead of a lockout,
+      // and so does a Mental Burst whose mob died first: the next try picks another.
+      const reason = errorReason(error);
+      if (reason !== 'cooldown' && !(d.skill === 'mentalburst' && ['not_there', 'no_target'].includes(reason)))
+        failures.set(d.skill, ports.world().now + 1000);
       report(w, d, 'rejected', errorReason(error));
       return false;
     } finally {
@@ -113,6 +116,11 @@ export function createSkillEngine(ports: SkillPorts) {
     offense(target: Combatant) {
       const w = world();
       return first(damageChoices(w, target));
+    },
+    /** A fan-farming rogue's Mental Burst at any mob it kills, without waiting for a primary target. */
+    burst() {
+      const w = world();
+      return w.actor.ctype === 'rogue' && fanFarming(w) ? first(burstChoices(w)) : Promise.resolve(false);
     },
     attack(target: Combatant): Promise<boolean> | null {
       const w = world();

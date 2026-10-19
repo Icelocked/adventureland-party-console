@@ -7,17 +7,25 @@ import { location } from './game/hunt-lifecycle';
 // alone and against a competitor. Declared inputs: the two stars, and in the contested case a
 // competitor at the spawn's south-east (where a live competitor farmed) that kills up to five crabs
 // within 150 of its spot every 600 ms, the pace of another Fan of Knives rogue. Crabs, respawns,
-// casts, potions and the rogue's kills are native.
+// casts, potions and the rogue's kills are native. The Mental Burst case (rogue-mental-burst-failures.md)
+// also declares two Rings of Intelligence at the lowest level that gives the rogue 64 int.
 test.use({ primaryClass: 'rogue', loadout: 'combat-range' });
 const R = 'E2EWarrior', P = 'E2EPriest', MINUTES = 4;
 const competitorSpot = { x: -1160, y: -230 };
 
-async function farm(live: any, info: any, contested: boolean) {
+async function farm(live: any, info: any, contested: boolean, burst = false) {
   const native = () => live.admin(`output=(()=>{const p=get_player('${R}');
     return {x:p.x,y:p.y,mp:p.mp,max_mp:p.max_mp,rip:p.rip,potions:p.items.filter(i=>i&&i.name==='mpot1').reduce((n,i)=>n+(i.q||1),0)};})()`);
   await live.admin(`output=(()=>{const p=get_player('${R}');for(const level of [7,7]){const i=p.items.findIndex(x=>!x);if(i<0)throw Error('bag full');p.items[i]={name:'firestars',level};}
     cache_player_items(p);resend(p,'u+cid+reopen');return true})()`);
   await expect.poll(async () => live.clients[R].run(`character.items.filter(i=>i&&i.name==='firestars').length`), { timeout: 30_000 }).toBe(2);
+  if (burst) {
+    const rings = await live.admin(`output=(()=>{const p=get_player('${R}');for(let level=0;level<=13;level++){
+      p.slots.ring1={name:'intring',level};p.slots.ring2={name:'intring',level};calculate_player_stats(p);if(p.int>=64)break;}
+      resend(p,'u+cid+reopen');return {level:p.slots.ring1.level,int:p.int};})()`);
+    expect(rings.int, 'Two Rings of Intelligence must reach 64 int').toBeGreaterThanOrEqual(64);
+    await expect.poll(async () => live.clients[R].run('character.int'), { timeout: 10_000 }).toBeGreaterThanOrEqual(64);
+  }
   for (const slot of ['mainhand', 'offhand']) {
     await live.clients[R].run(`(()=>{const i=character.items.findIndex(x=>x&&x.name==='firestars');equip(i,'${slot}');return true})()`);
     await expect.poll(async () => live.clients[R].run(`character.slots.${slot}?.name`), { timeout: 10_000 }).toBe('firestars');
@@ -25,8 +33,13 @@ async function farm(live: any, info: any, contested: boolean) {
   // Passive observer: the rogue's native actions and hits.
   await live.clients[R].run(`(() => {
     const log = globalThis.__crabRate = { actions: [], hits: [] };
-    parent.socket.on('action', d => { if (d && d.attacker === character.name) log.actions.push({ at: Date.now(), type: d.type, mp: character.mp }); });
+    parent.socket.on('action', d => { if (d && d.attacker === character.name) log.actions.push({ at: Date.now(), type: d.type, mp: character.mp,
+      ...(d.type === 'mentalburst' ? { readySince: log.readySince } : {}) }); if (d && d.attacker === character.name && d.type === 'mentalburst') log.readySince = null; });
     parent.socket.on('hit', d => { if (d && d.hid === character.name) log.hits.push({ at: Date.now(), source: d.source, id: d.id, kill: !!d.kill }); });
+    // The rogue's projectiles in flight (action until hit): their crabs are already being killed.
+    log.flying = new Map();
+    parent.socket.on('action', d => { if (d && d.attacker === character.name && d.target) log.flying.set(d.target, Date.now()); });
+    parent.socket.on('hit', d => { if (d && d.hid === character.name) log.flying.delete(d.id); });
     // Every 100 ms with the attack cooldown ready: MP and crabs within native Fan of Knives range.
     log.ready = []; log.decisions = [];
     // At each Fan of Knives decision: targets chosen against crabs in native range and authorized ones.
@@ -41,6 +54,20 @@ async function farm(live: any, info: any, contested: boolean) {
       return { skipped: c.skippedAttack || null, stage: c.stage || null, skill: c.skill ? c.skill.status + ':' + (c.skill.reason || '') + '@' + (Date.now() - c.skill.at) : null,
         selectedInRange: sel ? distance(character, sel) <= G.skills.fanofknives.range : null }; };
     const cost = Math.ceil(G.skills.fanofknives.mp * (1 - Math.min(100, character.mp_reduction || 0) / 100));
+    // Every 100 ms with Mental Burst ready: crabs within its native reach that its minimum hit kills.
+    log.burstReady = [];
+    const burstCost = Math.ceil(G.skills.mentalburst.mp * (1 - Math.min(100, character.mp_reduction || 0) / 100));
+    log.burstTimer = setInterval(() => {
+      if (character.int < 64 || Number(parent.next_skill?.mentalburst || 0) > Date.now() || character.mp < burstCost) return;
+      log.readySince ??= Date.now();
+      const reach = character.range * G.skills.mentalburst.range_multiplier + G.skills.mentalburst.range_bonus;
+      const hit = character.attack * G.skills.mentalburst.damage_multiplier * 0.9;
+      const killable = Object.values(parent.entities).filter(e => e && e.mtype === 'crab' && !e.dead && e.visible &&
+        distance(character, e) <= reach && e.hp <= hit * damage_multiplier((e.resistance || 0) - (character.rpiercing || 0)) &&
+        !(Date.now() - (log.flying.get(e.id) || 0) < 1000));
+      const s = globalThis.partyCombatState?.skill;
+      if (s && s.skill === 'mentalburst' && s.status === 'selected') return; // a burst is in flight
+      log.burstReady.push({ at: Date.now(), killable: killable.length, mp: character.mp, ...why([]) }); }, 100);
     log.timer = setInterval(() => { if (!(Number(parent.next_skill?.attack || 0) <= Date.now())) return;
       const crabs = Object.values(parent.entities).filter(e => e && e.mtype === 'crab' && !e.dead && e.visible);
       log.ready.push({ at: Date.now(), mp: character.mp, cost, inRange: crabs.filter(e => distance(character, e) <= G.skills.fanofknives.range).length,
@@ -74,8 +101,9 @@ async function farm(live: any, info: any, contested: boolean) {
   const lives: any[] = await live.admin(`output=(()=>{const l=globalThis.__crabLife;clearInterval(l.timer);return l.done.filter(c=>c.at>=${started});})()`);
   const competitorKills = contested ? await live.admin(`output=(()=>{clearInterval(globalThis.__crabCompetitor);return globalThis.__crabCompetitorKills})()`) : 0;
   const seen = await live.clients[R].run(`(() => { const l = globalThis.__crabRate, s = ${started}, e = s + ${MINUTES * 60_000};
-    clearInterval(l.timer);
-    return { actions: l.actions.filter(a => a.at >= s && a.at < e), hits: l.hits.filter(h => h.at >= s && h.at < e),
+    clearInterval(l.timer); clearInterval(l.burstTimer);
+    return { burstReady: l.burstReady.filter(r => r.at >= s && r.at < e), stats: { int: character.int, attack: character.attack, range: character.range },
+      actions: l.actions.filter(a => a.at >= s && a.at < e), hits: l.hits.filter(h => h.at >= s && h.at < e),
       ready: l.ready.filter(r => r.at >= s && r.at < e), decisions: l.decisions.filter(r => r.at >= s && r.at < e) }; })()`);
   // The server sends one action per knife; knives of one cast arrive together.
   const knives = seen.actions.filter((a: any) => a.type === 'fanofknives'), basics = seen.actions.filter((a: any) => a.type === 'attack');
@@ -85,13 +113,23 @@ async function farm(live: any, info: any, contested: boolean) {
   const gaps = fans.slice(1).map((f, i) => f.at - fans[i].at).sort((a, b) => a - b);
   let moved = 0; for (let i = 1; i < track.length; i++) moved += Math.hypot(track[i].x - track[i - 1].x, track[i].y - track[i - 1].y);
   const kills = seen.hits.filter((h: any) => h.kill).length;
+  const bursts = seen.actions.filter((a: any) => a.type === 'mentalburst');
+  const burstKills = seen.hits.filter((h: any) => h.kill && h.source === 'mentalburst').length;
+  // Ready samples are 100 ms apart: about 100 ms each of Mental Burst ready with a crab it kills in reach.
+  const burstIdle = seen.burstReady.filter((r: any) => r.killable > 0);
+  const waits = bursts.filter((b: any) => b.readySince).map((b: any) => b.at - b.readySince).sort((a: number, b: number) => a - b);
+  const burstResult = { readyToCastMs: { median: waits[waits.length >> 1] ?? null, p75: waits[Math.floor(waits.length * .75)] ?? null,
+      p90: waits[Math.floor(waits.length * .9)] ?? null, n: waits.length }, stats: seen.stats, bursts: bursts.length, burstsPerMinute: bursts.length / MINUTES, burstKills,
+    readyMs: seen.burstReady.length * 100, readyWithKillMs: burstIdle.length * 100,
+    readyWithKillBecause: burstIdle.reduce((h: Record<string, number>, r: any) => {
+      const k = `${r.stage}|${String(r.skill).replace(/@\d+$/, '')}`; h[k] = (h[k] || 0) + 1; return h; }, {}) };
   const result = { contested, minutes: MINUTES, kills, killsPerMinute: kills / MINUTES, competitorKills,
     casts: fans.length, castsPerMinute: fans.length / MINUTES, basicAttacks: basics.length,
     knives: knives.length, targetsPerCast: histogram, meanTargets: fans.length ? knives.length / fans.length : 0,
     castGapMs: { median: gaps[gaps.length >> 1] ?? null, p90: gaps[Math.floor(gaps.length * .9)] ?? null }, potions: before.potions - after.potions, movedPerMinute: Math.round(moved / MINUTES),
     position: { x: Math.round(track.reduce((s, t) => s + t.x, 0) / track.length), y: Math.round(track.reduce((s, t) => s + t.y, 0) / track.length) },
-    died: !!after.rip, crabLife: summarize(lives, track), idle: idleReasons(seen.ready), decisions: decisionGaps(seen.decisions) };
-  await info.attach('crab-rate-' + (contested ? 'contested' : 'solo'), { body: JSON.stringify({ result, track }, null, 2), contentType: 'application/json' });
+    died: !!after.rip, burst: burstResult, crabLife: summarize(lives, track), idle: idleReasons(seen.ready), decisions: decisionGaps(seen.decisions) };
+  await info.attach('crab-rate-' + (contested ? 'contested' : 'solo') + (burst ? '-burst' : ''), { body: JSON.stringify({ result, track }, null, 2), contentType: 'application/json' });
   console.log('CRAB RATE', JSON.stringify(result));
   return result;
 }
@@ -134,4 +172,18 @@ test('crab kills per minute against a competitor', async ({ live }, info) => {
   expect(r.died).toBe(false);
   // Control before the change: 246-269 a minute against the same competitor.
   expect(r.killsPerMinute, 'Crab kills per minute against a competitor').toBeGreaterThanOrEqual(275);
+});
+test('crab kills per minute alone with Mental Burst', async ({ live }, info) => {
+  test.setTimeout(MINUTES * 60_000 + 360_000);
+  const r = await farm(live, info, false, true);
+  expect(r.died).toBe(false);
+  expect(r.burst.stats.int).toBeGreaterThanOrEqual(64);
+  // 1-3: Mental Burst at any crab it kills, as its cooldown ends. Control: 3.75 a minute, ready with a
+  // crab it kills in reach for 225 s of 240. ChronAL's 250 ms clock steps hold the 900 ms cooldown to
+  // about 60 a minute; the median wait is measured from the cooldown's end to the server's action.
+  expect(r.burst.burstsPerMinute, 'Mental Bursts per minute').toBeGreaterThanOrEqual(40);
+  expect(r.burst.readyToCastMs.median, 'Median wait from the cooldown ending to a burst').toBeLessThanOrEqual(250);
+  expect(r.burst.burstKills, 'Every burst kills').toBeGreaterThanOrEqual(r.burst.bursts * 0.9);
+  // 4: Fan of Knives is no worse than alone without Mental Burst.
+  expect(r.killsPerMinute, 'Crab kills per minute alone with Mental Burst').toBeGreaterThanOrEqual(300);
 });
