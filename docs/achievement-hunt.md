@@ -112,6 +112,15 @@ deaths they cause still count toward the target's death blacklist.
   boss is in the next 2 seconds. A monster already attacking the party, or the
   fight already under way, is still fought. Combat steps never end inside a
   zone, except a step that moves out of it.
+- **Moving away.** Each character watches every boss's position, heading and
+  speed on every movement tick. Once a zone is 2 seconds or less from
+  reaching the character, the character walks away from the boss to a spot
+  outside every zone, keeping its target and attacking as it goes: a monster
+  that targets a party member follows that member, so the fight comes along.
+  The spot favours walkable ground inside the farm area, stays in the priest's
+  heal range when the priest is near, and for the priest keeps every member in
+  its heal range. When no spot keeps the heal range, the character takes the
+  nearest spot outside every zone.
 - **Leaving.** Characters report visible bosses on the list, with whom each one
   attacks (`avoidSightings`). When one attacks a party member, the hunt farms
   the next target as a stand-in, and returns once no member has seen the boss
@@ -326,6 +335,12 @@ Found on the live party on 2026-10-19:
 39. **The boss as a target.** A boss on the avoid list that attacked a party
     member passed the combat selection like any attacker, so the party fought
     it. Characters now never attack a boss on the list outside a joined event.
+40. **Fighting on while the boss walks in.** On 2026-10-19 the tank fought a
+    White Wolf while Stompy walked up to him. Nothing moved him, though the
+    wolf would have followed him. Characters now walk away from a boss before
+    its zone reaches them and keep the same target. The role runner
+    (`runtime/characters/roles/runner.ts`) calls `bossRetreatTick` on every
+    movement tick, after it wakes the attack loop and before grouped movement.
 
 ## Tests
 
@@ -341,6 +356,7 @@ the journey cannot reach a step sweep across several monsters, death
 thresholds, a lower step taking over, or the random-respawn list.
 
 `scripts/tests/achievement-boss-avoid.test.cjs` runs the real `shared.js` boss
-functions in a VM with the boss geometry (failure modes 29, 38 and 39). The
+functions in a VM with the boss geometry (failure modes 29 and 38 to 40), and
+the built role runner (`.build/runtime/roles.js`) for the movement loop's order. The
 E2E game server spawns no boss next to farm targets on demand, so no live
-journey covers the keep-out zone.
+journey covers the keep-out zone or the retreat.

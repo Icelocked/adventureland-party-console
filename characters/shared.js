@@ -3372,9 +3372,10 @@
   // files a boss with aggro above 0.99 (Mr. Green) on every tick instead of
   // rolling its aggro chance (Mr. Pumpkin 0.05, Stompy 0.2), so it adds 40 px more.
   var BOSS_LAG_SECONDS = 1.5, BOSS_CERTAIN_AGGRO_MARGIN = 40;
-  // Seconds of a walking boss's path that count: new pulls stay clear of it.
+  // Seconds of a walking boss's path that count: new pulls stay clear of it,
+  // and characters move away once a zone is this close.
   var BOSS_LEAD_SECONDS = 2;
-  var bossZoneCache = null;
+  var bossZoneCache = null, bossRetreat = null;
   /** A boss on the avoid list, outside a joined event for it. */
   function avoidedBoss(target) {
     return avoidMonsters.indexOf(target.mtype) >= 0 && !joinedEvent && !activeCombatEvent();
@@ -3434,6 +3435,70 @@
       var after = Math.hypot(point.x - zone.x, point.y - zone.y);
       return after >= zone.radius || after > Math.hypot(self.x - zone.x, self.y - zone.y);
     });
+  }
+  /** Whether the priest's heal range still covers this character at `point`, or, for the priest, every member. */
+  function bossRetreatHealed(point, members) {
+    var self = bossPoint(character), priest = members.find(function (member) { return member.ctype === "priest"; });
+    if (!priest) return true;
+    var range = Number(priest.range) || 0, heal = range - Math.min(20, Math.max(8, range * 0.1));
+    var keeps = function (from, ally) {
+      return Math.hypot(point.x - ally.x, point.y - ally.y) <= Math.max(heal, Math.hypot(from.x - ally.x, from.y - ally.y)) + 0.01;
+    };
+    if (priest.name !== character.name) return keeps(self, priest);
+    return members.every(function (ally) { return ally.name === character.name || keeps(self, ally); });
+  }
+  /** A walkable spot away from the threatening boss that no zone reaches within the lead time. */
+  function bossRetreatPoint(threat, target) {
+    var self = bossPoint(character), away = Math.atan2(self.y - threat.zone.y, self.x - threat.zone.x);
+    var members = typeof formationMembers === "function" ? formationMembers() : [];
+    var options = [];
+    for (var ring = 1; ring <= 8; ring++) {
+      for (var turn = -5; turn <= 5; turn++) {
+        var angle = away + turn * Math.PI / 8, length = ring * 40;
+        var point = { x: self.x + Math.cos(angle) * length, y: self.y + Math.sin(angle) * length };
+        var middle = { x: (self.x + point.x) / 2, y: (self.y + point.y) / 2 };
+        if (bossZoneReaching(point, BOSS_LEAD_SECONDS) || !safeCombatPoint(point, target)) continue;
+        var crossing = bossZoneReaching(middle, 0);
+        if (crossing && crossing.zone !== threat.zone) continue;
+        options.push({ point: point, cost: length + Math.abs(turn) * 15,
+          healed: bossRetreatHealed(point, members),
+          farm: typeof inFarmArea !== "function" || inFarmArea({ map: character.map, in: character.in, x: point.x, y: point.y }, partyLocation),
+          open: typeof can_move_to !== "function" || can_move_to(point.x + Math.cos(angle) * 60, point.y + Math.sin(angle) * 60) });
+      }
+    }
+    options.sort(function (a, b) {
+      return Number(b.healed) - Number(a.healed) || Number(b.farm) - Number(a.farm) || Number(b.open) - Number(a.open) || a.cost - b.cost;
+    });
+    return options.length ? options[0].point : null;
+  }
+  /**
+   * Movement tick: walks away from a boss whose zone reaches this character within
+   * the lead time. The target is untouched, so attacks go on and a monster that
+   * targets this character follows it. True while it owns movement.
+   */
+  function bossRetreatTick(target) {
+    // Each movement tick rebuilds the zones from the pass's boss list, so the retreat
+    // reads the bosses' current positions.
+    bossZoneCache = null;
+    if (!avoidMonsters.length || character.rip || joinedEvent || activeCombatEvent() ||
+        convoyTraveling && !convoyTraveling.defensePaused || typeof smart !== "undefined" && smart.moving) { bossRetreat = null; return false; }
+    var self = bossPoint(character), threat = bossZoneReaching(self, BOSS_LEAD_SECONDS);
+    if (!threat) { bossRetreat = null; return false; }
+    var plan = bossRetreat;
+    if (!plan || plan.zone !== threat.zone.id || bossZoneReaching(plan.point, BOSS_LEAD_SECONDS) ||
+        Math.hypot(plan.point.x - self.x, plan.point.y - self.y) < 4) {
+      var point = bossRetreatPoint(threat, target);
+      plan = bossRetreat = point ? { zone: threat.zone.id, point: point } : null;
+    }
+    var reason = threat.zone.mtype + " zone reaches us in " + threat.seconds.toFixed(1) + " s";
+    if (!plan) {
+      root.partyCombatPosition = { at: Date.now(), mode: "boss-retreat-blocked", movementOwner: "combat",
+        target: target && target.id || null, boss: threat.zone.id, reason: reason + "; no walkable spot outside every zone" };
+      return false;
+    }
+    if (!sendCombatMove(target || { id: threat.zone.id }, plan.point, "boss-retreat")) return false;
+    if (root.partyCombatPosition) { root.partyCombatPosition.boss = threat.zone.id; root.partyCombatPosition.reason = reason; }
+    return true;
   }
   /** Reported in status; the coordinator leaves the target once one of these attacks the party. */
   function avoidSightings() {
@@ -17350,6 +17415,7 @@
     emergencyWarriorStomp: emergencyWarriorStomp,
     isCurrentPartyTarget: isCurrentPartyTarget,
     kiteIfNeeded: kiteIfNeeded,
+    bossRetreatTick: bossRetreatTick,
     approachCombatTarget: approachCombatTarget,
     targetRejectionReason: function (target) {
       if (!target) return "selected monster not visible";
