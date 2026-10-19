@@ -16,8 +16,8 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 | New issue | 1 |
 | Update / comment | 8 (2 to do) |
 | Done upstream | 48 |
-| Matches | 17 (all done but #129, not commented) |
-| Open upstream | 19 |
+| Matches | 18 (all done but #129, not commented; #147 not commented) |
+| Open upstream | 18 |
 | Closed | 19 |
 | Fork-only | 7 |
 
@@ -203,6 +203,7 @@ A comment saying where it's implemented, with the commit link, is enough.
 
 | Issue | Feature | Fork commits | Note |
 |---|---|---|---|
+| [#147](https://github.com/Ryan-Haines/adventureland-party-console/issues/147) filed 10-19 | Planner routes cut wall corners that the game's collision rejects | the commit recording this | The planner worker loads the game's `can_move` from the installed `data.js` and `old_common_functions.js` and replaces each rejected same-map walking edge with one detour point that passes both legs (main (135, 72) → (153, -51) now goes via (135, -51)); an edge without one is left for the client repair, and without the sources it plans as before. 16 of 122 sampled Mainland routes had a rejected edge, 0 after. Not commented |
 | [#145](https://github.com/Ryan-Haines/adventureland-party-console/issues/145) filed 10-18 | Bank sort swap journal blocks the merchant when the freed cell is refilled | [8d79aff](https://github.com/Thefonze74065/adventureland-party-console/commit/8d79aff) | The swap is confirmed once the incoming item is in the buffer slot and no longer in the cell. Inventory `e2e/bank-sort-journal-failures.md`, journey `live-bank-sort-journal.spec.ts` |
 | [#144](https://github.com/Ryan-Haines/adventureland-party-console/issues/144) filed 10-18 | Skills sharing the attack cooldown lose slots to basic attacks | [85402f9](https://github.com/Thefonze74065/adventureland-party-console/commit/85402f9) | The skill world's `cooldown()` gives skills sharing `attack` the controller's 2 ms swing edge. Inventory `e2e/rogue-fan-crab-failures.md`, journey `live-rogue-fan-crab.spec.ts`. [#137 comment](https://github.com/Ryan-Haines/adventureland-party-console/issues/137#issuecomment-6252090346) links it |
 | [#143](https://github.com/Ryan-Haines/adventureland-party-console/issues/143) filed 10-18 | Manual upgrades of identical items stop as "recovery ambiguous" after the inventory tidy moves them | the commit recording this | `findUpgradeMarkSlot` gets the command's marks: copies still in another request's slot stay with it, and identical remaining copies are interchangeable. Inventory `e2e/manual-upgrade-duplicates-failures.md` |
@@ -243,7 +244,6 @@ A comment saying where it's implemented, with the commit link, is enough.
 | [#81](https://github.com/Ryan-Haines/adventureland-party-console/issues/81) | Show contribution-based multi-drops on monster details; investigate items listed twice for one monster with different rates (e.g. Broom). New, opened by the maintainer. | Not started |
 | [#82](https://github.com/Ryan-Haines/adventureland-party-console/issues/82) | Auto-cycle PVP-marked items (shadow stones that won't stack) and show the PVP mark on inventory icons. New, opened by the maintainer. | Not started |
 | [#95](https://github.com/Ryan-Haines/adventureland-party-console/issues/95) | “Go headless” fails with “Wait for the character’s active inventory operation to finish”. New, opened by the maintainer. | Not started |
-| [#147](https://github.com/Ryan-Haines/adventureland-party-console/issues/147) | Planner routes cut wall corners that the game's collision rejects: `alpathfinder` 0.6.0 accepts edges such as main (135, 72) → (153, -51) through the x=144 wall; 13% of sampled Mainland routes carry one, and each costs the client a bounded repair (convoys fail after three). Filed by the fork 10-19 from the live town trap. | Not started; the fork only has upstream's client repair |
 
 ## Closed: closed upstream, nothing outstanding
 

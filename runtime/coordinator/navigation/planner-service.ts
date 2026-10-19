@@ -12,13 +12,14 @@ export function createPlannerService(workerFile: string) {
     for (const p of instance.pending.values()) { clearTimeout(p.timer); p.reject(Error(reason)); }
     instance.pending.clear(); void instance.worker.terminate();
   }
-  function prepare(game: GameData, version: number) {
+  /** `collision` holds the game's data.js and old_common_functions.js sources, so the worker can check edges with can_move (#147). */
+  function prepare(game: GameData, version: number, collision?: {data: string; common: string}) {
     const fingerprint = geometryFingerprint(game), key = `${version}:${fingerprint}`, existing = instances.get(key);
     if (existing) return { fingerprint, ready: existing.ready };
     preparedData.set(key, {game, version, attempted: Date.now()});
     while (preparedData.size > 3) preparedData.delete(preparedData.keys().next().value!);
     makeRoom();
-    const worker = new Worker(workerFile, { workerData: { game, version, fingerprint } });
+    const worker = new Worker(workerFile, { workerData: { game, version, fingerprint, collision } });
     const instance = { worker, version, fingerprint, key, pending: new Map<string, Pending>(), used: Date.now() } as Instance;
     instance.ready = new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => { reject(Error('Planner preparation timed out')); retire(instance, 'Planner preparation timed out'); }, 10000);

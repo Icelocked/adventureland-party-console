@@ -1,5 +1,6 @@
 import { createContext, runInContext } from 'node:vm';
-import type { GameData } from '../../navigation/contracts.ts';
+import type { GameData, Point } from '../../navigation/contracts.ts';
+type Base = { h: number; v: number; vn: number };
 
 /** Match the game's initialization before hashing or preparing collision geometry. */
 export function loadPlannerGeometry(dataSource: string, commonSource: string): GameData {
@@ -21,6 +22,11 @@ export function loadCoordinatorGeometry(dataSource: string, commonSource: string
       // Native rectangular collision checks include lines crossing the footprint.
       // These are the game's ordinary human movement-base dimensions.
       return context.can_move({map:'main',x,y,going_x:x,going_y:y,base:{h:8,v:7,vn:2}}) === true;
+    },
+    /** The game's own straight-line collision for a walking edge (#147). */
+    canMove(from: Point, to: Point, base: Base): boolean {
+      if (from.map !== to.map || !context.G.geometry[from.map]) return false;
+      return context.can_move({map:from.map,x:from.x,y:from.y,going_x:to.x,going_y:to.y,base}) === true;
     },
   };
 }
