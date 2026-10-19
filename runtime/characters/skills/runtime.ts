@@ -30,7 +30,7 @@ export function installSkillRuntime(root: CombatRoot) {
   function world(): SkillWorld {
     // Normalize the local skill world, never mutate the native player object.
     // Offensive skill definitions retain their own damage_type precedence.
-    const actor: Actor = { ...character, damage_type: effectiveAttackDamageType(character, typeof G === 'undefined' ? undefined : G) };
+    const actor: Actor = { ...character, ...hitbox(character), damage_type: effectiveAttackDamageType(character, typeof G === 'undefined' ? undefined : G) };
     const context: CombatContext = shared.combatContext?.() || {
       leader: '', tank: null, allies: [], monsters: [], mode: 'blocked', event: null, observedAt: 0,
     };
@@ -127,6 +127,15 @@ export function installSkillRuntime(root: CombatRoot) {
       host.socket?.off?.('action', action); host.socket?.off?.('hit', hit);
     },
   };
+}
+/**
+ * Native `distance()` is edge to edge, reading `awidth` or PIXI's `width` getter, which a spread
+ * copy loses. Carry the native size so ranges match the server's (crab rate item 4).
+ */
+export function hitbox(entity: object): { awidth?: number; aheight?: number } {
+  const native = globalThis as unknown as { get_width?: (e: object) => number; get_height?: (e: object) => number };
+  if (typeof native.get_width !== 'function' || typeof native.get_height !== 'function') return {};
+  return { awidth: native.get_width(entity), aheight: native.get_height(entity) };
 }
 export function skillRange(actor: Actor, target: Combatant, s?: SkillDefinition): boolean {
   if (!s) return false;

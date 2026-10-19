@@ -17913,11 +17913,11 @@
     return false;
   }
 
-  // Fan of Knives one-shots while scatter farming: hold within its range of the target,
-  // toward the nearby cluster, instead of walking in to basic attack range.
+  // Fan of Knives one-shots while scatter farming: hold at the spot covering the most of
+  // them, even with the scatter target out of reach (the knives go to whatever is in range),
+  // instead of walking in to basic attack range of one.
   function fanMovementTick(target, stand) {
-    var reach = Math.max(20, (Number(G.skills.fanofknives && G.skills.fanofknives.range) || 160) - 20);
-    if (combatDistance(target) <= reach && Math.hypot(character.x - stand.x, character.y - stand.y) <= 30) {
+    if (Math.hypot(character.x - stand.x, character.y - stand.y) <= 30) {
       eventCombatDetour = null; return false;
     }
     var dx = stand.x - character.x, dy = stand.y - character.y;
@@ -18387,7 +18387,8 @@
         var def = G.monsters[m.mtype] || {};
         // Native entities keep x/y as PIXI prototype accessors, which Object.assign skips.
         // Farm-area authorization of multi-target skill targets reads them.
-        return Object.assign({}, def, m, { x: m.x, y: m.y });
+        // Native distance() reads awidth or PIXI's width getter; keep the size on the copy too.
+        return Object.assign({}, def, m, { x: m.x, y: m.y, awidth: get_width(m), aheight: get_height(m) });
       });
       var eventCombat = !!character.cave || event && (joinedEvent === event.name ||
         G.maps[character.map] && G.maps[character.map].event === event.name ||

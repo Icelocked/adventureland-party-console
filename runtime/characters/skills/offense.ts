@@ -4,23 +4,23 @@ import { damage, usefulDamage, purifiable } from './damage.ts';
 import { decision, type Combatant, type SkillDecision, type SkillId, type SkillWorld } from './types.ts';
 
 /**
- * While fan farming with MP for a cast: the spot within Fan of Knives range of the target that keeps
- * the most other one-shot mobs in range (up to its five targets), nearest first. A rogue whose
- * spot already reaches as many stays where it is.
+ * While fan farming with MP for a cast: the spot that keeps the most one-shot mobs within Fan of
+ * Knives range (up to its five targets), searched around every one in view rather than only the
+ * scatter primary, which is just the nearest. The rogue holds while its spot covers as many, so it
+ * does not chase each new primary; the knives go to whatever is in range (`attackChoices`).
  */
 export function fanStand(w: SkillWorld, primary: Combatant): { x: number; y: number } | null {
   if (!fanFarming(w) || w.actor.mp < cost(w, 'fanofknives')) return null;
-  const range = w.skills.fanofknives?.range || 160, reach = Math.max(20, range - 20);
-  const cap = w.skills.fanofknives?.max_targets || 5;
-  const near = (p: { x: number; y: number }, m: { x: number; y: number }, r: number) => Math.hypot(m.x - p.x, m.y - p.y) <= r;
-  const others = w.context.monsters.filter(m => m.id !== primary.id && fanLethal(w, m) && near(primary, m, reach * 2));
-  const covered = (p: { x: number; y: number }) => near(p, primary, reach) ? Math.min(cap, 1 + others.filter(m => near(p, m, reach)).length) : 0;
+  const reach = w.skills.fanofknives?.range || 160, cap = w.skills.fanofknives?.max_targets || 5;
+  const lethal = [primary, ...w.context.monsters.filter(m => m.id !== primary.id)].filter(m => fanLethal(w, m));
+  const covered = (p: { x: number; y: number }) =>
+    Math.min(cap, lethal.filter(m => Math.hypot(m.x - p.x, m.y - p.y) <= reach).length);
   const here = { x: w.actor.x, y: w.actor.y };
   let best = here, most = covered(here), travel = 0;
-  for (const radius of [0, reach / 3, reach * 2 / 3, reach])
+  for (const m of lethal) for (const radius of [0, reach / 2, reach * 0.9])
     for (let step = 0; step < (radius ? 16 : 1); step++) {
       const angle = step * Math.PI / 8;
-      const spot = { x: primary.x + Math.cos(angle) * radius, y: primary.y + Math.sin(angle) * radius };
+      const spot = { x: m.x + Math.cos(angle) * radius, y: m.y + Math.sin(angle) * radius };
       const count = covered(spot), distance = Math.hypot(spot.x - here.x, spot.y - here.y);
       if (count > most || count === most && best !== here && distance < travel) { best = spot; most = count; travel = distance; }
     }
@@ -29,6 +29,9 @@ export function fanStand(w: SkillWorld, primary: Combatant): { x: number; y: num
 export function attackChoices(w: SkillWorld, primary: Combatant): SkillDecision[] {
   const ids: SkillId[] = w.actor.ctype === 'ranger' ? ['piercingshot', '3shot', '5shot'] :
     w.actor.ctype === 'rogue' ? ['fanofknives'] : [];
+  // While fan farming the primary is only scatter's nearest pick: with it out of range the
+  // knives still go to the one-shot mobs that are in range, instead of losing the slot.
+  const anyTargets = (id: SkillId) => id === 'fanofknives' && fanFarming(w);
   return ids.map(id => {
     const cap = w.skills[id]?.max_targets || (id === '5shot' || id === 'fanofknives' ? 5 : id === '3shot' ? 3 : 1);
     const targets = [primary, ...w.context.monsters.filter(t => t.id !== primary.id)]
@@ -36,7 +39,7 @@ export function attackChoices(w: SkillWorld, primary: Combatant): SkillDecision[
       .sort((a, b) => Number(b.id === primary.id) - Number(a.id === primary.id) ||
         usefulDamage(w, id, b) - usefulDamage(w, id, a) || a.id.localeCompare(b.id)).slice(0, cap);
     return decision(id, targets);
-  }).filter(d => d.targets.some(t => t.id === primary.id));
+  }).filter(d => d.targets.some(t => t.id === primary.id) || anyTargets(d.skill) && d.targets.length > 0);
 }
 export function bestAttack(w: SkillWorld, primary: Combatant, affordable: (d: SkillDecision) => boolean): SkillDecision | null {
   const baseline = usefulDamage(w, 'attack', primary);

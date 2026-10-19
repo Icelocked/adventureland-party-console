@@ -46,6 +46,8 @@ Not filed yet. Fork fix in the commit recording this (10-17).
 
 Issues filed before the work landed, features that changed with use, and maintainer replies that leave out what the fork already has.
 
+- 10-19 (the commit recording this), crab kills per minute: Fan of Knives no longer needs the scatter primary among its targets, the stand covers the most one-shot mobs within Fan range (160, not 140) around any visible mob and holds while its spot covers as many, and the skill world's actor and context monsters carry `awidth`/`aheight` so the engine's range matches the server's edge-to-edge distance (the #136 class: copies lose PIXI getters). New `live-rogue-fan-crab-rate.spec.ts`: solo 282-294 → 320/min, against a competitor 246-269 → 291-293/min. Not yet commented on #136 or #137.
+
 ### Auto-merchant marks stuck with a compound rule
 
 [#43 · commented 10-08](https://github.com/Ryan-Haines/adventureland-party-console/issues/43#issuecomment-6056391275)
