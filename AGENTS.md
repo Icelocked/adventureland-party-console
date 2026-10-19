@@ -24,6 +24,9 @@
 
 # Testing
 
+- For rising game ping or runtime slowdown, read [performance investigation lessons](docs/performance-investigations.md). Verify local callback delay and growing history work before changing cooldown compensation.
+
+- Always run `npm run typecheck` after implementation changes and fix compiler errors before handing the work back. Leaving gameplay verification and E2E testing to the user does not skip this check.
 - Never write unit tests after you write code.
 - Highly prefer E2E tests as the sole testing mechanism. Use them to verify complex features work. At the end of E2E tests, produce a verifiable and repeatable artifact.
 - All gameplay E2Es must use ChronAL virtual time by default so gameplay waits do not run at real-time speed. Preserve browser, deployment, persistence, and telemetry coverage and existing behavioral assertions when integrating ChronAL; migrating a subset or retaining scenario counts alone does not satisfy this requirement. Validate runtime improvements locally with comparable runs and retain repeatable timing artifacts. Keep the native backend available for explicit parity checks.
