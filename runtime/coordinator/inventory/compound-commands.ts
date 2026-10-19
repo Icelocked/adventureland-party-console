@@ -85,6 +85,7 @@ export function createCompoundCommands(state: CompoundState, ports: CompoundPort
     if (!name || body.character !== name || typeof body.pack !== 'string' || !/^items\d+$/.test(body.pack) || !Number.isSafeInteger(body.slot))
       return reply({error:'invalid native bank compound selection'},400);
     const groups = state.compounds[name] ||= [];
+    if (groups.some(group=>group.items.some(mark=>mark.storage && mark.storage.pack===body.pack && mark.storage.slot===body.slot && JSON.stringify(mark.item)===JSON.stringify(item)))) return null;
     const reserved = new Set(groups.flatMap(group=>group.items.map(mark=>mark.storage ? mark.storage.pack+':'+mark.storage.slot : 'inventory:'+mark.slot)));
     const matches = protectedMerchantStorageStock(state).filter(entry=>/^items\d+$/.test(entry.craftLocation) && entry.item && !entry.item.l && !entry.item.b && entry.item.name===item.name && (entry.item.level||0)===(item.level||0) && !reserved.has(entry.craftLocation+':'+entry.slot));
     const selected = matches.find(entry=>entry.craftLocation===body.pack && entry.slot===body.slot && JSON.stringify(entry.item)===JSON.stringify(item));

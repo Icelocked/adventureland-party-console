@@ -159,7 +159,8 @@ export function createCompletionResults(state: CompletionState, ports: Completio
       const group=requestObject(raw);
       for(const value of Array.isArray(group.items)?group.items:[]) {
         const mark=requestObject(value),source=requestObject(mark.storage);
-        if(mark.storage && receipts.some(value=>{const receipt=requestObject(value);return receipt.pack===source.pack && receipt.slot===source.slot && deliveryMatches(requestObject(receipt.item),requestObject(mark.item)) && deliveryMatches(requestObject(mark.item),requestObject(receipt.item));})) mark.storageReceived=true;
+        const received=receipts.map(value=>requestObject(value)).find(receipt=>receipt.pack===source.pack && receipt.slot===source.slot && deliveryMatches(requestObject(receipt.item),requestObject(mark.item)) && deliveryMatches(requestObject(mark.item),requestObject(receipt.item)));
+        if(mark.storage && received && Number.isSafeInteger(received.inventorySlot)) {mark.storageReceived=true;mark.slot=received.inventorySlot;}
       }
     }
   }
