@@ -93,7 +93,7 @@ test("offline account inspection exposes saved inventory and comparison without 
     stdin: {
       resolveDir: path.resolve("dashboard"),
       loader: "tsx",
-      contents: `import React from'react';import{createRoot}from'react-dom/client';import{AccountSettings}from'./features/party/account-settings';createRoot(document.getElementById('root')).render(<AccountSettings state={window.fixture}/>);`,
+      contents: `import React from'react';import{createRoot}from'react-dom/client';import{QueryClient,QueryClientProvider}from'@tanstack/react-query';import{AccountSettings}from'./features/party/account-settings';createRoot(document.getElementById('root')).render(<QueryClientProvider client={new QueryClient()}><AccountSettings state={window.fixture}/></QueryClientProvider>);`,
     },
   });
   await page.goto(app.url);

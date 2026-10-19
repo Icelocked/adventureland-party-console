@@ -563,3 +563,10 @@ details with Compare. Nested comparison/stats dialogs remain above the character
 window. The actual settings workflow, saved inspection after restart, and
 never-loaded account comparison pass three focused E2Es, with 36 verified evidence
 files and three workspaces removed. The final comparison screenshot was reviewed.
+
+The first full follow-up exposed a missing QueryClientProvider in the retained
+standalone offline-inspection browser harness. The real dashboard supplies this
+provider, and inspection now subscribes to its live character cache. Wrap the
+harness in the same provider; preserve its saved-observation, comparison and
+absence-of-item-actions assertions. The corrected focused scenario passes, with
+13 verified evidence files and its workspace removed.
