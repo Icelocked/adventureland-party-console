@@ -925,7 +925,9 @@
       // fight or repeatedly replace our owned route with defense/loot holds.
       // Direct and unknown-target hits retain the conservative safety path.
       var victim=aggressor && aggressor.target && get_entity(aggressor.target);
-      if(data.splash===true && victim && victim.type==='character' && !victim.npc &&
+      var collateral=data.splash===true || data.unintentional===true &&
+        Array.isArray(data.stacked) && data.stacked.indexOf(String(data.id))>=0;
+      if(collateral && victim && victim.type==='character' && !victim.npc &&
         currentPartyList().indexOf(String(aggressor.target))<0)return;
       var passingRule=aggressor && passiveHunting.rules[aggressor.mtype];
       if(aggressor && aggressor.type==='monster' && (!isPassingEncounter(aggressor) || returnDepartureDefense() && !(passingRule && passingRule.enabled && passingRule.keepMoving)) && !joinedEvent && !eventTargetTypes.length) {
@@ -17268,6 +17270,7 @@
     queueCoverageCost: function(p){var a=groupedCombat && groupedCombat.anchor;return a && a.map===character.map && a.in===character.in ? Math.max(0,Math.hypot(p.x-a.x,p.y-a.y)-groupedCombat.range) : 0;},
     queueRecoveryReason: function(reason){root.partyCombatPosition={at:Date.now(),mode:"fight-recovery",movementOwner:"group",reason:reason};},
     queueMarkers: queueMarkers,
+    convoyNavigationReport: convoyNavigationReport,
     combatTraceSnapshot: function(){var p=root.partyCombatPosition||{};return {
       mode:farmingMode,epoch:root.__partyCombatResetAt||0,queueRevision:groupedCombat&&groupedCombat.queueRevision,
       owner:p.movementOwner||null,reason:p.reason||p.mode,cell:[Math.round(character.x/8),Math.round(character.y/8)],

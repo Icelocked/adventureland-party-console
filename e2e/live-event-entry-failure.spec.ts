@@ -43,7 +43,7 @@ test(`native event entry recovers ${fault}`,async({live},info)=>{
     if(body?.character!==W||body.to?.map!==seed.map||body.to?.x!==seed.x||body.to?.y!==seed.y)return route.fallback();
     const started=Date.now(),sample=await live.clients[W].frame.evaluate(()=>{
       const runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
-      return {movement:runner?.__partyMovement?.report?.(),navigation:runner?.convoyNavigationReport?.()};
+      return {movement:runner?.__partyMovement?.report?.(),navigation:runner?.sharedRoutine?.convoyNavigationReport?.()};
     });
     const snapshot=latest,s=snapshot.state,c=s.activeConvoy;
     const owner=sample.navigation,expected=c?.expected?.[W];

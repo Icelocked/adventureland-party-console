@@ -26,7 +26,7 @@ test(`explicit ${entry} travel skips only the current native event occurrence`,a
       const [sample,s]=await Promise.all([
         live.clients[P].frame.evaluate(()=>{
           const runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
-          return {movement:runner?.__partyMovement?.report?.(),navigation:runner?.convoyNavigationReport?.(),trace:runner?.sharedRoutine?.combatTraceSnapshot?.(),
+          return {movement:runner?.__partyMovement?.report?.(),navigation:runner?.sharedRoutine?.convoyNavigationReport?.(),trace:runner?.sharedRoutine?.combatTraceSnapshot?.(),
             revision:runner?.__partyNavigationIntent?.revision,commandId:runner?.__partyLastCommand};
         }),live.state()]);
       const c=s.activeConvoy,expected=c?.expected?.[P],rally=c?.rally;

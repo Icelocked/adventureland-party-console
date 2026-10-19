@@ -182,3 +182,36 @@ the old completion is no longer present in current state. Retain bounded actual
 peer barrier responses from the BrowserContext before arming; accept only the
 same convoy/epoch/route/step/exact destination with genuine ready=true. Preserve
 the one-leave/one-ack counts and all terminal ownership checks.
+
+Actual sandbox comparison, same real ChronAL broker and exact 60M-roll input:
+original 79.271s / native-yield-only 79.186s, identical unavailable/completed/rolls.
+Native yields alone do not fix the 30s request failure. Repeated global Math
+lookups cross the sandbox global proxy in the hottest loop. Capture the same
+intrinsic functions once at module load, without changing arithmetic, policy,
+RNG, roll counts or yields; compare exact result JSON before accepting the change.
+Intrinsic capture reduces this to 53.216s with identical results, still too slow.
+The remaining hot path awaits a new Promise for every failed base item. Keep
+ordinary attempts synchronous and return/await a Promise only at the original
+32768-roll I/O boundary; preserve the exact current level across that yield,
+budget exhaustion, RNG stream, grace, scroll consumption and cancellation check.
+
+Manual/entry fault direct reads used an optional global function that is private
+inside sharedRoutine's closure, so they could never certify the current owner.
+Expose that existing read-only report on sharedRoutine beside its combat trace;
+read it there and keep all exact ownership checks. Hawk geometry setup must hold
+from native login so a newly configured focus cannot first start farm relocation;
+maintenance intentionally parks existing journeys rather than deleting ownership.
+
+CPU profiling attributes 26s of the remaining 50s sandbox time to rollChance.
+Its only varying input is integer grace[level]; the expression saturates at
+grace>=14. Precompute the exact existing arithmetic for each level and grace
+0..14 once per policy, then index with the same saturated integer during rolls.
+Do not normalize RNG seeds or approximate probabilities. Verify identical
+available and unavailable estimates, all completion/roll/scroll/spending values.
+
+Targetron failure is a second genuine gameplay defect: its first native packet
+has unintentional=true and stacked=[Warrior,Priest,outsider merchant], without
+splash=true. Later splash packets are ignored correctly, but that first packet
+already stole the convoy for defense. Apply the existing outside-party-target
+guard to explicitly unintentional stacked victims too. Direct, unknown-target
+and actual party-target attacks must retain defense; validate both native cases.

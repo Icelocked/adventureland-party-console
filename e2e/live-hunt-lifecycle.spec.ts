@@ -100,7 +100,7 @@ test.describe('native Hunt lifecycle', () => {
     const native=()=>Promise.all(fighters.map(name=>live.clients[name].frame.evaluate(()=>{
       const w=(document.getElementById('maincode') as HTMLIFrameElement).contentWindow as any;
       return {name:w.character.name,map:w.character.map,in:w.character.in,x:w.character.real_x,y:w.character.real_y,
-        moving:!!w.character.moving,navigation:w.convoyNavigationReport?.(),cache:w.__partySharedRouteRemainder,
+        moving:!!w.character.moving,navigation:w.sharedRoutine?.convoyNavigationReport?.(),cache:w.__partySharedRouteRemainder,
         townReady:w.can_use('use_town')&&!w.is_on_cooldown('use_town')};
     })));
     await context.route('**/party-api/status',intercept);

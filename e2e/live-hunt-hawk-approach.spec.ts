@@ -12,7 +12,7 @@ const ringProbe=`(e)=>{const c=character,origin={x:c.real_x,y:c.real_y},clear=(a
  const ring=r=>Array.from({length:16},(_,i)=>({x:e.x+Math.cos(angle+i*Math.PI/8)*r,y:e.y+Math.sin(angle+i*Math.PI/8)*r})).filter(p=>clear(p,p)).map(p=>({...p,direct:clear(origin,p),distance:Math.hypot(p.x-origin.x,p.y-origin.y)})).sort((a,b)=>a.distance-b.distance);
  return {name:c.name,range:c.range,position:origin,nativeMoving:!!c.moving,activeJourney:globalThis.__partyMovement?.report?.()?.id,body:{width:get_width(c),height:get_height(c)},centerDistance:length,vision:c.vision||parent.character.vision,base:c.base,speed:c.speed,radius,padding,corrected,attackDistance,enemy:{id:e.id,type:e.type,mtype:e.mtype,map:e.map,in:e.in,x:e.x,y:e.y,real_x:e.real_x,real_y:e.real_y,width:get_width(e),height:get_height(e),rawWidth:e.width,rawHeight:e.height,awidth:e.awidth,aheight:e.aheight,mscale:e.mscale},ring:ring(radius),half:ring(Math.max(1,c.range-10)/2+padding),goalClear:clear(origin,origin),directToEnemy:clear(origin,e)};}`;
 
-test.use({loadout:'combat-follow-range',extraFighter:'mage',initialPositions:starts,initialConsoleHold:false});
+test.use({loadout:'combat-follow-range',extraFighter:'mage',initialPositions:starts,initialConsoleHold:true});
 const monster='bigbird',positions=starts;
 for(const scene of [{name:'direct alternate',target:[1140,240],direct:true},{name:'all blocked ring',target:[1280,300],direct:false}]){
 test(`planned Main hawks recover ranged actors from disconnected approach ring points: ${scene.name}`,async({live},info)=>{

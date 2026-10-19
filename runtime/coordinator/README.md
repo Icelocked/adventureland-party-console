@@ -2131,3 +2131,10 @@ suppress those readiness reports. Local convoy walking, foreign movement owners,
 unrelated targets and cancelled navigation remain exclusive. Validate the natural
 Halloween completion and changed Bee focus journey in
 `live-event-runtime-recovery.spec.ts`, retaining native damage from both fighters.
+
+Native explicitly unintentional stacked hits, like explosion splash, do not
+nominate an outside player's fight for convoy defense. A verified outside-party
+native target is required; direct hits, unknown targets and party attacks keep
+their conservative defense path. Validate both Targetron collateral journeys.
+sharedRoutine.convoyNavigationReport exposes the existing read-only current
+navigation ownership for diagnostics before the next full status publication.
