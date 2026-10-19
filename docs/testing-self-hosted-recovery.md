@@ -528,3 +528,38 @@ pass four repetitions across eight workers: eight passes, 367 verified evidence
 files and eight workspaces removed. Publication acceptance must include all seven
 catalogue fields and the exact current version; later heartbeat assertions remain
 strict. The full workflow still needs to pass.
+
+Before changing event admission after a farming combat handoff, cover an unfinished
+same-revision farming resume command blocking a new event rendezvous, a newer
+manual command being incorrectly discarded, and a delayed old completion touching
+the event's new owner. Retain fresh runtime/intent/event authorization and exact
+command identity. The full-run failure occurs before changing focus: both clients
+claim Mr. Pumpkin while remaining on Main, with the priest retaining the farming
+convoy's `event-resume-travel` continuation. Reproduce by refusing completion of
+one actual native farming handoff operation, without delaying unrelated status or
+movement requests; keep both native boss attacks and post-event bee attacks.
+
+The controlled old-coordinator run reproduces event-entry deadlock after two
+declared retries of the priest's real completion. All 50 red evidence files verify.
+The first follow-up still loaded the previous working-checkout coordinator bundle:
+building an immutable candidate does not rebuild the bundles loaded by the live
+test fixture. Its seven passes and one failure (382 verified evidence files) do
+not establish validation of the coordinator fix. Rebuild shared, runtime and game
+outputs before direct Playwright invocation; the workflow's npm pretest already
+does this. Keep this distinction when interpreting earlier direct-CLI focused
+results; the clean full-workflow runs include the maintained pretest build.
+
+After rebuilding the working bundles, all eight focused handoff/event-entry,
+manual override and navigation supersession journeys pass: 381 verified evidence
+files and eight workspaces removed. The controlled handoff now admits both native
+boss attacks, rejects the old completion as stale, preserves event navigation
+ownership during the focus change, and resumes both fighters against native bees
+after the native boss death and event return. The full-suite follow-up remains
+required.
+
+Settings character inspection also merges the live inventory/vitals stream and
+saved appearance, renders equipment/item sprites, and opens read-only item
+details with Compare. Nested comparison/stats dialogs remain above the character
+window. The actual settings workflow, saved inspection after restart, and
+never-loaded account comparison pass three focused E2Es, with 36 verified evidence
+files and three workspaces removed. The final comparison screenshot was reviewed.

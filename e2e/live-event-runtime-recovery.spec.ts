@@ -463,17 +463,36 @@ test.describe('farming focus changed during native event attendance',()=>{
  test.use({initialPosition:{map:'main',x:0,y:0}});
  test('new farming focus resumes after natural Halloween completion',async({live},info)=>{
   test.setTimeout(480_000);
-  let seed:any,changedAt=0,endedAt=0,focusOwnership:any;const samples:any[]=[];
+  let seed:any,handoffSeed:any,changedAt=0,endedAt=0,focusOwnership:any,heldHandoff:any;
+  const samples:any[]=[],handoffAttempts:any[]=[];
+  let releaseHandoff=false;
+  const context=live.clients[W].page.context();
+  const refuseHandoff=async(route:Route)=>{
+   const body=route.request().postDataJSON();
+   if(!fighters.includes(body?.character)||!Number.isSafeInteger(body?.commandId)){await route.continue();return;}
+   if(!heldHandoff)heldHandoff={character:body.character,commandId:body.commandId,navigationRevision:body.navigationRevision};
+   if(!releaseHandoff&&body.character===heldHandoff.character&&body.commandId===heldHandoff.commandId){
+    handoffAttempts.push({at:Date.now(),body});
+    await route.fulfill({status:409,json:{error:'Declared retry of the current farming handoff completion'}});return;
+   }
+   await route.continue();
+  };
+  await context.route('**/party-api/event-resume-complete',refuseHandoff);
   try{
    await live.post('/formation',{leader:W});await live.post('/formation',{character:P,follow:true});
+   handoffSeed=await live.admin(`output=(()=>{const m=new_monster('main',{type:'goo',count:1,boundary:[-32,800,-32,800]},{temp:1});m.e2eFarmEventHandoff=true;return {id:String(m.id)};})()`);
    const catalog=(await live.state(true)).monsterChoices,oldFarm=catalog.find((choice:any)=>choice.id==='goo').locations.find((point:any)=>point.map==='main');
    const selected=await live.post('/navigate-to-monster',{monsterId:'goo',location:oldFarm});
    await expect.poll(async()=>{const s=await live.state();return !s.activeConvoy&&fighters.every(name=>s.characters[name]?.map==='main'&&Math.hypot(s.characters[name].x-selected.location.x,s.characters[name].y-selected.location.y)<250);},{timeout:90_000}).toBe(true);
+   await expect.poll(()=>!!heldHandoff&&handoffAttempts.length>0,{timeout:90_000,message:'A real farming combat handoff must have an unfinished native completion before event selection'}).toBe(true);
    seed=await live.admin(`output=(()=>{const original=G.monsters.mrpumpkin;try{G.monsters.mrpumpkin={...original,hp:10000000,attack:1,speed:0,charge:0,range:1,aggro:0,rage:0,peaceful:true,spawns:[]};
     const m=new_monster('halloween',{type:'mrpumpkin',count:1,boundary:[-495,685,-495,685]},{temp:1});m.e2eChangedFarmEvent=true;E.mrpumpkin={live:true,map:m.map,x:m.x,y:m.y,hp:m.hp,max_hp:m.max_hp};broadcast_e();return {id:String(m.id),original};
    }catch(error){G.monsters.mrpumpkin=original;throw error;}})()`);
    await live.post('/formation',{character:W,eventSelections:['mrpumpkin']});
    await expect.poll(async()=>{const s=await live.state(),events=await live.clients[W].events();return fighters.every(name=>s.characters[name]?.joinedEvent==='mrpumpkin'&&events.some((packet:any)=>packet.event==='hit'&&String(packet.data?.id)===seed.id&&packet.data?.hid===name&&packet.data?.damage>0));},{timeout:150_000}).toBe(true);
+   releaseHandoff=true;
+   const staleCompletion=await live.post('/event-resume-complete',heldHandoff);
+   expect(staleCompletion.stale,'The superseded farming completion cannot acknowledge the new event owner').toBe(true);
    changedAt=Date.now();
    const beforeFocus=await Promise.all(fighters.map(name=>live.clients[name].run('globalThis.__partyNavigationIntent && globalThis.__partyNavigationIntent.revision')));
    // Same public action as MonsterFocusPicker, without an explicit travel override.
@@ -494,10 +513,12 @@ test.describe('farming focus changed during native event attendance',()=>{
     return !s.eventReturn&&fighters.every(name=>s.characters[name]?.map==='main'&&!s.characters[name]?.joinedEvent&&events.some((packet:any)=>packet.at>=endedAt&&packet.event==='hit'&&bees.includes(String(packet.data?.id))&&packet.data?.hid===name&&packet.data?.damage>0));
    },{timeout:240_000,message:'After the event, both native fighters must resume the newly selected bee focus instead of parking in town'}).toBe(true);
   }finally{
+   releaseHandoff=true;await context.unroute('**/party-api/event-resume-complete',refuseHandoff);
    const native=await Promise.all(fighters.map(async name=>({name,observation:await live.clients[name].run(`(()=>{const r=window,s=r.sharedRoutine;return {at:Date.now(),target:r.__partyGroupedCombat,encounter:r.__partyFarmingEngagement,trace:s.combatTraceSnapshot(),approach:s.independentApproachPorts().context(),occupied:s.isOccupied(),entities:Object.values(parent.entities).filter(e=>e.mtype==='bee').map(e=>({id:e.id,x:e.x,y:e.y,hp:e.hp,visible:e.visible,target:e.target}))};})()`).catch(String)})));
-   await info.attach('native-event-farming-focus-change',{body:JSON.stringify({seed,changedAt,endedAt,focusOwnership,samples,native,state:await live.state(),events:await live.clients[W].events()}),contentType:'application/json'});
+   await info.attach('native-event-farming-focus-change',{body:JSON.stringify({seed,handoffSeed,heldHandoff,handoffAttempts,changedAt,endedAt,focusOwnership,samples,native,state:await live.state(),events:await live.clients[W].events()}),contentType:'application/json'});
    await live.post('/formation',{character:W,eventSelections:[]}).catch(()=>{});
    if(seed)await live.admin(`output=(()=>{const m=instances.halloween.monsters[${JSON.stringify(seed.id)}];if(m?.e2eChangedFarmEvent)remove_monster(m,{silent:true});G.monsters.mrpumpkin=${JSON.stringify(seed.original)};delete E.mrpumpkin;broadcast_e();return true;})()`).catch(()=>{});
+   if(handoffSeed)await live.admin(`output=(()=>{const m=instances.main.monsters[${JSON.stringify(handoffSeed.id)}];if(m?.e2eFarmEventHandoff)remove_monster(m,{silent:true});return true;})()`).catch(()=>{});
   }
  });
 });

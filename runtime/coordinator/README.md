@@ -1,3 +1,12 @@
+Shared event walking can supersede an unfinished farming convoy combat-handoff
+continuation at the same navigation revision. Require fresh authorized event
+requests from the participating runtimes, retain all other command ownership
+checks, and do not restore that obsolete farm continuation after event arrival.
+Newer navigation commands remain authoritative; delayed old completion receipts
+remain fenced by command identity. Validate the natural Halloween completion and
+changed farming-focus journey with a declared retry of one real farm handoff
+completion, plus manual event overrides and navigation supersession E2Es.
+
 Completed Cave destination movement is a historical receipt, not proof of current
 arrival. After every participant completes its move and is freshly ready, displaced
 actors receive independent native paths to the same destination, with three bounded
