@@ -11,13 +11,13 @@ test.describe('Mailbox enhancements',()=>{
   const collect=dialog.getByLabel('Automatically collect mail attachments',{exact:true});
   const remove=dialog.getByLabel('Automatically delete messages after attachments are collected',{exact:true});
   await expect(collect).not.toBeChecked();await expect(remove).not.toBeChecked();
-  await remove.check();
+  await remove.click();await expect(remove).toBeChecked();
   await expect(dialog.getByRole('button',{name:/Collected attachment fixture/})).toHaveCount(0);
   await expect(dialog.getByRole('button',{name:/Unclaimed attachment fixture/})).toBeVisible();
   await expect(dialog.getByRole('button',{name:/Pending attachment fixture/})).toBeVisible();
   await expect(dialog.getByRole('button',{name:/Text message fixture/})).toBeVisible();
   await expect(collect).not.toBeChecked();
-  await collect.check();
+  await collect.click();await expect(collect).toBeChecked();
   await expect.poll(async()=>{const s=await app.state();return [s.merchantCurrent,...s.merchantQueue].filter(j=>j?.reason==='collect mail').map(j=>j.mail.id);}).toEqual(['mail-unclaimed']);
   await app.restartCoordinator();
   const response=await page.request.get(app.url+'/party-api/mail'),mailbox=await response.json();
