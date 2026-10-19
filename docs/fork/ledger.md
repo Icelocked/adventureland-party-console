@@ -8,15 +8,15 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 |---|---|
 | Upstream base | `1.5-feature-branch` @ 1832350, merged as 7d89bf8 on 10-18 (branch `adopt/1.5`, from `main`; previous merges 98f25b5 of 3ddec7d on 10-18 and 53a3cd6 of 849c38a on 10-16). Carries v1.4.0 (PR #64, b4443e4), the ChronAL simulation harness (7f81f71) and all gameplay E2Es on ChronAL (3ddec7d) |
 | Fork head | `adopt/1.5` @ the commit recording this (after 7d89bf8), not pushed (`origin/adopt/1.5` @ 098b897, pushed 10-18); `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
-| Divergence | 0 behind; 231 files differ from upstream’s tip (1832350) |
+| Divergence | 0 behind; 242 files differ from upstream’s tip (1832350) |
 | Checked | 2026-10-16, against every upstream issue, comment and PR (#13–#131); #136 and #137 filed 10-17, #138 filed 10-17, #142, #143, #144 and #145 filed 10-18; upstream's 88 commits to 1832350 checked on 10-18 against the issues they fix or implement; #147 filed 10-19 |
 
 | Status | Count |
 |---|---|
 | New issue | 1 |
-| Update / comment | 8 (2 to do) |
+| Update / comment | 9 (3 to do) |
 | Done upstream | 48 |
-| Matches | 18 (all done but #129, not commented; #147 not commented) |
+| Matches | 17 (all done but #129, not commented; #147 not commented) |
 | Open upstream | 18 |
 | Closed | 19 |
 | Fork-only | 7 |
@@ -47,6 +47,16 @@ Not filed yet. Fork fix in the commit recording this (10-17).
 Issues filed before the work landed, features that changed with use, and maintainer replies that leave out what the fork already has.
 
 - 10-19 (the commit recording this), crab kills per minute: Fan of Knives no longer needs the scatter primary among its targets, the stand covers the most one-shot mobs within Fan range (160, not 140) around any visible mob and holds while its spot covers as many, and the skill world's actor and context monsters carry `awidth`/`aheight` so the engine's range matches the server's edge-to-edge distance (the #136 class: copies lose PIXI getters). New `live-rogue-fan-crab-rate.spec.ts`: solo 282-294 → 320/min, against a competitor 246-269 → 291-293/min. Not yet commented on #136 or #137.
+
+### Configurable elixirs per character and gear set
+
+[#138 · filed 10-17](https://github.com/Ryan-Haines/adventureland-party-console/issues/138), to comment
+
+[b22fcc6](https://github.com/Thefonze74065/adventureland-party-console/commit/b22fcc6), [16208cc](https://github.com/Thefonze74065/adventureland-party-console/commit/16208cc)
+
+- As filed, the policy held one `elixir` supply (Liquid Luck) that the fighter kept active while its max was above zero. The user: "different characters or gearsets want different elixirs, so the behavior should be extensible & configurable in dashboard".
+- Now: a policy holds `elixirs` (any number of `elixir`-type supplies, each with min/max) and `keepElixir` (the character default, or none), all set from the restock form ("Add elixir", "Elixir kept active"). Each saved gear set has an elixir dropdown (character default, none, or an elixir); the worn set (saved items match every slot but the elixir) wins over the default. An active elixir is never replaced; the wanted one is drunk once it expires (agreed with the user). A supply no NPC sells is withdrawn from the bank and delivered; the heartbeat leaves out a supply that is neither sold nor in the bank snapshot. A policy saved with the old `elixir` supply becomes one supply and the default when its max was above zero.
+- `live-elixir-choice.spec.ts` (control fails both tests); `live-elixir-restock`, `live-gear-sets`, `live-gear-set-equip`, `live-gear-set-recovery` and `live-fan-farm-gear` pass. The restock form fix (e4070be, 10-19) belongs in the same comment.
 
 ### Auto-merchant marks stuck with a compound rule
 
@@ -209,7 +219,6 @@ A comment saying where it's implemented, with the commit link, is enough.
 | [#145](https://github.com/Ryan-Haines/adventureland-party-console/issues/145) filed 10-18 | Bank sort swap journal blocks the merchant when the freed cell is refilled | [8d79aff](https://github.com/Thefonze74065/adventureland-party-console/commit/8d79aff) | The swap is confirmed once the incoming item is in the buffer slot and no longer in the cell. Inventory `e2e/bank-sort-journal-failures.md`, journey `live-bank-sort-journal.spec.ts` |
 | [#144](https://github.com/Ryan-Haines/adventureland-party-console/issues/144) filed 10-18 | Skills sharing the attack cooldown lose slots to basic attacks | [85402f9](https://github.com/Thefonze74065/adventureland-party-console/commit/85402f9) | The skill world's `cooldown()` gives skills sharing `attack` the controller's 2 ms swing edge. Inventory `e2e/rogue-fan-crab-failures.md`, journey `live-rogue-fan-crab.spec.ts`. [#137 comment](https://github.com/Ryan-Haines/adventureland-party-console/issues/137#issuecomment-6252090346) links it |
 | [#143](https://github.com/Ryan-Haines/adventureland-party-console/issues/143) filed 10-18 | Manual upgrades of identical items stop as "recovery ambiguous" after the inventory tidy moves them | the commit recording this | `findUpgradeMarkSlot` gets the command's marks: copies still in another request's slot stay with it, and identical remaining copies are interchangeable. Inventory `e2e/manual-upgrade-duplicates-failures.md` |
-| [#138](https://github.com/Ryan-Haines/adventureland-party-console/issues/138) filed 10-17 | Keep a fighter's elixir active: merchant restock and auto-drink | [b22fcc6](https://github.com/Thefonze74065/adventureland-party-console/commit/b22fcc6) | An `elixir` restock supply (default `elixirluck`, off at max 0) beside HP/MP: `/restock`, default policy, completion check, scheduling, dashboard import and "Luck elixir min/max" controls. The merchant walks to the seller by name (Warin's aisle approach) and withdraws bank gold for a shortfall; `restockPolicies` joins the heartbeat state, and a fighter with no active elixir drinks the one its policy names. `live-elixir-restock.spec.ts`; `live-equipment` and `live-economy` pass |
 | [#137](https://github.com/Ryan-Haines/adventureland-party-console/issues/137) filed 10-17 | Rogue: sustain Fan of Knives while scatter farming mobs it one-shots | [dbadfe7](https://github.com/Thefonze74065/adventureland-party-console/commit/dbadfe7) | Gated on `fanFarming` (Knife Belt rogue, scatter mode, a mob Fan of Knives kills outright): MP potions whenever a whole one fits (no `regen_mp` lockout), no sustained-budget throttle on Fan of Knives (20% reserve kept), Quick Stab/Punch dropped and Mental Burst only when its kill refund covers its cost, no Assassin's Smoke opener, and a stand within Fan of Knives range toward the nearby cluster. `live-rogue-fan-scatter.spec.ts` (native spawn and a declared sparse layout); depends on #136 |
 | [#136](https://github.com/Ryan-Haines/adventureland-party-console/issues/136) filed 10-17 | Multi-target skills never add extra targets: combat context copies lose x/y | [dbadfe7](https://github.com/Thefonze74065/adventureland-party-console/commit/dbadfe7) | `combatContext()` copied monsters with `Object.assign`, which skips the PIXI `x`/`y` accessors, so farm-area authorization rejected every extra Fan of Knives / 3-shot / 5-shot target. The copy now carries `x`/`y`. Found during the #137 control run |
 | [#129](https://github.com/Ryan-Haines/adventureland-party-console/issues/129) maintainer, not commented | Giveaway entry: host not visible at the market; can't join in the bank | [15c2f2a](https://github.com/Thefonze74065/adventureland-party-console/commit/15c2f2a) | A host not in sight is looked up through `/api/pull_merchants` and walked to; another realm, no open stand and inside-the-bank hosts are reported; bank giveaways are not queued. Also: jobs expire at the observed remaining minutes, and an unattempted expiry logs a warning and releases its claim. `live-giveaway-locate.spec.ts` |
