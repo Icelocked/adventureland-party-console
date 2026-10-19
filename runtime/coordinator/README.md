@@ -2104,3 +2104,13 @@ physical arrival and reward checks. Build and stage; activate only by explicit l
 Merchant bank manual compound marks bind three unlocked native bank sources, including different packs, before admission. The ordinary improvement command withdraws those sources and reports separate native withdrawal receipts; a failed later stage retains confirmed withdrawals for retry. Auto-compound uses the shared bank rules. Stat-scroll marks fence delivery payloads for the exact item regardless of priorities; native completion advances its retained delivery fingerprint. Replacement fishing and mining tools have separate default-off merchant settings; opted-in missing tools use the ordinary durable crafting order and material reservations. Validate the bank triplet, stat-bank/delivery, native gathering miss/hit and tool-setting journeys before staging a complete console artifact.
 
 Mailbox automation settings persist independently. Native attachment collection remains merchant-owned; auto-delete waits for account mail taken=true and no matching active collection job. Confirmed send completions produce local, durable outbox records; deleting a record cannot recall native mail. Opening the mailbox acknowledges incoming message IDs for its new-mail indicator. Validate mailbox-enhancements.case.ts and live-mailbox.spec.ts, retaining native inventory and mailbox receipts. Coordinator/dashboard changes require an explicitly requested supported coordinator-only activation; building alone does not activate them.
+
+Unconfirmed external stand purchases remain durable reservations until their owned
+job ends and a player explicitly resolves the outcome. The native-stand
+resolve-purchase action refuses current or queued jobs; bought uses the ordinary
+bid fulfillment path, not bought only releases the reservation. Repeated decisions
+cannot fill twice. The WTB row displays unresolved ledger entries independently of
+recomputed stand problems. Validate the native dashboard bought/not-bought,
+queued-job refusal and restart journeys in live-wtb-unconfirmed-purchase.spec.ts.
+Build a completed candidate after integrating the dashboard and coordinator; leave
+activation to an explicit console load.
