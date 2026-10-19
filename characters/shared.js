@@ -2766,6 +2766,7 @@
       monsterAchievements: monsterAchievementProgress(),
       tracktrix: tracktrixBonuses(),
       donationXpPerGold: donationXpPerGold,
+      donationLevelXp: Object.keys(G.levels || {}).reduce(function(levels,key) { levels[Number(key)] = Number(G.levels[key]); return levels; }, []),
       inventoryStackRetryAt: Number(root.__merchantStackRetryAt) || 0,
       inventoryStackError: root.__merchantStackError || null,
       gatheringActive: gatheringActive,

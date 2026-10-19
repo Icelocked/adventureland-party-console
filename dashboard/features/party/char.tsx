@@ -15,8 +15,10 @@ import { Sprite } from "./sprite";
 
 export type Char = {
   luckySlotTracking?: LuckySlotTracking;
-  tracktrix?: { active: boolean; bonuses: Record<string, number> | null; sprite?: Sprite | null };
-  lootStatus?: {at:number;map:string;eligible:number;pending:boolean;error?:string|null};
+  tracktrix?: { active: boolean; bonuses: Record<string, number> | null; sprite?: Sprite | null;
+  };
+  lootStatus?: {at:number;map:string;eligible:number;pending:boolean;error?:string|null;
+  };
   combat?: {positioning?: {at?:number;mode?:string;reason?:string}};
   activeEvent?:string|null;
   joinedEvent?:string|null;
@@ -93,6 +95,7 @@ export type Char = {
   characterSprite?: Sprite | null;
   characterDollHtml?: string | null;
   donationXpPerGold?: number;
+  donationLevelXp?: number[];
   gatheringCooldowns?: { fishing?: number; mining?: number };
   nearbyStandListings?: (PlayerStandListing & { meta?: ItemMeta | null })[];
   monsterAchievementKills?: Record<string, number> | null;
