@@ -127,4 +127,27 @@ test.describe('saves through the mail settings route', () => {
     expect(Object.keys(after.characterSnapshots ?? {})).toEqual(Object.keys(before.characterSnapshots ?? {}));
     expect((await (await page.request.get(`${app.url}/party-api/mail`)).json()).settings).toEqual({ autoCollect: false, autoDelete: false });
   });
+
+  test('settings save in layout 2 within a second of a change, and in the v1.4.0 layout at shutdown', async ({ page, app }, info) => {
+    // P3 items 7 and 9 through the real coordinator; layout 2 keeps the market
+    // cache and production under their own keys while the console runs.
+    await page.waitForTimeout(2000);
+    const changed = Date.now();
+    expect((await mailSettings(page, app.url, { autoCollect: true, autoDelete: false })).ok()).toBe(true);
+    await expect.poll(() => saved(app.journal, settingsKey).at(-1)?.mailbox?.settings?.autoCollect, { intervals: [100] }).toBe(true);
+    const saveMs = Date.now() - changed;
+    const running = saved(app.journal, settingsKey);
+    expect(running.at(-1).persistenceLayout).toBe(2);
+    expect(running.filter(record => 'production' in record || 'aldataMarketListings' in record)).toEqual([]);
+    expect(saved(app.journal, 'party_dashboard_production_state_v1').length).toBeGreaterThan(0);
+    expect(saved(app.journal, 'party_dashboard_market_state_v1').length).toBeGreaterThan(0);
+    await app.restartCoordinator();
+    const shutdown = saved(app.journal, settingsKey).filter(record => 'production' in record && 'aldataMarketListings' in record);
+    await report(info, 'settings-layout', { saveMs, runningRecords: running.length, shutdownRecords: shutdown.length });
+    // A material change saves within a second, plus the poll.
+    expect(saveMs).toBeLessThan(2500);
+    expect(shutdown.length).toBeGreaterThan(0);
+    expect(shutdown.at(-1)).toMatchObject({ persistenceLayout: 2, mailbox: { settings: { autoCollect: true } } });
+    expect((await (await page.request.get(`${app.url}/party-api/mail`)).json()).settings).toEqual({ autoCollect: true, autoDelete: false });
+  });
 });

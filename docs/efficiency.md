@@ -92,3 +92,91 @@ Failure inventory:
 Tests: `scripts/tests/coordinator-jsonl-store.test.cjs` (1-7), including a real
 writer and store for unchanged roster reports, and
 `e2e/console-persistence.spec.ts` (1 and 4 through the real coordinator).
+
+### Settings split and liveness timestamps (P3)
+
+`party_dashboard_settings_state_v1` was one 1.23 MB document of about 90
+fields (`settingsSnapshot`, `snapshots.ts`), saved within a second of any
+change (`scheduleSettings`, `writer.ts`). Two parts are large and change on
+their own schedule: the ALData market cache (`aldataMarketListings` 0.51 MB,
+`aldataMarketBuyOrders` 0.11 MB and three smaller fields), replaced on each
+ALData refresh (`commerce/aldata-service.ts`), and `production` (0.33 MB),
+whose attempt phases change during upgrades. Most saves changed only liveness
+timestamps: on a live console 14 of 14 consecutive settings records differed
+in `eventAttendance.<character>.<event>.lastLiveAt` / `lastObservedAt`, and 13
+of 14 in `farmAreaState.quiet`.
+
+Layout 2 saves three documents:
+
+| Key | Content | Saved when |
+|---|---|---|
+| `party_dashboard_market_state_v1` | the five `aldata*` fields | an ALData refresh replaces one of them |
+| `party_dashboard_production_state_v1` | `production` | its content changes |
+| `party_dashboard_settings_state_v1` | every other settings field, plus `persistenceLayout: 2` | see below |
+
+Liveness timestamps keep their in-memory value at full rate. A settings save
+whose only changes are these values waits until 30 s after the previous
+settings record (`SETTINGS_LIVENESS_MS`):
+
+- `lastLiveAt`, `lastObservedAt`, `elapsedMs`, `authorizedAt` and `seenAt`
+  numbers inside `eventAttendance`, `eventSessions`, `farmingProfiles`,
+  `farmAreaState` and `standPriceHistory`
+- the timestamps in `farmAreaState.quiet`, whose area keys still count as a
+  change, and the `farmAreaState.seen` hit filter
+
+Any other change saves within a second, as in v1.4.0, and carries the pending
+timestamps with it. The readers of these values use windows of 3 s to minutes
+(`events/attendance-limits.ts`, `scripts/farm-area-control.cjs`), and a
+restart already takes longer than those windows, so a value up to 30 s old
+after a crash leads to the same decisions.
+
+Crash window: liveness timestamps up to 30 s old; everything else as in
+v1.4.0.
+
+The comparison costs one `JSON.stringify` per field, which the save needs
+anyway, plus a masked stringify of only the liveness fields that changed
+(`eventAttendance` and `farmAreaState` are a few KB). The writer compares the
+market document by array identity first, because `aldata-service.ts` replaces
+those arrays and never edits them in place.
+
+Migration and rollback:
+
+- Load (`initial-snapshots.ts`): when the settings document carries
+  `persistenceLayout: 2`, the market and production documents override the
+  same fields in it. Without the marker, the settings document is the only
+  source, so a v1.4.0 journal loads every field as before.
+- The writer saves market and production before settings. A crash between
+  them leaves settings without the marker, and load ignores the newer split
+  documents only until the next save.
+- Shutdown (`flush()`) saves the settings document in the v1.4.0 layout, with
+  the market and production fields inside it and the marker kept. A v1.4.0
+  build started after an orderly stop reads every field.
+- After a crash, a v1.4.0 build reads settings without `production` and the
+  market cache. It starts with no production receipts and refetches the market
+  on its first ALData refresh.
+- A v1.4.0 build rewrites settings without the marker. When the new build
+  starts again, it reads that document and ignores the split documents it left
+  behind, which are older.
+- Dashboard export and import (`persistence/dashboard-import.ts`) cover neither
+  `production` nor the market fields, so the split does not change them.
+
+Failure inventory:
+
+1. A v1.4.0 journal with only the monolithic document loses a field on load.
+2. Split documents do not override the fields in a layout 2 settings document.
+3. A settings document written by a v1.4.0 build after a rollback loses to
+   older split documents.
+4. A timestamp-only change appends the market or production document.
+5. A timestamp-only change appends settings more often than every 30 s.
+6. The writer never saves a timestamp-only change.
+7. A material change waits for the liveness window.
+8. A change in a liveness field other than a listed timestamp waits for the
+   liveness window.
+9. Shutdown leaves a settings document a v1.4.0 build cannot read in full.
+10. The writer skips a market cache refresh, or saves the cache on every settings save.
+11. Credentials or transient fields reach a saved document.
+
+Tests: `scripts/tests/coordinator-persistence-writer.test.cjs` (4-11),
+`scripts/tests/coordinator-initialization.test.cjs` (1-3) with a v1.4.0
+journal fixture, and `e2e/console-persistence.spec.ts` (7 and 9 through the
+real coordinator and dashboard).
