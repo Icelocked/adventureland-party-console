@@ -1,4 +1,5 @@
-// Achievement Hunt target choice (docs/achievement-hunt.md). Pure: no state, no I/O.
+// Achievement Hunt target choice (docs/achievement-hunt.md). Pure: no I/O, and the only
+// state is an id index per monsterChoices array (choiceById).
 import type { GMonster } from "typed-adventureland";
 import { legacyPriorities } from "../coordinator/navigation/passive-settings.ts";
 
@@ -95,14 +96,29 @@ function rareSpawn(id: string, choice: AchievementChoice | undefined): boolean {
   return randomRespawn(choice) || Object.hasOwn(legacyPriorities, id);
 }
 
+// One index per monsterChoices array. consumeStatusCatalogs replaces the whole array on a new
+// report, so each index matches the array choiceById built it from (docs/achievement-hunt.md § 32-34).
+const choiceIndexes = new WeakMap<readonly AchievementChoice[], Map<string, AchievementChoice>>();
+/** The first choice with `id`, as a linear search would return it. */
+function choiceById(choices: readonly AchievementChoice[] | null | undefined, id: string): AchievementChoice | undefined {
+  if (!choices) return undefined;
+  let index = choiceIndexes.get(choices);
+  if (!index) {
+    index = new Map();
+    for (const choice of choices) if (!index.has(choice.id)) index.set(choice.id, choice);
+    choiceIndexes.set(choices, index);
+  }
+  return index.get(id);
+}
+
 /** Every monster that has achievements, weakest first: by XP, then threat (attack × speed), HP and name.
  *  Threat alone misranks monsters (a Vampire Rat hits harder than a Fire Spirit but has a ninth of its HP). */
 export function achievementMonsters(
   catalog: readonly AchievementCatalogEntry[] | null | undefined,
   choices: readonly AchievementChoice[] | null | undefined,
-): AchievementMonster[] {
+): readonly AchievementMonster[] {
   const routable = new Set((choices || []).filter((choice) => (choice.locations || []).length > 0).map((choice) => choice.id));
-  const choiceOf = (id: string) => (choices || []).find((choice) => choice.id === id);
+  const choiceOf = (id: string) => choiceById(choices, id);
   const monsters = (catalog || [])
     .map((entry) => {
       const definition = entry.definition || {};
@@ -126,6 +142,25 @@ export function achievementMonsters(
   return monsters.map((monster) => (counts.get(monster.name)! > 1 ? { ...monster, name: `${monster.name} (${monster.id})` } : monster));
 }
 
+/** The monster list with an id index, kept while both inputs stay the same arrays. */
+export interface AchievementOrder {
+  order: readonly AchievementMonster[];
+  byId: ReadonlyMap<string, AchievementMonster>;
+}
+/** achievementMonsters, rebuilt only when `catalog` or `choices` is a new array (docs/achievement-hunt.md § 32-33). */
+export function createAchievementOrder(): (catalog: readonly AchievementCatalogEntry[] | null | undefined,
+  choices: readonly AchievementChoice[] | null | undefined) => AchievementOrder {
+  let kept: { catalog: unknown; choices: unknown; value: AchievementOrder } | null = null;
+  return (catalog, choices) => {
+    if (kept && kept.catalog === catalog && kept.choices === choices) return kept.value;
+    const order = achievementMonsters(catalog, choices);
+    const byId = new Map<string, AchievementMonster>();
+    for (const monster of order) if (!byId.has(monster.id)) byId.set(monster.id, monster);
+    kept = { catalog, choices, value: { order, byId } };
+    return kept.value;
+  };
+}
+
 function spawnPlaces(choice: AchievementChoice | undefined, field: "locations" | "spawnRecords" = "locations"): SpawnPlace[] {
   return (choice?.[field] || []).filter((place): place is SpawnPlace => {
     const value = place as Partial<SpawnPlace> | null;
@@ -145,7 +180,7 @@ function spawnDistance(point: { x: number; y: number }, place: SpawnPlace): numb
 /** Whether `place` is on the same map as one of `id`'s spawns and within `radius` of it. */
 export function nearSpawnOf(choices: readonly AchievementChoice[] | null | undefined, id: string,
   place: { map: string; x: number; y: number }, radius: number): boolean {
-  const spawns = spawnPlaces((choices || []).find((choice) => choice.id === id));
+  const spawns = spawnPlaces(choiceById(choices, id));
   return spawns.some((spawn) => spawn.map === place.map && spawnDistance(place, spawn) <= radius);
 }
 
@@ -163,14 +198,14 @@ function sharesGround(at: SpawnPlace, spawn: SpawnPlace): boolean {
 
 /** How many of `id` spawn on the ground of the target spot `at`, from its spawn records. */
 export function spawnCount(choices: readonly AchievementChoice[] | null | undefined, id: string, at: SpawnPlace): number {
-  return spawnPlaces((choices || []).find((choice) => choice.id === id), "spawnRecords")
+  return spawnPlaces(choiceById(choices, id), "spawnRecords")
     .filter((spawn) => sharesGround(at, spawn))
     .reduce((total, spawn) => total + (Number((spawn as { count?: unknown }).count) || 0), 0);
 }
 
 /** Whether one of `id`'s spawns shares ground with the target spot `at`. */
 function onGround(choices: readonly AchievementChoice[] | null | undefined, id: string, at: SpawnPlace): boolean {
-  return spawnPlaces((choices || []).find((choice) => choice.id === id)).some((spawn) => sharesGround(at, spawn));
+  return spawnPlaces(choiceById(choices, id)).some((spawn) => sharesGround(at, spawn));
 }
 
 /**

@@ -4,9 +4,9 @@
 import type { ReturnLocation } from "../events/return-types.ts";
 import { defaultPassiveRule, type PassiveRule } from "../navigation/passive-settings.ts";
 import {
-  achievementMonsters,
   bossesOnGround,
   chooseAchievementTarget,
+  createAchievementOrder,
   nearbyFillers,
   nearSpawnOf,
   spawnCount,
@@ -96,6 +96,10 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
   // Set again after a restart or a settings change (failure mode 21).
   let refocus = true;
 
+  // The monster list, rebuilt only when a new catalog or new monster choices arrive (failure mode 32).
+  const ordered = createAchievementOrder();
+  const monsterList = () => ordered(state.bestiaryCatalog as AchievementCatalogEntry[] | null, state.monsterChoices);
+  const nameOf = (id: string): string => monsterList().byId.get(id)?.name || id;
   const settings = (): AchievementHuntSettings => (state.achievementHunt ||= { ...defaultAchievementHuntSettings });
   const say = (message: string): void => { state.achievementMessage = message; };
   function excluded(id: string): boolean {
@@ -202,7 +206,7 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
     state.achievementTarget = null;
   }
   /** Focuses the target and the nearby monsters to fight while it respawns, target first. */
-  function focusWithFillers(target: AchievementTargetState, location: ReturnLocation, order: AchievementMonster[]): void {
+  function focusWithFillers(target: AchievementTargetState, location: ReturnLocation, order: readonly AchievementMonster[]): void {
     const fillers = settings().fillIdle === false ? []
       : nearbyFillers(order, state.monsterChoices, target.id, location, excluded, fillerChoice());
     target.focus = [target.id, ...fillers];
@@ -259,13 +263,13 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
    * A monster at a lower step (re-selected, unblacklisted, or a route retry) takes over: kills only
    * rise, so that cannot thrash.
    */
-  function stillWorking(order: AchievementMonster[], kills: Record<string, number>, best: AchievementTarget | null): boolean {
+  function stillWorking(kills: Record<string, number>, best: AchievementTarget | null): boolean {
     const current = state.achievementTarget;
     if (!current || dropped(current)) return false;
-    const monster = order.find((entry) => entry.id === current.id);
+    const monster = monsterList().byId.get(current.id);
     const count = Number(kills[current.id]) || 0;
     if (!monster || nextStep(monster.ladder, count) !== current.step || (best && best.step < current.step)) return false;
-    say(`Farming ${monster.name}: ${killText(count, current.milestone, current.step)}${standInText(current, order)}`);
+    say(`Farming ${monster.name}: ${killText(count, current.milestone, current.step)}${standInText(current)}`);
     return true;
   }
   /** Unselected, excluded, or a stand-in whose boss-held target is free again. */
@@ -274,12 +278,11 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
       (!!current.standInFor && !bossHeld(current.standInFor));
   }
   /** " while Stompy holds White Wolf (back in 9m)" for a stand-in, or "". */
-  function standInText(target: AchievementTargetState, order: AchievementMonster[]): string {
+  function standInText(target: AchievementTargetState): string {
     const hold = target.standInFor ? bossHolds.get(target.standInFor) : undefined;
     if (!hold) return "";
-    const name = (id: string) => order.find((monster) => monster.id === id)?.name || id;
     const minutes = Math.max(1, Math.ceil((bossAwayMs() - (ports.now() - hold.seenAt)) / 60_000));
-    return ` while ${name(hold.boss)} holds ${name(target.standInFor!)} (back in ${minutes}m)`;
+    return ` while ${nameOf(hold.boss)} holds ${nameOf(target.standInFor!)} (back in ${minutes}m)`;
   }
 
   /** The state for a new target, with the deaths it had before a boss sent the party away. */
@@ -297,10 +300,10 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
     try { return { started: location ? ports.select(id, location) : null, failure: "" }; }
     catch (error) { return { started: null, failure: String((error as Error)?.message || error) }; }
   }
-  function switchTo(choice: AchievementTarget | null, order: AchievementMonster[]): void {
+  function switchTo(choice: AchievementTarget | null, order: readonly AchievementMonster[]): void {
     if (!choice) {
       release();
-      const names = Object.keys(state.achievementPassive || {}).map((id) => order.find((monster) => monster.id === id)?.name || id);
+      const names = Object.keys(state.achievementPassive || {}).map(nameOf);
       return say(names.length
         ? `No target to farm: fighting ${names.join(", ")} when seen`
         : "Nothing left to farm: every selected monster has finished its ladder or is skipped");
@@ -315,8 +318,7 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
     release();
     state.achievementTarget = target;
     focusWithFillers(target, location!, order);
-    const name = order.find((monster) => monster.id === choice.id)?.name || choice.id;
-    say(`Farming ${name}: ${killText(choice.kills, choice.milestone, choice.step)}${standInText(target, order)}`);
+    say(`Farming ${nameOf(choice.id)}: ${killText(choice.kills, choice.milestone, choice.step)}${standInText(target)}`);
     ports.persist();
   }
 
@@ -331,7 +333,7 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
   function variantCandidate(best: AchievementTarget, monster: AchievementMonster): boolean {
     return monster.id !== best.id && !monster.rare && settings().monsters.includes(monster.id) && !excluded(monster.id);
   }
-  function variantOf(best: AchievementTarget, monster: AchievementMonster, order: AchievementMonster[],
+  function variantOf(best: AchievementTarget, monster: AchievementMonster, order: readonly AchievementMonster[],
     kills: Record<string, number>): AchievementTarget | null {
     if (!variantCandidate(best, monster)) return null;
     const count = Number(kills[monster.id]) || 0, step = nextStep(monster.ladder, count);
@@ -341,7 +343,7 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
     return { id: monster.id, step, milestone: monster.ladder[step]!, kills: count };
   }
   /** Rare variants first: farming Orange Snakes with snakes as fillers clears the snake step too. */
-  function preferVariant(best: AchievementTarget | null, order: AchievementMonster[], kills: Record<string, number>): AchievementTarget | null {
+  function preferVariant(best: AchievementTarget | null, order: readonly AchievementMonster[], kills: Record<string, number>): AchievementTarget | null {
     if (!best || settings().fillIdle === false) return best;
     for (const monster of order) {
       const variant = variantOf(best, monster, order, kills);
@@ -392,7 +394,7 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
     return dead.length ? `Waiting: ${dead.join(" and ")} ${dead.length === 1 ? "is" : "are"} dead` : null;
   }
   /** Sets the kept target's focus again around where the party farms, without moving it. */
-  function focusKeptTarget(order: AchievementMonster[]): void {
+  function focusKeptTarget(order: readonly AchievementMonster[]): void {
     const current = state.achievementTarget!;
     const here = state.location && nearSpawnOf(state.monsterChoices, current.id, state.location, ports.radius()) ? state.location : ports.destination(current.id);
     refocus = false;
@@ -401,14 +403,14 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
     focusWithFillers(current, here as ReturnLocation, order);
     ports.persist();
   }
-  function returnToTarget(order: AchievementMonster[]): void {
+  function returnToTarget(order: readonly AchievementMonster[]): void {
     const current = state.achievementTarget!;
     returnedAt = ports.now();
     const location = ports.destination(current.id);
     if (!location || !ports.select(current.id, location)) return;
     restorePriorities(current);
     focusWithFillers(current, location, order);
-    say(`Returning to the ${order.find((monster) => monster.id === current.id)?.name || current.id} spawn`);
+    say(`Returning to the ${nameOf(current.id)} spawn`);
     ports.persist();
   }
 
@@ -426,11 +428,11 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
     const hold = holdReason(names);
     if (hold) return say(hold);
     if (focusChangedByHand()) return stop("Switched to Auto: the monster focus was changed by hand");
-    const order = achievementMonsters(state.bestiaryCatalog as AchievementCatalogEntry[] | null, state.monsterChoices);
+    const order = monsterList().order;
     const kills = partyAchievementKills(state.statuses, names.length ? names : [String(state.leader)]);
     syncRares(wantedRares(order, new Set(settings().monsters), (id) => !!state.achievementBlacklist[id], kills));
     const best = chooseAchievementTarget(order, new Set(settings().monsters), excluded, kills);
-    if (!stillWorking(order, kills, best)) switchTo(preferVariant(best, order, kills), order);
+    if (!stillWorking(kills, best)) switchTo(preferVariant(best, order, kills), order);
     else if (shouldReturn()) returnToTarget(order);
     else if (refocus) focusKeptTarget(order);
     refocus = false;
