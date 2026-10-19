@@ -117,7 +117,7 @@ export type PartyState = {
   leader?: string | null;
   designatedTank?: string | null;
   /** Saved gear sets per character (luck/tank; gold reserved). */
-  gearSets?: Record<string, Partial<Record<"luck" | "tank" | "gold" | "fan", { slots: Record<string, { name: string; level?: number; p?: string; stat_type?: string }>; savedAt: number }>>>;
+  gearSets?: Record<string, Partial<Record<"luck" | "tank" | "gold" | "fan", { slots: Record<string, { name: string; level?: number; p?: string; stat_type?: string }>; savedAt: number; elixir?: string | null }>>>;
   followers?: Record<string, boolean>;
   eventsByCharacter?: Record<string, boolean>;
   eventAttendance?: Record<string, Record<string, Pick<import("../../../runtime/coordinator/events/attendance-limits").AttendanceInstance, "ignored" | "ended">>>;

@@ -12,7 +12,11 @@ export const GEAR_SET_SLOTS = [
   "ring1", "ring2", "earring1", "earring2", "elixir",
 ] as const;
 export type GearSetItem = { name: string; level?: number; p?: string; stat_type?: string };
-export interface GearSet { slots: Partial<Record<(typeof GEAR_SET_SLOTS)[number], GearSetItem>>; savedAt: number }
+export interface GearSet {
+  slots: Partial<Record<(typeof GEAR_SET_SLOTS)[number], GearSetItem>>; savedAt: number;
+  /** The elixir kept active while this set is worn: unset uses the character's restock default, null keeps none. */
+  elixir?: string | null;
+}
 export type GearSets = Record<string, Partial<Record<GearSetName, GearSet>> | undefined>;
 
 interface GearSetState {
@@ -69,7 +73,15 @@ export function createGearSetRoute(state: GearSetState, ports: GearSetPorts) {
     else if (body.action === "save") {
       const slots = equipped(name);
       if (typeof slots === "string") return res.status(409).json({ error: slots });
-      sets[set] = { slots, savedAt: ports.now() };
+      // Saving records the gear; the set's elixir choice is kept.
+      const elixir = sets[set]?.elixir;
+      sets[set] = { slots, savedAt: ports.now(), ...(elixir !== undefined ? { elixir } : {}) };
+    } else if (body.action === "elixir") {
+      const saved = sets[set];
+      if (!saved) return res.status(409).json({ error: "that gear set is not saved" });
+      if (body.elixir === "default") delete saved.elixir;
+      else if (body.elixir === null || typeof body.elixir === "string" && body.elixir) saved.elixir = body.elixir as string | null;
+      else return res.status(400).json({ error: "invalid elixir" });
     } else return res.status(400).json({ error: "invalid gear set action" });
     ports.persist();
     return res.json({ ok: true, gearSets: state.gearSets[name] });

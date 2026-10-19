@@ -6,6 +6,7 @@ import {validHuntSettings} from "../hunt/settings.ts";
 import {validMarketIgnoredItem} from "../../market-preferences.ts";
 import { stateKeys } from "./snapshots.ts";
 import { validStandLocation } from '../merchant/stand-location.ts';
+import { normalizeRestockPolicy } from '../http/restock.ts';
 
 type ObjectValue = Record<string, unknown>;
 const object = (value: unknown): value is ObjectValue =>
@@ -88,7 +89,10 @@ export const validators: Record<string, (value: unknown) => boolean> = {
       [value.hp, value.mp].every(
         (p) => object(p) && number(p.min) && number(p.max) && text(p.item),
       ) &&
-      (value.elixir === undefined || object(value.elixir) && number(value.elixir.min) && number(value.elixir.max) && text(value.elixir.item)),
+      (value.elixir === undefined || object(value.elixir) && number(value.elixir.min) && number(value.elixir.max) && text(value.elixir.item)) &&
+      (value.elixirs === undefined || Array.isArray(value.elixirs) && value.elixirs.every(
+        (p: unknown) => object(p) && number(p.min) && number(p.max) && text(p.item))) &&
+      (value.keepElixir === undefined || value.keepElixir === null || text(value.keepElixir)),
   ),
   bankSortMode: value => value === "automatic" || value === "request",
   bankSortLayout: value => value === "packed" || value === "gapped",
@@ -259,6 +263,7 @@ export function applyDashboardImport(state: ObjectValue, parsed: DashboardImport
 }
 function importedValue(state: ObjectValue, key: string, value: unknown): unknown {
   if (key === 'merchantRoutinePriorities') return migrateRoutinePriorities(value as Record<string, number>);
+  if (key === 'restockPolicies') return Object.fromEntries(Object.entries(value as ObjectValue).map(([name, policy]) => [name, normalizeRestockPolicy(policy)]));
   if (key !== 'farmingProfiles') return value;
   const previous = object(state.farmingProfiles) ? state.farmingProfiles : {};
   return {...previous, ...Object.fromEntries(Object.entries(value as ObjectValue).map(([name, profile]) =>

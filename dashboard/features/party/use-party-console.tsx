@@ -511,7 +511,7 @@ export function usePartyConsole() {
   }
   async function saveRestock(character: string, policy: RestockPolicy) {
     try {
-      await post("/restock", { character, hp: policy.hp, mp: policy.mp, elixir: policy.elixir });
+      await post("/restock", { character, hp: policy.hp, mp: policy.mp, elixirs: policy.elixirs || [], keepElixir: policy.keepElixir ?? null });
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Restock update failed");
     }

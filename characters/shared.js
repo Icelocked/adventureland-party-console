@@ -7134,10 +7134,10 @@
         }
       }
       var deliveries = [];
-      var restockSupplies = ["hp", "mp", "elixir"].map(function (kind) {
-        var supply = command.restock && command.restock[kind];
-        if (!supply || !supply.max) return null;
-        return { kind: kind, supply: supply, have: statusQuantity(command.targetInventory, supply.item) };
+      var restockSupplies = [command.restock && command.restock.hp, command.restock && command.restock.mp]
+        .concat(command.restock && command.restock.elixirs || []).map(function (supply) {
+        if (!supply || !supply.max || !supply.item) return null;
+        return { supply: supply, have: statusQuantity(command.targetInventory, supply.item) };
       }).filter(Boolean);
       // Any low-water mark starts one complete restock. Once the merchant
       // commits to the visit, bring every configured supply up to its maximum.
@@ -7165,6 +7165,15 @@
               }
               deliveries.push({ name: supply.item, quantity: needed });
             } else activity.push({ level: "error", message: "Insufficient gold to restock " + command.target });
+          } else if (needed > 0) {
+            // Nobody sells it (stat and resistance elixirs): deliver from the bank's stock.
+            if (inventoryQuantity(supply.item) < needed && itemAvailability(supply.item).inBank > 0) {
+              await merchantVisitBank(command, activity);
+              await retrieveFromBankUntil(supply.item, needed);
+            }
+            var carriedSupply = inventoryQuantity(supply.item);
+            if (carriedSupply > 0) deliveries.push({ name: supply.item, quantity: Math.min(needed, carriedSupply) });
+            else activity.push({ level: "error", message: "No seller or bank stock for " + supply.item + " to restock " + command.target });
           }
       }
       var deliveredRestocks = {}, deliveredWithdrawalsByIndex = {};
@@ -14155,19 +14164,36 @@
       gatheringActive || (character.moving && !engagedMonster());
   }
 
-  // A fighter keeps its restock policy's elixir active; equipping one consumes it.
+  // A fighter keeps an elixir active: its worn gear set's choice, else its restock default.
+  // Equipping one consumes it, so an active elixir is never replaced; the next is drunk when it expires.
   var elixirBusy = false, elixirRetryAt = 0;
+  var GEAR_SET_WORN_SLOTS = ["mainhand", "offhand", "chest", "pants", "helmet", "gloves", "shoes", "cape", "belt", "orb",
+    "amulet", "ring1", "ring2", "earring1", "earring2"];
+  function gearSetWorn(set) {
+    var saved = set && set.slots || {}, worn = character.slots || {};
+    return GEAR_SET_WORN_SLOTS.every(function (slot) {
+      var want = saved[slot], have = worn[slot] && worn[slot].name ? worn[slot] : null;
+      if (!want || !have) return !want && !have;
+      return have.name === want.name && Number(have.level || 0) === Number(want.level || 0) &&
+        (have.p || null) === (want.p || null) && (have.stat_type || null) === (want.stat_type || null);
+    });
+  }
+  function wantedElixir(policy) {
+    var sets = root.partyGearSets && root.partyGearSets[character.name] || {};
+    for (var name in sets) if (sets[name] && sets[name].elixir !== undefined && gearSetWorn(sets[name])) return sets[name].elixir;
+    return policy && policy.keepElixir || null;
+  }
   function maintainElixir() {
     if (elixirBusy || Date.now() < elixirRetryAt || character.rip || character.ctype === "merchant") return;
-    var policy = root.partyRestockPolicies && root.partyRestockPolicies[character.name], supply = policy && policy.elixir;
-    if (!supply || !(Number(supply.max) > 0) || !supply.item) return;
+    var policy = root.partyRestockPolicies && root.partyRestockPolicies[character.name], wanted = wantedElixir(policy);
+    if (!wanted) return;
     var active = character.slots && character.slots.elixir;
     if (active && (!active.expires || new Date(active.expires).getTime() > Date.now())) return;
-    var index = (character.items || []).findIndex(function (item) { return item && item.name === supply.item; });
+    var index = (character.items || []).findIndex(function (item) { return item && item.name === wanted; });
     if (index < 0) return;
     elixirBusy = true;
     Promise.resolve(equip(index, "elixir")).then(function () {
-      game_log("Drank " + (G.items[supply.item] && G.items[supply.item].name || supply.item), "#51D2E1");
+      game_log("Drank " + (G.items[wanted] && G.items[wanted].name || wanted), "#51D2E1");
     }).catch(function (error) {
       elixirRetryAt = Date.now() + 30000;
       game_log("Elixir failed: " + String(error && (error.reason || error.message) || error), "red");
