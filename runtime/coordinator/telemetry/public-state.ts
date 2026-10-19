@@ -292,11 +292,12 @@ export function createPublicStateRoute(state: Readonly<PublicState>, ports: Publ
               referenceRevision: referenceRevision(),
             }),
     };
-    return response.json(
-      Object.hasOwn(sections, section)
-        ? sections[section]()
-        : fullPayload(state, ports, request.query?.catalog === "0"),
-    );
+    if (!section) return response.json(fullPayload(state, ports, request.query?.catalog === "0"));
+    // An unknown section answers 400, so a typo never turns a small poll
+    // into the multi-megabyte full payload.
+    if (!Object.hasOwn(sections, section))
+      return response.status(400).json({ error: "Unknown state section", sections: Object.keys(sections) });
+    return response.json(sections[section]());
   };
 }
 

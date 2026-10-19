@@ -78,8 +78,33 @@ test('sections join per-type catalog meta onto per-copy report meta',()=>{
  assert.equal(JSON.stringify([r.party.statuses.P.items,r.party.bankSnapshot]),before);
 });
 
-test('overview does not expose unlisted private state and unknown sections retain full responses',()=>{
+test('overview does not expose unlisted private state',()=>{
  const r=publicStateRuntime();r.party.sessionToken='never expose';r.party.worker={pid:123};
- const value=read(r,{section:'constructor'});assert.equal(value.sessionToken,undefined);assert.equal(value.worker,undefined);
+ const value=read(r,{});assert.equal(value.sessionToken,undefined);assert.equal(value.worker,undefined);
  assert.deepEqual(value.giveawayPlayers.SR_USII,['Alice','Bob','Trader']);assert.equal(value.characters.P.name,'P');
+});
+
+// C5 failure modes (docs/efficiency.md § Requests and logs): a mistyped or
+// prototype section name answers with the full payload; a request without a
+// section stops getting the full payload; a known section changes shape.
+function respond(r,query){
+ const result={status:200,body:undefined};
+ const response={status(code){result.status=code;return response;},json(value){result.body=JSON.parse(JSON.stringify(value));return response;}};
+ r.route({query},response);return result;
+}
+test('unknown sections answer 400 without building a payload; no section keeps the full payload',()=>{
+ const r=publicStateRuntime();r.party.sessionToken='never expose';
+ for(const section of ['mail','Bank','constructor','__proto__','toString','hasOwnProperty']){
+  const answer=respond(r,{section});
+  assert.equal(answer.status,400,section);
+  assert.equal(answer.body.characters,undefined,section);assert.equal(answer.body.sessionToken,undefined,section);
+  assert.match(answer.body.error,/Unknown state section/,section);
+  assert.ok(answer.body.sections.includes('bank'),section);
+ }
+ for(const query of [{},{section:''},{catalog:'0'}]){
+  const answer=respond(r,query);
+  assert.equal(answer.status,200);assert.equal(answer.body.characters.P.name,'P');
+ }
+ for(const section of ['fast','inventory','logs','bank','market','catalog','config','core'])
+  assert.equal(respond(r,{section,dashboard:'1'}).status,200,section);
 });
