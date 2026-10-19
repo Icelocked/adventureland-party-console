@@ -10,6 +10,9 @@ test('character sections collapse independently and retain inventory equipment r
   const equipped=merchant.getByRole('button',{name:'Equipped',exact:true});
   const restock=merchant.getByRole('button',{name:'Merchant restock',exact:true});
   for(const button of [inventory,equipped,restock]) await expect(button).toBeVisible();
+  await expect(inventory).toHaveAttribute('aria-expanded','true');
+  await expect(equipped).toHaveAttribute('aria-expanded','true');
+  await expect(restock).toHaveAttribute('aria-expanded','false');
   const positions=await Promise.all([inventory,equipped,restock].map(b=>b.boundingBox()));
   expect(positions[0]!.y).toBeLessThan(positions[1]!.y);expect(positions[1]!.y).toBeLessThan(positions[2]!.y);
   for(const button of [inventory,equipped]) if(await button.getAttribute('aria-expanded')==='true')await button.click();
