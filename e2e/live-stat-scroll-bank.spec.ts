@@ -41,9 +41,10 @@ for (const {deliver,stat} of [{deliver:false,stat:'str'},{deliver:true,stat:'str
     await live.post('/merchant/force-stand', {enabled:true});
     await live.post('/command', { character: merchant, type: 'stat-scroll-mark', slot: 20, item: { name: 'helmet', level: 0, stat_type: 'dex' }, statType: stat });
     if(deliver){
-      await live.post('/merchant/routine-priorities',{priorities:{deliveries:100,'manual upgrades':1},enabled:{}});
+      await live.post('/merchant/routine-priorities',{priorities:{deliveries:100,'manual upgrades':1},enabled:{deliveries:true}});
       await live.post('/command',{character:merchant,type:'give',slot:20,item:seeded.item,target:'E2EWarrior'});
       expect((await live.state()).statScrolls[merchant]).toHaveLength(1);
+      await expect.poll(async()=>{const state=await live.state();return state.merchantAutomations.deliveries===true && state.merchantDeliveries.E2EWarrior?.length===1 && state.statScrolls[merchant]?.length===1 && state.merchantRoutinePriorities.deliveries>state.merchantRoutinePriorities['manual upgrades'];},{timeout:30_000,message:'Both enabled intents and the delivery priority must persist before release'}).toBe(true);
     }
     await live.post('/merchant/force-stand',{enabled:false});
     await expect.poll(async () => { const n = await native(live,scroll); observations.push({ at: Date.now(), n }); return deliver ? await live.admin(`output=get_player('E2EWarrior').items.find(i=>i&&i.name==='helmet'&&i.stat_type==='str')?.stat_type`) : n.helmet?.stat_type; },
