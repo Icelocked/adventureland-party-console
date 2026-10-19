@@ -13,3 +13,5 @@ and nothing was ever withdrawn. Live journey: `e2e/live-stat-scroll-bank.spec.ts
    stocked inventory makes no bank trip.
 
 Delivery dependencies (#103): a higher priority delivery can steal an unmodified item; an exact stat mutation can invalidate its reserved fingerprint; removing the queue before telemetry may hide a stranded order. Queue both marks before releasing the merchant, retain the stat mark, and observe the recipient receive only the requested STR item without spending.
+
+Stale cleanup is separate from native application: removing a stale INT-modified item mark must retain the old DEX delivery fingerprint and its missing-item block; it cannot fabricate STR or consume its scroll. Positive primary, rare-scroll and priority cases require exactly one explicit applied receipt whose observed item has the requested stat.

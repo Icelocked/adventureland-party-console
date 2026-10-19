@@ -89,7 +89,7 @@ function characterWork(state: DispatchCoordinatorState, name: string | null): Ch
     autoCompounds: state.autoCompounds[ruleOwner(state, String(name))] || [],
     withdrawals: state.withdrawals[String(name)] || [],
     statScrolls: state.statScrolls[String(name)] || [],
-    deliveries: (state.merchantDeliveries[String(name)] || []).filter(mark => deliveryReady(mark) && !(state.statScrolls[String(state.merchantCharacter)] || []).some(stat => !stat.equipped && stat.slot === mark.slot && deliveryMatches(mark.item, stat.item))),
+    deliveries: (state.merchantDeliveries[String(name)] || []).filter(mark => deliveryReady(mark) && !(state.statScrolls[String(state.merchantCharacter)] || []).some(stat => !stat.equipped && deliveryMatches(mark.item, stat.item) && deliveryMatches(stat.item, mark.item))),
     goldTarget: state.goldTargets[String(name)],
   };
 }

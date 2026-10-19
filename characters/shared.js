@@ -6299,6 +6299,7 @@
   async function applyStatScrolls(command, activity) {
     var returns = [], resolved = [];
     command._statReturns = [];
+    command._statScrollsApplied = [];
     for (var i = 0; i < (command.statScrolls || []).length; i += 1) {
       var mark = command.statScrolls[i];
       // A partial name/level match can select an otherwise identical item that
@@ -6319,6 +6320,11 @@
       try {
         await smart_move(find_npc("newupgrade"));
         await upgrade(itemSlot, scrollSlot);
+        var appliedDeadline=Date.now()+2500;
+        while ((!character.items[itemSlot] || character.items[itemSlot].stat_type!==mark.statType) && Date.now()<appliedDeadline) await sleep(100);
+        if (!character.items[itemSlot] || character.items[itemSlot].stat_type!==mark.statType)
+          throw Error('Native stat-scroll outcome was not confirmed');
+        command._statScrollsApplied.push({mark:mark,slot:itemSlot,item:fingerprint(character.items[itemSlot])});
         if (character.items[itemSlot]) {
           var completed = fingerprint(character.items[itemSlot]);
           returns.push(completed);
@@ -7027,6 +7033,7 @@
         upgradesResolved: (command.upgrades || []).length > 0,
         upgradeMarksResolved: (command.upgrades || []).filter(function(mark) { return (command._offeringWaits || []).indexOf(mark) < 0; }),
         statScrollsResolved: command._statScrollsResolved || [],
+        statScrollsApplied: command._statScrollsApplied || [],
         compoundsResolved: (command.compounds || []).length > 0,
         autoCompoundsResolved: command.sharedBankImprovements ? [] : command._autoCompoundsResolved || [],
         purchasesResolved: (command.purchases || []).length > 0,
@@ -7048,6 +7055,7 @@
         await request("/merchant/complete", { method: "POST", body: {
           jobId: command.jobId, success: false,
           error: String(error.reason || error.message || error),
+          statScrollsApplied: command._statScrollsApplied || [],
           merchantWithdrawalsDelivered: command._merchantWithdrawalsCompleted || [],
           merchantBanked: command._merchantBankedCompleted || [], activity: activity,
         }});

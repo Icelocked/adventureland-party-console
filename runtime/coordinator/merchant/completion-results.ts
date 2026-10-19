@@ -51,20 +51,28 @@ export function createCompletionResults(state: CompletionState, ports: Completio
       else state.upgrades[String(name)] = [];
     }
   }
-  function successfulImprovements(name: string | null, body: CompletionReport): void {
-    upgrades(name, body);
-    // A native stat mutation changes the delivery fingerprint. Advance only the
-    // delivery bound to this exact completed merchant mark, retaining its identity.
-    if (name === state.merchantCharacter) for (const raw of body.statScrollsResolved || []) {
-      const mark = requestObject(raw), item = requestObject(mark.item);
-      if (mark.equipped || !Number.isSafeInteger(mark.slot) || typeof mark.statType !== 'string') continue;
-      for (const deliveries of Object.values(state.merchantDeliveries)) for (const delivery of deliveries || []) {
-        if (delivery.slot === mark.slot && deliveryMatches(delivery.item, item)) {
-          delivery.item = {...delivery.item, stat_type: mark.statType};
-          if (delivery.blocked === 'Reserved delivery item missing') delete delivery.blocked;
+  function appliedStatReceipts(name: string | null, body: CompletionReport): void {
+    if (name !== state.merchantCharacter) return;
+    for (const receipt of body.statScrollsApplied || []) {
+      const mark=requestObject(receipt.mark), original=requestObject(mark.item), actual=receipt.item;
+      if (mark.equipped || !Number.isSafeInteger(receipt.slot) || typeof mark.statType!=='string' || actual.stat_type!==mark.statType) continue;
+      const previous:Item={...actual};
+      if(typeof original.stat_type==='string') previous.stat_type=original.stat_type;
+      else delete previous.stat_type;
+      if (!deliveryMatches(previous,original) || !deliveryMatches(original,previous)) continue;
+      // Cleanup of stale marks is not a native outcome. Only this explicit,
+      // observed mutation can advance an item's reserved delivery identity.
+      for(const deliveries of Object.values(state.merchantDeliveries)) for(const delivery of deliveries || []) {
+        if ((delivery.slot===mark.slot || delivery.slot===receipt.slot) && deliveryMatches(delivery.item,original) && deliveryMatches(original,delivery.item)) {
+          delivery.item={...actual};delivery.slot=receipt.slot;
+          if(delivery.blocked==='Reserved delivery item missing') delete delivery.blocked;
         }
       }
+      removeMatching(state.statScrolls[String(name)],[receipt.mark]);
     }
+  }
+  function successfulImprovements(name: string | null, body: CompletionReport): void {
+    upgrades(name, body);
     removeMatching(state.statScrolls[String(name)], body.statScrollsResolved);
     if (
       body.statScrollsReady &&
@@ -130,6 +138,7 @@ export function createCompletionResults(state: CompletionState, ports: Completio
   function resolve(current: CompletionJob, body: CompletionReport): void {
     const name = current.target;
     deconstructionReceipts(name, body);
+    appliedStatReceipts(name, body);
     commerce(current, body);
     cargo(body);
     if (body.success || realmFailure(body)) success(name, body);
