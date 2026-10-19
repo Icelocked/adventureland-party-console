@@ -53,3 +53,12 @@ Completed owned scenario workspaces are removed by the normal E2E teardown.
 A single local machine is not equivalent to sixteen parallel hosted machines:
 compare the same selected scenarios and distinguish queue/setup from test duration
 before claiming a speedup. Idle runner memory was approximately 83 MiB at setup.
+
+## Automatic CI policy
+
+Updates to an open pull request run only typechecking. They
+do not install browsers or start console, deployment, debug, or gameplay E2Es.
+New PR updates cancel superseded automatic checks for that PR. Pushes to `main`
+retain full hosted validation before release. A manual hosted dispatch runs the
+complete hosted suite; a manual `self_hosted=true` dispatch runs the selected local
+project/filter. Explicit full validation should be run before merging a release PR.

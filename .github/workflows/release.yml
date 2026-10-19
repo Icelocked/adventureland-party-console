@@ -22,10 +22,26 @@ permissions:
   contents: read
 concurrency:
   group: public-release-${{ github.ref }}-${{ inputs.self_hosted && 'local' || 'hosted' }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
+  checks:
+    # PR pushes get fast feedback; full E2Es run on main or explicit dispatch.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.0'
+          cache: npm
+      - run: npm ci
+      - run: npm --prefix dashboard ci
+      - run: node tools/caracal/setup.mts
+      - run: npm --prefix .caracal ci
+      - run: npm run typecheck
   validate:
-    if: ${{ !inputs.self_hosted }}
+    if: github.event_name != 'pull_request' && !inputs.self_hosted
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -65,7 +81,7 @@ jobs:
           include-hidden-files: true
           retention-days: 14
   gameplay:
-    if: ${{ !inputs.self_hosted }}
+    if: github.event_name != 'pull_request' && !inputs.self_hosted
     runs-on: ubuntu-latest
     env:
       E2E_MONGO_IMAGE: mirror.gcr.io/library/mongo@sha256:c630c59342c1493d50345136df2af14a76b9e827dd5316bfabee07a0880a5f3a
