@@ -176,3 +176,36 @@ test('display-only dashboard timers pause while the tab is hidden and read at on
   // Returning to the tab reads the stored preview; it never queues one.
   for (const body of previews) expect(body).toMatchObject({ refresh: false });
 });
+
+test('first render and game log capture reach the dashboard as fast as before', async ({ page, app }, info) => {
+  // The first load also compiles the dev dashboard; time the warm reloads.
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'M', exact: true })).toBeVisible();
+  const renders: number[] = [];
+  for (let index = 0; index < 3; index++) {
+    const started = Date.now();
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'M', exact: true })).toBeVisible();
+    renders.push(Date.now() - started);
+  }
+  const firstRender = [...renders].sort((a, b) => a - b)[1];
+  const opened = Date.now();
+  await page.getByRole('button', { name: 'Show logs', exact: true }).click();
+  const sidebar = page.getByRole('complementary', { name: 'Live logs' });
+  await expect(sidebar).toBeVisible();
+  const logsOpen = Date.now() - opened;
+  // Each line lands at a different point of the 1 s logs poll.
+  const capture: number[] = [];
+  for (let index = 0; index < 6; index++) {
+    await page.waitForTimeout(index * 170);
+    const message = `Latency probe ${index}`;
+    capture.push(await timed(page, '[aria-label="Live logs"]', `text:${message}`, () =>
+      fetch(`${app.url}/party-api/game-logs`, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: app.url },
+        body: JSON.stringify({ character: 'W', events: [{ session: 'latency', seq: index + 1, at: Date.now(), message, color: "white" }] }) })));
+  }
+  const median = [...capture].sort((a, b) => a - b)[Math.floor(capture.length / 2)];
+  const result = { firstRender, logsOpen, capture: { median, max: Math.max(...capture), values: capture } };
+  await info.attach('dashboard-latency', { body: JSON.stringify(result, null, 1), contentType: 'application/json' });
+  console.log('dashboard-latency', JSON.stringify(result));
+  for (const value of capture) expect(value).toBeLessThan(2500);
+});

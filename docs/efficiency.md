@@ -573,3 +573,410 @@ The same rule applies to the card fields from PR #135. `bonuses`
 `title` is per-type data keyed by the copy's title id: the report already
 carries that id as `item.p`, the title definitions (`G.titles`) belong in the
 catalog once, and readers join `titles[item.p]` the way they join `allItems`.
+
+## Requests and logs
+
+The health check, the dashboard's big sections, the container log and two
+browser polls did work nobody used. The health check now asks a 14-byte
+readiness route instead of building the 14.6 MB state. The bank, logs and
+market sections answer 304 with no body while their content is unchanged, and
+any client that does not ask for that gets the full body as before. An unknown
+section answers 400 instead of the full payload. Each party kill and find by
+a caracAL character prints once in the container log, from that character's
+thread, and the account poll logs only when its counts change. The Steam client stops
+fetching a missing activation record every 2 s, and two display-only dashboard
+timers pause in a hidden tab and read at once when it returns. Section times,
+dashboard latency, first render and log capture show no regression beyond
+run-to-run noise.
+
+Measurements ran in `ah-e2e-runner` against the real coordinator with the
+console fixture (`e2e/coordinator.cjs`, fixture heartbeats on). The "live-size"
+bank is 8 packs of 42 items with a 9 KB `world` block per item (3.17 MB), close
+to the 4.4 MB live bank; logs are 1,000 lines for each of three characters
+(349 KB). The client measures each time, body included. Another test stack
+shared the runner, so the runs alternate (v1.4.0, branch, v1.4.0, branch), and
+each value below is one run's median / p95.
+
+### Health check (C1)
+
+**Before.** The gateway's `/health` (`tools/hosting/gateway.ts`) calls
+`servicesHealthy` (`tools/hosting/health.ts`), which fetched
+`/party-api/state?catalog=0` and cancelled the body. The coordinator built the
+whole payload anyway: 14.6 MB and 194 ms per call measured live, every 30 s
+from the production `HEALTHCHECK`.
+
+**Failure modes** (`scripts/tests/native-host-health.test.cjs`):
+
+1. the check builds the full state to answer "is the coordinator up";
+2. it reports healthy while the coordinator is down or answering errors;
+3. it reports unhealthy against an older coordinator without the readiness route;
+4. it skips the dashboard check, or asks the API before the user configures the account.
+
+**Change.** The coordinator serves `GET /party-api/ready` (`{"ready":true}`)
+next to `/party-api/state` (`runtime/coordinator/http/dashboard.ts`), so it
+answers from the same moment. `servicesHealthy` asks it. A rollback can run a
+coordinator older than the host; it answers 404 there, and the check falls
+back to the state route.
+
+The debug image's 3 s health check (`Dockerfile`, `debug` stage) answers from
+`tools/debug/gateway.ts` with a ready flag and never reached the coordinator,
+so it needed no change.
+
+| Read | Bytes | Median / p95 (ms) |
+|---|---:|---:|
+| v1.4.0 `/party-api/state?catalog=0`, live-size bank | 3,187,288 | 46.0 / 88.3, 53.7 / 116.9, 51.5 / 111.1 |
+| Branch `/party-api/ready` | 14 | 0.54 / 1.5, 0.63 / 2.1, 0.45 / 0.8 |
+| Live v1.4.0 state read (breakdown, window A) | 14.6 MB | 194 |
+
+### Unknown sections (C5)
+
+**Before.** `publicState` (`runtime/coordinator/telemetry/public-state.ts`)
+answered a section it did not know with the full payload: 14.3 MB measured live
+for `section=mail`. A unit test pinned that fallback ("unknown sections retain
+full responses").
+
+**Failure modes** (`scripts/tests/coordinator-public-state.test.cjs`,
+`e2e/console-requests.spec.ts`):
+
+1. a mistyped or prototype section name (`constructor`, `__proto__`) answers with the full payload;
+2. a request without a section stops getting the full payload;
+3. a known section changes shape;
+4. a client in the repository asks for a section that does not exist.
+
+**Change.** An unknown section answers 400
+`{"error":"Unknown state section","sections":[...]}`. No section, or an empty
+one, still answers the full payload. The old test now checks the private-state
+rule on the full payload. The console E2E records every state request the
+dashboard makes while it opens the bank and market and finds only known
+sections. The PWA, the APK (`PartyRepository.kt`) and the metrics service
+(`collector.ts`, `follow.ts`, `server.ts`) ask only `core`, `config`, `fast`,
+`inventory`, `logs`, `bank`, `market` and `catalog`.
+
+| `section=mail` | Status | Bytes | Median / p95 (ms) |
+|---|---:|---:|---:|
+| v1.4.0, live-size bank | 200 | 3,187,285 | 47.2 / 83.6 |
+| Branch | 400 | 114 | 0.66 / 10.8 |
+
+### Conditional bank, logs and market sections (C3)
+
+**Before.** The dashboard polls `bank` every 2 s, `logs` every 1 s and `market`
+every 10 s (`dashboard/features/party/query-cache.tsx`, `policies`), and each
+poll carried the whole body: 4.4 MB, 1.2 MB and 1.75 MB live. Express already
+hashed each body for a weak ETag, but browsers add `Cache-Control: no-cache` to
+any fetch that sets `If-None-Match`, and Express's freshness check then always
+answers 200. The fixture measurement showed one stable ETag per section and a
+200 to every conditional request.
+
+What each section carries (`createPublicStateRoute`):
+
+| Section | Fields |
+|---|---|
+| `bank` | `bank` (snapshot), `bankVaults`, `bankCurrent`, `bankQueue`, and `bankbois` with `dashboard=1` |
+| `logs` | `gameLogs`, `combatLogs`, `merchantActivity` |
+| `market` | `aldata`, `ponty`, `standPriceHistory` |
+
+The bank tab (`usePanelModel`) lays the `bank`, `market` and `logs` domains over
+the `core`, `config` and `catalog` domains. Marks for sale, withdrawal and
+upgrade, NPC sale marks, automatic rules, stand listings, BankBoi summaries and
+bank gold come from `config` and `core`. Those sections keep their polling, and
+each dashboard action keeps invalidating the domains in `actionDomains`
+(`query-actions.ts`).
+
+**Failure modes** (`scripts/tests/coordinator-section-revision.test.cjs`,
+`scripts/tests/dashboard-section-revision.test.cjs`,
+`e2e/console-requests.spec.ts`):
+
+1. an unchanged bank, logs or market section resends its whole body on every poll;
+2. the revision stays the same although a field the section carries changed,
+   so the dashboard keeps showing old bank contents, jobs, logs or prices;
+3. a client that sends no revision (PWA, APK, metrics) gets anything but the full body;
+4. a stale or malformed revision answers 304;
+5. sections outside bank, logs and market start answering 304;
+6. a 304 replaces the cached data with nothing, or the dashboard sends a
+   revision for data it no longer holds (replaced by `setQueryData`, removed);
+7. structural sharing loses the revision, so the dashboard never gets a 304;
+8. a mark, unmark, withdrawal mark or rule change, or a bank change, shows later than in v1.4.0;
+9. auth loss and server errors behave differently.
+
+**Change.**
+
+- **Coordinator.** `sendWithRevision`
+  (`runtime/coordinator/telemetry/section-revision.ts`) serializes the section
+  once, hashes it with SHA-1 (the hash Express computed for its ETag) and sets a
+  strong ETag. A request whose `revision=` query or `If-None-Match` header
+  matches answers 304 with no body. The revision is a hash of the whole body,
+  so a change in any field in the table above answers 200; the unit test
+  mutates each field and checks for a new revision.
+- **Dashboard.** `readRevision` (`query-cache.tsx`) keeps each revision with
+  the cached data object it arrived with (a `WeakMap`), and sends it only while
+  that object is still the cached value. A 304 returns the cached object, so
+  nothing re-renders. The domains' `structuralSharing` carries the revision to
+  the shared object. The dashboard reads a section in full after `setQueryData`
+  replaces its data or the cache removes it.
+- **External clients.** A client that sends neither `revision=` nor a matching
+  `If-None-Match` gets the same body as v1.4.0 (field-for-field test). The PWA
+  and APK (`pm-worktrees/mobile-fork`, `origin/dev` of
+  `adventureland-party-mobile`) and the metrics service
+  (`party-console-metrics/src`) send neither, so they need no change. The
+  gateway's `Cache-Control: no-store` keeps browsers from caching the body, as
+  before.
+
+- **Test mocks.** Console E2E tests that rewrite a fetched state body
+  (`page.route('**/party-api/state*')` with `route.fetch()`) kept the real
+  ETag on the rewritten body, so the next poll's revision matched the real
+  body and `route.fetch()` returned a 304 with nothing to rewrite (three
+  failures in the first full run). They now fetch through
+  `e2e/state-route.ts`, which drops the revision. A proxy that rewrote bodies
+  and passed the ETag through would hit the same problem; nothing in the
+  hosting stack rewrites bodies.
+
+The server still builds and serializes the section on every poll; a 304 saves
+the transfer, the browser's parse and React Query's structural comparison.
+
+| Section (fixture, live-size bank) | Bytes | v1.4.0 median / p95 (ms) | Branch, no revision | Branch, unchanged (304) |
+|---|---:|---:|---:|---:|
+| `bank` | 3,167,456 | 35.9 / 75.7, 42.8 / 106.0, 54.7 / 84.3 | 42.0 / 101.5, 48.6 / 121.5, 48.1 / 96.8 | 0 B: 16.4 / 42.0, 19.8 / 76.1, 24.1 / 61.4 |
+| `logs` | 348,580 | 3.6 / 36.7, 5.2 / 31.3, 4.9 / 26.1 | 2.7 / 25.8, 3.6 / 17.8, 4.0 / 30.3 | 0 B: 1.9 / 2.6, 2.2 / 8.8, 2.4 / 19.1 |
+| `market` | 390 | 0.64 / 3.7 | 0.51 / 1.0 | 0 B: 0.46 / 1.7 |
+
+The v1.4.0 conditional reads (the same request with its ETag) answered 200 with
+the full body: bank 60.6 / 103.5, 46.2 / 77.4, 50.0 / 101.4 ms.
+
+Bank tab latency in the real dashboard (`bank tab shows marks, unmarks,
+withdrawals, rules and bank changes as fast as before`), ms from the action to
+the tile change, median of 3 (bank change: of 5, each landing at a different
+point of the 2 s poll), two runs each:
+
+| Action | v1.4.0 | Branch |
+|---|---:|---:|
+| Mark for withdrawal | 856, 903 | 923, 575 |
+| Unmark withdrawal | 904, 975 | 856, 566 |
+| Sell to NPC (banner "NPC sale") | 690, 671 | 743, 542 |
+| Clear all marks | 1,098, 787 | 1,065, 685 |
+| Auto sell to NPC rule (banner "Auto NPC", one sample) | 673, 679 | 671, 372 |
+| Bank content change (new tile) | 753, 1,116 | 800, 1,192 |
+| Bank polls answered 304 | 0 of 16, 0 of 15 | 9 of 15, 9 of 15 |
+
+Bank change samples: v1.4.0 645-1,583 ms, branch 318-1,575 ms, the spread of
+one 2 s poll in both.
+
+While farming, `logs` changes almost every second (every kill adds a line), so
+it answers 304 mostly between fights and when the party is idle. A cursor for
+new log entries would cut it further; that changes the section's shape for
+clients that opt in, so it waits for a later change.
+
+### Duplicate game log lines (L1)
+
+**Before.** caracAL's hook in `src/CharacterThread.js` wraps `add_log` and
+prints every `game_logs` entry through pino to the container's stdout. The game
+delivers each party event to every member's client, so with three headless
+fighters each kill printed three times. Live, kill and gold lines were 89% of
+17,397 lines/h (breakdown window A). Each character's `N gold` line is its own
+share of the loot, not a copy of another character's line.
+
+**Failure modes** (`scripts/tests/game-log-echo.test.cjs`,
+`scripts/tests/coordinator-installer.test.cjs`):
+
+1. every caracAL thread prints a party kill or find that a sibling thread also receives;
+2. a thread stops printing a line about its own character;
+3. two separate events with identical text lose a line, in stdout or in the console capture;
+4. a kill or find by a party member outside this caracAL process (the Steam client) leaves stdout;
+5. the console capture (`gameLogs`) changes in any byte;
+6. a phrase lookup that no `add_log` follows silences the next unrelated line;
+7. without a siblings list, or for lines without a phrase, anything stops printing.
+
+**Change.** `installGameLogEcho` (`runtime/characters/game-log-echo.ts`)
+replaces the hook. The game's `game_log` handler calls
+`ui_log(phrase.message(data, true), data.color)`, so the installer wraps
+`phrase.message` to read the event's own phrase arguments. A thread does not
+print a `server.kill.player.*` or `server.item.named_found.*` event whose
+`player` is one of its running caracAL siblings (`siblings_and_acc`) other than
+itself. That sibling receives the same event and prints it; live logs show a
+killer's own thread printing "Recharged killed a Tiny Crab" and a finder's
+printing "Sadokunn found a Seashell". The choice comes from the event, never
+from comparing message text, so two Goos killed at once by the same character
+print twice. A kill by the Steam client keeps printing from every thread, as
+before. Gold shares, other phrases and plain strings print as before.
+
+Every event still reaches `add_log`, so the console's capture
+(`installHostGameLogs`, `runtime/characters/game-logs.ts`) sees the same lines.
+The unit test feeds one event stream through the upstream hook and through the
+new one, with the capture installed on top as `runner-host.ts` does, and
+compares the captured entries byte for byte. The metrics service counts kills
+and finds from `gameLogs` and only from the killer's or finder's own log
+(`party-console-metrics/src/parse.ts`, `kill` and `drop`), so its counts stay
+the same.
+
+**How the console carries it.** `tools/caracal/setup.mts` pins upstream
+caracAL at revision `234af745` and applies
+`patches/caracal-current-api.patch`. The patch is unchanged for L1:
+`tools/caracal/upgrade-runner.mts` adds one guarded line in front of the
+upstream hook at install time, like `installGameRendering`. An older lifecycle
+bundle without the installer (a rolled-back console build) runs the upstream
+hook.
+
+Live log mix, 30 minutes read with `docker logs` (read-only) on 2026-10-19:
+
+| Lines | 30 min |
+|---|---:|
+| All | 1,887 |
+| `game_logs` | 1,254 (498 kills, 96 finds, 504 gold shares) |
+| Kill and find lines a sibling prints instead | 396 (21% of all lines) |
+| Account info pair (L2) | 598 (32%) |
+| After L1 and L2 | about 893 (-53%) |
+
+On the breakdown's busier window A (17,397 lines/h, 7,767 kill lines), L1
+removes about 5,200 lines/h and L2 about 1,200, roughly 37%.
+
+### Account info poll (L2)
+
+**Before.** caracAL's `account_info.js` POSTs
+`adventure.land/api/servers_and_characters` every 6 s and logged "updating
+account info" and "found N servers and N characters" on each poll: 1,198 lines/h.
+
+**Failure modes** (`scripts/tests/account-info-log.test.cjs`):
+
+1. every poll logs the pair although nothing changed;
+2. a change in the server or character count goes unlogged;
+3. the poll leaves the first account read after start unlogged;
+4. the poll interval, the response or the listeners change;
+5. a failed poll stops logging its warning.
+
+**Change.** The poll line logs at debug. The found line logs at info on the
+first read and when its text changes, and at debug otherwise. Log level
+`debug` shows every poll as before.
+
+**Interval.** The poll stays at 6 s. Readers of `my_acc.response` in
+`runtime/coordinator/application.ts`:
+
+| Reader | Freshness need |
+|---|---|
+| `connectionCount` (realm switch, `connectionToSuspend` in `realm-switch.ts`) | reads the cached response without a refresh while it decides whether to suspend a slot |
+| `accountCharacters`, `characterCount`, `rosterProjection` (`online`, `server`, `level` in the roster) | the dashboard and roster routes display and check them |
+| `servers` (`publicOverview`, giveaway realms) | display |
+| `subscribeAccount` listener | pushes `siblings_and_acc` to every character thread on each poll (the game's account data and the L1 siblings list) |
+| `confirmOffline`, `confirmAccountHomes`, character creation, realm routes, mail | call `updateInfo()` themselves |
+
+A slower poll would make the first four staler, and the realm switch reads its
+count without asking, so the interval stays.
+
+**How the console carries it.** The change is a hunk of
+`patches/caracal-current-api.patch` (`account_info.js`), regenerated with
+`git diff` from a clean clone at the pinned revision; the rest of the patch is
+byte-identical. Docker builds and fresh installs apply it.
+`tools/caracal/setup.mts` skips the patch on a checkout that already has the
+previous version applied, so an existing local install keeps the old logging
+until someone reinstalls it.
+
+### Activation record poll (H2)
+
+**Before.** The universal loader (`runtime/characters/universal-loader.ts`,
+published as `characters/universal-loader.js`) asks for
+`CODE/adventure_land/activation.json` every 2 s. Only a managed console build
+deployment writes that record (`publishCode` in
+`tools/console-build/hosting.ts`). The live console runs the production image
+without `AL_CONSOLE_MANAGED`, so the coordinator serves `CODE` and has no
+record: the Steam client got a 404 every 2 s (61 in 2 minutes measured live)
+and returned early.
+
+**Failure modes** (`scripts/tests/loader-activation-poll.test.cjs`,
+`e2e/console-requests.spec.ts`):
+
+1. the loader asks for `activation.json` every 2 s while the host has none;
+2. the loader ignores an activation the host publishes later, or adopts it a tick late;
+3. the loader stops asking a host that does not report its activation for the record;
+4. the `console-deployment` poll, its maintenance hold, or the startup manifest load change.
+
+**Change.** `/party-api/console-deployment`, which the loader already polls on
+the same tick, names the host's activation record in `activation`, or `null`
+when there is none. The managed host reads its deployed directory; the
+coordinator reads its `CODE` directory. While the reply says `null`, the loader
+skips `activation.json` after its first load. When a record appears, the
+control reply that reports it starts a refresh at once, so the loader adopts
+a new activation on the same tick as before. The loader asks a host that
+leaves the field out (an older host) for the record on every tick, as before.
+A loader older than the host ignores the field.
+
+| Steam client, host without a record | Requests per minute |
+|---|---:|
+| v1.4.0 | 30 `console-deployment` + 30 `activation.json` (404) |
+| Branch | 30 `console-deployment` |
+
+The Steam client keeps the loader it started with until it reloads.
+
+### Hidden-tab dashboard timers (H4)
+
+Each plain `setInterval` in the breakdown, and what it does:
+
+| Timer | Request | Role | Branch |
+|---|---|---|---|
+| `console-build-control.tsx`, 1 s | `GET /console-build` | Shows build and deployment state. After the tab's own deployment completes with a new dashboard, it reloads the page. | Unchanged. It already returns early while `document.hidden` and refreshes on `visibilitychange`, so the post-deploy reload waits until the tab is visible, as in v1.4.0. The deployment itself runs on the host. |
+| `console-updates.tsx`, 3 s | `GET /console-update` | Shows update status in the header and in Settings. Download, restart and preference changes are click POSTs. | Paused while hidden; reads at once on return. |
+| `debug-instance.tsx`, 1.5 s | `GET /console-debug` | Shows the debug instance. The host's `status()` (`tools/debug/service.ts`) also marks a running instance as failed when its container turns unhealthy, so the read drives a state change. | Unchanged. It runs only while Settings is open. |
+| `upgrade-preview-panel.tsx`, 2 s | `POST /upgrade-preview` with `refresh: false` | Reads the stored preview (`createUpgradePreviews`, `request`); only the Refresh chances click queues one. | Paused while hidden; reads at once on return, still with `refresh: false`. |
+
+No flow depends on a timer that now pauses. Browsers also throttle timers in
+hidden tabs, so a flow that needed one would already be unreliable there.
+
+**Failure modes** (`e2e/console-requests.spec.ts`, `display-only dashboard
+timers pause while the tab is hidden and read at once on return`):
+
+1. a display-only timer keeps requesting while the tab is hidden;
+2. a tab that becomes visible shows a stale view until the next tick;
+3. returning to the tab queues an upgrade preview;
+4. a timer that drives a flow stops.
+
+The test hides the tab (`document.hidden` and `visibilitychange`) for 7 s with
+an upgrade preview open:
+
+| Requests while hidden, 7 s | v1.4.0 | Branch |
+|---|---:|---:|
+| `/console-update` | 4 | 0 |
+| `/upgrade-preview` | 4 | 0 |
+| `/console-build` | 0 | 0 |
+| First read after return, ms (update / preview) | 936-1,460 / 1,751-1,815 (next tick) | 46-119 / 50-127 |
+
+### Dashboard first render and log capture
+
+`first render and game log capture reach the dashboard as fast as before`
+(`e2e/console-requests.spec.ts`), three runs per tree, interleaved. First
+render is the median of three warm reloads until the merchant card shows (the
+first load also compiles the dev dashboard). Log capture is the time from
+`POST /party-api/game-logs` to the line in the Live logs sidebar, median of 6
+lines placed across the 1 s logs poll.
+
+| Run | v1.4.0 first render / logs open / capture (ms) | Branch |
+|---|---|---|
+| 1 | 2,311 / 111 / 627 | 2,764 / 320 / 630 |
+| 2 | 4,482 / 131 / 635 | 2,553 / 349 / 630 |
+| 3 | 2,715 / 301 / 609 | 2,630 / 223 / 638 |
+
+Capture samples ranged 83-997 ms on v1.4.0 and 70-955 ms on the branch, one
+logs poll in both.
+
+### Tests
+
+Run in `ah-e2e-runner` on the branch tip (`.caracal` reinstalled with the
+branch's patch and installer), against the v1.4.0 baselines:
+
+| Check | v1.4.0 | Branch |
+|---|---|---|
+| `npm run typecheck` | clean | clean |
+| `npm run lint:runtime` | 132 | 132 |
+| Dashboard oxlint | 56 | 56 |
+| Unit (`npm run test:unit`) | 2 failures (Caddy HTTPS, launcher restart) | 3,713 / 3,715; the same 2 failures |
+| Console E2E | 78 | 83 / 84 (78 + 6 new) |
+
+The one console E2E failure, `log character pills default to all and
+independently filter live updates across tabs`, passed in the first full run
+of the branch and failed in the second and in four isolated reruns while
+another test stack held the runner at load 13-15. v1.4.0 failed it the same
+way (the sidebar never opens) in two reruns in the same window. The test
+opens the log sidebar 2 s after load, before a slow dev server has finished
+its first reload.
+
+New tests: `native-host-health`, `coordinator-public-state` (400),
+`coordinator-section-revision`, `dashboard-section-revision`,
+`game-log-echo`, `coordinator-installer` (echo transform),
+`account-info-log`, `loader-activation-poll`, and six console E2E tests in
+`e2e/console-requests.spec.ts`.
