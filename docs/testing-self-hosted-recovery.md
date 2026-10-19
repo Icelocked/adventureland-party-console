@@ -450,3 +450,18 @@ including all 13 full-run failures, with 1738 hashes verified and 36 workspaces
 removed. The corrected clock case passes in the retained two-case follow-up;
 these are separate focused runs. TypeScript checks pass. A new clean full
 self-hosted workflow remains the release-quality gate.
+
+Run 39252732969 exposes a separate lucky-slot browser failure after restart:
+the exact slot-1 tooltip is absent. Its persisted ledger still computes nextSlot=1
+and inferred=false, and the actual trace shows Raw Emerald with the lucky-slot
+menu binding. The final DOM has no tooltip at all. Before changing the fixture,
+retain the exact slot-1 tooltip, inference lapse, restart and subsequent dialog
+checks. Bring the real page forward and retry an actual leave/re-enter hover plus
+the exact visible tooltip together within the original 15-second assertion budget;
+capture the visible tooltip before opening its existing menu. No inference or
+gameplay rule, timeout, expected text or scenario selection changes.
+
+Both lucky-slot browser journeys pass three consecutive repetitions after this
+interaction correction: six passes, 72 evidence hashes verified. Stop the known
+failed full run and preserve its partial evidence before replacing it with a clean
+full run of the corrected commit. A cancelled partial run is not a passing suite.
