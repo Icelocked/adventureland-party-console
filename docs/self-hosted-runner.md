@@ -22,11 +22,11 @@ Do not approve untrusted workflow changes for execution on this personal machine
 labels and workflow conditions are routing controls, not an isolation boundary.
 See [GitHub runner security](https://docs.github.com/en/actions/reference/security/secure-use).
 
-The dedicated checkout lives under `.build/self-hosted-work/`, separate from the
-live installation. Its `R:` drive alias keeps nested executable paths within Windows
-limits; the launcher recreates that alias at login and refuses to replace an occupied
-drive. Preparation installs pinned dependencies and fixtures there;
-it never activates the live console. Ignored build/dependency caches are reused.
+The dedicated checkout lives under `C:\al-ci\`, separate from the live installation.
+This is a real short directory, not a drive alias or junction: it avoids Windows
+native executable path limits while retaining the repository's strict cleanup
+root checks. Preparation installs pinned dependencies and fixtures there; it never
+activates the live console. Ignored build/dependency caches are reused.
 The runner application lives in `.build/self-hosted-runner/`, including its local
 credentials; neither directory belongs in Git. The initial official Windows x64
 runner package is v2.338.0, SHA256
