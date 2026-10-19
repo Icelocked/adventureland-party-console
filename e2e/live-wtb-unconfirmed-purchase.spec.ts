@@ -35,11 +35,28 @@ for (const bought of [false, true]) {
     await info.attach('wtb-unconfirmed-before', { body: await page.screenshot(), contentType: 'image/png' });
     await row.getByRole('button', { name: bought ? 'It was bought' : "It wasn't bought", exact: true }).click();
     await expect(row).toBeHidden({ timeout: 15_000 });
+    await expect.poll(async()=>{const state=await live.state();return {purchases:state.nativeStand.purchases,silk:state.standBids.spidersilk.quantity,leather:state.standBids.leather.quantity};},{timeout:15_000}).toEqual({purchases:{},silk:bought?44:45,leather:3});
     const state = await live.state();
     // 3, 5: the purchase is gone, counted once only when bought, and Leather is untouched.
     expect(state.nativeStand.purchases).toEqual({});
     expect(state.standBids.spidersilk.quantity).toBe(bought ? 44 : 45);
     expect(state.standBids.leather.quantity).toBe(3);
+    await expect(live.post('/merchant/native-stand',{action:'resolve-purchase',id:key,bought})).rejects.toThrow(/no longer pending/i);
+    await live.restartCoordinator();
+    await expect.poll(async()=>{const state=await live.state();return {purchases:state.nativeStand.purchases,silk:state.standBids.spidersilk.quantity,leather:state.standBids.leather.quantity};},{timeout:30_000}).toEqual({purchases:{},silk:bought?44:45,leather:3});
     await info.attach('wtb-unconfirmed-after', { body: JSON.stringify({ purchases: state.nativeStand.purchases, bids: state.standBids }), contentType: 'application/json' });
   });
 }
+
+test('unconfirmed WTB resolution refuses a still queued purchase job',async({live},info)=>{
+ test.setTimeout(180_000);
+ await live.post('/merchant/force-stand',{enabled:true});
+ await live.restoreHistoricalSettings(()=>({...seed(),merchantQueue:[{id:stale,target:'E2EMerchant',reason:'stand purchases',queuedAt:Date.now(),listings:[]}]}));
+ await expect.poll(async()=>{const state=await live.state();return state.merchantQueue.some((job:any)=>job.id===stale)&&!!state.nativeStand?.purchases?.[key];},{timeout:30_000}).toBe(true);
+ for(const bought of [false,true])await expect(live.post('/merchant/native-stand',{action:'resolve-purchase',id:key,bought})).rejects.toThrow(/still in progress/i);
+ let state=await live.state();expect(Object.keys(state.nativeStand.purchases)).toEqual([key]);expect(state.standBids.spidersilk.quantity).toBe(45);expect(state.standBids.leather.quantity).toBe(3);
+ await live.post('/merchant/job/cancel',{id:stale});
+ await live.post('/merchant/native-stand',{action:'resolve-purchase',id:key,bought:true});
+ await expect.poll(async()=>{const state=await live.state();return {purchases:state.nativeStand.purchases,silk:state.standBids.spidersilk.quantity,leather:state.standBids.leather.quantity};},{timeout:15_000}).toEqual({purchases:{},silk:44,leather:3});
+ state=await live.state();await info.attach('wtb-in-progress-resolution-guard',{body:JSON.stringify({nativeStand:state.nativeStand,bids:state.standBids,queue:state.merchantQueue}),contentType:'application/json'});
+});
