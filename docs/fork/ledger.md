@@ -110,11 +110,11 @@ Issues filed before the work landed, features that changed with use, and maintai
 
 ### Phoenix split search
 
-[#56 · updated 10-08](https://github.com/Ryan-Haines/adventureland-party-console/issues/56)
+[#56 · updated 10-18](https://github.com/Ryan-Haines/adventureland-party-console/issues/56)
 
 [6be5492](https://github.com/Thefonze74065/adventureland-party-console/commit/6be5492), [aebe90a](https://github.com/Thefonze74065/adventureland-party-console/commit/aebe90a), [706d2b9](https://github.com/Thefonze74065/adventureland-party-console/commit/706d2b9)
 
-- Point 8 was rewritten for the outrun escape, then restored on 10-08 to “defends itself through ordinary combat” after the escape was discarded.
+- Point 8 was rewritten for the outrun escape, then restored on 10-08 to “defends itself through ordinary combat” after the escape was discarded. On 10-18 it was rewritten again to outrun-or-kill on search and converge legs (the user chose to describe the fork's restored rule), so #56 matches the fork.
 
 - Add the two later fixes: a resent search id no longer flips control every second, and encounter/loot routes now retry. In 3 simulated hours: 30 kills (22 before).
 
@@ -122,9 +122,9 @@ Issues filed before the work landed, features that changed with use, and maintai
 
 - Fixed 10-09 ([5166889](https://github.com/Thefonze74065/adventureland-party-console/commit/5166889)): when the Phoenix already has a target, members still converging kept standing still while a gathered member fought it. A new live journey covers it (231 s stalled before, in range after 38.5 s). [Commented on #56](https://github.com/Ryan-Haines/adventureland-party-console/issues/56#issuecomment-6075671935).
 
-- Fixed 10-18 (this commit): converging members restarted their route, and a far member its town warp, on every sighting, because the Phoenix drifts past the fixed 100-unit re-aim rule every 2-3 s. Re-aim now scales with the trip left and never interrupts a warp or transport. Not yet commented on #56.
+- Fixed 10-18 (this commit): converging members restarted their route, and a far member its town warp, on every sighting, because the Phoenix drifts past the fixed 100-unit re-aim rule every 2-3 s. Re-aim now scales with the trip left and never interrupts a warp or transport. In #56 since 10-18.
 
-- Fixed 10-18 (second commit): a busy member no longer ends a converge (8c) and its resent control is no longer rejected by the loot filter (8e); a distant fight no longer pulls a spotter off the Phoenix (8f); a warp is kept only while the Phoenix is out of sight (13a); and on Phoenix legs fighters walk away from attackers they can outrun (8d, the 946a7bd rule restored for Phoenix legs only by the user's choice). Not yet commented on #56.
+- Fixed 10-18 (second commit): a busy member no longer ends a converge (8c) and its resent control is no longer rejected by the loot filter (8e); a distant fight no longer pulls a spotter off the Phoenix (8f); a warp is kept only while the Phoenix is out of sight (13a); and on Phoenix legs fighters walk away from attackers they can outrun (8d, the 946a7bd rule restored for Phoenix legs only by the user's choice). In #56 since 10-18.
 
 ### Live WTB counts bank stock
 
