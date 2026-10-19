@@ -11,10 +11,12 @@ import { CharacterStatsDialog } from './character-stats-dialog';
 import { GearComparisonDialog } from './gear-comparison-dialog';
 import { ItemCard } from './item-card';
 import { comparisonSlotsFor } from './comparison-slots-for';
+import { SpriteCrop } from './sprite-crop';
+import { useCharacterData } from './dashboard-live';
 import type { Char } from './char';
 import type { InventoryEntry } from './inventory-entry';
 export function OfflineCharacterView({
-  character,
+  character: savedCharacter,
   onClose,
   offline = true,
 }: {
@@ -22,6 +24,11 @@ export function OfflineCharacterView({
   onClose: () => void;
   offline?: boolean;
 }) {
+  const inventory = useCharacterData(savedCharacter.name, 'inventory');
+  const vitals = useCharacterData(savedCharacter.name, 'vitals');
+  const character = offline ? savedCharacter : { ...savedCharacter, ...vitals, ...inventory,
+    characterDollHtml: vitals?.characterDollHtml || savedCharacter.characterDollHtml,
+    characterSprite: vitals?.characterSprite || savedCharacter.characterSprite };
   const [stats, setStats] = useState(false),
     [item, setItem] = useState<InventoryEntry | null>(null),
     [comparison, setComparison] = useState<InventoryEntry | null>(null);
@@ -82,6 +89,7 @@ export function OfflineCharacterView({
                         className={`${button} w-full text-sm`}
                         onClick={() => setItem(entry)}
                       >
+                        {entry.meta?.sprite && <span role="img" aria-label={`${label} sprite`} className="relative mx-auto block h-12 w-12"><SpriteCrop sprite={entry.meta.sprite}/></span>}
                         {entry.label}
                         <br />
                         {label}
@@ -101,8 +109,12 @@ export function OfflineCharacterView({
               </div>
             </section>
           ))}
+        </DialogContent>
           {item && (
-            <section aria-label="Inspected item">
+            <Dialog open onOpenChange={open=>{if(!open)setItem(null);}}>
+            <DialogContent className="max-h-[85vh] overflow-auto border-slate-600 bg-[#0b1916] text-white">
+            <DialogHeader><DialogTitle>{String(item.meta?.definition.name || item.item.name)} +{item.item.level || 0}</DialogTitle></DialogHeader>
+            {item.meta?.sprite && <span role="img" aria-label="Inspected item sprite" className="relative block h-12 w-12"><SpriteCrop sprite={item.meta.sprite}/></span>}
               <ItemCard
                 item={item.item}
                 meta={item.meta}
@@ -113,10 +125,10 @@ export function OfflineCharacterView({
                 skillHint={() => undefined}
                 onSkill={() => {}}
               />
-            </section>
+            {comparisonSlotsFor(item.meta, character).length > 0 && <button className={button} onClick={()=>{setComparison(item);setItem(null);}}>Compare</button>}
+            </DialogContent>
+            </Dialog>
           )}
-        </DialogContent>
-      </Dialog>
       {stats && (character.inspection && !character.inspection.calculated ? <Dialog open onOpenChange={open=>{if(!open)setStats(false);}}><DialogContent className="border-slate-600 bg-[#0b1916] text-white"><DialogHeader><DialogTitle>{character.name} saved stats</DialogTitle></DialogHeader><p>{character.inspection.note}</p><p>Level: {character.level}</p><p>XP: {character.xp.toLocaleString()}</p><p>HP: {character.hp}</p><p>MP: {character.mp}</p><p>Gold: {character.gold.toLocaleString()}</p><p>Maximum HP/MP, attack, armor, resistance and attributes: unavailable</p></DialogContent></Dialog> : <CharacterStatsDialog offline={offline} character={character} onOpenChange={open=>{if(!open)setStats(false);}}/>)}
       <GearComparisonDialog
         comparison={comparison ? { character, entry: comparison } : null}
@@ -125,6 +137,7 @@ export function OfflineCharacterView({
           if (!open) setComparison(null);
         }}
       />
+      </Dialog>
     </>
   );
 }

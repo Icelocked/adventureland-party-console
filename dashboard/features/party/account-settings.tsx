@@ -20,7 +20,10 @@ export function AccountSettings({ state }: { state: PartyState }) {
     <div className="mt-4 space-y-4">
       {inspected && (
         <OfflineCharacterView
-          character={inspected}
+          character={{...inspected,
+            characterDollHtml: inspected.characterDollHtml || state.characterAppearances?.[inspected.name]?.characterDollHtml,
+            characterSprite: inspected.characterSprite || state.characterAppearances?.[inspected.name]?.characterSprite,
+            skin: inspected.skin || state.characterAppearances?.[inspected.name]?.skin}}
           offline={!state.characters[inspected.name]}
           onClose={() => setInspected(null)}
         />
