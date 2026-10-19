@@ -14648,8 +14648,26 @@
     var defense=typeof huntTravelDefense==='function' && huntTravelDefense() && (convoyTraveling.defenseTargets||[]).some(function(t){return passingKey(t)===passingKey(target);});
     if(!defense && !isAttackingPartyMember(target))return false;
     var deaths = typeof groupedCombat !== 'undefined' && groupedCombat && groupedCombat.deaths || [];
-    if(deaths.some(function(d){return String(d.id)===String(target.id) && d.map===character.map &&
-      String(d.in==null?d.map:d.in)===String(character.in==null?character.map:character.in) && d.server===reunionRealm();}))return false;
+    // departureTargetEngaged runs for every visible monster that attacks the
+    // party on each travel and target check, and the list holds up to 512
+    // tombstones (runtime/combat/queue.ts), so it indexes the ids that apply
+    // here once per list. The coordinator replaces the list or appends to it.
+    // A new list, a new length or another realm, map or instance rebuilds the
+    // index. The cache lives on the function, as in isPassingEncounter, so
+    // extracted test harnesses install it too.
+    var instance = String(character.in==null?character.map:character.in), realm = reunionRealm();
+    var context = realm + '|' + character.map + '|' + instance;
+    var indexes = departureTargetEngaged.deathIds || (departureTargetEngaged.deathIds = new WeakMap());
+    var index = indexes.get(deaths);
+    if(!index || index.length !== deaths.length || index.context !== context){
+      var ids = new Set();
+      deaths.forEach(function(d){
+        if(d.map===character.map && String(d.in==null?d.map:d.in)===instance && d.server===realm)ids.add(String(d.id));
+      });
+      index = {length:deaths.length,context:context,ids:ids};
+      indexes.set(deaths,index);
+    }
+    if(index.ids.has(String(target.id)))return false;
     return true;
   }
   function departureCombatPending() {
