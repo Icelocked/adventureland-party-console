@@ -5,19 +5,26 @@ The repository runner `party-console-5090-manual` uses the unique label
 GitHub-hosted Ubuntu/Windows or generic self-hosted runners do not select it.
 
 On the Actions **Validate and release** workflow, choose **Run workflow**, select
-`1.5-feature-branch`, enable `self_hosted`, choose `local_project`, and supply a
-`local_grep` title filter. The initial filter runs the character-section journey.
-The following command also works before these input controls are merged into the
-default branch:
+`1.5-feature-branch`, and enable `self_hosted`. The project defaults to `all` and
+the optional title filter defaults to empty, so this runs the complete suite.
+
+- `console`: dashboard/browser and console deployment journeys; no live gameplay.
+- `live`: ChronAL gameplay journeys with actual clients and server boundaries.
+- `debug`: debug-instance and debug-container journeys.
+- `all`: all three projects, including browser, deployment, debug and gameplay.
+
+An optional title filter deliberately narrows the selected project(s) for diagnosis.
+For a full run, leave it empty. The equivalent command is:
 
 ```powershell
-gh workflow run release.yml --ref 1.5-feature-branch -f self_hosted=true -f local_project=console -f "local_grep=character sections collapse independently"
+gh workflow run release.yml --ref 1.5-feature-branch -f self_hosted=true -f local_project=all -f local_grep=
 ```
 
-Clear the filter to run the complete selected project; `all` retains console,
-deployment, debug, and ChronAL gameplay coverage. No release is published by this
-manual path. The self-hosted job additionally requires the repository owner to
-invoke it on the named branch. Pull requests and automatic pushes retain hosted CI.
+The local job only validates and uploads evidence. It does not create a release,
+publish packages/images, or activate the live console. The version job explicitly
+rejects `self_hosted=true`, and all packaging/publishing jobs depend on that job.
+The self-hosted job requires the repository owner to invoke it on the named branch.
+Automatic PR checks retain hosted CI.
 Do not approve untrusted workflow changes for execution on this personal machine:
 labels and workflow conditions are routing controls, not an isolation boundary.
 See [GitHub runner security](https://docs.github.com/en/actions/reference/security/secure-use).

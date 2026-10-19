@@ -13,11 +13,11 @@ on:
         description: 'Local E2E project (all includes browser, deployment, debug and gameplay)'
         type: choice
         options: [console, live, debug, all]
-        default: console
+        default: all
       local_grep:
         description: 'Optional local title filter; clear to run the complete selected project'
         type: string
-        default: 'character sections collapse independently'
+        default: ''
 permissions:
   contents: read
 concurrency:
@@ -210,7 +210,7 @@ jobs:
           retention-days: 14
   version:
     needs: [validate, gameplay]
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && !inputs.self_hosted
     runs-on: ubuntu-latest
     permissions:
       contents: write
