@@ -204,6 +204,9 @@ export function startCoordinatorApplication(
       persistHistory,
     });
     const persistence = coordinatorPolicies.createCoordinatorPersistence(party, localStorage);
+    // A farm-area snapshot saved while record() was idle keeps expired hits.
+    for (const scope of [party, ...Object.values(party.farmingProfiles || {})])
+      if (scope?.farmAreaState) farmAreaControl.prune(scope.farmAreaState, Date.now());
     if (initializeStandLocation(party, Object.keys(persistedSettings).length === 0, canStand)) persistence.settings();
     const storageService = coordinatorPolicies.createCoordinatorStorageService(
       party,

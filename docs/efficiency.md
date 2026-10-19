@@ -226,3 +226,132 @@ Failure inventory:
 
 Tests: `scripts/tests/coordinator-jsonl-store.test.cjs` (1-4, 8 new; 5-7 by
 the existing size, sharing-conflict and malformed-input tests).
+
+### Retention (P5)
+
+Every collection below is Ryan's v1.4.0 code (checked with
+`git show v1.4.0:<path>`). Counts come from the live journal on 2026-10-05,
+10-08, 10-11 and 10-18.
+
+Four collections keyed by game entity ids or player names had no expiry:
+
+| Collection | Live growth | Window derived from the code | Fix |
+|---|---|---|---|
+| `farmAreaState.seen`, `.quiet`, `.activity`, top level and in each `farmingProfiles` entry | `seen` 0 to 38 entries, then frozen | `record()` in `scripts/farm-area-control.cjs` ignores hits older than 10 s and drops `seen` after 15 s, finished `activity` after 10 s and `quiet` after `COOLDOWN` (120 s), but only while it runs, so a snapshot saved while it is idle keeps them | `prune()` holds those three rules; `record()` calls it, and the coordinator applies it at load (`application.ts`) |
+| `mluckCastAt` (player name) | 35 to 49 names | `mluckRemaining` (`merchant/luck.ts`) gives 0 for a cast older than `luckDurationMs` (1 h), the same as no cast | `pruneLuckCasts` drops casts at least 1 h old, on each new cast (`merchant/completion-results.ts`) and at load (`merchant/initial-gathering.ts`) |
+| `rarePursuitProgress` (monster instance id) | 1 to 25 | none: an entry matters while its monster lives, and `rare-hunting.ts` deletes it only on a kill or retry evidence | `keepNewestRare` keeps the newest 100 by `progress`, on each write (`rememberPursuit`) and at load for every scope (`navigation/initial-farming.ts`) |
+| `rareRetryEvidence` (monster instance id) | 0 to 5 | none: `rare-retry-evidence.ts` deletes an entry only when new evidence makes it eligible | the newest 100 by `sight.seenAt`, on each rejection and when the store loads a scope's evidence |
+
+Dropping a rare entry changes behavior only for an instance not touched
+since the 100 newest: its next pursuit starts with a fresh 300 s budget, and
+the coordinator can pursue a rejected instance once more.
+
+A cap, the account or the game data bounds every other saved collection:
+
+| Collection | Bound | Where |
+|---|---|---|
+| `history.combatLogs` | 500 per character | `telemetry/combat-log.ts`, `historySnapshot` (`persistence/snapshots.ts`) |
+| `history.merchantActivity`, `anniversary.activity` | 500 | `telemetry/activity.ts` |
+| `production.attempts` | 2048, plus receipt pruning | `pruneProductionReceipts` (`inventory/production.ts`) |
+| `dailyDungeons.operations` | 200 | `dungeons/service.ts` |
+| `huntEventTrips` | 32 per character | `events/hunt-trip.ts` |
+| `standListingCache` (in memory) | 500 | `merchant/completion-results.ts` |
+| market cache (`aldata*`) | replaced on each refresh | `commerce/aldata-service.ts` |
+| `npcSaleMarks`, `deconstructionMarks`, `standListings` | filtered on completion | `http/automatic-sales.ts`, `inventory/automatic-action.ts`, `merchant/deconstruction.ts` |
+| `standPriceHistory`, `autoNpcSales`, `autoExchanges`, `autoCompounds`, `autoDeconstruction` | one entry per item id or rule | game item list |
+| roster, selections, `characterLocations`, `navigationIntents`, `returnProgress`, `restockPolicies`, `goldTargets`, `eventAttendance`, `eventSessions`, `combatDeathSeen`, `convoyCompletionReceipts`, `luckySlotTracking` | one entry per account character, and per event name where keyed so | account roster, `G` events |
+| `merchantRoutinePriorities`, `merchantAutomations`, `huntFailures`, `huntBlacklist`, `passiveHunting.rules` | one entry per routine or monster type | code and game monster list |
+| rare `sightings` / `cooldowns` / `kills` (in memory) | 30 s / 3 s / 120 s | `navigation/rare-hunting.ts` |
+| rare diagnostics (in memory) | cleared above 100 | `navigation/rare-hunting.ts` |
+| Ponty `dismissed` (in memory) | 120 s | `commerce/ponty.ts` |
+| Bankboi `completedReports` (in memory) | 32 | `http/bankboi-storage.ts` |
+| grouped combat `deaths` / `evidence` / `transitionTrace` (in memory, sent in reports) | 512 / 256 and 60 s / 100 | `runtime/combat/queue.ts`, `runtime/combat/grouped.ts` |
+
+Two remain unbounded, and this change leaves them as they are:
+
+- `anniversary.rounds`, `.attempts`, `.advertisedRounds` and `.abortedRounds`
+  gain one entry per anniversary round (288 in the 2026 event, 41 KB in all).
+  `anniversaryHandoffs` and `alreadyHandedOff` (`anniversary/handoffs.ts`)
+  read `rounds` across every round to find unhanded slices, so trimming it
+  changes handoff behavior. They grow only while the event runs.
+- Grouped combat `lostTargets` (`runtime/combat/queue.ts:34`) keeps every lost
+  target since the last grouped combat reset, with no count cap. It is in
+  memory and in each status report, not in the journal. It needs a combat
+  E2E before a cap, so it is out of scope for persistence.
+
+Fields that exist only on the user's fork (`achievementHunt`,
+`achievementBlacklist`, `achievementTarget`, `achievementPassive`, `bossChase`,
+`realmHopBlacklist`, `gearSets`) are not in v1.4.0, and this review leaves
+them out.
+
+Failure inventory:
+
+1. An expired farm-area hit, quiet area or activity survives a restart.
+2. Load drops a live farm-area entry.
+3. The prune drops a luck cast still in effect, or an expired one changes
+   `mluckRemaining`.
+4. The cap drops the newest rare progress or rejection, or removes more than
+   the oldest entries.
+5. The in-memory retry evidence keeps a rejection the saved dictionary dropped.
+6. An absent collection becomes an empty one at load.
+
+Tests: `scripts/tests/coordinator-retention.test.cjs` (1-6) and
+`e2e/console-persistence.spec.ts` (3, 4 and 6 through a saved journal and the
+real coordinator load).
+
+### Measurements
+
+All numbers come from `tools/benchmark-persistence.mts` (600 simulated
+seconds, real CPU time) and `e2e/console-persistence.spec.ts`, run in the same
+Linux container (Node 24, shared with other jobs, load average 8-10). The
+benchmark replays the live rates: 4 status reports/s with one native roster
+save, 3.3 combat lines/s, merchant activity 0.25/s while farming, and 2 lines
+plus 2 production phase changes/s during production, against documents of
+live size.
+
+Disk writes in MB/s, appends plus compaction rewrites, each commit added to
+the one before:
+
+| Build | Farming | Production |
+|---|---:|---:|
+| v1.4.0 | 5.27 (4.83 + 0.44) | 7.02 (6.58 + 0.44) |
+| + history saves (P2) | 1.70 (1.48 + 0.22) | 1.70 (1.48 + 0.22) |
+| + saves by content (P1) | 1.68 (1.47 + 0.22) | 1.69 (1.47 + 0.22) |
+| + settings split (P3) | 0.43 (0.21 + 0.22) | 0.82 (0.60 + 0.22) |
+| + compaction on growth (P4) | 0.25 (0.21 + 0.03) | 0.72 (0.60 + 0.12) |
+
+P1 saves about 10 KB/s (roster and selections); its larger effect is CPU. P5
+changes no write rate. What remains while farming is the history document,
+1.08 MB every 5 s.
+
+Speed, v1.4.0 against this branch, median / p95 in ms over three benchmark
+runs (run-to-run spread in brackets):
+
+| Path | v1.4.0 | This branch |
+|---|---:|---:|
+| Persistence work per status report | 0.011-0.016 / 0.07 | 0.001 / 0.016 |
+| Roster save (native status report) | 0.06 / 0.10 | 0.011 / 0.02 |
+| History save per combat-log POST | 5.4-5.6 / 11-13 | 0.000 / 0.004 |
+| Timed save (1 s settings timer, 5 s history timer) | 9.2-10.0 / 17-21 | 1.6-1.7 / 4.2-4.9 |
+| Direct settings save with a change | 9.7-10.5 / 19-22 | 2.7-3.0 / 3.9-6.1 |
+| Bank save, changed (4.3 MB) | 20.6-22.2 / 31-41 | 15.7-16.0 / 24-31 |
+| Bank save, unchanged | 21.2-22.5 / 38-97 | 8.7-9.4 / 12-14 |
+| Compaction pause (event loop blocked) | 62-71 / 83-96, 22 per 300 s | 36-44 / 42-59, 6 per 300 s |
+| Shutdown (flush and close) | 0.3 | 52-62 |
+
+Shutdown is the one slower path: it now writes settings in the v1.4.0 layout
+for rollback and compacts the journal, so the next start replays a compact
+file. It runs once per stop, inside the 30 s `stop_grace_period`.
+
+Dashboard latency through the real coordinator and dashboard
+(`e2e/console-persistence.spec.ts`, 20 samples each):
+
+| Measure | v1.4.0 | This branch |
+|---|---:|---:|
+| Status report to DOM, median / p95 | 32 / 66 ms | 22 / 33 ms |
+| Status POST response, median / p95 | 6.3 / 15.8 ms | 3.7 / 8.2 ms |
+| Combat line to DOM, median | 994 ms | 982 ms |
+| History records appended for 20 lines in 20 s | 22 | 3 |
+
+The combat line latency is the dashboard's 1 s `logs` poll; both builds show
+one 1.5 s sample when a line lands shortly after a poll.

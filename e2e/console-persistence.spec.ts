@@ -151,3 +151,21 @@ test.describe('saves through the mail settings route', () => {
     expect((await (await page.request.get(`${app.url}/party-api/mail`)).json()).settings).toEqual({ autoCollect: true, autoDelete: false });
   });
 });
+
+test.describe('saved entries past their window', () => {
+  const now = Date.now(), hour = 3_600_000;
+  const rare = Object.fromEntries(Array.from({ length: 101 }, (_, index) => [`USII|main|1|rare-${index}`, { start: now - hour, progress: index, lowHp: 0 }]));
+  test.use({ mailbox: true, savedRecords: [{ [settingsKey]: { mluckCastAt: { Expired: now - 2 * hour, Current: now - 60_000 }, rarePursuitProgress: rare } }] });
+  test('load drops expired luck casts and keeps the newest 100 rare pursuits', async ({ page, app }, info) => {
+    // P5 items 3, 4 and 6 through a saved journal and the real coordinator load.
+    await page.waitForTimeout(2000);
+    expect((await mailSettings(page, app.url, { autoCollect: true, autoDelete: false })).ok()).toBe(true);
+    await expect.poll(() => saved(app.journal, settingsKey).at(-1)?.mailbox?.settings?.autoCollect, { intervals: [100] }).toBe(true);
+    const record = saved(app.journal, settingsKey).at(-1);
+    await report(info, 'retained-entries', { mluckCastAt: record.mluckCastAt, rare: Object.keys(record.rarePursuitProgress).length });
+    expect(Object.keys(record.mluckCastAt)).toEqual(['Current']);
+    expect(Object.keys(record.rarePursuitProgress)).toHaveLength(100);
+    expect(record.rarePursuitProgress).not.toHaveProperty(['USII|main|1|rare-0']);
+    expect(record.rarePursuitProgress).toHaveProperty(['USII|main|1|rare-100']);
+  });
+});

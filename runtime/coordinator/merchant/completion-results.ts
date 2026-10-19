@@ -1,4 +1,5 @@
 import { acknowledgeDelivery, deliveryMatches, deliveryReady } from './delivery-recovery.ts';
+import { pruneLuckCasts } from "./luck.ts";
 import { requestObject, requestText } from "../http/contracts.ts";
 import { receiveBankDeconstruction } from "./bank-deconstruction.ts";
 import { receiveBankUpgrades } from '../inventory/bank-upgrade-receipts.ts';
@@ -43,6 +44,7 @@ export function createCompletionResults(state: CompletionState, ports: Completio
   function luck(body: CompletionReport): void {
     for (const recipient of body.mluckRecipients || [])
       if (typeof recipient === "string") state.mluckCastAt[recipient] = ports.now();
+    pruneLuckCasts(state.mluckCastAt, ports.now());
   }
   function upgrades(name: string | null, body: CompletionReport): void {
     if (body.upgradesResolved) {
