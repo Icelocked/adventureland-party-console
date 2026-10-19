@@ -3493,11 +3493,14 @@
     }).finally(function () { rareLootPending = false; });
   }
 
+  var mapSpriteLayerBudget = 192, mapSpriteEntityBudget = 64;
   function mapEntity(entity, id) {
     if (!entity || entity.dead) return null;
     var type = entity.type || (entity.mtype ? "monster" : null);
     if (["character", "monster", "npc"].indexOf(type) < 0) return null;
     var skin = entity.skin || entity.mtype;
+    var layers = mapSpriteEntityBudget-- > 0 && mapSpriteLayerBudget > 0 && root.capturePartyMapLayers ? root.capturePartyMapLayers(entity).slice(0,mapSpriteLayerBudget) : [];
+    mapSpriteLayerBudget -= layers.length;
     return {
       id: String(entity.id || id), name: entity.name || entity.mtype || String(id),
       type: type, ctype: entity.ctype || null, mtype: entity.mtype || null,
@@ -3509,13 +3512,14 @@
       angle: Number(entity.angle) || 0, direction: Number(entity.direction) || 0,
       going_x: Number(entity.going_x) || 0, going_y: Number(entity.going_y) || 0,
       sprite: skin ? spriteDefinition(skin) : null,
-      dollHtml: type === "character" || entity.cx ? mapDollHtml(entity, entity.direction) : null,
+      layers: layers.length ? layers : undefined,
+      dollHtml: !layers.length && (type === "character" || entity.cx) ? mapDollHtml(entity, entity.direction) : null,
       stand: entity.stand || null,
       standSprite: entity.stand ? (spriteDefinition(typeof entity.stand === "string" ? entity.stand : "stand0") || spriteDefinition("stand0")) : null,
-      weapons: entity.cave ? ['mainhand','offhand'].map(function (hand) {
+      weapons: ['mainhand','offhand'].map(function (hand) {
         var item = entity.slots && entity.slots[hand], definition = item && G.items[item.name];
         return definition ? {hand:hand,name:item.name,sprite:spriteDefinition(definition.skin_c || definition.skin)} : null;
-      }).filter(Boolean) : undefined,
+      }).filter(Boolean),
     };
   }
 
@@ -3538,6 +3542,8 @@
   function publishMapFrame() {
     if (!mapTelemetryEnabled || mapTelemetryBusy) return;
     mapTelemetryBusy = true;
+    mapSpriteLayerBudget = 192;
+    mapSpriteEntityBudget = 64;
     var self = mapEntity(character, character.name);
     if (self) { self.id = character.name; self.name = character.name; self.type = "character"; }
     var entities = Object.keys(parent.entities || {}).map(function (id) {
@@ -3550,7 +3556,7 @@
       data: JSON.stringify({ name: character.name, map: character.map, definition: liveCaveMapDefinition(), at: Date.now(),
         x: Number(character.real_x !== undefined ? character.real_x : character.x) || 0,
         y: Number(character.real_y !== undefined ? character.real_y : character.y) || 0,
-        target: character.target || combatTargetId || null, eventCombat: eventTargetTypes.length>0, queue: queueMarkers(), queueRevision: groupedCombat && groupedCombat.queueRevision, grouped: groupedFarming(), entities: entities, events: events }),
+        target: character.target || combatTargetId || null, eventCombat: eventTargetTypes.length>0, queue: queueMarkers(), queueRevision: groupedCombat && groupedCombat.queueRevision, grouped: groupedFarming(), entities: entities, visuals: root.capturePartyMapVisuals ? root.capturePartyMapVisuals(parent.map_animations || {},64) : [], events: events }),
     }).always(function () { mapTelemetryBusy = false; });
   }
 

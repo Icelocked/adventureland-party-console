@@ -1,3 +1,4 @@
+import './map-sprites.case';
 import './drop-rewards.case';
 import './release-ui.case';
 import './market-preferences.case';

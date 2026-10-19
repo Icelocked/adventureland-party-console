@@ -12,4 +12,5 @@ import "./compound-storage.ts";
 import "./bank-stacks.ts";
 import "./movement.ts";
 import "./metrics.ts";
+import "./map-sprites.ts";
 import "../../characters/shared.js";

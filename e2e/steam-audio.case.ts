@@ -94,3 +94,17 @@ test("Steam pointer toggle blocks movement surface clicks and preserves UI contr
     contentType: "application/json",
   });
 });
+
+// Native score and controls are declared DOM boundaries; layout and clicks run
+// in Chromium. Changing expansion must never change the toggle's screen anchor.
+test('Steam character controls fit beside native score and keep a fixed minimize anchor',async({page},info)=>{
+ const bundle=await build({entryPoints:['runtime/steam/switcher.ts'],bundle:true,write:false,platform:'browser',format:'iife',globalName:'Switcher'});
+ await page.setViewportSize({width:1600,height:900});await page.route('http://layout.test/**',route=>route.fulfill({contentType:'text/html',body:'<body><div id="topmid" style="position:fixed;left:550px;top:0;width:200px;height:40px;background:#222;color:white">PVP score 15:3</div><div id="toprightcorner" style="position:fixed;right:0;top:0"><div class="game-controls" style="width:360px;height:40px;background:#444;color:white">X CODE COM Skills Guide</div></div></body>'}));
+ async function mount(){await page.goto('http://layout.test/');await page.addScriptTag({content:bundle.outputFiles[0].text});await page.evaluate(()=>{const h=window as any;h.switcher=h.Switcher.createSwitcher(window,async()=>{});h.switcher.render({members:['Warrior','Mage','Merchant','Priest'].map(name=>({name,online:true,hosting:'steam'})),realm:'SR_USI'});});}
+ await mount();const minimize=()=>page.getByRole('button',{name:'Minimize Steam character controls',exact:true}),restore=()=>page.getByRole('button',{name:'Restore Steam character controls',exact:true});
+ const initial=await minimize().boundingBox();expect(initial).not.toBeNull();const bounds=await page.locator('#party-console-switcher').boundingBox();expect(bounds!.x).toBeGreaterThanOrEqual(758);expect(bounds!.x+bounds!.width).toBeLessThanOrEqual(1232);
+ for(let i=0;i<3;i++){await minimize().click();expect(await restore().boundingBox()).toEqual(initial);await restore().click();expect(await minimize().boundingBox()).toEqual(initial);}
+ await info.attach('steam-expanded-native-gap',{body:await page.screenshot(),contentType:'image/png'});
+ await minimize().click();await mount();await expect(restore()).toBeVisible();expect(await restore().boundingBox()).toEqual(initial);await info.attach('steam-minimized-native-gap',{body:await page.screenshot(),contentType:'image/png'});
+ await page.setViewportSize({width:800,height:900});await expect.poll(async()=>{const b=await page.locator('#party-console-switcher').boundingBox();return b!.x>=8&&b!.x+b!.width<=792&&b!.y>=48;}).toBe(true);await restore().click();const narrow=await minimize().boundingBox();await minimize().click();expect(await restore().boundingBox()).toEqual(narrow);await page.evaluate(()=>(window as any).switcher.dispose());await expect(page.locator('#party-console-switcher')).toHaveCount(0);
+});
