@@ -18,6 +18,8 @@ interface Transport {
 }
 interface JQueryAjax {
   ajaxTransport(dataTypes: string, factory: (options: AjaxOptions) => Transport | undefined): void;
+  ajax: (url?: unknown, options?: unknown) => unknown;
+  ajaxSettings: { url?: unknown; crossDomain?: unknown };
 }
 
 const loopback = new Set(["127.0.0.1", "localhost", "[::1]"]);
@@ -41,6 +43,41 @@ function headerText(raw: string[]): string {
   return text;
 }
 
+function originKey(url: URL): string {
+  return url.protocol + "//" + url.host;
+}
+
+/**
+ * jQuery decides crossDomain for each request by assigning the URL to a jsdom
+ * anchor element and reading its protocol and host back. jsdom parses that URL
+ * in JavaScript, about 200 us per request (half of a status POST's CPU in the
+ * runner benchmark, docs/efficiency.md, CT9). For an absolute http(s) URL this
+ * wrapper computes the same comparison with Node's URL parser and passes it as
+ * the crossDomain option. jQuery keeps its own decision for relative and
+ * protocol-relative URLs, unparseable URLs, and requests whose options or
+ * ajaxSetup already set crossDomain. The wrapper copies the caller's options
+ * object and never edits it.
+ */
+function presetCrossDomain(host: JQueryAjax): void {
+  let origin: string;
+  try { origin = originKey(new URL(String(host.ajaxSettings.url))); } catch { return; }
+  const decide = (target: unknown, settings: Record<string, unknown> | undefined): boolean | undefined => {
+    if (typeof target !== "string" || !/^\s*https?:\/\//i.test(target)) return undefined;
+    if (settings?.crossDomain != null || host.ajaxSettings.crossDomain != null) return undefined;
+    try { return originKey(new URL(target)) !== origin; } catch { return undefined; }
+  };
+  const ajax = host.ajax;
+  host.ajax = function (this: unknown, url?: unknown, options?: unknown) {
+    const object = typeof url === "object" && url !== null;
+    const settings = (object ? url : options) as Record<string, unknown> | undefined;
+    const crossDomain = decide(object ? settings?.url : url || settings?.url, settings);
+    if (crossDomain === undefined) return Reflect.apply(ajax, this, arguments);
+    // jQuery merges options with for-in, so the copy keeps their prototype.
+    const preset = Object.assign(Object.create(settings ? Object.getPrototypeOf(settings) : null), settings, { crossDomain });
+    return Reflect.apply(ajax, this, object ? [preset] : [url, preset]);
+  };
+}
+
 /**
  * Headless CODE runs inside jsdom. Its XMLHttpRequest builds a new keep-alive
  * agent, so a new TCP connection, for every request, and converts each body
@@ -53,6 +90,7 @@ function headerText(raw: string[]): string {
 export function installNativeAjax(jquery: unknown): void {
   const host = jquery as Partial<JQueryAjax> | null;
   if (!host || typeof host.ajaxTransport !== "function") return;
+  if (typeof host.ajax === "function" && host.ajaxSettings) presetCrossDomain(host as JQueryAjax);
   host.ajaxTransport("+*", (options) => {
     if (!nativeAjaxEligible(options)) return undefined;
     let request: http.ClientRequest | undefined;
