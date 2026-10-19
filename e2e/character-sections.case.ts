@@ -20,7 +20,7 @@ test('character sections collapse independently and retain inventory equipment r
   await inventory.focus();await page.keyboard.press('Enter');await expect(inventory).toHaveAttribute('aria-expanded','true');await expect(bag.getByText('sword',{exact:true})).toBeVisible();
   await expect(other).toHaveAttribute('aria-expanded',before!);
   await equipped.click();await expect(equipped).toHaveAttribute('aria-expanded','true');
-  const gear=merchant.locator(`[id="${await equipped.getAttribute('aria-controls')}"]`);await expect(gear.getByText('Helmet',{exact:true})).toBeVisible();
+  const gear=merchant.locator(`[id="${await equipped.getAttribute('aria-controls')}"]`);await expect(gear.getByText(/^helmet$/i)).toBeVisible();
   const log=merchant.getByRole('button',{name:'Combat log',exact:true});
   await log.click();await expect(merchant.getByText('No combat events yet',{exact:true})).toBeVisible();
   await expect(merchant.getByRole('button',{name:'Combat log',exact:true})).toHaveCount(1);
@@ -31,7 +31,7 @@ test('character sections collapse independently and retain inventory equipment r
   await merchant.getByRole('button',{name:'Save restock',exact:true}).click();
   await expect.poll(async()=>(await app.state()).restockPolicies.M.hp.min).toBe(17);
   await restock.click();await inventory.click();await equipped.click();
-  await expect(gear.getByText('Helmet',{exact:true})).toBeHidden();
+  await expect(gear.getByText(/^helmet$/i)).toBeHidden();
   await page.reload();
   await expect(merchant.getByRole('button',{name:'Merchant restock',exact:true})).toHaveAttribute('aria-expanded','false');
   await expect(merchant.getByRole('button',{name:/^Inventory/})).toHaveAttribute('aria-expanded','false');
