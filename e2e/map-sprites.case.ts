@@ -158,7 +158,7 @@ const url=location.origin+'/headless-atlas.svg';const cell=(left,bottom,w,h,mx,m
   await page.route('**/headless-doll-harness',route=>route.fulfill({contentType:'text/html',body:'<style>canvas{display:block;width:100%;height:100%}</style><body style="margin:0"><div id="root"></div>'}));
   await page.goto(app.url+'/headless-doll-harness');await page.addScriptTag({content:bundle.outputFiles[0].text});
   const canvas=page.locator('canvas');
-  await expect.poll(()=>canvas.evaluate(el=>{const ctx=(el as HTMLCanvasElement).getContext('2d')!;return [[174,134],[200,104],[200,140],[167,134]].map(([x,y])=>Array.from(ctx.getImageData(x,y,1,1).data))})).toEqual([[0,255,255,255],[255,0,255,255],[255,0,0,255],[7,17,15,255]]);
+  await expect.poll(()=>canvas.evaluate(el=>{const ctx=(el as HTMLCanvasElement).getContext('2d')!;return [[174,134],[200,101],[200,140],[167,134]].map(([x,y])=>Array.from(ctx.getImageData(x,y,1,1).data))})).toEqual([[0,255,255,255],[255,0,255,255],[255,0,0,255],[7,17,15,255]]);
   await info.attach('headless-native-html-cosmetics',{body:await canvas.screenshot(),contentType:'image/png'});
 });
 
