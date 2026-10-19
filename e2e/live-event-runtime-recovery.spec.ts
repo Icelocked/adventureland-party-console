@@ -418,20 +418,26 @@ test('native event limits exhaust only the current instance and survive restart'
 for(const event of ['mrgreen','mrpumpkin'])test(`native ${event} walk yields to a newly visible boss before the advertised spawn`,async({live},info)=>{
  test.setTimeout(240_000);
  const advertised={map:'halloween',x:-495,y:685},samples:any[]=[];
- let baseline:any,seed:any,firstHit:any;
+ let initialBoss:any,baseline:any,seed:any,firstHit:any;
  try{
   await live.post('/formation',{leader:W});await live.post('/formation',{character:P,follow:true});
-  await live.admin(`output=(()=>{if(Object.values(instances.halloween.monsters).some(m=>m.type==='${event}'))throw Error('Existing event boss cannot be replaced');E['${event}']={live:true,...${JSON.stringify(advertised)},hp:10000000,max_hp:10000000};broadcast_e();return true;})()`);
+  initialBoss=await live.admin(`output=(()=>{if(Object.values(instances.halloween.monsters).some(m=>m.type==='${event}'))throw Error('Existing event boss cannot be replaced');
+   const original=G.monsters['${event}'];try{G.monsters['${event}']={...original,hp:10000000,attack:1,speed:0,charge:0,range:1,aggro:0,rage:0,peaceful:true,spawns:[]};
+    const m=new_monster('halloween',{type:'${event}',count:1,boundary:[${advertised.x},${advertised.y},${advertised.x},${advertised.y}]},{temp:1});m.e2eMovingEventSighting=true;
+    E['${event}']={live:true,...${JSON.stringify(advertised)},hp:m.hp,max_hp:m.max_hp};broadcast_e();return {id:String(m.id),map:m.map,x:m.x,y:m.y};
+   }finally{G.monsters['${event}']=original;}})()`);
   await live.post('/formation',{character:W,eventSelections:[event]});
   await expect.poll(async()=>{
    const state=await live.state(),native=await live.admin(`output=(()=>{const p=get_player('${W}');return {map:p.map,x:p.x,y:p.y,moving:!!p.moving};})()`),c=state.activeConvoy;
+   samples.push({at:Date.now(),stage:'before-native-displacement',native,convoy:c&&{id:c.id,phase:c.phase,event:c.walkingEvent},attendance:state.eventAttendance?.[W]?.[event]});if(samples.length>96)samples.shift();
    if(c?.walkingEvent===event&&c.phase==='travel'&&native.map==='halloween'&&native.moving&&Math.hypot(native.x-advertised.x,native.y-advertised.y)>400){baseline={at:Date.now(),native,convoy:c};return true;}return false;
   },{timeout:90_000,message:'The real event route must be walking toward the advertised spawn before introducing the boss'}).toBe(true);
-  seed=await live.admin(`output=(()=>{const p=get_player('${W}'),original=G.monsters['${event}'];try{
-   G.monsters['${event}']={...original,hp:10000000,attack:1,speed:0,charge:0,range:1,aggro:0,rage:0,peaceful:true,spawns:[]};
-   const m=new_monster('halloween',{type:'${event}',count:1,boundary:[p.x,p.y,p.x,p.y]},{temp:1});m.e2eMovingEventSighting=true;
-   E['${event}']={live:true,...${JSON.stringify(advertised)},hp:m.hp,max_hp:m.max_hp};broadcast_e();return {id:String(m.id),map:m.map,x:m.x,y:m.y,at:Date.now()};
-  }finally{G.monsters['${event}']=original;}})()`);
+  // Keep the event genuinely live, then displace that same owned native boss
+  // only after real walking. All visibility packets and attacks remain native.
+  seed=await live.admin(`output=(()=>{const p=get_player('${W}'),m=instances.halloween.monsters[${JSON.stringify(initialBoss.id)}];
+   if(!m||!m.e2eMovingEventSighting)throw Error('Owned live boss missing before displacement');
+   const before={x:m.x,y:m.y};m.x=p.x;m.y=p.y;m.going_x=m.x;m.going_y=m.y;m.moving=false;m.abs=true;m.u=true;m.cid++;m.last_jump=new Date();
+   E['${event}']={live:true,...${JSON.stringify(advertised)},hp:m.hp,max_hp:m.max_hp};broadcast_e();return {id:String(m.id),map:m.map,x:m.x,y:m.y,before,at:Date.now()};})()`);
   await expect.poll(async()=>{
    const state=await live.state(),events=await live.clients[W].events(),native=await live.admin(`output=Object.fromEntries(${JSON.stringify(fighters)}.map(name=>{const p=get_player(name);return [name,{map:p.map,x:p.x,y:p.y,moving:!!p.moving}]}))`);
    const hits=events.filter((packet:any)=>packet.event==='hit'&&String(packet.data?.id)===seed.id&&packet.data?.damage>0);
@@ -442,7 +448,7 @@ for(const event of ['mrgreen','mrpumpkin'])test(`native ${event} walk yields to 
   expect(firstHit).toBeTruthy();expect(firstHit.native[W].map).toBe('halloween');
   expect(Math.hypot(firstHit.native[W].x-advertised.x,firstHit.native[W].y-advertised.y)).toBeGreaterThan(250);
  }finally{
-  await info.attach('native-event-en-route-sighting',{body:JSON.stringify({event,advertised,baseline,seed,firstHit,samples,final:await live.state(),events:await live.clients[W].events()}),contentType:'application/json'});
+  await info.attach('native-event-en-route-sighting',{body:JSON.stringify({event,advertised,initialBoss,baseline,seed,firstHit,samples,final:await live.state(),events:await live.clients[W].events()}),contentType:'application/json'});
   await live.post('/formation',{character:W,eventSelections:[]}).catch(()=>{});
   await live.admin(`output=(()=>{for(const m of Object.values(instances.halloween.monsters))if(m.type==='${event}'&&m.e2eMovingEventSighting)remove_monster(m,{silent:true});delete E['${event}'];broadcast_e();return true;})()`).catch(()=>{});
  }
