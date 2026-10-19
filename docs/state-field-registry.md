@@ -235,4 +235,48 @@ reads them from core, so they are candidates for a later cut.
 
 ## Speed
 
-SPEED_TABLE
+Two measurements, both comparing v1.4.0 with this branch in `shadow` and
+`enforce` mode.
+
+Section builders on real data. A saved four-character state dump
+(2026-09-23, 141 fields per character) fed through `createPublicStateRoute`
+plus `JSON.stringify`, 300 timed calls after 50 warm-up calls, two runs each
+(median / p95 in ms):
+
+| Section | v1.4.0 | shadow | enforce |
+| --- | --- | --- | --- |
+| fast bytes (4 characters) | 627,617 | 627,617 | 36,656 |
+| fast time | 2.64 / 4.20, 2.72 / 4.57 | 2.60 / 4.02, 3.03 / 6.02 | 0.21 / 0.35, 0.19 / 0.42 |
+| fast keys per character | 134 | 134 | 58 |
+| core bytes, time | 37,582; 0.44 / 1.32 | 37,582; 0.42 / 1.31 | 37,582; 0.43 / 1.15 |
+| inventory bytes, time | 52,019; 0.19 / 0.37 | 52,019; 0.20 / 0.35 | 52,019; 0.19 / 0.45 |
+| full request bytes, time | 4,750,325; 28.3 / 37.4 | 4,750,325; 26.8 / 40.1 | 4,750,325; 29.0 / 45.8 |
+
+One character's fast entry drops from about 157 KB to about 9 KB. The status
+ingestion path (`status/ingestion.ts`) is unchanged; the builders only run
+when a client requests a section.
+
+Dashboard journeys. `e2e/field-registry-speed.spec.ts` (Playwright project
+`speed`, run with `PARTY_SPEED_LABEL` set) on the E2E fixture, three
+interleaved rounds per build on a shared runner. Each cell is the median of
+the three per-round medians (p95 in brackets), in ms:
+
+| Journey | v1.4.0 | shadow | enforce |
+| --- | --- | --- | --- |
+| First render to the merchant's inventory (5 loads) | 1853 (2439) | 1670 (1722) | 1733 (2490) |
+| Item details dialog open (10) | 445 (506) | 384 (460) | 386 (491) |
+| Gear comparison dialog open (10) | 469 (629) | 427 (607) | 442 (574) |
+| Bank dialog open (10) | 303 (355) | 202 (256) | 233 (282) |
+| Update latency, live stream (20; status POST to DOM) | 22 (85) | 18 (48) | 21 (47) |
+| Update latency, fast polling with the stream blocked (20) | 186 (302) | 177 (274) | 172 (271) |
+| `section=fast` response (50) | 0.6 (1.8) | 0.7 (1.7) | 0.7 (1.4) |
+| `section=core&dashboard=1` response (50) | 0.9 (1.6) | 0.9 (1.4) | 0.9 (1.3) |
+| `section=inventory` response (50) | 0.6 (1.0) | 0.6 (0.7) | 0.6 (0.9) |
+| Full request response (20) | 8.8 (27.6) | 7.4 (21.8) | 7.1 (24.1) |
+
+No update sample missed its 3 s window. The fixture's three characters
+report about 30 fields each, so its fast section is 2.4 KB (1.7 KB enforced)
+and the journey numbers show that nothing regressed; the real-data table
+shows the size win. Other agents shared the runner during these
+runs (load average 8 to 11 on 8 cores), so differences of this size between
+builds are run-to-run noise.
