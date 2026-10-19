@@ -31,11 +31,11 @@ test('character sections collapse independently and retain inventory equipment r
   await merchant.getByRole('button',{name:'Save restock',exact:true}).click();
   await expect.poll(async()=>(await app.state()).restockPolicies.M.hp.min).toBe(17);
   await restock.click();await inventory.click();await equipped.click();
+  await expect(gear.getByText('Helmet',{exact:true})).toBeHidden();
   await page.reload();
   await expect(merchant.getByRole('button',{name:'Merchant restock',exact:true})).toHaveAttribute('aria-expanded','false');
   await expect(merchant.getByRole('button',{name:/^Inventory/})).toHaveAttribute('aria-expanded','false');
   await expect(merchant.getByRole('button',{name:'Equipped',exact:true})).toHaveAttribute('aria-expanded','false');
-  await expect(gear.getByText('Helmet',{exact:true})).toBeHidden();
   await page.setViewportSize({width:800,height:1000});
   await info.attach('character-sections-collapsed',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
   await app.restartCoordinator();await expect.poll(async()=>(await app.state()).restockPolicies.M.hp.min).toBe(17);
