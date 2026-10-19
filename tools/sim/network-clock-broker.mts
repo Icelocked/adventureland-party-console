@@ -3,6 +3,11 @@ import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import path from "node:path";
 import type {Socket} from 'node:net';
+import {performance as nativePerformance} from 'node:perf_hooks';
+
+// A caller can already use an observation/virtual Date. Broker pacing and
+// real-I/O budgets must remain on an independent, monotonic native timeline.
+const wallNow=()=>Math.floor(nativePerformance.timeOrigin+nativePerformance.now());
 type ClockSocket = {
   readyState: number;
   send(data: string): void;
@@ -21,14 +26,22 @@ export async function startNetworkClock(rate: number) {
   if (!Number.isFinite(rate) || rate <= 1 || rate > 1024) throw Error("ChronAL clock rate must be greater than 1 and at most 1024; use E2E_GAMEPLAY_BACKEND=native for real time");
   const windowMs=Number(process.env.E2E_CLOCK_WINDOW_MS||250);
   if(!Number.isInteger(windowMs)||windowMs<25||windowMs>250)throw Error('ChronAL network window must be 25–250 ms');
-  const epoch = Date.now(),
+  const epoch = wallNow(),
     token = randomUUID(),
-    members = new Map<string, { now: number; scope: string; label: string; sent: number; count: number; total: number; max: number; timing?: {count:number;receiveMs:number;workMs:number;returnMs:number} }>();
+    members = new Map<string, { now: number; scope: string; label: string; sent: number; count: number; total: number; max: number; nativeIo?:boolean; timing?: {count:number;receiveMs:number;workMs:number;returnMs:number} }>();
   const retired = new Set<string>();
   let now = epoch,
     closed = false,
     lastWall = epoch,
-    budget = 0;
+    budget = 0,nativeIoActive=false,nativeIoSince=0,nativeIoWallMs=0;
+  function reconcileNativeIo(){
+    const active=[...members.values()].some(member=>member.nativeIo),wall=wallNow();
+    if(active===nativeIoActive)return;
+    if(nativeIoActive)nativeIoWallMs+=wall-nativeIoSince;
+    nativeIoActive=active;nativeIoSince=active?wall:0;
+    // Discard credit from the previous mode; no post-I/O catch-up burst.
+    budget=0;lastWall=wall;
+  }
   const sockets = new Map<string, ClockSocket>();
   const connections=new Set<Socket>();
   const server = createServer((req, res) => {
@@ -56,13 +69,15 @@ export async function startNetworkClock(rate: number) {
       JSON.stringify({
         now,
         rate,
+        effectiveRate:nativeIoActive?1:rate,
         windowMs,
         epoch,
         members: members.size,
         ...(url.pathname === "/diagnostics"
           ? {
-              wallMs: Date.now() - epoch,
+              wallMs: wallNow() - epoch,
               virtualMs: now - epoch,
+              nativeIoWallMs:nativeIoWallMs+(nativeIoActive?wallNow()-nativeIoSince:0),
               participants: [...members].map(([id, value]) => ({
                 id,
                 ...value,
@@ -90,22 +105,27 @@ export async function startNetworkClock(rate: number) {
     }
     ws.handleUpgrade(req, socket, head, (connection: ClockSocket) => {
       sockets.set(id, connection);
-      members.set(id, { now, scope: url.searchParams.get("scope") || "", label: url.searchParams.get("label") || id, sent: Date.now(), count: 0, total: 0, max: 0 });
+      members.set(id, { now, scope: url.searchParams.get("scope") || "", label: url.searchParams.get("label") || id, sent: wallNow(), count: 0, total: 0, max: 0 });
       connection.on("message", (bytes: Buffer) => {
-        let value: { now: number; receivedWall?:number; completedWall?:number; workMs?:number };
+        let value: { now?: number; kind?:string; active?:boolean; receivedWall?:number; completedWall?:number; workMs?:number };
         try {
           value = JSON.parse(bytes.toString());
         } catch {
           connection.close(1008, "Invalid clock acknowledgement");
           return;
         }
-        if (!Number.isFinite(value?.now) || value.now > now) {
+        if(value?.kind==='native-io'){
+          if(typeof value.active!=='boolean'){connection.close(1008,'Invalid native I/O observation');return;}
+          if(sockets.get(id)===connection&&members.has(id)){members.get(id)!.nativeIo=value.active;reconcileNativeIo();}
+          return;
+        }
+        if (typeof value?.now!=='number' || !Number.isFinite(value.now) || value.now > now) {
           connection.close(1008, "Invalid clock acknowledgement");
           return;
         }
         if (sockets.get(id) === connection && members.has(id)) {
           const member = members.get(id)!;
-          const elapsed = Date.now() - member.sent;
+          const elapsed = wallNow() - member.sent;
           member.now = value.now;
           member.count++;
           member.total += elapsed;
@@ -113,7 +133,7 @@ export async function startNetworkClock(rate: number) {
           if([value.receivedWall,value.completedWall,value.workMs].every(Number.isFinite)){
             const timing=member.timing??={count:0,receiveMs:0,workMs:0,returnMs:0};
             timing.count++;timing.receiveMs+=value.receivedWall!-member.sent;
-            timing.workMs+=value.workMs!;timing.returnMs+=Date.now()-value.completedWall!;
+            timing.workMs+=value.workMs!;timing.returnMs+=wallNow()-value.completedWall!;
           }
         }
       });
@@ -134,8 +154,11 @@ export async function startNetworkClock(rate: number) {
   const address = server.address();
   if (!address || typeof address === "string") throw Error("ChronAL clock broker did not bind");
   const timer = setInterval(() => {
-    const wall = Date.now();
-    budget = Math.min(windowMs, budget + Math.max(0, wall - lastWall) * rate);
+    reconcileNativeIo();
+    const wall = wallNow();
+    // Real XHR is not accelerated. Preserve its original timeout budget while
+    // it is in flight; ordinary gameplay timers resume the requested rate.
+    budget = Math.min(windowMs, budget + Math.max(0, wall - lastWall) * (nativeIoActive?1:rate));
     lastWall = wall;
     if (
       closed ||

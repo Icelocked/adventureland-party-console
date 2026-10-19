@@ -2138,3 +2138,14 @@ native target is required; direct hits, unknown targets and party attacks keep
 their conservative defense path. Validate both Targetron collateral journeys.
 sharedRoutine.convoyNavigationReport exposes the existing read-only current
 navigation ownership for diagnostics before the next full status publication.
+
+An older native missing-tool report must not disable gathering after automatic
+replacement crafting has been enabled. The coordinator checks the current
+per-tool opt-in and rejects that obsolete disabling effect; the client retains
+the mode until fresh settings arrive. Validate both native replacement-tool
+journeys, including an in-flight no-tool report crossing opt-in, unavailable
+materials, and exactly one actual craft. Build and stage character/coordinator
+assets together; activate only through an explicitly requested console load.
+New gathering attempts also wait for ordinary inventory commands to finish, so
+a manual Equip can complete after cancelling its old cast. Validate native hand
+receipts, subsequent gathering, exact item ownership and restart restoration.

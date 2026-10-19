@@ -9539,12 +9539,15 @@
       gatheringStatus('Crafting replacement ' + session.tool, 'info', {jobId:toolOrder.jobId});
       return false;
     }
-    await request("/merchant/gather-status", { method: "POST", body: {
+    var missingTool = await request("/merchant/gather-status", { method: "POST", body: {
       character: character.name, mode: session.mode, noTool: true,
       message: (session.mode === "fishing" ? "Fishing" : "Mining") + " off: no tool in inventory or bank",
       level: "info",
     }});
     if (current && !current()) return false;
+    // Settings may have enabled replacement crafting while this report was on
+    // the wire. Keep the current mode; the next fresh status supplies opt-in.
+    if (missingTool.noTool === false) return false;
     gatheringModes = gatheringModes.filter(function (mode) { return mode !== session.mode; });
     selectGatheringMode();
     return false;
@@ -9770,6 +9773,10 @@
     if (busy) return "status update";
     if (banking) return "banking";
     if (root.__merchantActiveJob) return "merchant job";
+    // A manual equip waits for the old gathering attempt to stop. Do not let
+    // its completion immediately start another tool swap before that ordinary
+    // inventory command has actually finished.
+    if (root.__partyInventoryCommands) return "inventory command";
     if (Date.now() < (Number(root.__merchantLogisticsHoldUntil) || 0)) return "logistics handoff";
     if (anniversaryBusy || merchantAnniversaryWorkReserved()) return "anniversary reservation";
     if (Date.now() < gatheringRetryAt) return "retry delay";

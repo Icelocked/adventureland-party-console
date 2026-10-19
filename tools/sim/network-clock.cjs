@@ -7,9 +7,11 @@ const realDate = Date,
   realPerformance = performance;
 const realTimeout = setTimeout;
 const realImmediate = setImmediate;
+const realClearImmediate = clearImmediate;
 const http = require("node:http");
 const { randomUUID } = require("node:crypto");
 const { joinClock } = require("./join-clock.cjs");
+const { createNativeIo } = require('./native-io.cjs');
 const chronalDirectory = () =>
   process.env.E2E_CHRONAL_DIR || path.resolve(__dirname, "../../.build/sim/chronal");
 const clockScope = () => process.env.E2E_CLOCK_SCOPE || "game";
@@ -82,6 +84,18 @@ function install({ dateOnly = false } = {}) {
       req.on("close", () => clearTimeoutNative(timeout));
     });
   const clearTimeoutNative = require("node:timers").clearTimeout;
+  function nativeTurn(callback){
+    let complete=false,immediate,timer;
+    const run=()=>{
+      if(complete)return;complete=true;
+      if(immediate!==undefined)realClearImmediate(immediate);
+      if(timer!==undefined)clearTimeoutNative(timer);
+      callback();
+    };
+    // Both paths enter from a native macrotask. A busy check phase must not
+    // indefinitely retain a completed window's acknowledgement.
+    immediate=realImmediate(run);timer=realTimeout(run,0);
+  }
   const errors = [];
   const clock = new VirtualClock({
     start: config.epoch,
@@ -118,6 +132,8 @@ function install({ dateOnly = false } = {}) {
   const observations = { requests: 0, consecutiveFailures: 0, retries: [] };
   const join = {};
   const transport = { phase: dateOnly ? 'observe' : 'connecting', window: null, completed: 0, startedWall: 0 };
+  let notifyNativeIo=()=>{};
+  const nativeIo=createNativeIo(()=>notifyNativeIo(),()=>realPerformance.now());
   let readyResolve, readyReject;
   const ready = new Promise((resolve, reject) => {
     readyResolve = resolve;
@@ -159,6 +175,8 @@ function install({ dateOnly = false } = {}) {
       }),
     );
     const socket = new WebSocket(socketUrl(broker, id, scope));
+    notifyNativeIo=()=>{if(socket.readyState===1)socket.send(JSON.stringify({kind:'native-io',active:nativeIo.stats.active}));};
+    socket.on('open',notifyNativeIo);
     const windows=[];
     let advancing=false;
     const failed=error=>{
@@ -170,7 +188,7 @@ function install({ dateOnly = false } = {}) {
       advancing=true;
       // runSync drains native Promise microtasks without a macrotask per timer.
       // It must start outside a Promise continuation.
-      realImmediate(()=>{
+      nativeTurn(()=>{
         try{
           const next=windows.shift();
           transport.phase='advancing';transport.window=next.now;transport.startedWall=realDate.now();
@@ -184,7 +202,7 @@ function install({ dateOnly = false } = {}) {
           }
           // Retain a native I/O turn for socket and persistence completions.
           transport.phase='native-io';
-          realImmediate(()=>{
+          nativeTurn(()=>{
             readyResolve();
             if(socket.readyState===1)socket.send(JSON.stringify({now:clock.now}));
             transport.completed++;transport.phase='idle';transport.window=null;
@@ -215,7 +233,7 @@ function install({ dateOnly = false } = {}) {
       if(stopped)return;
       if(clock.now!==lastObserved){lastObserved=clock.now;lastProgressWall=realDate.now();}
       if((transport.window!==null&&realDate.now()-transport.startedWall>=5000||realDate.now()-lastProgressWall>=5000)&&warnings++<3)
-        console.error('[ChronAL pending acknowledgement]',JSON.stringify({id,scope,now:clock.now,events:clock.events,pending:windows.length,socketState:socket.readyState,transport}));
+        console.error('[ChronAL pending acknowledgement]',JSON.stringify({at:realDate.now(),id,scope,now:clock.now,events:clock.events,pending:windows.length,socketState:socket.readyState,transport}));
       realTimeout(inspect,5000).unref();
     };
     realTimeout(inspect,5000).unref();
@@ -238,6 +256,7 @@ function install({ dateOnly = false } = {}) {
       clock.installInto(ctx, { profile: context?.document ? "browser" : "node" });
       if (context?.document) installWindowTimers(clock, ctx);
       else installNodeTimers(clock, ctx);
+      nativeIo.install(ctx);
       vm.runInContext("Math", ctx).random = random;
       ctx.__e2eChronalClock = globalThis.__e2eChronalClock;
       return ctx;
@@ -252,6 +271,7 @@ function install({ dateOnly = false } = {}) {
     observations,
     join,
     transport,
+    nativeIo:nativeIo.stats,
     timers,
     ready,
     now: () => Math.floor(clock.now),

@@ -3,6 +3,7 @@
 const { VirtualClock } = require("chronal-clock");
 const { stats: taskStats } = require("./browser-task-queue.cjs");
 const { joinClock } = require("./join-clock.cjs");
+const { createNativeIo } = require('./native-io.cjs');
 const config = globalThis.__e2eClockConfiguration;
 if (config && config.rate > 1) {
   const NativeDate = Date;
@@ -12,6 +13,11 @@ if (config && config.rate > 1) {
     NativeWebSocket = WebSocket;
   const nativeFrame = requestAnimationFrame,
     nativeCancelFrame = cancelAnimationFrame;
+  let socket;
+  const nativeIo=createNativeIo(active=>{
+    if(socket?.readyState===1)socket.send(JSON.stringify({kind:'native-io',active}));
+  },()=>nativePerformance.now());
+  nativeIo.install(globalThis);
   let id = "browser-" + nativeRandom().toString(36).slice(2) + "-" + nativePerformance.now();
   const url = (route) => {
     const u = new URL(route, config.broker);
@@ -96,9 +102,9 @@ if (config && config.rate > 1) {
         return {now:clock.now,receivedWall,completedWall:NativeDate.now(),workMs:elapsed};
       };
       const endpoint=url('/clock');endpoint.protocol=endpoint.protocol==='https:'?'wss:':'ws:';
-      const socket=new NativeWebSocket(endpoint);
+      socket=new NativeWebSocket(endpoint);
       let opened=false;
-      socket.onopen=()=>{opened=true;record.phase='open';record.openedAt=NativeDate.now();};
+      socket.onopen=()=>{opened=true;record.phase='open';record.openedAt=NativeDate.now();socket.send(JSON.stringify({kind:'native-io',active:nativeIo.stats.active}));};
       let queue=Promise.resolve();
       socket.onmessage=event=>{
         const receivedWall=NativeDate.now();
@@ -130,6 +136,7 @@ if (config && config.rate > 1) {
     taskStats,
     join,
     ready,
+    nativeIo:nativeIo.stats,
     now: () => Math.floor(clock.now),
     cpuNow: () => nativePerformance.now(),
     nativeTimeOrigin: nativePerformance.timeOrigin,

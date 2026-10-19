@@ -5,6 +5,7 @@ import {connect,type Socket} from 'node:net';
 import {readFileSync} from 'node:fs';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
+import {performance as nativePerformance} from 'node:perf_hooks';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {environment} from './fixtures';
@@ -72,11 +73,30 @@ test('ChronAL browser clock recovers an initial rejected handshake without losin
  }finally{await page.close();for(const socket of sockets)socket.destroy();await new Promise<void>(resolve=>proxy.close(()=>resolve()));await clock.close();}
 });
 
-test('ChronAL late joining actors preserve relative startup timers',async({page},info)=>{
+test('ChronAL late joining actors preserve relative startup timers',async({page,browser:browserHost},info)=>{
  test.skip(process.env.E2E_GAMEPLAY_BACKEND==='native','ChronAL-only transport initialization regression.');
- const clock=await startNetworkClock(16),server=createServer((req,res)=>{
-  if(req.url==='/application.js'){res.setHeader('Content-Type','text/javascript');res.end('globalThis.applicationStartedAt=Date.now();');}
-  else res.end('<html><body>Late clock join<script src="/application.js"></script></body></html>');
+ const ioReceipts:Array<{started:number;finished?:number;closedBeforeReply?:boolean}>=[];
+ const nativeWall=()=>Math.floor(nativePerformance.timeOrigin+nativePerformance.now());
+ // The caller may already use another pool's observation Date. Its private
+ // broker must pace actual network deadlines independently of that clock.
+ const callerDate=Date,nativeBefore=nativeWall();
+ let clock:Awaited<ReturnType<typeof startNetworkClock>>,callerNow:number;
+ try{
+  globalThis.Date=new Proxy(callerDate,{get(target,key,receiver){return key==='now'?()=>callerDate.now()+60_000:Reflect.get(target,key,receiver);}});
+  callerNow=Date.now();clock=await startNetworkClock(16);
+ }finally{globalThis.Date=callerDate;}
+ const nativeAfter=nativeWall();
+ let waiting:import('node:http').ServerResponse|undefined;
+ const server=createServer((req,res)=>{
+  if(req.url==='/jquery.js'){res.setHeader('Content-Type','text/javascript');res.end(readFileSync('.caracal/node_modules/jquery/dist/jquery.js','utf8'));}
+  else if(req.url==='/application.js'){res.setHeader('Content-Type','text/javascript');res.end('globalThis.applicationStartedAt=Date.now();');}
+  else if(req.url==='/party-api/io-probe'){
+   const receipt:{started:number;finished?:number;closedBeforeReply?:boolean}={started:nativeWall()};ioReceipts.push(receipt);
+   res.on('close',()=>{if(!res.writableFinished)receipt.closedBeforeReply=true;});
+   setTimeout(()=>{receipt.finished=nativeWall();res.setHeader('Content-Type','application/json');res.end('{"ok":true}');},200);
+  }else if(req.url==='/party-api/status'){waiting=res;}
+  else if(req.url==='/release-clock-longpoll'){waiting?.setHeader('Content-Type','application/json');waiting?.end('{"ok":true}');waiting=undefined;res.end('released');}
+  else res.end('<html><body>Late clock join<script src="/jquery.js"></script><script src="/application.js"></script></body></html>');
  });
  const sockets=new Set<Socket>();server.on('connection',socket=>{sockets.add(socket);socket.on('close',()=>sockets.delete(socket));});
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -84,8 +104,10 @@ test('ChronAL late joining actors preserve relative startup timers',async({page}
  const origin=`http://127.0.0.1:${address.port}`,broker=`http://127.0.0.1:${clock.port}`;
  const config={rate:16,epoch:clock.epoch,wall:clock.epoch,broker,token:clock.token,scope:'late-join-witness'};
  const bundle=readFileSync('.build/sim/browser-clock.js','utf8');
- let late:import('@playwright/test').Page|undefined;
+ let late:import('@playwright/test').Page|undefined,nativeContext:import('@playwright/test').BrowserContext|undefined;
  try{
+  await info.attach('broker-independent-native-wall',{body:JSON.stringify({callerNow,nativeBefore,nativeAfter,epoch:clock.epoch}),contentType:'application/json'});
+  expect(clock.epoch).toBeGreaterThanOrEqual(nativeBefore);expect(clock.epoch).toBeLessThanOrEqual(nativeAfter);
   await page.addInitScript({content:`globalThis.__e2eClockConfiguration=${JSON.stringify(config)};\n`+bundle+`\nglobalThis.initialStartupAt=Date.now();`});
   await page.goto(origin);
   await page.waitForFunction(()=>(window as any).__e2eChronalClock.now()>=(window as any).__e2eChronalClock.epoch+8000,undefined,{timeout:10_000});
@@ -117,11 +139,25 @@ test('ChronAL late joining actors preserve relative startup timers',async({page}
   expect(browser.timeouts).toHaveLength(1);expect(browser.intervals).toHaveLength(3);expect(browser.errors).toEqual([]);
   expect(browser.timeouts[0]-browser.join.at).toBeGreaterThanOrEqual(5000);
   browser.intervals.forEach((at:number,index:number)=>expect(at-browser.join.at).toBeGreaterThanOrEqual((index+1)*1000));
+  const probe=()=>new Promise<any>(resolve=>{
+   const host=window as any,c=host.__e2eChronalClock,wall=()=>c?c.cpuNow():performance.now(),began=wall(),at=Date.now();
+   host.$.ajax({url:'/party-api/io-probe',timeout:1000}).done((value:unknown)=>resolve({ok:true,value,wallMs:wall()-began,virtualMs:Date.now()-at}))
+    .fail((_xhr:unknown,status:string,error:unknown)=>resolve({ok:false,status,error:String(error),wallMs:wall()-began,virtualMs:Date.now()-at}));
+  });
+  nativeContext=await browserHost.newContext();const nativePage=await nativeContext.newPage();await nativePage.goto(origin);
+  const nativeIo=await nativePage.evaluate(probe),acceleratedIo=await late.evaluate(probe);
   const beforeFork=await page.evaluate(()=>Date.now());
   const script=`const clock=globalThis.__e2eChronalClock,startupAt=Date.now(),timeouts=[],intervals=[];
     setTimeout(()=>timeouts.push(Date.now()),5000);const timer=setInterval(()=>{intervals.push(Date.now());if(intervals.length===3)clearInterval(timer);},1000);
-    setTimeout(()=>{console.log(JSON.stringify({startupAt,join:clock.join,timeouts,intervals,errors:clock.errors}));process.exit(0);},6000);`;
-  const child=await promisify(execFile)(process.execPath,['--import',pathToFileURL(path.resolve('tools/sim/network-clock-preload.mjs')).href,'-e',script],{timeout:15_000,windowsHide:true,
+    setTimeout(async()=>{
+      const {JSDOM}=require(${JSON.stringify(path.resolve('.caracal/node_modules/jsdom'))}),window=new JSDOM('<html></html>',{url:${JSON.stringify(origin)}}).window;
+      require('node:vm').createContext(window);const $=require(${JSON.stringify(path.resolve('.caracal/node_modules/jquery'))})(window);
+      const began=clock.cpuNow(),io=await new Promise(resolve=>$.ajax({url:'/party-api/io-probe',timeout:1000}).done(value=>resolve({ok:true,value,wallMs:clock.cpuNow()-began})).fail((_xhr,status,error)=>resolve({ok:false,status,error:String(error),wallMs:clock.cpuNow()-began})));
+      window.close();globalThis.__delayClockImmediate=true;const turnBegan=clock.cpuNow(),turnAt=Date.now();
+      setTimeout(()=>{globalThis.__delayClockImmediate=false;console.log(JSON.stringify({startupAt,join:clock.join,timeouts,intervals,errors:clock.errors,io,nativeIo:clock.nativeIo,nativeTurn:{wallMs:clock.cpuNow()-turnBegan,virtualMs:Date.now()-turnAt}}));process.exit(0);},2000);
+    },6000);`;
+  const delayedImmediate=`const immediate=globalThis.setImmediate,timeout=globalThis.setTimeout;globalThis.setImmediate=(fn,...args)=>globalThis.__delayClockImmediate?immediate(()=>timeout(fn,100,...args)):immediate(fn,...args);`;
+  const child=await promisify(execFile)(process.execPath,['--import','data:text/javascript,'+encodeURIComponent(delayedImmediate),'--import',pathToFileURL(path.resolve('tools/sim/network-clock-preload.mjs')).href,'-e',script],{timeout:15_000,windowsHide:true,
     env:environment({NODE_OPTIONS:'',E2E_CLOCK_PRELOAD:'1',E2E_CLOCK_RATE:'16',E2E_CLOCK_WALL_EPOCH:String(clock.epoch),E2E_CLOCK_VIRTUAL_EPOCH:String(clock.epoch),E2E_CLOCK_BROKER:broker,E2E_CLOCK_TOKEN:clock.token,E2E_CLOCK_SCOPE:'late-node'})});
   const node=JSON.parse(child.stdout);
   expect(node.startupAt).toBeGreaterThanOrEqual(beforeFork);expect(node.errors).toEqual([]);
@@ -129,5 +165,22 @@ test('ChronAL late joining actors preserve relative startup timers',async({page}
   expect(node.timeouts[0]-node.startupAt).toBeGreaterThanOrEqual(5000);
   node.intervals.forEach((at:number,index:number)=>expect(at-node.startupAt).toBeGreaterThanOrEqual((index+1)*1000));
   await info.attach('late-actor-startup-timers',{body:JSON.stringify({beforeFork,browser,node}),contentType:'application/json'});
- }finally{await late?.close();await page.close();for(const socket of sockets)socket.destroy();await new Promise<void>(resolve=>server.close(()=>resolve()));await clock.close();}
+  await info.attach('native-and-accelerated-http-deadlines',{body:JSON.stringify({nativeIo,acceleratedIo,nodeIo:node.io,ioReceipts}),contentType:'application/json'});
+  expect(nativeIo.ok).toBe(true);expect(acceleratedIo.ok).toBe(true);expect(node.io.ok).toBe(true);
+  await info.attach('native-clock-turn-under-deferred-immediate',{body:JSON.stringify(node.nativeTurn),contentType:'application/json'});
+  expect(node.nativeTurn.virtualMs).toBeGreaterThanOrEqual(2000);expect(node.nativeTurn.wallMs).toBeLessThan(1000);
+  const longpoll=await late.evaluate(async()=>{
+   const host=window as any,began=Date.now();
+   const reply=new Promise(resolve=>host.$.ajax({url:'/party-api/status',method:'POST',data:JSON.stringify({combatWait:true}),timeout:10000}).done(()=>resolve(true)).fail(()=>resolve(false)));
+   await new Promise(resolve=>setTimeout(resolve,1000));
+   const nativeIoActive=host.__e2eChronalClock.nativeIo?.active;
+   await fetch('/release-clock-longpoll');return {ok:await reply,virtualMs:Date.now()-began,nativeIoActive};
+  });
+  await info.attach('native-longpoll-does-not-block-future-virtual-events',{body:JSON.stringify(longpoll),contentType:'application/json'});
+  expect(longpoll.ok).toBe(true);expect(longpoll.virtualMs).toBeGreaterThanOrEqual(1000);expect(longpoll.nativeIoActive).toBe(false);
+  const wait=async()=>{const clock=(window as any).__e2eChronalClock,wall=()=>clock?clock.cpuNow():performance.now(),began=wall(),at=Date.now();await new Promise(resolve=>setTimeout(resolve,2000));return {wallMs:wall()-began,virtualMs:Date.now()-at};};
+  const nativeWait=await nativePage.evaluate(wait),acceleratedWait=await late.evaluate(wait);
+  await info.attach('native-io-retains-gameplay-timer-speedup',{body:JSON.stringify({nativeWait,acceleratedWait}),contentType:'application/json'});
+  expect(acceleratedWait.virtualMs).toBeGreaterThanOrEqual(2000);expect(acceleratedWait.wallMs).toBeLessThan(nativeWait.wallMs);
+ }finally{await nativeContext?.close();await late?.close();await page.close();for(const socket of sockets)socket.destroy();await new Promise<void>(resolve=>server.close(()=>resolve()));await clock.close();}
 });

@@ -366,3 +366,87 @@ validated across their retained runs, including all ten failures from run
 hashes verified). Final TypeScript checks pass. Candidate `64c76ca1b04a` is complete,
 source-matched and deep-verified; active `7881dbb8120d` remains unchanged. A fresh
 complete self-hosted run is still required before claiming the branch green.
+
+Run 39241223991 reaches a new bank-staging failure: the bank job is accepted,
+then fails with `POST /movement-plan · timeout`; no bank snapshot ever arrives.
+The full 99.75 virtual seconds of body time elapse, so this is not clock stall
+or evidence of incorrect sorting. Before implementation, extend the real-network
+clock regression with actual jQuery browser and JSDOM requests whose 200ms native
+responses fit the original 1000ms timeout at native speed but not at 16x. Preserve
+the timeout value and actual response. Coordinate temporary native I/O pressure
+at the shared broker rather than enlarging deadlines or changing gameplay code.
+Combat-wait long polls must not impose I/O backpressure because their responses
+depend on future virtual events; prove a virtual timer can release that request.
+After responses settle, verify ordinary gameplay timers still accelerate and
+retain comparable native/virtual timing evidence.
+
+The native-I/O regression reproduces false timeouts at 135ms in Chromium and
+129.5ms in JSDOM, although the native control succeeds in 209.7ms. Native-I/O
+backpressure passes the same requests without changing timeout values; a 2000ms
+gameplay wait takes 242.9ms versus 2013ms native. Combat-wait remains untracked and
+its future virtual release succeeds. The separate headless stall records completed
+virtual callbacks with a missing acknowledgement in `native-io` phase. Before
+changing scheduling, delay only the standalone Node probe's native immediate
+callbacks and require a two-second virtual timer to complete in less than one
+native second, with all startup timer counts and native responses still exact.
+
+The delayed-immediate probe reproduces 1944.9ms native for a 2002ms virtual wait.
+Racing the native immediate with a native zero-delay timer (one guarded callback,
+cancel the loser) reduces that same wait to 385.2ms. Both paths still acknowledge
+only after completed virtual callbacks and a native macrotask. The paired normal
+browser wait takes 239.9ms versus 2011.2ms native, and both clock regressions pass.
+These are focused transport measurements, not a full-suite runtime comparison.
+
+The Steam CODE-slot test reused a packet array across disposed bridge clients.
+An already-transmitted release from the successful client could arrive after the
+array was cleared and be attributed to the next full/unknown-inventory client.
+Keep all packets and use each new client's actual session-storage client ID for
+the exact no-release assertion. Retain the one-save count, original-cache checks,
+full/unknown error messages and connected-native-client checks.
+
+The fishing receipt timeline also shows a real settings race: a no-tool report
+arrives after a new gathering enable and after automatic tool crafting is opted
+in. It disables the mode permanently, so later available materials cannot be
+crafted. Before changing the handler, extend both native replacement-tool E2Es:
+hold only the current no-tool request, opt in through the actual settings route,
+release that request and require the mode to stay enabled without a no-tool mark.
+Keep the real unavailable-material 409, unchanged gold, actual single craft,
+one accepted job identity and final tool/inventory assertions.
+
+The stop-required Hunt failure actually commits and attacks other native ambient
+Goos while the asserted seeded Goo remains behind the travelling Warrior. This
+does not prove policy ignored Goo. Before changing inputs, retain the exact-seed
+commit, subsequent native kill, same-cycle armadillo Hunt and reward assertions.
+Declare reversible isolation of only ambient Goos, enable policy before introducing
+the native seed ahead on its actual walking route, preserve all native armadillos,
+and restore native population/constructor accounting even on failure. The shared
+isolation helper must retain its existing all-species default for other journeys.
+
+The manual Broom failure records the fishing attempt cancelled for `command equip`
+and a new mining attempt starting in that same virtual millisecond, with no native
+Broom equip receipt. Gathering currently excludes merchant jobs but not a pending
+ordinary inventory command, even though handle already tracks those commands.
+Before changing admission, retain the native Broom packet, later actual gathering
+tool, restored Broom, exact four-item ownership and restart persistence checks.
+Do not admit a new gathering attempt while any inventory command is still held;
+keep cancellation of the old attempt and native completion separate milestones.
+
+The 38-case replay passes every one of the latest full run's 13 failures, plus
+both native replacement-tool races and manual Broom restoration. Its only failure
+is the expanded standalone transport regression: Node's 1000ms virtual deadline
+expires after 227.9ms native despite a 200ms native response. A direct diagnostic
+confirms Node XHR tracking works; the regression broker itself inherits an already
+virtualized Date from its worker. A separate actual-broker probe with a caller
+Date 60 seconds ahead reproduces an erroneous 59977ms epoch offset. Before fixing
+pacing, extend the real browser/Node E2E to create its broker under that displaced
+caller Date and require its epoch to lie between native monotonic observations.
+Keep every actual HTTP, startup timer, acknowledgement and long-poll assertion.
+
+That explicit displaced-Date E2E fails before the fix with its broker epoch
+59989ms beyond the native observation. After pacing every broker wall-time read
+from node:perf_hooks' monotonic native origin, both transport E2Es pass; all 22
+evidence hashes verify. The prior 38-case eight-worker replay passed 37 cases,
+including all 13 full-run failures, with 1738 hashes verified and 36 workspaces
+removed. The corrected clock case passes in the retained two-case follow-up;
+these are separate focused runs. TypeScript checks pass. A new clean full
+self-hosted workflow remains the release-quality gate.

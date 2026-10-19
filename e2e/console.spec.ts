@@ -1557,18 +1557,23 @@ test('Steam bridge reserves a free native CODE slot without overwriting saved co
     expect(JSON.parse(result.original||'null')).toEqual({slot_owned_w:'1',code_owned_w:'User code'});
     await info.attach('steam-native-free-slot',{body:JSON.stringify({packets,result}),contentType:'application/json'});
     for(const inventory of ['full','unknown']) {
-      packets.length=0;
-      await page.evaluate(inventory=>{
+      // A request from the preceding bridge can already be on the wire when
+      // dispose aborts it. Attribute receipts to the new bridge's actual client
+      // identity instead of treating a cleared server array as a network fence.
+      const clientId=await page.evaluate(inventory=>{
         const host=window as unknown as {__partySteamBridge:{dispose():void};socket:{connected:boolean};X:{codes?:Record<string,unknown>};NativeBridge:{installSteamBridge(host:unknown):void}};
         host.__partySteamBridge.dispose();localStorage.clear();sessionStorage.clear();host.socket.connected=true;
         host.X.codes=inventory==='full'?Object.fromEntries(Array.from({length:100},(_,i)=>[String(i+1),['User code',1]])):undefined;
         host.NativeBridge.installSteamBridge(window);
+        return sessionStorage.getItem('party-steam-client');
       },inventory);
-      await expect.poll(()=>packets.find(packet=>packet.error)?.error).toContain(inventory==='full'?'No free Adventure Land CODE slot':'Cannot inspect saved CODE slots');
-      expect(packets.some(packet=>packet.released===true)).toBe(false);
+      expect(clientId).toBeTruthy();
+      const currentPackets=()=>packets.filter(packet=>packet.clientId===clientId);
+      await expect.poll(()=>currentPackets().find(packet=>packet.error)?.error).toContain(inventory==='full'?'No free Adventure Land CODE slot':'Cannot inspect saved CODE slots');
+      expect(currentPackets().some(packet=>packet.released===true)).toBe(false);
       expect(await page.evaluate(()=>((window as unknown as {saved:unknown[]}).saved).length)).toBe(1);
       expect(await page.evaluate(()=>((window as unknown as {socket:{connected:boolean}}).socket).connected)).toBe(true);
-      await info.attach('steam-native-slot-'+inventory,{body:JSON.stringify(packets),contentType:'application/json'});
+      await info.attach('steam-native-slot-'+inventory,{body:JSON.stringify({clientId,packets:currentPackets(),allPackets:packets}),contentType:'application/json'});
     }
 
   } finally {await page.close();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
