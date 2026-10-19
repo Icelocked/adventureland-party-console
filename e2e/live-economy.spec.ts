@@ -1405,7 +1405,7 @@ for (const kind of ['upgrade', 'compound']) test(`auto merchant collects twelve 
   }
 });
 
-test('manual compound from native bank withdraws exactly its reserved triplet',async({live},info)=>{
+for(const automatic of [false,true]) test(`${automatic?'automatic':'manual'} compound from native bank withdraws exactly its reserved triplet`,async({live},info)=>{
  test.setTimeout(300_000);
  // Failure modes: withdrawals alone masquerade as compounding; unrelated or locked
  // stock is consumed; public bank snapshots lag; duplicate native results appear.
@@ -1434,19 +1434,20 @@ test('manual compound from native bank withdraws exactly its reserved triplet',a
     const grade=G.items.strring.igrade,previous=D.compounds[grade][1];D.compounds[grade][1]=1;
     try{log.push({at:Date.now(),items:data.items.slice(),declaredProbability:1});return original.apply(this,arguments);}finally{D.compounds[grade][1]=previous;}}
    socket.removeListener('compound',original);socket.on('compound',wrapped);globalThis.__manualBankCompoundHook={socket,original,wrapped,log};return true;})()`);
-  await live.post('/command',{character:merchant,type:'compound-mark',pack:'items0',slot:selected.slot,item:selected.item});
+  if(automatic) await live.post('/merchant/routine-priorities',{priorities:{},enabled:{'auto compound':true}});
+  await live.post('/command',{character:merchant,type:automatic?'auto-compound-mark':'compound-mark',pack:'items0',slot:selected.slot,item:selected.item,...(automatic?{targetTier:1,quantity:1}:{})});
   before=await economy(live);
   await live.post('/merchant/force-stand',{enabled:false});
   await expect.poll(async()=>{
    const state=await live.state(),native=await economy(live),receipts=await live.clients[merchant].run('globalThis.__manualBankCompoundReceipts');
    observations.push({at:Date.now(),groups:state.compounds?.[merchant],native,receipts});
-   return !(state.compounds?.[merchant]||[]).length&&receipts.length===1&&receipts[0].response==='compound_success'&&account(native,0)===account(before!,0)-3&&account(native,1)===account(before!,1)+1;
+   return (automatic ? (state.autoCompounds?.[merchant]||[]).some((rule:any)=>rule.name==='strring'&&rule.quantity===0) : !(state.compounds?.[merchant]||[]).length)&&receipts.length===1&&receipts[0].response==='compound_success'&&account(native,0)===account(before!,0)-3&&account(native,1)===account(before!,1)+1;
   },{timeout:240_000}).toBe(true);
   const after=await economy(live),bankItems=Object.values(after.bank).flat();
   expect(bankItems.filter(item=>item?.name==='strring'&&item.l)).toEqual([{name:'strring',level:0,l:'l'}]);
   expect(bankItems.filter(item=>item?.name==='beewings').reduce((sum,item)=>sum+(item?.q||1),0)).toBe(3);
-  expect(bankQuantity(after,'strring')).toBe(bankQuantity(before,'strring')-3);
-  await record(live,info,'native-manual-bank-compound',before,{after,observations,declaredRolls:await live.admin('output=globalThis.__manualBankCompoundHook.log')});
+  if(!automatic) expect(bankQuantity(after,'strring')).toBe(bankQuantity(before,'strring')-3);
+  await record(live,info,'native-bank-compound',before,{automatic,after,observations,declaredRolls:await live.admin('output=globalThis.__manualBankCompoundHook.log')});
  }finally{
   await info.attach('native-manual-bank-compound-observations',{body:JSON.stringify({before,observations,state:await live.state()}),contentType:'application/json'});
   await live.admin(`output=(()=>{const hook=globalThis.__manualBankCompoundHook;if(hook){hook.socket.removeListener('compound',hook.wrapped);hook.socket.on('compound',hook.original);delete globalThis.__manualBankCompoundHook;}return true;})()`).catch(()=>{});
