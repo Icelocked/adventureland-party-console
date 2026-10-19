@@ -89,7 +89,7 @@ CoordinatorJsonlStore.prototype.refactor = function (this: unknown, ...rest: unk
   }
 };
 
-mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'], now: start });
+mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'setImmediate', 'Date'], now: start });
 const timerMs: number[] = [];
 const scheduled = globalThis.setTimeout;
 (globalThis as any).setTimeout = (callback: () => void, delay: number) => scheduled(() => {
@@ -159,7 +159,23 @@ for (let at = 0; at < seconds * 1000; at += step) {
   }
   mock.timers.tick(step);
 }
-const appendedBeforeShutdown = counters.appendBytes;
+const appendedBeforeShutdown = counters.appendBytes, compactedBeforeShutdown = counters.compactionBytes;
+const fsyncsBeforeShutdown = counters.fsyncs, compactionsBeforeShutdown = counters.compactions;
+// Direct save calls, 30 each, after the timed run so their bytes stay out of
+// the rates: a changed and an unchanged 4.3 MB bank save, and an immediate
+// settings save with a material change (production routes call it).
+const direct: Record<string, number[]> = { bankChanged: [], bankUnchanged: [], settingsChanged: [] };
+for (let i = 0; i < 30; i++) {
+  state.bankSnapshot.packs.items0[0].name = text(10);
+  // Ticks between calls run deferred compactions outside the measured call.
+  let began = performance.now(); writer.bank(); direct.bankChanged!.push(performance.now() - began);
+  mock.timers.tick(1);
+  began = performance.now(); writer.bank(); direct.bankUnchanged!.push(performance.now() - began);
+  mock.timers.tick(1);
+  state.merchantQueue[0].note = text(200);
+  began = performance.now(); writer.settings(); direct.settingsChanged!.push(performance.now() - began);
+  mock.timers.tick(1);
+}
 const shutdownBegan = performance.now();
 writer.flush?.(); store.close();
 const shutdownMs = performance.now() - shutdownBegan;
@@ -174,10 +190,11 @@ const mb = (bytes: number) => +(bytes / 1024 / 1024).toFixed(3);
 console.log(JSON.stringify({
   root, scenario, seconds,
   appendMBps: mb(appendedBeforeShutdown / seconds),
-  compactionMBps: mb(counters.compactionBytes / seconds),
-  totalMBps: mb((appendedBeforeShutdown + counters.compactionBytes) / seconds),
-  fsyncs: counters.fsyncs, compactions: counters.compactions,
+  compactionMBps: mb(compactedBeforeShutdown / seconds),
+  totalMBps: mb((appendedBeforeShutdown + compactedBeforeShutdown) / seconds),
+  fsyncs: fsyncsBeforeShutdown, compactions: compactionsBeforeShutdown,
   compaction: stats(compactionMs), timerSaves: stats(timerMs),
   calls: Object.fromEntries(Object.entries(callMs).map(([name, values]) => [name, stats(values)])),
+  direct: Object.fromEntries(Object.entries(direct).map(([name, values]) => [name, stats(values)])),
   shutdownMs: +shutdownMs.toFixed(1),
 }, null, 2));

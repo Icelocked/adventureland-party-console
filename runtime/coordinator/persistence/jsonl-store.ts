@@ -7,7 +7,18 @@ import {processLockActive, processLockIdentity} from './process-lock.ts';
  * One saved value. `json` is the exact text of its last record; replayed
  * values get it on first comparison. get() parses `value` on first read.
  */
-interface StoredValue { json?: string; value?: unknown; parsed: boolean }
+interface StoredValue { json?: string; value?: unknown; parsed: boolean; bytes: number }
+
+/**
+ * Compact once superseded records exceed both this size and COMPACT_GROWTH
+ * times the live records. A compaction rewrites the live set, so its write
+ * rate is the append rate times live / superseded: about a quarter of the
+ * appends for the 7.6 MB live set of a console in use.
+ */
+export const COMPACT_SUPERSEDED_BYTES = 32 * 1024 * 1024;
+export const COMPACT_GROWTH = 3;
+/** Bounds the journal even if a busy event loop delays the growth check. */
+const COMPACT_MAX_BYTES = 128 * 1024 * 1024;
 
 /** Compatible JSONL store: replay one record at a time, never the entire journal. */
 export class CoordinatorJsonlStore implements CoordinatorFileStore {
@@ -16,7 +27,11 @@ export class CoordinatorJsonlStore implements CoordinatorFileStore {
   private lock: number | undefined;
   private guard: number | undefined;
   private timer: ReturnType<typeof setInterval> | undefined;
+  private pendingCompaction: ReturnType<typeof setImmediate> | undefined;
   private bytes = 0;
+  /** Bytes of the newest record of each live key; what a compaction writes. */
+  private liveBytes = 0;
+  private opened = false;
   private compactRetryAt = 0;
   private closed = false;
   private lockPath: string;
@@ -31,9 +46,15 @@ export class CoordinatorJsonlStore implements CoordinatorFileStore {
       if(!fs.existsSync(mainPath) && fs.existsSync(replacementPath))fs.renameSync(replacementPath,mainPath);
       this.handle=fs.openSync(mainPath,'a+');
       this.replay();
-      this.refactor();
-      this.timer=setInterval(()=>this.refactor(),interval);
+      this.bytes=fs.fstatSync(this.handle).size;
+      // Superseded records from the previous run. Startup leaves a journal
+      // that the last shutdown compacted as it is.
+      if(this.bytes>this.liveBytes)this.refactor();
+      // The growth check runs on every append; the timer retries a deferred
+      // compaction when no append follows.
+      this.timer=setInterval(()=>this.compactIfNeeded(),interval);
       this.timer.unref();
+      this.opened=true;
     } catch(error) {this.close();throw error;}
   }
   private acquire():void {
@@ -71,19 +92,22 @@ export class CoordinatorJsonlStore implements CoordinatorFileStore {
       let start=0;
       for(let i=0;i<count;i++)if(chunk[i]===10) {
         fragments.push(Buffer.from(chunk.subarray(start,i)));
-        this.record(Buffer.concat(fragments).toString('utf8'));
+        const line=Buffer.concat(fragments);
+        this.record(line.toString('utf8'),line.length+1);
         fragments=[];start=i+1;
       }
       if(start<count)fragments.push(Buffer.from(chunk.subarray(start,count)));
     }
-    if(fragments.length)this.record(Buffer.concat(fragments).toString('utf8'));
+    if(fragments.length){const line=Buffer.concat(fragments);this.record(line.toString('utf8'),line.length+1);}
   }
-  private record(line:string):void {
+  private record(line:string,bytes:number):void {
     if(!line.trim())return;
     const entry=Object.entries(JSON.parse(line) as Record<string,unknown>)[0];
     if(!entry)throw new Error('Empty storage record');
     const [key,value]=entry;
-    if(value===null)this.values.delete(key);else this.values.set(key,{value,parsed:true});
+    this.liveBytes-=this.values.get(key)?.bytes||0;
+    if(value===null)this.values.delete(key);
+    else {this.values.set(key,{value,parsed:true,bytes});this.liveBytes+=bytes;}
   }
   private json(stored:StoredValue):string {
     return stored.json??=JSON.stringify(stored.value);
@@ -98,12 +122,13 @@ export class CoordinatorJsonlStore implements CoordinatorFileStore {
     try {
       for(const [key,stored] of this.values) {
         const record=CoordinatorJsonlStore.record(key,this.json(stored));
-        fs.writeFileSync(replacement,record);bytes+=Buffer.byteLength(record);
+        stored.bytes=Buffer.byteLength(record);
+        fs.writeFileSync(replacement,record);bytes+=stored.bytes;
       }
       fs.fsyncSync(replacement);
     } finally {fs.closeSync(replacement);}
     fs.closeSync(this.handle!);this.handle=undefined;
-    try {fs.renameSync(this.replacementPath,this.mainPath);this.bytes=bytes;this.compactRetryAt=0;}
+    try {fs.renameSync(this.replacementPath,this.mainPath);this.bytes=this.liveBytes=bytes;this.compactRetryAt=0;}
     catch(error) {this.deferCompaction(error);}
     finally {this.handle=fs.openSync(this.mainPath,'a+');}
   }
@@ -115,14 +140,27 @@ export class CoordinatorJsonlStore implements CoordinatorFileStore {
     this.compactRetryAt=Date.now()+30000;
     console.warn('Coordinator journal compaction deferred for 30 seconds: '+code);
   }
-  private append(key:string,json:string):void {
+  /** Returns the record's size in bytes. */
+  private append(key:string,json:string):number {
     if(this.closed)throw new Error('Storage is closed');
-    const record=CoordinatorJsonlStore.record(key,json);
-    fs.writeFileSync(this.handle!,record);this.bytes+=Buffer.byteLength(record);
+    const record=CoordinatorJsonlStore.record(key,json),bytes=Buffer.byteLength(record);
+    fs.writeFileSync(this.handle!,record);this.bytes+=bytes;
+    return bytes;
+  }
+  private grown():boolean {
+    const superseded=this.bytes-this.liveBytes;
+    return superseded>COMPACT_SUPERSEDED_BYTES && superseded>COMPACT_GROWTH*this.liveBytes;
   }
   private compactIfNeeded():void {
-    // Bound append history even if a busy event loop delays the periodic timer.
-    if(this.bytes>=128*1024*1024)this.refactor();
+    if(this.bytes>=COMPACT_MAX_BYTES){this.refactor();return;}
+    // Growth compaction runs after the current request or status report, so
+    // the save that crossed the threshold returns at its own cost.
+    if(this.pendingCompaction || !this.grown())return;
+    this.pendingCompaction=setImmediate(()=>{
+      this.pendingCompaction=undefined;
+      if(this.grown())this.refactor();
+    });
+    this.pendingCompaction.unref();
   }
   get(key:string):unknown {
     const stored=this.values.get(key);
@@ -145,21 +183,33 @@ export class CoordinatorJsonlStore implements CoordinatorFileStore {
   setSerialized(key:string,json:string):this {
     const stored=this.values.get(key);
     if(stored && this.json(stored)===json)return this;
-    this.append(key,json);
-    this.values.set(key,{json,parsed:false});
+    const bytes=this.append(key,json);
+    this.liveBytes+=bytes-(stored?.bytes||0);
+    this.values.set(key,{json,parsed:false,bytes});
     this.compactIfNeeded();return this;
   }
   delete(key:string):boolean {
-    if(!this.values.has(key))return false;
-    this.append(key,'null');const removed=this.values.delete(key);
-    this.compactIfNeeded();return removed;
+    const stored=this.values.get(key);
+    if(!stored)return false;
+    this.append(key,'null');this.values.delete(key);this.liveBytes-=stored.bytes;
+    this.compactIfNeeded();return true;
   }
   *entries():IterableIterator<[string,unknown]> {
-    for(const key of [...this.values.keys()])yield [key,this.get(key)];
+    // Map iteration tolerates the deletes a storage "clear" makes while it runs.
+    for(const key of this.values.keys())yield [key,this.get(key)];
   }
   close():void {
     if(this.closed)return;
-    this.closed=true;clearInterval(this.timer);
+    clearInterval(this.timer);
+    // The vm host in scripts/tests/helpers/coordinator-host.cjs defines no clearImmediate.
+    if(this.pendingCompaction!==undefined)clearImmediate(this.pendingCompaction);
+    // Leave a compact journal for the next start. A failed open keeps its
+    // source untouched, and a failed compaction still releases the lock.
+    if(this.opened && this.bytes>this.liveBytes) {
+      try {this.refactor();}
+      catch(error) {console.warn('Coordinator journal compaction at shutdown failed; the append journal is intact',error);}
+    }
+    this.closed=true;
     if(this.handle!==undefined)fs.closeSync(this.handle);
     if(this.lock!==undefined){fs.closeSync(this.lock);fs.unlinkSync(this.lockPath);}
     if(this.guard!==undefined)fs.closeSync(this.guard);

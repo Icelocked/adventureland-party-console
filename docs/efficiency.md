@@ -180,3 +180,49 @@ Tests: `scripts/tests/coordinator-persistence-writer.test.cjs` (4-11),
 `scripts/tests/coordinator-initialization.test.cjs` (1-3) with a v1.4.0
 journal fixture, and `e2e/console-persistence.spec.ts` (7 and 9 through the
 real coordinator and dashboard).
+
+### Compaction on growth (P4)
+
+`CoordinatorJsonlStore` rewrote every live record into a replacement file,
+fsynced it and renamed it over the journal every 30 s, whether or not the
+journal had grown, and at 128 MB. With a 7.6 MB live set the timer alone wrote
+about 250 KB/s and blocked the event loop for the whole rewrite.
+
+The store now tracks the bytes of each key's newest record. It compacts when
+superseded records exceed both `COMPACT_SUPERSEDED_BYTES` (32 MB) and
+`COMPACT_GROWTH` (3) times the live set. A compaction rewrites the live set,
+so it writes the append rate times live / superseded: for the 7.6 MB live set,
+about a quarter of the append volume. With a threshold of 2 times the live set
+and 8 MB, the benchmark compacted every 13 s during production (0.6 MB/s of
+appends) and wrote more than the 30 s timer did.
+The journal now peaks near 40 MB, under the 90-130 MB it reached between
+compactions in v1.4.0. Every append checks the threshold, and the
+compaction runs in a `setImmediate` after the request or status report that
+crossed the threshold, so that save returns at its own cost. At 128 MB it still
+compacts inside the append. The 30 s timer only retries a compaction that a Windows sharing
+conflict deferred. Start-up compacts only a journal with superseded records,
+and `close()` compacts one at shutdown, so the next start replays a compact
+file. Compaction writes the JSON text kept since P1 and no longer stringifies
+each value.
+
+Crash safety is unchanged: the journal stays authoritative until the store
+renames the fsynced replacement over it, and replay of an uncompacted journal
+gives the same values.
+
+Failure inventory:
+
+1. The timer, a restart or shutdown rewrites a journal with nothing
+   appended.
+2. Growth past the threshold does not compact, compacts before the minimum
+   size, or compacts inside the save that crossed it.
+3. The live-set count drifts after deletes, replays or compactions, so
+   compaction never runs or runs on every append.
+4. Compaction loses a key or keeps a deleted one.
+5. The store never compacts a journal over 128 MB.
+6. A Windows `EPERM` / `EACCES` / `EBUSY` during the rename fails the write
+   instead of deferring 30 s.
+7. close() compacts a store whose open failed (malformed journal) and overwrites its source.
+8. A compaction failure at shutdown keeps the writer lock.
+
+Tests: `scripts/tests/coordinator-jsonl-store.test.cjs` (1-4, 8 new; 5-7 by
+the existing size, sharing-conflict and malformed-input tests).

@@ -153,3 +153,52 @@ test('an unchanged roster report through the writer appends nothing',t=>{
  state.headlessSlots.push('G');writer.roster();assert.equal(journalLines(main).length,lines+1,'in-place change is seen');
  state.headlessSlots.push('H');assert.deepEqual(s.get('party_dashboard_roster_state_v1').headlessSlots,['F','G']);s.close();
 });
+
+// Compaction on growth: docs/efficiency.md (Persistence), failure inventory P4.
+function countRenames(t){
+ const rename=fs.renameSync,calls={count:0,fail:null};
+ t.mock.method(fs,'renameSync',(...args)=>{calls.count++;if(calls.fail)throw calls.fail;return rename(...args);});
+ syncBuiltinESMExports();t.after(()=>{t.mock.restoreAll();syncBuiltinESMExports();});
+ return calls;
+}
+const {COMPACT_SUPERSEDED_BYTES}=require('../../runtime/coordinator/persistence/jsonl-store.ts');
+test('a journal with nothing new is never rewritten by the timer, reopen or shutdown',async t=>{
+ const [main,rotation]=fixture(t);let s=new Store(main,rotation,20);s.set('a',{value:1});s.set('b','x');s.close();
+ const renames=countRenames(t);
+ s=new Store(main,rotation,20);
+ await new Promise(resolve=>setTimeout(resolve,150));
+ s.set('a',{value:1});s.close();
+ assert.equal(renames.count,0,'a compact journal stays as it is');
+ const r=new Store(main,rotation);try{assert.deepEqual(r.get('a'),{value:1});assert.equal(r.get('b'),'x');}finally{r.close();}
+});
+test('growth past the superseded threshold compacts after the save returns and keeps every key',async t=>{
+ const [main,rotation]=fixture(t),s=new Store(main,rotation),renames=countRenames(t);
+ const turn=()=>new Promise(resolve=>setImmediate(resolve));
+ assert.ok(COMPACT_SUPERSEDED_BYTES>0&&COMPACT_SUPERSEDED_BYTES<=48*1024*1024);
+ s.set('small',{keep:true});s.delete('small');s.set('other',[1,2,3]);
+ const chunk='x'.repeat(1024*1024);let i=0;
+ while(renames.count===0&&i<64){
+  s.set('big',chunk+(i++));
+  assert.equal(renames.count,0,'the save that crosses the threshold does not compact inside itself');
+  await turn();
+ }
+ assert.equal(renames.count,1,'compacts once growth passes the threshold');
+ assert.ok(i*1024*1024>=COMPACT_SUPERSEDED_BYTES,'not before the minimum size');
+ assert.ok(fs.statSync(main).size<2*1024*1024);
+ for(let j=0;j<3;j++){s.set('big',chunk+'again'+j);await turn();}
+ assert.equal(renames.count,1,'the next threshold needs new superseded bytes');
+ s.close();
+ const r=new Store(main,rotation);try{assert.equal(r.get('big'),chunk+'again2');assert.deepEqual(r.get('other'),[1,2,3]);assert.equal(r.get('small'),undefined);}finally{r.close();}
+});
+test('shutdown compacts superseded records',t=>{
+ const [main,rotation]=fixture(t),s=new Store(main,rotation);
+ for(let i=0;i<10;i++)s.set('a',{value:i});s.set('gone',1);s.delete('gone');s.close();
+ assert.deepEqual(journalLines(main),[JSON.stringify({a:{value:9}})]);
+});
+test('a failed compaction at shutdown keeps the journal and releases the lock',t=>{
+ const [main,rotation]=fixture(t),s=new Store(main,rotation),renames=countRenames(t);
+ s.set('a',1);s.set('a',2);renames.fail=Object.assign(Error('I/O failure'),{code:'EIO'});
+ const warnings=t.mock.method(console,'warn',()=>{});
+ assert.doesNotThrow(()=>s.close());assert.equal(fs.existsSync(main+'.writer.lock'),false);assert.equal(warnings.mock.callCount(),1);
+ renames.fail=null;const r=new Store(main,rotation);try{assert.equal(r.get('a'),2);}finally{r.close();}
+});
