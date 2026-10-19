@@ -5,7 +5,7 @@ import { migrateRoutinePriorities } from '../merchant/routines.ts';
 import {validHuntSettings} from "../hunt/settings.ts";
 import {validMarketIgnoredItem} from "../../market-preferences.ts";
 import {validAchievementHuntSettings} from "../hunt/achievement-settings.ts";
-import { stateKeys } from "./snapshots.ts";
+import { stateKeys, settingsLayout, joinAchievementState } from "./snapshots.ts";
 import { validStandLocation } from '../merchant/stand-location.ts';
 
 type ObjectValue = Record<string, unknown>;
@@ -165,7 +165,7 @@ function replayRecords(source: string): Map<string, ObjectValue> {
     lineNumber++;
     if (!line.trim()) continue;
     const [key, value] = parseRecord(line, lineNumber);
-    if (key !== stateKeys.settings && key !== stateKeys.selections) continue;
+    if (key !== stateKeys.settings && key !== stateKeys.selections && key !== stateKeys.achievement) continue;
     if (value === null) {
       records.delete(key);
       continue;
@@ -229,7 +229,10 @@ function importedSettings(source: string): ObjectValue {
     return parsed.settings;
   }
   const records = replayRecords(source);
-  return { ...records.get(stateKeys.settings), ...records.get(stateKeys.selections) };
+  const settings = { ...records.get(stateKeys.settings) };
+  // Layout 2 settings keep Achievement Hunt state in its own document (docs/efficiency.md).
+  if (settings[settingsLayout.field] === settingsLayout.split) joinAchievementState(settings, records.get(stateKeys.achievement));
+  return { ...settings, ...records.get(stateKeys.selections) };
 }
 
 export function parseDashboardImport(

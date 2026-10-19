@@ -14,6 +14,8 @@ import {
   withoutLiveness,
   historySnapshot,
   authSnapshot,
+  achievementSnapshot,
+  profilesWithoutAchievement,
 } from "./snapshots.ts";
 import { rosterSnapshots } from "../status/character-appearance.ts";
 
@@ -39,8 +41,6 @@ export const HISTORY_SAVE_MS = 5000;
  * settings record. Any other change saves within a second.
  */
 export const SETTINGS_LIVENESS_MS = 30000;
-
-type SettingsField = (typeof settingsFields)[number];
 
 /** Use explicit snapshots so process handles and credentials stay in their intended documents. */
 export function createCoordinatorPersistence(
@@ -89,23 +89,33 @@ export function createCoordinatorPersistence(
     for (const [field, value] of fields) json += (json ? "," : "{") + JSON.stringify(field) + ":" + value;
     return json ? json + "}" : "{}";
   }
+  /**
+   * The values layout 2 settings save: state, with farmingProfiles copied
+   * without the Achievement Hunt fields that achievement() saves.
+   */
+  function splitSource(): Record<string, unknown> {
+    return { ...selectSnapshot(state, splitSettingsFields),
+      farmingProfiles: profilesWithoutAchievement(state.farmingProfiles) };
+  }
+  function achievement(): void {
+    write(stateKeys.achievement, achievementSnapshot(state));
+  }
   /** "same" saves nothing, "liveness" waits for the liveness window, "changed" saves now. */
-  function settingsChange(fields: Map<string, string>): "same" | "liveness" | "changed" {
+  function settingsChange(fields: Map<string, string>, source: Record<string, unknown>): "same" | "liveness" | "changed" {
     if (!savedFields || fields.size !== savedFields.size) return "changed";
     let liveness = false;
     for (const [field, json] of fields) {
       if (savedFields.get(field) === json) continue;
       if (!livenessFields.has(field) ||
-        withoutLiveness(state[field as SettingsField]) !== savedLiveness.get(field)) return "changed";
+        withoutLiveness(source[field]) !== savedLiveness.get(field)) return "changed";
       liveness = true;
     }
     return liveness ? "liveness" : "same";
   }
-  function saveSettings(fields: Map<string, string>, json: string): void {
+  function saveSettings(fields: Map<string, string>, json: string, source: Record<string, unknown>): void {
     writeJson(stateKeys.settings, json);
     savedFields = fields;
-    savedLiveness = new Map([...livenessFields].map((field) =>
-      [field, withoutLiveness(state[field as SettingsField])]));
+    savedLiveness = new Map([...livenessFields].map((field) => [field, withoutLiveness(source[field])]));
     savedAt = Date.now();
     clearTimeout(livenessTimer);
     livenessTimer = undefined;
@@ -118,9 +128,9 @@ export function createCoordinatorPersistence(
     write(stateKeys.bank, selectSnapshot(state, bankFields));
   }
   /**
-   * Saves selections, the market cache and production, then settings in
-   * layout 2. Split documents go first, so a settings record with the layout
-   * marker always has its split documents on disk.
+   * Saves selections, the market cache, production and Achievement Hunt state,
+   * then settings in layout 2. Split documents go first, so a settings record
+   * with the layout marker always has its split documents on disk.
    */
   function settings(): void {
     clearTimeout(settingsTimer);
@@ -128,9 +138,11 @@ export function createCoordinatorPersistence(
     write(stateKeys.selections, selectSnapshot(state, selectionFields));
     market();
     write(stateKeys.production, { production: state.production });
-    const fields = fieldJson(splitSettingsFields, state);
+    achievement();
+    const source = splitSource();
+    const fields = fieldJson(splitSettingsFields, source);
     fields.set(settingsLayout.field, String(settingsLayout.split));
-    const change = settingsChange(fields);
+    const change = settingsChange(fields, source);
     if (change === "same") {
       clearTimeout(livenessTimer);
       livenessTimer = undefined;
@@ -142,11 +154,12 @@ export function createCoordinatorPersistence(
       livenessTimer.unref();
       return;
     }
-    saveSettings(fields, documentJson(fields));
+    saveSettings(fields, documentJson(fields), source);
   }
   /**
    * The v1.4.0 layout: every field in the settings document, plus the marker.
-   * A v1.4.0 build started after this save reads every field.
+   * A v1.4.0 build, or an Achievement Hunt build without the split, started
+   * after this save reads every field.
    */
   function rollbackSettings(): void {
     clearTimeout(settingsTimer);
@@ -154,12 +167,14 @@ export function createCoordinatorPersistence(
     write(stateKeys.selections, selectSnapshot(state, selectionFields));
     market();
     write(stateKeys.production, { production: state.production });
+    achievement();
     const legacy = fieldJson([...settingsFields, ...Object.keys(marketSnapshot(state.aldata))],
       settingsSnapshot(state));
     legacy.set(settingsLayout.field, String(settingsLayout.split));
-    const fields = fieldJson(splitSettingsFields, state);
+    const source = splitSource();
+    const fields = fieldJson(splitSettingsFields, source);
     fields.set(settingsLayout.field, String(settingsLayout.split));
-    saveSettings(fields, documentJson(legacy));
+    saveSettings(fields, documentJson(legacy), source);
   }
   function historyNow(): void {
     clearTimeout(historyTimer);
