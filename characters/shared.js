@@ -3194,8 +3194,10 @@
       else history.failure = { at: now, kind: outcome, durationMs: Math.max(0, Math.round(now - started)) };
     } catch (_) {}
   }
-  function passingKey(target) {
-    return JSON.stringify([target.server || reunionRealm(), target.map || character.map,
+  // isPassingEncounter passes the realm it already read, so a key costs no
+  // second read of parent.server_region through the CODE facade.
+  function passingKey(target, realm) {
+    return JSON.stringify([target.server || (realm === undefined ? reunionRealm() : realm), target.map || character.map,
       String(target.in == null ? character.in || character.map : target.in), String(target.id)]);
   }
   function passingEncounterReport() {
@@ -3213,13 +3215,20 @@
     if (typeof passiveTravelInterruptible==='function' && passiveTravelInterruptible() && passiveStopRequired(target))return false;
     var rule=passiveHunting.rules[target.mtype];
     if (committedHuntEncounter(target) || typeof huntTravelDefense === "function" && huntTravelDefense() && !(rule && rule.enabled && rule.keepMoving)) return false;
-    var key = passingKey(target), now = Date.now() + coordinatorClockOffset;
+    var realm = reunionRealm(), key = passingKey(target, realm), now = Date.now() + coordinatorClockOffset;
     if (target.dead || target.hp === 0) return false;
     // Keep cache ownership inside this function: standalone runtime harnesses
     // install it without the surrounding script. Weak keys release replaced
     // coordinator lists; native deaths appended in place invalidate by length.
     var indexes = isPassingEncounter.indexes || (isPassingEncounter.indexes = new WeakMap());
-    var context = JSON.stringify([reunionRealm(), character.map, String(character.in || character.map)]);
+    // isPassingEncounter runs for every visible monster on each combat and
+    // travel check (docs/efficiency.md, CT8). It keeps the last context text
+    // and serializes again only when the realm, map or instance changes.
+    var place = isPassingEncounter.place, instance = String(character.in || character.map);
+    if (!place || place.realm !== realm || place.map !== character.map || place.instance !== instance)
+      place = isPassingEncounter.place = {realm:realm,map:character.map,instance:instance,
+        context:JSON.stringify([realm, character.map, instance])};
+    var context = place.context;
     function recent(list) {
       if (!list || !list.length) return false;
       var cached = indexes.get(list);
