@@ -2356,6 +2356,7 @@ export function startCoordinatorApplication(
               },
               startMail: () =>
                 coordinatorPolicies.startCoordinatorMail(party, my_acc, {
+                  persist: persistSettings,
                   session: sess,
                   loadFetch: () => platform.loadFetch(),
                   timeout: (milliseconds) => AbortSignal.timeout(milliseconds),

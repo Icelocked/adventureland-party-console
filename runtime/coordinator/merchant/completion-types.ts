@@ -86,6 +86,7 @@ export interface CompletionState {
 export interface CompletionPorts {
   now(): number;
   nextCommand(): number;
+  mailSent?(id:string,mail:unknown):void;
   mailComplete(id: string, success: boolean, error: unknown): void;
   fulfill(item: Item, quantity: number): void;
   clearUpgrades(name: string | null, marks: UpgradeMark[]): void;
