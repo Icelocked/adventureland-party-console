@@ -2112,3 +2112,12 @@ recomputed stand problems. Validate the native dashboard bought/not-bought,
 queued-job refusal and restart journeys in live-wtb-unconfirmed-purchase.spec.ts.
 Build a completed candidate after integrating the dashboard and coordinator; leave
 activation to an explicit console load.
+
+Replacing a farming focus schedules a normal revision-fenced farm relocation when
+the old catalog-tagged area contains none of the new selected species. Compatible
+focus additions and untagged manual waypoints retain their area. During event
+attendance, do not invalidate navigation revisions or replace the saved return
+checkpoint: pending relocation waits for native event/return ownership and combat
+to finish, then authorizes the newly selected catalog area. A later manual
+navigation revision supersedes the pending relocation. Validate the natural
+Halloween focus-change journey and retain its native Bee hits for both fighters.
