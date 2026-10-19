@@ -127,6 +127,7 @@ export function createCompletionResults(state: CompletionState, ports: Completio
   function commerce(current: CompletionJob, body: CompletionReport): void {
     if (current.reason === "collect mail")
       ports.mailComplete(current.mail!.id, !!body.success, body.error);
+    if (current.reason === "send mail" && body.success === true) ports.mailSent?.(current.id, current.mail);
     search(body);
     for (const purchase of body.bidPurchases || [])
       ports.fulfill(purchase.item || { name: purchase.itemId, level: 0 }, purchase.quantity);
