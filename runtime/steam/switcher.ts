@@ -55,7 +55,27 @@ export function createSwitcher(host: ViewHost, action: (name: string, action?: S
     return control;
   }
   let minimized = host.localStorage?.getItem(minimizedKey) === "1";
-  let minimizedPosition: { left: number; top: number } | null = null;
+  let toggleControl:HTMLButtonElement|null=null;
+  const observed=new Set<Element>();
+  function layout(){
+    const view=host.document.defaultView;if(!view || !toggleControl)return;
+    const score=host.document.querySelector('#topmid'),native=host.document.querySelector('#toprightcorner .game-controls') || host.document.querySelector('#toprightcorner');
+    for(const element of observed)if(element!==score&&element!==native){resize?.unobserve(element);observed.delete(element);}
+    for(const element of [score,native])if(element&&!observed.has(element)){observed.add(element);resize?.observe(element);}
+    const scoreBox=score?.getBoundingClientRect(),nativeBox=native?.getBoundingClientRect();
+    const nativeVisible=nativeBox && nativeBox.width>0 && nativeBox.height>0;
+    let right=nativeVisible?nativeBox.left-8:view.innerWidth-8,left=scoreBox&&scoreBox.width>0&&scoreBox.height>0?scoreBox.right+8:8,top=8;
+    const toggleWidth=toggleControl.offsetWidth, toggleHeight=toggleControl.offsetHeight;
+    // A narrow window cannot physically fit controls between the two native
+    // surfaces. Use the next row while retaining the same right-hand anchor.
+    if(right-left<toggleWidth+16){left=8;right=view.innerWidth-8;top=Math.max(nativeBox?.bottom || 0,scoreBox?.bottom || 0)+8;}
+    panel.style.top=top+'px';panel.style.right=Math.max(8,view.innerWidth-right)+'px';panel.style.maxWidth=Math.max(toggleWidth+16,right-left)+'px';
+    panel.style.width=minimized?toggleWidth+16+'px':'';panel.style.minHeight=toggleHeight+16+'px';panel.style.maxHeight=Math.max(60,view.innerHeight-top-8)+'px';
+  }
+  const resize=typeof ResizeObserver==='undefined'?null:new ResizeObserver(layout);
+  const nativeMount=typeof MutationObserver==='undefined'?null:new MutationObserver(layout);
+  nativeMount?.observe(host.document.body,{childList:true});
+  host.document.defaultView?.addEventListener('resize',layout);
   let dialog: HTMLDialogElement | null = null, latest: BridgeReply | null = null, busy = false;
   let audioControls: (() => void)[] = [];
   // Native settings and CODE can change flags between roster replies. Refresh
@@ -187,26 +207,21 @@ export function createSwitcher(host: ViewHost, action: (name: string, action?: S
   function render() {
     audioControls = [];
     panel.replaceChildren();
-    panel.style.cssText = `position:fixed;top:${minimized && minimizedPosition ? minimizedPosition.top - 3 : 8}px;left:${minimized && minimizedPosition ? minimizedPosition.left - 3 + "px" : "50%"};transform:${minimized && minimizedPosition ? "none" : "translateX(-50%)"};max-width:calc(100vw - 16px);z-index:999999;background:#111;color:#fff;border:3px solid #888;padding:${minimized ? "0" : "5px"};box-sizing:border-box;font:24px Pixel,monospace;line-height:24px`;
+    panel.style.cssText = `position:fixed;top:8px;right:8px;max-width:calc(100vw - 16px);z-index:999999;background:#111;color:#fff;border:3px solid #888;padding:5px;box-sizing:border-box;font:24px Pixel,monospace;line-height:24px;overflow:auto`;
     const toggle = button(
       "_",
       minimized ? "Restore Steam character controls" : "Minimize Steam character controls",
       () => {
-        if (!minimized) {
-          const bounds = toggle.getBoundingClientRect();
-          minimizedPosition = { left: bounds.left, top: bounds.top };
-        }
         minimized = !minimized;
         host.localStorage?.setItem(minimizedKey, minimized ? "1" : "0");
         render();
       },
     );
-    if (minimized) {
-      panel.append(toggle);
-      return;
-    }
+    toggleControl=toggle;toggle.style.position='absolute';toggle.style.top='5px';toggle.style.right='5px';
+    panel.append(toggle);
+    if (minimized) { layout(); return; }
     const header = host.document.createElement("div");
-    header.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:20px";
+    header.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding-right:40px";
     const title = host.document.createElement("span");
     title.textContent = "Characters";
     const controls = host.document.createElement("div");
@@ -231,7 +246,7 @@ export function createSwitcher(host: ViewHost, action: (name: string, action?: S
       busy ||
       !latest?.members.some((member) => member.hosting === "steam") ||
       (!!latest?.operation && latest.operation.phase !== "complete");
-    controls.append(movementButton(), audioButton(false), audioButton(true), toggle, all);
+    controls.append(movementButton(), audioButton(false), audioButton(true), all);
     header.append(title, controls);
     panel.append(header);
     const list = host.document.createElement("div");
@@ -277,9 +292,11 @@ export function createSwitcher(host: ViewHost, action: (name: string, action?: S
       list.append(row);
     }
     panel.append(list);
+    layout();
   }
   return {
     dispose() {
+      resize?.disconnect();nativeMount?.disconnect();observed.clear();host.document.defaultView?.removeEventListener('resize',layout);
       if (host.call_code_function === gatedCodeFunction)
         host.call_code_function = nativeCodeFunction;
       host.document.defaultView?.clearInterval(audioTimer);

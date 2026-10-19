@@ -843,8 +843,29 @@
     mapTelemetryEvents.push({ kind: kind, at: Date.now(), data: safeFields(data) });
     if (mapTelemetryEvents.length > 40) mapTelemetryEvents.splice(0, mapTelemetryEvents.length - 40);
   }
-  var mapActionListener = function (data) { rememberMapEvent("action", data); };
-  var mapHitListener = function (data) { rememberMapEvent("hit", data); };
+  var mapTelemetryProjectiles = {};
+  var mapActionListener = function (data) {
+    rememberMapEvent("action", data);
+    if (!mapTelemetryEnabled || !parent.no_graphics || !data || !root.projectPartyHeadlessAction) return;
+    var attacker = parent.get_entity && parent.get_entity(data.attacker);
+    if (!attacker || attacker.map && attacker.map !== character.map) return;
+    var target = parent.get_entity && parent.get_entity(data.target);
+    var origin = parent.projectile_origin && parent.projectile_origin(attacker, target || {x:data.x,y:data.y}, data.origin_offset || 0);
+    var projectile = G.projectiles && G.projectiles[data.projectile];
+    var animation = projectile && G.animations && G.animations[projectile.animation || projectile.ray];
+    if (!origin || !animation) return;
+    var end = {x:target && parent.get_x ? parent.get_x(target) : data.x,y:target && parent.get_y ? parent.get_y(target) - (parent.get_height ? parent.get_height(target)/2 : 0) : data.y};
+    var ray = !projectile.animation && !!projectile.ray;
+    if (ray) origin = {x:parent.get_x ? parent.get_x(attacker) : attacker.x,y:(parent.get_y ? parent.get_y(attacker) : attacker.y) - (parent.get_height ? parent.get_height(attacker)/2 : 0)};
+    var projection = root.projectPartyHeadlessAction(data, origin, end, animation, Date.now(), ray);
+    if (projection) {
+      var keys = Object.keys(mapTelemetryProjectiles);
+      if(keys.length>=64)delete mapTelemetryProjectiles[keys[0]];
+      projection.map = character.map;
+      mapTelemetryProjectiles[data.pid] = projection;
+    }
+  };
+  var mapHitListener = function (data) { rememberMapEvent("hit", data); if(data && mapTelemetryProjectiles[data.pid] && !mapTelemetryProjectiles[data.pid].ray) delete mapTelemetryProjectiles[data.pid]; };
 
   function inventoryTotals() {
     return (character.items || []).reduce(function (totals, item) {
@@ -2236,7 +2257,7 @@
     try {
       return dashboardDollHtml(renderSprite.call(parent, entity.skin, {
         cx: JSON.parse(JSON.stringify(entity.cx || {})), width: 27, height: 38,
-        scale: 1, j: Number(direction) || 0,
+        scale: 1, overflow: true, j: Number(direction) || 0,
       }));
     } catch (_error) { return null; }
   }
@@ -3493,11 +3514,14 @@
     }).finally(function () { rareLootPending = false; });
   }
 
+  var mapSpriteLayerBudget = 192, mapSpriteEntityBudget = 64;
   function mapEntity(entity, id) {
     if (!entity || entity.dead) return null;
     var type = entity.type || (entity.mtype ? "monster" : null);
     if (["character", "monster", "npc"].indexOf(type) < 0) return null;
     var skin = entity.skin || entity.mtype;
+    var layers = mapSpriteEntityBudget-- > 0 && mapSpriteLayerBudget > 0 && root.capturePartyMapLayers ? root.capturePartyMapLayers(entity).slice(0,mapSpriteLayerBudget) : [];
+    mapSpriteLayerBudget -= layers.length;
     return {
       id: String(entity.id || id), name: entity.name || entity.mtype || String(id),
       type: type, ctype: entity.ctype || null, mtype: entity.mtype || null,
@@ -3509,13 +3533,14 @@
       angle: Number(entity.angle) || 0, direction: Number(entity.direction) || 0,
       going_x: Number(entity.going_x) || 0, going_y: Number(entity.going_y) || 0,
       sprite: skin ? spriteDefinition(skin) : null,
-      dollHtml: type === "character" || entity.cx ? mapDollHtml(entity, entity.direction) : null,
+      layers: layers.length ? layers : undefined,
+      dollHtml: !layers.length && (type === "character" || entity.cx) ? mapDollHtml(entity, entity.direction) : null,
       stand: entity.stand || null,
       standSprite: entity.stand ? (spriteDefinition(typeof entity.stand === "string" ? entity.stand : "stand0") || spriteDefinition("stand0")) : null,
-      weapons: entity.cave ? ['mainhand','offhand'].map(function (hand) {
+      weapons: ['mainhand','offhand'].map(function (hand) {
         var item = entity.slots && entity.slots[hand], definition = item && G.items[item.name];
         return definition ? {hand:hand,name:item.name,sprite:spriteDefinition(definition.skin_c || definition.skin)} : null;
-      }).filter(Boolean) : undefined,
+      }).filter(Boolean),
     };
   }
 
@@ -3538,6 +3563,8 @@
   function publishMapFrame() {
     if (!mapTelemetryEnabled || mapTelemetryBusy) return;
     mapTelemetryBusy = true;
+    mapSpriteLayerBudget = 192;
+    mapSpriteEntityBudget = 64;
     var self = mapEntity(character, character.name);
     if (self) { self.id = character.name; self.name = character.name; self.type = "character"; }
     var entities = Object.keys(parent.entities || {}).map(function (id) {
@@ -3550,7 +3577,7 @@
       data: JSON.stringify({ name: character.name, map: character.map, definition: liveCaveMapDefinition(), at: Date.now(),
         x: Number(character.real_x !== undefined ? character.real_x : character.x) || 0,
         y: Number(character.real_y !== undefined ? character.real_y : character.y) || 0,
-        target: character.target || combatTargetId || null, eventCombat: eventTargetTypes.length>0, queue: queueMarkers(), queueRevision: groupedCombat && groupedCombat.queueRevision, grouped: groupedFarming(), entities: entities, events: events }),
+        projectilesAt: Date.now(), projectiles: Object.keys(mapTelemetryProjectiles).filter(function(id){var p=mapTelemetryProjectiles[id];if(p.expiresAt<=Date.now() || p.map!==character.map){delete mapTelemetryProjectiles[id];return false;}return true;}).slice(0,64).map(function(id){return mapTelemetryProjectiles[id];}), target: character.target || combatTargetId || null, eventCombat: eventTargetTypes.length>0, queue: queueMarkers(), queueRevision: groupedCombat && groupedCombat.queueRevision, grouped: groupedFarming(), entities: entities, visuals: root.capturePartyMapVisuals ? root.capturePartyMapVisuals(parent.map_animations || {},64) : [], events: events }),
     }).always(function () { mapTelemetryBusy = false; });
   }
 
@@ -10876,6 +10903,7 @@
         return;
       }
       mapTelemetryEnabled = !!state.mapTelemetry;
+      if (!mapTelemetryEnabled) mapTelemetryProjectiles = {};
       dungeonRuntime().receive(state.dailyDungeon);
       if (root.installCaveRecovery) caveRecovery().receive(state.dailyDungeon && state.dailyDungeon.recovery);
       if (dungeonRuntime().owns()) {
@@ -10946,6 +10974,7 @@
       root.__partyRareControlAt = Math.max(Number(root.__partyRareControlAt || 0),Number(state.serverNow || 0));
       if (!rareControlState) cancelRarePath();
       mapTelemetryEnabled = !!state.mapTelemetry;
+      if (!mapTelemetryEnabled) mapTelemetryProjectiles = {};
       partyLocation = state.partyLocation || null;
       farmTravelPaused = !!state.farmTravelPaused;
       bankQueued = !!state.bankQueued;
