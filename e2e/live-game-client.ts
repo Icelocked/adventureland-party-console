@@ -1,3 +1,4 @@
+import {isLoopback} from './game/addresses.cjs';
 import type { BrowserContext, Page, Frame } from '@playwright/test';
 import {randomUUID} from 'node:crypto';
 import {installCompanionGraphicsDiagnostic} from './native-graphics-diagnostic.ts';
@@ -24,7 +25,7 @@ export interface LiveClient {
 /** Connect an unmodified upstream client and run the maintained production CODE loader. */
 export async function launchGameClient(context: BrowserContext, options: LiveClientOptions): Promise<LiveClient> {
   for (const address of [options.webUrl, options.coordinatorUrl]) {
-    if (!['127.0.0.1', '127.0.0.2', '127.0.0.3', '127.0.0.4', 'localhost'].includes(new URL(address).hostname)) throw new Error('Live E2E requires loopback services');
+    if (!isLoopback(new URL(address).hostname)) throw new Error('Live E2E requires loopback services');
   }
   const page = options.primary?.page || await context.newPage();
   if(!options.primary)await installCompanionGraphicsDiagnostic(context,options,process.env.E2E_COMPANION_NO_GRAPHICS==='1');

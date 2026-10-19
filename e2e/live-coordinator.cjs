@@ -1,3 +1,4 @@
+const {isLoopback}=require('./game/addresses.cjs');
 // Production coordinator, with account/client-file transport pointed at the disposable upstream server.
 require('../tools/sim/network-clock.cjs').install();
 // Character status and every game action come from actual browser CODE runtimes.
@@ -10,7 +11,7 @@ const directory = path.resolve(process.env.E2E_DATA_DIR || '');
 const relative = path.relative(path.join(root, '.build/e2e'), directory);
 if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw Error('Dedicated E2E_DATA_DIR required');
 const webUrl = process.env.E2E_GAME_WEB_URL;
-if (!webUrl || !['localhost','127.0.0.1','127.0.0.2','127.0.0.3','127.0.0.4'].includes(new URL(webUrl).hostname)) throw Error('Local upstream web URL required');
+if (!webUrl || !isLoopback(new URL(webUrl).hostname)) throw Error('Local upstream web URL required');
 const auth = process.env.E2E_GAME_AUTH;
 if (!auth) throw Error('Disposable account auth required');
 const port = Number(process.env.E2E_COORDINATOR_PORT);
@@ -18,7 +19,7 @@ const nativeFetch = globalThis.fetch;
 async function localFetch(input, init) {
   let url = new URL(String(input));
   if (url.hostname === 'adventure.land') url = new URL(url.pathname + url.search, webUrl);
-  if (!['127.0.0.1', '127.0.0.2', '127.0.0.3', '127.0.0.4', 'localhost', '::1'].includes(url.hostname)) throw Error('Unexpected nonlocal request: ' + url.origin);
+  if (!isLoopback(url.hostname)) throw Error('Unexpected nonlocal request: ' + url.origin);
   return nativeFetch(url, init);
 }
 globalThis.fetch = localFetch;

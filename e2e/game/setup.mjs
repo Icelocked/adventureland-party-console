@@ -42,8 +42,12 @@ export default async function setup(config) {
   process.env.E2E_CLOCK_VIRTUAL_EPOCH=process.env.E2E_CLOCK_WALL_EPOCH;
   if (selectors.length && !selectors.some(name => name === 'live' || name.includes('*'))) return;
   if (!config.projects.some(project => project.name === 'live')) return;
-  if(config.workers>gameHosts.length)throw Error('At most four isolated local gameplay workers are supported');
-  const pools=[];
+  const offset=Number(process.env.E2E_GAME_POOL_OFFSET||0);
+  const prefix=process.env.E2E_GAME_PROJECT_PREFIX||'al-e2e-pr21';
+  if(!Number.isInteger(offset)||offset<0||offset+config.workers>gameHosts.length)
+    throw Error(`Assigned pool range must fit within ${gameHosts.length} isolated gameplay hosts`);
+  if(!/^[a-z0-9][a-z0-9_-]*$/.test(prefix))throw Error('Invalid isolated game project prefix');
+  const pools=[],pending=[];
   try {
     for(let index=0;index<config.workers;index++){
       const clock=accelerated?await startNetworkClock(Number(process.env.E2E_CLOCK_RATE)):undefined;
@@ -51,9 +55,15 @@ export default async function setup(config) {
         E2E_CLOCK_WALL_EPOCH:String(Date.now()),E2E_CLOCK_VIRTUAL_EPOCH:String(clock?.epoch||Date.now()),
         E2E_CLOCK_TOKEN:clock?.token||'',E2E_CLOCK_BROKER:clock?`http://127.0.0.1:${clock.port}`:'',
         E2E_CLOCK_DOCKER_BROKER:clock?`http://host.docker.internal:${clock.port}`:''};
-      const pool={project:`al-e2e-pr21-${index}`,host:gameHosts[index],environment,clock};
+      const pool={project:`${prefix}-${index}`,host:gameHosts[offset+index],environment,clock};
       pools.push(pool);
-      await up(pool);
+      pending.push(pool);
+      if(pending.length===2||index===config.workers-1){
+        const results=await Promise.allSettled(pending.map(item=>up(item)));
+        pending.length=0;
+        const errors=results.filter(result=>result.status==='rejected').map(result=>result.reason);
+        if(errors.length)throw new AggregateError(errors,'Isolated game startup failed');
+      }
     }
     process.env.E2E_GAME_POOLS=JSON.stringify(pools.map(({clock,...pool})=>pool));
   } catch(error){await cleanup();throw error;}

@@ -183,12 +183,12 @@ jobs:
           } finally {await browser.close();}
           '@ | node --input-type=module
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Run selected E2Es with one worker
+      - name: Run selected E2Es with eight workers
         env:
           LOCAL_PROJECT: ${{ inputs.local_project }}
           LOCAL_GREP: ${{ inputs.local_grep }}
         run: |
-          $testArgs = @('run', 'test:e2e', '--', '--workers=1')
+          $testArgs = @('run', 'test:e2e', '--', '--workers=8')
           if ($env:LOCAL_PROJECT -ne 'all') { $testArgs += "--project=$env:LOCAL_PROJECT" }
           if ($env:LOCAL_GREP) { $testArgs += @('--grep', $env:LOCAL_GREP) }
           & npm @testArgs

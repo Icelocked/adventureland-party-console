@@ -41,9 +41,8 @@ runner package is v2.338.0, SHA256
 normal GitHub runner updates remain enabled.
 
 `tools/ci/start-local-runner.ps1` runs hidden through the current user's Startup
-shortcut **Party Console GitHub runner**. It uses BelowNormal priority and restricts
-inherited Windows process affinity to the first eight logical CPUs. A single runner,
-a workflow concurrency group, and `--workers=1` prevent simultaneous local jobs.
+shortcut **Party Console GitHub runner**. It uses BelowNormal priority and all available CPUs. A single runner and workflow
+concurrency group prevent simultaneous local jobs; each job uses `--workers=8`.
 This does not limit the separate Docker/WSL VM or enforce a memory ceiling. Docker
 Desktop must be running for live/debug projects. Signing out stops this interactive
 runner; signing in starts it again. Administrator privileges were not required.
@@ -54,7 +53,7 @@ To start it again, open the Startup shortcut. Removing that shortcut disables lo
 startup; remove the repository runner in GitHub Settings to unregister it.
 
 The workflow explicitly requests hardware rendering and the RTX 5090, ChronAL at
-4x, one worker, and browser CPU diagnostics. Reports, traces, screenshots, videos,
+4x, eight workers, and browser CPU diagnostics. Reports, traces, screenshots, videos,
 and timing evidence are uploaded as `self-hosted-e2e-RUN-ATTEMPT` for 14 days.
 Completed owned scenario workspaces are removed by the normal E2E teardown.
 A single local machine is not equivalent to sixteen parallel hosted machines:

@@ -1,3 +1,4 @@
+import {isLoopback} from './game/addresses.cjs';
 import { test as base, expect } from '@playwright/test';
 import {cleanupWorkspace} from './workspace';
 import { fork, type ChildProcess } from 'node:child_process';
@@ -184,7 +185,7 @@ export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantCo
   context: async ({ context }, use) => {
     await context.route('**/*', route => {
       const url = new URL(route.request().url());
-      return ['127.0.0.1', '127.0.0.2', '127.0.0.3', '127.0.0.4', 'localhost', '::1', '[::1]'].includes(url.hostname) || ['data:', 'blob:'].includes(url.protocol)
+      return isLoopback(url.hostname) || ['data:', 'blob:'].includes(url.protocol)
         ? route.continue() : route.abort('blockedbyclient');
     });
     await use(context);

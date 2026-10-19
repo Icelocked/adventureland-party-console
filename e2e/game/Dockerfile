@@ -11,6 +11,6 @@ RUN git init . && git remote add origin https://github.com/kaansoral/adventurela
 COPY backend-package-lock.json /game/package-lock.json
 COPY server-package-lock.json /game/node/package-lock.json
 RUN npm ci --omit=dev && cd node && npm ci --omit=dev
-COPY configure.cjs boot.cjs /game/e2e/
+COPY configure.cjs boot.cjs addresses.cjs /game/e2e/
 RUN node e2e/configure.cjs
 CMD ["node", "e2e/boot.cjs"]
