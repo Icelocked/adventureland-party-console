@@ -1,61 +1,9 @@
 import { selectSnapshot } from "../persistence/snapshots.ts";
+import { fastProjection, sectionFields } from "./character-fields.ts";
 import type { PresentationEntry, PresentationStatus, PublicCommand } from "./public-state-types.ts";
 
 export function diagnosticCharacters(statuses: Readonly<Record<string, PresentationStatus>>) {
-  const allowed = new Set([
-    "name",
-    "recovery",
-    "movement",
-    "eventWalkFailure",
-    "farmingNavigationDebug",
-    "ctype",
-    "server",
-    "level",
-    "seenAt",
-    "ping",
-    "owner",
-    "skin",
-    "characterSprite",
-    "characterDollHtml",
-    "primaryStat",
-    "attack",
-    "frequency",
-    "range",
-    "speed",
-    "unrestrictedSpeed",
-    "armor",
-    "resistance",
-    "str",
-    "int",
-    "dex",
-    "vit",
-    "fortitude",
-    "luck",
-    "goldBonus",
-    "xpBonus",
-    "combatStats",
-    "banking",
-    "bankQueued",
-    "stocking",
-    "upgrading",
-    "standOpen",
-    "farmingMode",
-    "monsterHunt",
-    "activeEvent",
-    "joinedEvent",
-    "donationXpPerGold",
-    "donationLevelXp",
-    "gatheringCooldowns",
-    "gatheringPhase",
-    "gatheringBlockedReason",
-    "gatheringAttemptId",
-    "monsterAchievementKills",
-    "monsterAchievements",
-    "tracktrix",
-    "anniversaryVisit",
-    "anniversaryState",
-    "lootStatus",
-  ]);
+  const allowed = new Set<string>(sectionFields.diagnostics);
   return Object.fromEntries(
     Object.entries(statuses).map(([name, status]) => [
       name,
@@ -69,15 +17,6 @@ export function diagnosticCharacters(statuses: Readonly<Record<string, Presentat
   );
 }
 
-const omittedFastFields = new Set([
-  "items",
-  "slots",
-  "bank",
-  "realmPlayers",
-  "nearbyStandListings",
-  "nearbyGiveaways",
-  "characterDollHtml",
-]);
 const metadataFields = [
   "definition",
   "upgradeable",
@@ -94,9 +33,7 @@ export function fastCharacters(statuses: Readonly<Record<string, PresentationSta
   return Object.fromEntries(
     Object.entries(statuses).map(([name, status]) => [
       name,
-      Object.fromEntries(
-        Object.entries(status || {}).filter(([key]) => !omittedFastFields.has(key)),
-      ),
+      fastProjection(status || {}),
     ]),
   );
 }
