@@ -51,12 +51,90 @@ function entries(value: unknown): RecordValue {
     Object.entries(requestObject(value)).filter(([key]) => key !== "__proto__"),
   );
 }
-function difference(before: RecordValue, after: RecordValue): RecordValue {
-  const result: RecordValue = {};
-  for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
-    if (JSON.stringify(before[key]) !== JSON.stringify(after[key]))
-      result[key] = after[key] ?? null;
+// jsonEqual answers "is JSON.stringify(a) === JSON.stringify(b)" by walking
+// both values and stopping at the first difference. Status records and
+// samples come from parsed request JSON, which the walk covers. A toJSON
+// method, a non-plain object (Map, Date, boxed primitive), a bigint or a 65th
+// level sends the whole field to JSON.stringify, so a cycle repeated on both
+// sides still throws there. Identical references compare equal without a walk.
+const FALLBACK = Symbol("fallback");
+type Equal = boolean | typeof FALLBACK;
+const absent = (value: unknown) =>
+  value === undefined || typeof value === "function" || typeof value === "symbol";
+function plain(value: object): boolean {
+  const prototype: unknown = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null || Array.isArray(value);
+}
+// One JSON token kind per value: "absent" is what JSON.stringify drops from an
+// object or writes as null in an array.
+function kind(value: unknown): string {
+  if (value === null || typeof value === "number" && !Number.isFinite(value)) return "null";
+  if (absent(value)) return "absent";
+  return typeof value;
+}
+function arrayEqual(a: unknown[], b: unknown[], depth: number): Equal {
+  if (a.length !== b.length) return false;
+  for (let index = 0; index < a.length; index++) {
+    const left = absent(a[index]) ? null : a[index], right = absent(b[index]) ? null : b[index];
+    const equal = valueEqual(left, right, depth + 1);
+    if (equal !== true) return equal;
   }
+  return true;
+}
+// A toJSON can drop its own key, so keys() hands the field to JSON.stringify
+// when any entry has one.
+function opaque(value: unknown): boolean {
+  return typeof value === "bigint" || typeof value === "object" && value !== null &&
+    (typeof (value as { toJSON?: unknown }).toJSON === "function" || !plain(value));
+}
+function keys(value: RecordValue): string[] | typeof FALLBACK {
+  const result: string[] = [];
+  for (const key of Object.keys(value)) {
+    const entry = value[key];
+    if (opaque(entry)) return FALLBACK;
+    if (!absent(entry)) result.push(key);
+  }
+  return result;
+}
+function objectEqual(a: RecordValue, b: RecordValue, depth: number): Equal {
+  const left = keys(a), right = keys(b);
+  if (left === FALLBACK || right === FALLBACK) return FALLBACK;
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index++) {
+    if (left[index] !== right[index]) return false;
+    const equal = valueEqual(a[left[index]], b[left[index]], depth + 1);
+    if (equal !== true) return equal;
+  }
+  return true;
+}
+function primitiveEqual(a: unknown, b: unknown): boolean {
+  const kindA = kind(a);
+  return kindA === kind(b) && (kindA === "null" || kindA === "absent");
+}
+function structureEqual(a: unknown, b: unknown, depth: number): Equal {
+  const objectA = typeof a === "object" && a !== null, objectB = typeof b === "object" && b !== null;
+  if (objectA !== objectB) return false;
+  if (!objectA) return primitiveEqual(a, b);
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  return Array.isArray(a) ? arrayEqual(a, b as unknown[], depth) : objectEqual(a as RecordValue, b as RecordValue, depth);
+}
+function valueEqual(a: unknown, b: unknown, depth: number): Equal {
+  if (a === b && typeof a !== "bigint") return true;
+  if (depth > 64 || opaque(a) || opaque(b)) return FALLBACK;
+  return structureEqual(a, b, depth);
+}
+function jsonEqual(a: unknown, b: unknown): boolean {
+  const equal = valueEqual(a, b, 0);
+  return equal === FALLBACK ? JSON.stringify(a) === JSON.stringify(b) : equal;
+}
+/** Fields whose JSON text changed, in the order of before's keys, then after's new keys. */
+export function difference(before: RecordValue, after: RecordValue): RecordValue {
+  const result: RecordValue = {};
+  for (const key of Object.keys(before))
+    if (!jsonEqual(before[key], after[key])) result[key] = after[key] ?? null;
+  for (const key of Object.keys(after))
+    if (!Object.prototype.propertyIsEnumerable.call(before, key) && !jsonEqual(undefined, after[key]))
+      result[key] = after[key] ?? null;
   return result;
 }
 function pickVitals(status: RecordValue): RecordValue {
