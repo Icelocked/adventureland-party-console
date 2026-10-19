@@ -20,6 +20,15 @@ import { initializeStandLocation, standLocationRoute } from './merchant/stand-lo
 import { createRareRouteDistance } from './navigation/rare-route-distance.ts';
 import { createMetricsService } from './metrics/service.ts';
 import { accountGoldSnapshot } from './telemetry/account-gold.ts';
+/** A farm-area snapshot saved while record() was idle keeps expired hits. */
+function pruneSavedFarmAreas(
+  party: { farmAreaState?: object | null; farmingProfiles?: Record<string, { farmAreaState?: object | null } | null | undefined> },
+  control: Pick<import("./infrastructure/hunt-platform.ts").FarmAreaControlPlatform, "prune">,
+): void {
+  for (const scope of [party, ...Object.values(party.farmingProfiles || {})])
+    if (scope?.farmAreaState) control.prune(scope.farmAreaState, Date.now());
+}
+
 export function startCoordinatorApplication(
   platform: CoordinatorApplicationPlatform,
 ): Promise<void> {
@@ -204,9 +213,7 @@ export function startCoordinatorApplication(
       persistHistory,
     });
     const persistence = coordinatorPolicies.createCoordinatorPersistence(party, localStorage);
-    // A farm-area snapshot saved while record() was idle keeps expired hits.
-    for (const scope of [party, ...Object.values(party.farmingProfiles || {})])
-      if (scope?.farmAreaState) farmAreaControl.prune(scope.farmAreaState, Date.now());
+    pruneSavedFarmAreas(party, farmAreaControl);
     if (initializeStandLocation(party, Object.keys(persistedSettings).length === 0, canStand)) persistence.settings();
     const storageService = coordinatorPolicies.createCoordinatorStorageService(
       party,

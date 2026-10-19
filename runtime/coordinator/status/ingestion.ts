@@ -102,6 +102,11 @@ export function createStatusIngestion<Report extends StatusReport>(
       measureStatusStage('persist', () => ports.persist());
   }
 
+  function receiveRosterEvidence(raw: Record<string, unknown>, body: Report, receivedAt: number): void {
+    const snapshotChanged = rememberCharacterSnapshot(state, raw, receivedAt);
+    if (rememberCharacterAppearance(state, body, receivedAt) || snapshotChanged) ports.persistRoster();
+  }
+
   function handle(req: HttpRequest, res: HttpResponse): unknown {
     const receivedAt = ports.now();
     const sendJson = res.json.bind(res);
@@ -117,8 +122,7 @@ export function createStatusIngestion<Report extends StatusReport>(
     // Report fields are decoded by their domain consumer; unrecognized fields remain available to the dashboard.
     const body = raw as unknown as Report;
     receiveLuckyEvidence(raw, raw.name);
-    const snapshotChanged = rememberCharacterSnapshot(state, raw, receivedAt);
-    if (rememberCharacterAppearance(state, body, receivedAt) || snapshotChanged) ports.persistRoster();
+    receiveRosterEvidence(raw, body, receivedAt);
     const learned = consume(body);
     const previous = state.statuses[body.name];
     if (body.name === state.merchantCharacter) ports.merchant(body, previous);
