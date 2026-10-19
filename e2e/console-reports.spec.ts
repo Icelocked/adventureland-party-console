@@ -30,3 +30,25 @@ test('a saved snapshot with per-copy item meta shows catalog names offline', asy
   await expect(page.getByRole('button', { name: 'Inspect Coat +3', exact: true })).toBeVisible();
   await info.attach('saved-snapshot-entry', { body: JSON.stringify((await app.state()).characterSnapshots.M.items[0]), contentType: 'application/json' });
 });
+
+test('a report that omits unchanged inventory keeps it, and an unknown revision answers 409', async ({ page, app }, info) => {
+  const report = await merchantReport(app);
+  const acknowledged = await app.deliverStatus(report({ items: coat(3), slots: {}, inventoryRevision: 'probe-1' })) as { inventoryRevision?: string };
+  expect(acknowledged.inventoryRevision).toBe('probe-1');
+  // Reports between inventory changes name the revision and leave the fields out.
+  for (let index = 0; index < 3; index++) await app.deliverStatus(report({ hp: 900 + index, inventoryRevision: 'probe-1' }));
+  const carried = await inventory(app.url);
+  expect(carried.items[0].item).toEqual({ name: 'coat', level: 3 });
+  expect((await app.state()).characters.M).toMatchObject({ hp: 902 });
+  await page.goto('/');
+  const merchant = page.locator('article').filter({ has: page.getByRole('heading', { name: 'M', exact: true }) });
+  await expect(merchant.getByText('coat', { exact: true })).toBeVisible();
+  // A revision this coordinator never held: the character must resend the inventory.
+  await expect(app.deliverStatus(report({ hp: 950, inventoryRevision: 'probe-unknown' }))).rejects.toThrow(/409.*inventory-required/);
+  expect((await app.state()).characters.M).toMatchObject({ hp: 902 });
+  // The resend with the changed inventory replaces the carried one.
+  await app.deliverStatus(report({ items: coat(4), slots: {}, inventoryRevision: 'probe-2' }));
+  await app.deliverStatus(report({ inventoryRevision: 'probe-2' }));
+  expect((await inventory(app.url)).items[0].item).toEqual({ name: 'coat', level: 4 });
+  await info.attach('carried-inventory', { body: JSON.stringify((await inventory(app.url)).items[0]), contentType: 'application/json' });
+});
