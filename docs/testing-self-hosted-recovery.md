@@ -509,3 +509,22 @@ acknowledgement and later tracker reward refresh each pass three repetitions
 runs retain all original assertions and ChronAL at 4x. They are not a substitute
 for the full self-hosted workflow; do not claim a full-suite green result until
 that workflow completes successfully.
+
+Run 39270495973 exposed a catalogue-test precondition race. Its native ledger
+shows an ordinary merchant heartbeat with no catalogue fields and `needsCatalog:
+false`, followed by one 9.16 MB discovery publication and subsequent catalogue-free
+heartbeats. Shared coordinator state being available does not acknowledge that
+client's still-preparing generation. Request one catalogue publication per native
+client through the existing `needsCatalog` protocol, then require acceptance of
+the full payload and exact current version before counting the subsequent three
+heartbeats. Keep the strict zero catalogue-field and no-renegotiation assertions.
+
+The first readiness probe incorrectly required tracker data on characters without
+a tracker; all four acknowledgement repetitions stopped at that precondition while
+the four reward-refresh repetitions passed. Their 363 evidence files are verified.
+Use each client's prepared/accepted catalogue state instead, retaining bounded
+timestamped readiness observations. With that correction, both catalogue journeys
+pass four repetitions across eight workers: eight passes, 367 verified evidence
+files and eight workspaces removed. Publication acceptance must include all seven
+catalogue fields and the exact current version; later heartbeat assertions remain
+strict. The full workflow still needs to pass.
