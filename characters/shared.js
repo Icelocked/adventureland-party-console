@@ -5966,11 +5966,15 @@
       if (!group.items || group.items.length !== 3) continue;
       var slots = [], localUsed = {};
       group.items.forEach(function (mark) {
-        var slot = character.items.findIndex(function (item, index) { return !localUsed[index] && sameItem(item, mark.item); });
+        var slot = mark.storage ? (Number.isInteger(mark.slot) && !localUsed[mark.slot] && sameItemState(character.items[mark.slot],mark.item) ? mark.slot : -1)
+          : character.items.findIndex(function (item, index) { return !localUsed[index] && sameItem(item, mark.item); });
         if (slot >= 0) localUsed[slot] = true;
         slots.push(slot);
       });
-      if (slots.some(function (slot) { return slot < 0; })) continue;
+      if (slots.some(function (slot) { return slot < 0; })) {
+        if (group.items.some(function(mark){return mark.storage;})) throw Error('Reserved bank compound input moved before production');
+        continue;
+      }
       var cscroll = "cscroll" + item_grade(character.items[slots[0]]), cscrollSlot = findInventoryItemByName(cscroll);
       if (cscrollSlot < 0) {
         await ensureOwnedItemQuantity(cscroll, 1, command, activity);
@@ -6869,13 +6873,16 @@
       if(!source || mark.storageReceived) continue;
       var bankItem=character.bank && character.bank[source.pack] && character.bank[source.pack][source.slot];
       if(!bankItem || bankItem.l || !sameItemState(bankItem,mark.item)) throw Error('Reserved bank compound item changed');
+      var beforeSlots=character.items.map(function(item){return item ? JSON.stringify(fingerprint(item)) : null;});
       var before=character.items.filter(function(item){return sameItemState(item,mark.item);}).length;
       await bank_retrieve(source.pack,source.slot);
       var deadline=Date.now()+2500;
       while(character.items.filter(function(item){return sameItemState(item,mark.item);}).length<=before && Date.now()<deadline) await sleep(100);
       if(character.items.filter(function(item){return sameItemState(item,mark.item);}).length<=before) throw Error('Bank compound withdrawal unconfirmed');
-      mark.storageReceived=true;
-      (command._merchantWithdrawalsCompleted ||= []).push({pack:source.pack,slot:source.slot,item:mark.item});
+      var receivedSlot=character.items.findIndex(function(item,index){return !beforeSlots[index] && sameItemState(item,mark.item);});
+      if(receivedSlot<0) throw Error('Bank compound destination was not uniquely observed');
+      mark.slot=receivedSlot;mark.storageReceived=true;
+      (command._merchantWithdrawalsCompleted ||= []).push({pack:source.pack,slot:source.slot,item:mark.item,inventorySlot:receivedSlot});
     }
     activity.push({level:'info',message:'Withdrew reserved bank compound triplets'});
   }
