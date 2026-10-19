@@ -175,8 +175,9 @@ export function createRareHunting(input: unknown, hooks: Hooks) {
     );
   }
   /**
-   * Split searchers are independent: one fighter's command, low HP, event, or a
-   * leader heartbeat gap during a map change must not pause the others.
+   * Split searchers and converging members are independent: one fighter's
+   * command, low HP, event, or a leader heartbeat gap during a map change must
+   * not pause the others or end the encounter.
    */
   function searchPaused(): string | null {
     const lead = leader();
@@ -186,7 +187,7 @@ export function createRareHunting(input: unknown, hooks: Hooks) {
     return hooks.turnIn() ? "Hunt turn-in" : null;
   }
   function splitSearch(): boolean {
-    return !!patrol && !encounter;
+    return !!patrol && (!encounter || encounter.stage === "converge");
   }
   function blocked(): boolean {
     return splitSearch() ? !!searchPaused() : protectedActivity();
@@ -516,7 +517,8 @@ export function createRareHunting(input: unknown, hooks: Hooks) {
       const s = party.statuses[n];
       return !!s && now() - s.seenAt <= FRESH && !s.rip && Number(s.hp) > 0;
     });
-    const missing = names.filter((n) => !gathered(party.statuses[n], e.target));
+    // A member busy with its own condition (8c) has not gathered, even in range.
+    const missing = names.filter((n) => !gathered(party.statuses[n], e.target) || memberProtected(n));
     if (names.length && (!missing.length || now() >= e.gatherDeadline!)) {
       e.stage = "approach";
       e.awaitingSelection = combat.grouped();
@@ -1055,7 +1057,7 @@ export function createRareHunting(input: unknown, hooks: Hooks) {
   }
   function searchControlFor(name: string) {
     const reason = searchPaused() || memberProtection(name);
-    if (!reason) return searchControl(name);
+    if (!reason) return encounter ? ownedControl(encounter, name) : searchControl(name);
     diagnostic('Phoenix search control withheld', {id:name,reason});
     return null;
   }

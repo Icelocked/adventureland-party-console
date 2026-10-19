@@ -311,4 +311,225 @@ test.describe('far fighter converging on a wandering Phoenix',()=>{
       await info.attach('phoenix-far-converge-timeline',{body:JSON.stringify(timeline,null,2),contentType:'application/json'});
     }
   });
+
+});
+
+// Failure 8c: one fighter's own condition must not end the converge. The leader
+// (warrior) waits on the strip and spots; the follower (priest) is the busy one,
+// standing in town as after a merchant handoff, as the live case was.
+test.describe('converging fighter busy in town',()=>{
+  test.use({initialPositions:{[W]:{map:'main',x:-1180,y:800},[P]:{map:'main',x:1100,y:-200}}});
+  test('A converging fighter dropping to low HP mid-converge does not end the encounter for the others',async({live},info)=>{
+    test.setTimeout(900_000);
+    const encounters:any[]=[];
+    const diagnostics=new Map<string,any>();
+    const statusCancels=new Map<string,{who:string;at:number}>();
+    let sampling=true;
+    const sample=async()=>{
+      while(sampling) {
+        try {
+          const [state,positions,phoenix]=await Promise.all([live.state(),world(live),
+            live.admin(`output=Object.values(instances.main?.monsters||{}).filter(m=>m.type==='phoenix'&&!m.dead).map(m=>({x:Math.round(m.x),y:Math.round(m.y)}))[0]||null`)]);
+          const e=state.rareHuntState?.encounter;
+          for(const [who,list] of Object.entries(state.combatLogs||{}))for(const entry of ((list as any)?.events||list||[])) {
+            if(/withheld|Rare pursuit ended|gathered/.test(entry.message))diagnostics.set(who+entry.at+entry.message+JSON.stringify(entry.details),{who,...entry});
+            // Failure 8e: the status loop cancelling a resent converge route.
+            if(/cancelRarePath[\s\S]*\btick\b/.test(entry.details?.failureContext?.stopStack||''))statusCancels.set(who+entry.at,{who,at:entry.at});
+          }
+          encounters.push({at:Date.now(),id:e?.id||null,stage:e?.stage||null,message:state.rareHuntState?.message||null,
+            freshness:Object.fromEntries([W,P].map(n=>[n,{age:Date.now()-Number(state.characters?.[n]?.seenAt||0),server:state.characters?.[n]?.server,
+              rareNav:state.characters?.[n]?.rareNavigation||null}])),
+            searchers:Object.keys(state.rareHuntState?.patrol?.searchers||{}),phoenix,
+            positions:Object.fromEntries([W,P].map(n=>[n,{map:positions.players[n].map,x:Math.round(positions.players[n].x),y:Math.round(positions.players[n].y),hp:positions.players[n].hp}]))});
+        } catch(error) { encounters.push({at:Date.now(),error:String(error)}); }
+        await new Promise(resolve=>setTimeout(resolve,500));
+      }
+    };
+    let sampler:Promise<void>|undefined;
+    try {
+      await live.post('/formation',{leader:W});
+      await live.post('/formation',{character:P,follow:true});
+      await expect.poll(async()=>(await live.state(true)).monsterChoices?.find((m:any)=>m.id==='phoenix')?.locations?.length,{timeout:120_000}).toBe(5);
+      const order=zones((await live.state(true)).monsterChoices,['phoenix']).map(a=>a.id!);
+      // Declared fixture: as above, the native Phoenix pinned to the west strip.
+      const seeded=await live.admin(`output=(()=>{
+        const found=[];for(const instance of Object.values(instances))for(const m of Object.values(instance.monsters||{}))if(m.type==='phoenix'&&!m.dead)found.push(m);
+        if(found.length!==1)throw Error('Expected one native Phoenix, found '+found.length);
+        const native=found[0],definition=native.map_def,boundaries=definition.boundaries,original=G.monsters.phoenix;
+        remove_monster(native,{nospawn:true,silent:true});
+        try {
+          definition.boundaries=boundaries.filter(b=>b[0]==='main'&&b[1]===-1358);
+          G.monsters.phoenix={...original,hp:2000000,attack:1};
+          const m=new_monster('main',definition,{});
+          return {id:m.id,map:m.map,x:m.x,y:m.y};
+        } finally {definition.boundaries=boundaries;G.monsters.phoenix=original;}
+      })()`);
+      await live.post('/navigate-to-monster',{monsterId:'phoenix',phoenixRouteOrder:order});
+      sampler=sample();
+      await expect.poll(async()=>(await live.state()).rareHuntState?.encounter?.targetId,{timeout:300_000,intervals:[500],
+        message:'A fighter on the strip must spot the seeded Phoenix'}).toBe(seeded.id);
+      const spottedAt=Date.now();
+      const first=(await live.state()).rareHuntState.encounter;
+      // Declared boundary: the converging fighter (not the spotter, which keeps the
+      // Phoenix in sight) drops below the 35% protection line, as FonzePriest's
+      // merchant handoff took it out of the live converge.
+      const spotter=/spotted by (\S+)/.exec((await live.state()).rareHuntState?.message||'')?.[1];
+      expect([W,P],'The sighting must name its spotter').toContain(spotter);
+      const hurt=await live.admin(`output=(()=>{
+        const near=Object.values(players).find(p=>p.name===${JSON.stringify(spotter===W?P:W)});
+        if(!near)throw Error('Spotter not online: '+JSON.stringify(Object.values(players).map(p=>[p.name,p.map,p.x,p.y])));
+        // As a merchant handoff leaves it: hurt and waiting in town, far from the Phoenix.
+        near.hp=Math.floor(near.max_hp*.2);transport_player_to(near,'main',0);resend(near,'reopen+cid');
+        return {name:near.name,map:near.map,x:near.x,y:near.y,hp:near.hp,max_hp:near.max_hp,at:Date.now()};
+      })()`);
+      const walker=spotter;
+      await expect.poll(async()=>{const s=(await live.state()).characters?.[hurt.name];return s&&s.hp/s.max_hp<.35;},
+        {timeout:30_000,intervals:[250],message:'The coordinator must see the hurt fighter below 35% HP'}).toBe(true);
+      const protectedSeenAt=Date.now();
+      // Declared boundary: the busy fighter waits in town for 15 s, as during a
+      // merchant handoff, then its condition ends.
+      for(const until=Date.now()+15_000;Date.now()<until;await new Promise(resolve=>setTimeout(resolve,1000)))
+        await live.admin(`output=(()=>{const p=Object.values(players).find(p=>p.name===${JSON.stringify(hurt.name)});
+          if(p&&(p.map!=='main'||Math.hypot(p.x,p.y)>80))transport_player_to(p,'main',0);return true;})()`);
+      const healed=await live.admin(`output=Object.values(players).filter(p=>p.name===${JSON.stringify(hurt.name)}).map(p=>{p.hp=p.max_hp;resend(p,'reopen+cid');return {hp:p.hp,max_hp:p.max_hp};})`);
+      const healedAt=Date.now();
+      const farAtHeal=await live.admin(`output=(()=>{const m=Object.values(instances.main.monsters).find(m=>m.id===${JSON.stringify(seeded.id)});
+        const p=Object.values(players).find(p=>p.name===${JSON.stringify(hurt.name)});return m&&p&&p.map===m.map?Math.hypot(p.x-m.x,p.y-m.y):null;})()`);
+      expect(farAtHeal,'The healed fighter must still have a converge walk ahead').toBeGreaterThan(800);
+      await expect.poll(async()=>(await world(live)).players[hurt.name].hp/hurt.max_hp,{timeout:15_000,intervals:[500],
+        message:'The declared heal must take: '+JSON.stringify(healed)}).toBeGreaterThan(.35);
+      await expect.poll(async()=>(await live.state()).rareHuntState?.encounter?.gatheredAt||0,{timeout:420_000,intervals:[500],
+        message:'The party must still gather on the Phoenix'}).toBeGreaterThan(0);
+      const gathered=(await live.state()).rareHuntState.encounter;
+      const during=encounters.filter(s=>s.at>=spottedAt&&s.at<=gathered.gatheredAt);
+      const ids=[...new Set(during.map(s=>s.id))];
+      const logs=(await live.state()).combatLogs||{};
+      const ended=Object.values(logs).flatMap((l:any)=>l?.events||l||[]).filter((e:any)=>e.at>=hurt.at&&e.message==='Rare pursuit ended');
+      const interrupted=ended.filter((e:any)=>/protected activity/.test(e.details?.reason||''));
+      await info.attach('phoenix-converge-member-protected',{body:JSON.stringify({seeded,first:first.id,hurt,walker,protectedSeenAt,
+        gathered:{id:gathered.id,gatheredAt:gathered.gatheredAt,gatheredWithout:gathered.gatheredWithout},ids,ended,interrupted,during},null,2),contentType:'application/json'});
+      expect(interrupted,'A fighter at low HP must not end the encounter').toEqual([]);
+      // A spotter can still lose sight at the edge of its view; that is entry 12's
+      // lost-sighting path, unrelated to the busy member, and the search re-finds it.
+      expect(ended.filter((e:any)=>e.details?.reason!=='Phoenix lost while the party converged'),
+        'Only a lost sighting may end the encounter while the fighter is busy').toEqual([]);
+      expect(gathered.gatheredWithout,'Both fighters must gather once the hurt fighter recovers').toEqual([]);
+      const resentCancels=[...statusCancels.values()].filter(c=>c.who===hurt.name&&c.at>healedAt+3000&&c.at<=gathered.gatheredAt);
+      await info.attach('phoenix-converge-resent-control',{body:JSON.stringify({healedAt,gatheredAt:gathered.gatheredAt,resentCancels},null,2),contentType:'application/json'});
+      expect(resentCancels.length,'The healed fighter must keep its resent converge route (8e)').toBeLessThanOrEqual(2);
+    } finally {
+      sampling=false;
+      await sampler;
+      await info.attach('phoenix-converge-member-protected-timeline',{body:JSON.stringify({diagnostics:[...diagnostics.values()],encounters},null,2),contentType:'application/json'});
+    }
+  });
+});
+
+// Failure 8d: a searcher caught by an attacker it can outrun walks on instead of
+// standing in the spawn fighting it alone. Live, FonzePriest healed itself at the
+// Mainland Hawk spawn for over 280 s while the party waited for it.
+test.describe('searcher caught by a slower attacker',()=>{
+  const hawks={map:'main',x:1340,y:250};
+  test.use({initialPositions:{[P]:hawks,[W]:{map:'main',x:0,y:0}}});
+  test('A Phoenix searcher walks away from a hawk it can outrun and nobody fights the hawk',async({live},info)=>{
+    test.setTimeout(600_000);
+    await live.post('/formation',{leader:W});
+    await live.post('/formation',{character:P,follow:true});
+    await expect.poll(async()=>(await live.state(true)).monsterChoices?.find((m:any)=>m.id==='phoenix')?.locations?.length,{timeout:120_000}).toBe(5);
+    const order=zones((await live.state(true)).monsterChoices,['phoenix']).map(a=>a.id!);
+    // Declared fixture: no Phoenix on the server, so only searching is observed.
+    await live.admin(`output=Object.values(instances).flatMap(i=>Object.values(i.monsters||{})).filter(m=>m.type==='phoenix'&&!m.dead).map(m=>{remove_monster(m,{nospawn:true,silent:true});return m.id})`);
+    await live.post('/navigate-to-monster',{monsterId:'phoenix',phoenixRouteOrder:order});
+    // Declared boundary: the nearest hawk targets the priest once the search starts.
+    await expect.poll(async()=>!!(await live.state()).rareHuntState?.patrol?.searchers?.[P],{timeout:120_000,
+      message:'The priest must receive a search assignment'}).toBe(true);
+    const caught=await live.admin(`output=(()=>{
+      const p=Object.values(players).find(p=>p.name===${JSON.stringify(P)});
+      const hawk=Object.values(instances.main.monsters).filter(m=>m.type==='bigbird'&&!m.dead)
+        .sort((a,b)=>Math.hypot(a.x-p.x,a.y-p.y)-Math.hypot(b.x-p.x,b.y-p.y))[0];
+      if(!hawk)throw Error('No hawk on Mainland');
+      target_player(hawk,p);
+      return {hawk:String(hawk.id),hawkSpeed:hawk.speed,priestSpeed:p.speed,priest:{x:p.x,y:p.y},distance:Math.hypot(hawk.x-p.x,hawk.y-p.y),at:Date.now()};
+    })()`);
+    await info.attach('hawk-caught-searcher',{body:JSON.stringify(caught,null,2),contentType:'application/json'});
+    expect(caught.priestSpeed,'The fixture needs a priest faster than the hawk').toBeGreaterThan(caught.hawkSpeed);
+    const samples:any[]=[];
+    const away=async()=>{
+      const [s,state]=await Promise.all([world(live),live.state()]);
+      const p=s.players[P];
+      samples.push({at:Date.now(),priest:{map:p.map,x:Math.round(p.x),y:Math.round(p.y),hp:p.hp},covered:state.rareHuntState?.patrol?.covered?.length||0,
+        retry:state.rareHuntState?.patrol?.retryReason||null});
+      return p.map!=='main'||Math.hypot(p.x-hawks.x,p.y-hawks.y)>600;
+    };
+    await expect.poll(away,{timeout:45_000,intervals:[1000],message:'The priest must walk away from the hawk spawn'}).toBe(true);
+    await expect.poll(async()=>(await live.state()).rareHuntState?.patrol?.covered?.length||0,{timeout:300_000,intervals:[2000],
+      message:'The search must still cover a region'}).toBeGreaterThan(0);
+    const hawkHits=(await Promise.all([W,P].map(name=>live.clients[name].events()))).flat()
+      .filter((event:any)=>event.event==='hit'&&[W,P].includes(event.data?.hid)&&String(event.data?.id)===caught.hawk);
+    await info.attach('hawk-escape-timeline',{body:JSON.stringify({caught,hawkHits:hawkHits.length,samples},null,2),contentType:'application/json'});
+    expect(hawkHits.length,'Nobody may stop to fight a hawk the priest can outrun').toBe(0);
+  });
+});
+
+// Failure 8f: a fight the spotter cannot be part of (the warrior's, on another
+// map) must not switch the spotter's converge control off.
+test.describe('distant fight while the spotter shadows',()=>{
+  test.use({initialPositions:{[P]:{map:'halloween',x:0,y:600},[W]:{map:'main',x:-1180,y:800}}});
+  test('The spotter keeps shadowing the Phoenix while another fighter fights on another map',async({live},info)=>{
+    test.setTimeout(900_000);
+    const samples:any[]=[];
+    await live.post('/formation',{leader:W});
+    await live.post('/formation',{character:P,follow:true});
+    await expect.poll(async()=>(await live.state(true)).monsterChoices?.find((m:any)=>m.id==='phoenix')?.locations?.length,{timeout:120_000}).toBe(5);
+    const order=zones((await live.state(true)).monsterChoices,['phoenix']).map(a=>a.id!);
+    // Declared fixture: the native Phoenix pinned to Spooky Forest, next to the priest.
+    const seeded=await live.admin(`output=(()=>{
+      const found=[];for(const instance of Object.values(instances))for(const m of Object.values(instance.monsters||{}))if(m.type==='phoenix'&&!m.dead)found.push(m);
+      if(found.length!==1)throw Error('Expected one native Phoenix, found '+found.length);
+      const native=found[0],definition=native.map_def,boundaries=definition.boundaries,original=G.monsters.phoenix;
+      remove_monster(native,{nospawn:true,silent:true});
+      try {
+        definition.boundaries=boundaries.filter(b=>b[0]==='halloween');
+        G.monsters.phoenix={...original,hp:2000000,attack:1};
+        const m=new_monster('halloween',definition,{});
+        return {id:m.id,map:m.map,x:m.x,y:m.y};
+      } finally {definition.boundaries=boundaries;G.monsters.phoenix=original;}
+    })()`);
+    await live.post('/navigate-to-monster',{monsterId:'phoenix',phoenixRouteOrder:order});
+    await expect.poll(async()=>(await live.state()).rareHuntState?.encounter?.targetId,{timeout:300_000,intervals:[500],
+      message:'The priest must spot the seeded Phoenix'}).toBe(seeded.id);
+    const first=(await live.state()).rareHuntState.encounter;
+    // Declared boundary: a hawk the warrior cannot outrun, with enough HP to keep it
+    // fighting, spawned next to it from a modified definition (as the Phoenix is).
+    const hawk=await live.admin(`output=(()=>{
+      const p=Object.values(players).find(p=>p.name===${JSON.stringify(W)});
+      if(!p||p.map!=='main')throw Error('The warrior must still be on Mainland: '+(p&&p.map));
+      // A chasing monster moves at its definition's charge speed, recalculated
+      // continuously, so this disposable server's hawks charge faster for the rest of the test.
+      const fast=Math.max(200,p.speed*2),original=G.monsters.bigbird;
+      original.charge=fast;
+      try {
+        G.monsters.bigbird={...original,speed:fast,hp:2000000};
+        const m=new_monster('main',{type:'bigbird',boundary:[p.x-40,p.y-40,p.x+40,p.y+40],count:1},{});
+        target_player(m,p);
+        return {id:String(m.id),speed:m.speed,warriorSpeed:p.speed,at:Date.now()};
+      } finally {G.monsters.bigbird=original;}
+    })()`);
+    expect(hawk.speed,'The fixture needs an attacker faster than the warrior').toBeGreaterThan(hawk.warriorSpeed);
+    await expect.poll(async()=>{
+      const [state,s,phoenix]=await Promise.all([live.state(),world(live),
+        live.admin(`output=(()=>{const m=Object.values(instances.halloween.monsters).find(m=>m.id===${JSON.stringify(seeded.id)});return m?{x:m.x,y:m.y}:null})()`)]);
+      const pr=s.players[P],wa=s.players[W];
+      samples.push({at:Date.now(),encounter:state.rareHuntState?.encounter?.id||null,message:state.rareHuntState?.message,
+        priest:{map:pr.map,x:Math.round(pr.x),y:Math.round(pr.y),dist:phoenix&&pr.map==='halloween'?Math.round(Math.hypot(pr.x-phoenix.x,pr.y-phoenix.y)):null},
+        warrior:{map:wa.map,x:Math.round(wa.x),y:Math.round(wa.y)},fights:(state.characters?.[W]?.groupedCombat?.state?.fights||state.characters?.[W]?.groupedCombat?.fights||[]).map((f:any)=>String(f.id))});
+      return Date.now()-hawk.at;
+    },{timeout:120_000,intervals:[1000]}).toBeGreaterThan(60_000);
+    const fighting=samples.filter(s=>s.fights.includes(hawk.id));
+    await info.attach('phoenix-distant-fight',{body:JSON.stringify({seeded,first:first.id,hawk,fightingSamples:fighting.length,samples},null,2),contentType:'application/json'});
+    expect(fighting.length,'The fixture needs the warrior in a grouped fight with the hawk').toBeGreaterThan(5);
+    expect(samples.every(s=>s.encounter===first.id),'The encounter must survive the warrior\'s distant fight').toBe(true);
+    expect(samples.filter(s=>s.priest.map!=='halloween'||s.priest.dist===null||s.priest.dist>600),
+      'The priest must keep shadowing the Phoenix').toEqual([]);
+  });
 });

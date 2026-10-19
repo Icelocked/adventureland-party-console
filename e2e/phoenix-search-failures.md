@@ -72,6 +72,97 @@ entries marked **live**; others rely on the coordinator design and review.
     survive pauses and heartbeat gaps under 10 seconds. A rate-limited
     diagnostic names the fighter and condition whenever a search control is
     withheld.
+8c. **One fighter's condition ends the whole converge (seen live, 10-18).**
+    Written before the fix. 8b applies only while no encounter exists: once a
+    Phoenix is sighted, `blocked()` and `control()` use the party-wide
+    `protectedActivity()` again, so any member's own condition ends the
+    encounter. Live: the merchant handed items to FonzePriest mid-converge
+    (`command merchant-handoff/-`), the encounter ended "interrupted by
+    protected activity", every member's search assignment came back (the warrior
+    turned back to its old scan point, the priest was sent to the cave), and the
+    encounter restarted 8 s later from scratch. Expected: while converging, as
+    while searching, only party-wide conditions pause the patrol; the busy
+    member's control is withheld and it counts as not yet gathered (the gather
+    deadline still bounds the wait), and the others keep converging on the same
+    encounter. Once gathered, the party-wide rule applies again. Ways the fix
+    could fail:
+    - The encounter still ends or is replaced while one member is busy.
+    - The busy member still gets a converge control and walks off mid-handoff.
+    - The busy member is counted as gathered, so the fight starts without it.
+    - A party-wide condition (town, recovery, event, leader missing) no longer
+      pauses a converging patrol.
+    A busy member that is the only one with the Phoenix in sight stops
+    shadowing, so the encounter can still end through entry 12 ("Phoenix lost
+    while the party converged") and the search resumes; that is the ordinary
+    lost-sighting path, not this failure.
+    Not covered: a member whose condition outlasts the gather deadline. In E2E
+    an idle priest at 20% HP never heals back over 35%, so the party engages
+    without it and the post-gather party-wide rule then ends the encounter.
+    **live**: the converging (non-spotter) fighter drops to low HP right after
+    the sighting and is healed 15 s later (a declared stand-in for a handoff);
+    the same encounter continues, and both gather.
+8e. **A converge control withheld and resent is rejected forever (seen live and
+    in E2E, 10-18).** Written before the fix. The 8c change withholds a busy
+    member's control and resends the same encounter id when it is free. The
+    client's loot filter (`runtime/combat/departure-loot.ts`, see 4a) retires
+    every replaced rare control id except search ids, so the withheld converge
+    id was rejected on every later full status while the combat channel (which
+    skips the filter) restored it. Live, FonzePriest after a merchant handoff
+    and later FonzeWarrior wiggled in place, cancelling the converge route about
+    once a second (69 cancels in 2 minutes, every stack `cancelRarePath <-
+    tick`); temporary probes showed the coordinator sending the control in every
+    response while the client read null. In E2E the healed fighter of 8c
+    cancelled 279 times after the heal. Expected: like search controls,
+    converge and engage controls can be withheld and resent, so they are never
+    retired; encounter and loot controls keep their one-way retirement.
+    **live**: in 8c's journey (the busy fighter also waits in town, as after a
+    handoff), the healed fighter's route is not cancelled by the status loop.
+8f. **Another fighter's distant fight pulls the spotter off the Phoenix (seen in
+    E2E, 10-18).** Written before the fix. `rareActive()` returns false for every
+    member while any grouped fight is unfinished (a converge/engage exemption
+    exists only for fights on the Phoenix itself). In 2 of 5 runs of the main
+    journey, the warrior crossing Mainland got "Group engaged" on a hawk while
+    the priest shadowed the Phoenix in Spooky Forest; the priest lost its rare
+    control, farm reunion walked it to main town, the encounter ended "Phoenix
+    lost while the party converged", and both fighters then stalled in town and
+    at the Spooky Forest entrance until "All Phoenix regions unreachable".
+    Expected: on a search or converge leg, a fight this fighter cannot be part of
+    (another map or instance, or more than 600 units away) does not switch its
+    rare control off; a fight next to it still does, so it defends itself as
+    before. Ways the fix could fail:
+    - The fighter that is actually fighting keeps walking its rare route.
+    - A nearby fight no longer stops a searcher (entry 8 defense).
+    - Engage and encounter controls start ignoring the party's fight.
+    **live**: with a fast hawk forced onto the converging warrior, the priest
+    keeps shadowing the Phoenix on another map and the encounter survives.
+8d. **A searcher pinned by an attacker it can outrun (seen live, 10-18).**
+    Written before the fix. FonzePriest (speed 68) walking past the Mainland
+    Hawk spawn (bigbird: speed 24, aggro 1, 32k HP, 480 attack) was targeted.
+    `rareUnderAttack()` cancelled its route for any attacker, and the
+    coordinator committed the hawk as the party's fight, so the priest stood at
+    (1264, 274) for over 280 s healing itself (87 heals and 12 MP potions in 5
+    minutes, never in attack range) while the others waited at the gather with
+    "converging 2/3". The general outrun-or-kill rule (946a7bd) was removed on
+    10-08 with no upstream issue; on 10-18 the user chose to restore it for
+    Phoenix search and converge legs only. Expected: on a search or converge
+    leg, an attacker the fighter is faster than is walked away from along the
+    existing route (no route cancel, no hovering or kiting in place), and the
+    coordinator never makes it the party's fight from any member's report. An
+    attacker that keeps up (equal or faster) is fought before moving on, even
+    though the queue never nominated it. Outside Phoenix legs nothing changes.
+    Ways the fix could fail:
+    - The client walks on but the coordinator still selects the attacker, so
+      the party deadlocks on a fight nobody takes (seen when 946a7bd was first
+      tried client-only).
+    - The fighter walks on from an attacker that is as fast as it is and dies.
+    - The Phoenix itself is treated as an escaped attacker while converging.
+    - Farming, convoys or other travel start ignoring attackers.
+    - A neighbour takes it on (seen in E2E): with both fighters in the east
+      region, the warrior taunted the hawk chasing the priest and both then
+      fought it. On a Phoenix leg nobody targets a monster chasing a party
+      member that can outrun it.
+    **live**: the priest searches from the Hawk spawn with a hawk targeting it;
+    it leaves the spawn, nobody fights the hawk, and the search covers a region.
 
 ## Sighting and convergence
 
@@ -103,8 +194,11 @@ entries marked **live**; others rely on the coordinator design and review.
     the Phoenix's drift is small compared with the distance still to walk
     (re-aim only past the larger of 100 units and a third of that distance; a
     member on another map re-aims only when the Phoenix changes map), and a town
-    warp or transport in progress is never interrupted to re-aim. Ways the fix
-    could fail:
+    warp or transport is never interrupted while the member cannot see the
+    Phoenix, for drift or for a new control (search to converge); the next poll
+    after it lands re-aims. A member that sees the Phoenix abandons a warp
+    rather than being carried away from it (seen in E2E runs of 8c: the spotter
+    warped to town and lost the Phoenix). Ways the fix could fail:
     - The far member still restarts dozens of times, or still interrupts its warp.
     - A near member no longer tracks the Phoenix and arrives where it used to be.
     - A member on another map walks to a stale point after the Phoenix changed map.
