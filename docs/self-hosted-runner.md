@@ -7,6 +7,13 @@ GitHub-hosted Ubuntu/Windows or generic self-hosted runners do not select it.
 On the Actions **Validate and release** workflow, choose **Run workflow**, select
 `1.5-feature-branch`, enable `self_hosted`, choose `local_project`, and supply a
 `local_grep` title filter. The initial filter runs the character-section journey.
+The following command also works before these input controls are merged into the
+default branch:
+
+```powershell
+gh workflow run release.yml --ref 1.5-feature-branch -f self_hosted=true -f local_project=console -f "local_grep=character sections collapse independently"
+```
+
 Clear the filter to run the complete selected project; `all` retains console,
 deployment, debug, and ChronAL gameplay coverage. No release is published by this
 manual path. The self-hosted job additionally requires the repository owner to
@@ -16,7 +23,9 @@ labels and workflow conditions are routing controls, not an isolation boundary.
 See [GitHub runner security](https://docs.github.com/en/actions/reference/security/secure-use).
 
 The dedicated checkout lives under `.build/self-hosted-work/`, separate from the
-live installation. Preparation installs pinned dependencies and fixtures there;
+live installation. Its `R:` drive alias keeps nested executable paths within Windows
+limits; the launcher recreates that alias at login and refuses to replace an occupied
+drive. Preparation installs pinned dependencies and fixtures there;
 it never activates the live console. Ignored build/dependency caches are reused.
 The runner application lives in `.build/self-hosted-runner/`, including its local
 credentials; neither directory belongs in Git. The initial official Windows x64

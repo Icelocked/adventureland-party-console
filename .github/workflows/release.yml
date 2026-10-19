@@ -149,6 +149,24 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npx playwright install chromium
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify RTX 5090 rendering
+        run: |
+          @'
+          import {chromium} from '@playwright/test';
+          import {measureBrowserRendering} from './e2e/browser-rendering.ts';
+          import {mkdir,writeFile} from 'node:fs/promises';
+          const browser=await chromium.launch({args:['--enable-gpu']});
+          try {
+            const page=await browser.newPage();
+            await page.evaluate(()=>{const canvas=document.createElement('canvas');if(!canvas.getContext('webgl'))throw Error('WebGL unavailable');});
+            const finish=await measureBrowserRendering(browser,()=>Date.now());
+            const result=await finish();
+            await mkdir('.build/ci',{recursive:true});
+            await writeFile('.build/ci/runner-gpu.json',JSON.stringify(result,null,2));
+            console.log('Verified hardware renderer: '+result.renderer);
+          } finally {await browser.close();}
+          '@ | node --input-type=module
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Run selected E2Es with one worker
         env:
           LOCAL_PROJECT: ${{ inputs.local_project }}
@@ -168,6 +186,7 @@ jobs:
         with:
           name: self-hosted-e2e-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
+            .build/ci/runner-gpu.json
             .build/e2e-report/
             .build/e2e-results/
           if-no-files-found: error
