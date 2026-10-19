@@ -1622,3 +1622,5 @@ test.describe('stand buy order item levels',()=>{
 });
 
 });
+
+import './metrics-history.case';
