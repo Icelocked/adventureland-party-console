@@ -1,5 +1,5 @@
 import type { Entity, ItemInfo, MonsterEntity, ServerToClient_hit, ServerToClient_chest_opened, ServerToClient_chest_opened_loot } from 'typed-adventureland';
-import { METRIC_BUCKET_MS, type MetricBatch, type MetricFrame, type MetricSample } from '../metrics/contracts.ts';
+import { METRIC_BUCKET_MS, METRIC_OUTBOX_PREFIX, type MetricBatch, type MetricFrame, type MetricSample } from '../metrics/contracts.ts';
 import { metricNumber, parseMetricFrame } from '../metrics/parse.ts';
 import { encouragementLuck } from '../metrics/luck.ts';
 
@@ -13,7 +13,7 @@ interface Ports {
   context(): { server: string; map: string; instance: string; party: string[] };
   sample(): Omit<MetricSample, 'at'>;
   send(batch: MetricBatch): Promise<unknown>;
-  storage: Pick<Storage, 'getItem' | 'setItem'>;
+  storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 }
 type Frame = MetricFrame & { server: string };
 interface Journal { runtime: string; sequence: number; queue: Frame[]; lost: boolean; goldMovement: number }
@@ -32,9 +32,27 @@ function isMonsterTarget(target: Target | null | undefined): target is MonsterTa
 
 /** One collector per CODE generation. Retries keep their original bucket and sequence. */
 export function installPartyMetrics(ports: Ports) {
-  const key = 'party-metrics-v1:' + ports.name();
+  const key = METRIC_OUTBOX_PREFIX + ports.name();
   const persistedFrames = new Set<number>();
   const frameKey = (sequence: number) => key + ':frame:' + (sequence % 1024);
+  // The game's local_cm_logic walks every localStorage key every 16 ms, so the outbox
+  // keeps a ring key only while the queue holds its frame. persist() removes the keys of
+  // frames that left the queue (confirmed, or dropped past 720) after it writes the
+  // header, and never a slot that a queued frame uses.
+  function removeReleased(released: Iterable<number>) {
+    const retained = new Set(journal.queue.map(frame => frameKey(frame.sequence)));
+    for (const sequence of released) if (!retained.has(frameKey(sequence))) ports.storage.removeItem(frameKey(sequence));
+  }
+  // At install, removeStale removes every ring key the restored header does not list:
+  // 1.5 kept confirmed frames until the ring wrapped, and restore never adopts a frame
+  // whose header write a crash cut off.
+  function removeStale() {
+    const retained = new Set(journal.queue.map(frame => frameKey(frame.sequence)));
+    for (let slot = 0; slot < 1024; slot++) {
+      const ring = key + ':frame:' + slot;
+      if (!retained.has(ring) && ports.storage.getItem(ring) != null) ports.storage.removeItem(ring);
+    }
+  }
   const journal: Journal = { runtime: Date.now() + '-' + Math.random().toString(36).slice(2), sequence: 0, queue: [], lost: false, goldMovement: 0 };
   // Restored data crosses a storage boundary. Accept only our bounded versioned envelope;
   // the coordinator performs full frame validation before accepting measurements.
@@ -60,6 +78,7 @@ export function installPartyMetrics(ports: Ports) {
       journal.lost ||= 'lost' in saved && saved.lost === true;
     }
   } catch { journal.lost = true; }
+  try { removeStale(); } catch { /* The next confirmation removes its own keys. */ }
   let active: Frame | undefined, busy = false, previousAt = ports.now(), previousServer = ports.context().server;
   // The coordinator commit that will write each accepted frame, by sequence.
   // Not persisted: a reload sends every queued frame again.
@@ -98,7 +117,9 @@ export function installPartyMetrics(ports: Ports) {
       }
       ports.storage.setItem(key, JSON.stringify({...journal,queue:journal.queue.map(frame=>frame.sequence)}));
       const retained=new Set(journal.queue.map(frame=>frame.sequence));
-      for(const sequence of persistedFrames)if(!retained.has(sequence))persistedFrames.delete(sequence);
+      const released=[...persistedFrames].filter(sequence=>!retained.has(sequence));
+      for(const sequence of released)persistedFrames.delete(sequence);
+      removeReleased(released);
     }
     catch { journal.lost = true; }
   }
