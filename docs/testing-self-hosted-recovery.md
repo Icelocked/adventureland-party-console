@@ -484,3 +484,28 @@ reports there and retain the existing exact blacklist checks through full state.
 With stable model-owned dialog state, both the reconnect and blacklist export/import
 journeys pass three repetitions: six passes, 81 evidence hashes verified. The visible
 post-reconnect dialog screenshot confirms its owner and manually added Goo entry.
+
+Before optimizing catalogue expansion, account for repeated absent-item searches,
+cyclic loot tables whose absence depends on their ancestor path, and tracker table
+updates invalidating earlier negative results. Preserve all reward probabilities,
+paths, home reward separation and existing publication assertions. Native CPU
+profiles from three passing mixed deployment repetitions show reward expansion
+blocking headless event loops for several seconds. Retain those profiles and the
+224 verified baseline evidence files; do not relax the 30-second clock stall guard.
+
+The negative-cache-only candidate passes three repetitions, with 224 verified
+evidence files, but profiles still show multi-second catalogue work. Preparation's
+8 ms limit used gameplay `Date.now()`, which cannot bound CPU work while virtual
+time is fixed inside a callback. Limit each batch to four items as well, and use a
+positive 4 ms timer so batches span virtual clock windows. Keep generation checks
+and publish only the complete catalogue. Validate with eight simultaneous mixed
+deployment journeys and the existing native catalogue acknowledgement and tracker
+refresh E2Es before the next full self-hosted run.
+
+The completed batch-limited candidate passes all eight concurrent mixed deployment
+journeys (579 verified evidence files, eight workspaces removed). Catalogue
+acknowledgement and later tracker reward refresh each pass three repetitions
+(six passes, 269 verified evidence files, six workspaces removed). These focused
+runs retain all original assertions and ChronAL at 4x. They are not a substitute
+for the full self-hosted workflow; do not claim a full-suite green result until
+that workflow completes successfully.

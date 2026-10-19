@@ -1363,7 +1363,7 @@
 
   function lootTableOutcome(tableName, itemName, seen) {
     var cacheKey = tableName + ":" + itemName;
-    if (lootOutcomeCache[cacheKey]) return lootOutcomeCache[cacheKey];
+    if (Object.prototype.hasOwnProperty.call(lootOutcomeCache, cacheKey)) return lootOutcomeCache[cacheKey];
     seen = seen || {};
     if (seen[tableName] || !Array.isArray(nativeLootTable(tableName))) return null;
     var nextSeen = Object.assign({}, seen); nextSeen[tableName] = true;
@@ -1380,7 +1380,10 @@
       if (!paths || (result.paths || []).length < paths.length) paths = result.paths || [];
     });
     var outcome = probability > 0 ? { probability: Math.min(1, probability), paths: paths || [] } : null;
-    lootOutcomeCache[cacheKey] = outcome;
+    // A failed nested search may only have hit an ancestor cycle. Only a
+    // top-level miss proves this item is absent independently of that path.
+    // Reuse those misses across the many monster/map sources that open a table.
+    if (outcome || !Object.keys(seen).length) lootOutcomeCache[cacheKey] = outcome;
     return outcome;
   }
 
@@ -2074,13 +2077,14 @@
       var items = Object.keys(G.items || {});
       var index = 0;
       while (index < items.length) {
-        await new Promise(function (resolve) { setTimeout(resolve, 0); });
+        await new Promise(function (resolve) { setTimeout(resolve, 4); });
         if (!runtimeCurrent() || generation !== catalogGeneration) return;
-        // Bound work by elapsed time, not one timer per item. Hidden/loaded
-        // clients can delay each timer substantially even for already cached data.
-        var sliceStarted = Date.now();
+        // Bound both elapsed time and item count: virtual time is fixed while
+        // synchronous work runs. A positive timer also spreads batches across
+        // clock windows instead of draining the whole catalog at one timestamp.
+        var sliceStarted = Date.now(), sliceIndex = index;
         do { itemWorldInfo(items[index++]); }
-        while (index < items.length && Date.now() - sliceStarted < 8);
+        while (index < items.length && index - sliceIndex < 4 && Date.now() - sliceStarted < 8);
       }
       catalogPrepared = true;
     } catch (error) {
