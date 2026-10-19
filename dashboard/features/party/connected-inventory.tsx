@@ -60,17 +60,17 @@ export const ConnectedInventory = memo(function ConnectedInventory({
     (entry: InventoryEntry, auto: boolean, remove: boolean, id?: string) => {
       if (!remove) { setDeconstructionSelection({ entry, auto }); return; }
       void post(auto ? '/deconstruction/auto' : '/deconstruction/mark', {
-        character: id ? deconstructionMarks.find(mark => mark.id === id)?.owner || name : name, slot: entry.slot, item: entry.item, remove, id,
+        character: id ? deconstructionMarks.find((mark) => mark.id === id)?.owner || name : name, slot: entry.slot, item: entry.item, remove, id,
       });
     },
     [post, deconstructionMarks, name],
   );
   const onRetryDeconstruction = useCallback(
-    (id: string) => void post('/deconstruction/mark', { character: deconstructionMarks.find(mark => mark.id === id)?.owner || name, id, retry: true }),
+    (id: string) => void post('/deconstruction/mark', { character: deconstructionMarks.find((mark) => mark.id === id)?.owner || name, id, retry: true }),
     [post, deconstructionMarks, name],
   );
   const onRemoveNpcSale = useCallback(
-    (id: string) => void post('/merchant/npc-sale', { character: npcSaleMarks.find(mark => mark.id === id)?.character || name, id, remove: true }),
+    (id: string) => void post('/merchant/npc-sale', { character: npcSaleMarks.find((mark) => mark.id === id)?.character || name, id, remove: true }),
     [post, npcSaleMarks, name],
   );
   const onStand = useCallback(
@@ -167,7 +167,9 @@ export const ConnectedInventory = memo(function ConnectedInventory({
   // Presence and inventory arrive independently, including after reconnects.
   // Missing inventory is still loading, not an empty bag.
   if (!char || !Array.isArray(char.items) || !char.slots) {
-    return <output className="block border-t border-emerald-900/70 bg-[#0b1916] p-5 text-emerald-100">Loading inventory…</output>;
+    return (
+      <output className="block border-t border-emerald-900/70 bg-[#0b1916] p-5 text-emerald-100">Loading inventory…</output>
+    );
   }
   return (
     <UpgradeOfferingProvider character={char.name} executor={state.merchantCharacter} stock={state.upgradeOfferingStock || emptyRecord()} rules={state.upgradeOfferingRules || emptyArray()} catalog={state.merchantCatalog?.allItems || emptyArray()} post={post}>
@@ -219,10 +221,16 @@ export const ConnectedInventory = memo(function ConnectedInventory({
       onSelect={onSelect}
       onCompare={onCompare}
       onCommand={command}
-      onTravel={onTravel}
+        onBatchCommand={(character, type, item, extra) =>
+          post('/command', { character, type, item, ...extra })
+        }
+        onBatchError={setActionError}
+        onTravel={onTravel}
     />
-    <LuckySlotDialog character={name} tracking={luckyTracking} verified={state.luckyUpgradeSlots?.[name]} lockedSlot={state.luckySlotLocks?.[name]} resumingSlot={state.luckySlotResume?.[name]?.slot} onLock={slot => { void post("/merchant/config", {character: name, slot, action: state.luckySlotLocks?.[name] != null ? "unlock-lucky-slot" : "lock-lucky-slot"}); }} open={luckySlotOpen} onOpenChange={setLuckySlotOpen} />
-    {char.name === state.merchantCharacter && <SharedRuleConflicts state={state} onResolve={(id, owner) => post("/merchant/rule-conflict", {id,owner})} />}
+    <LuckySlotDialog character={name} tracking={luckyTracking} verified={state.luckyUpgradeSlots?.[name]} lockedSlot={state.luckySlotLocks?.[name]} resumingSlot={state.luckySlotResume?.[name]?.slot} onLock={(slot) => { void post("/merchant/config", {character: name, slot, action: state.luckySlotLocks?.[name] != null ? "unlock-lucky-slot" : "lock-lucky-slot"}); }} open={luckySlotOpen} onOpenChange={setLuckySlotOpen} />
+    {char.name === state.merchantCharacter && (
+        <SharedRuleConflicts state={state} onResolve={(id, owner) => post("/merchant/rule-conflict", {id,owner})} />
+      )}
     <DeconstructionConfirmation selection={deconstructionSelection} catalog={state.deconstructionCatalog || emptyRecord()}
       items={state.merchantCatalog?.allItems || emptyArray()} onClose={() => setDeconstructionSelection(null)}
       onConfirm={async ({ entry, auto }) => {

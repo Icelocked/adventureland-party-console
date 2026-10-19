@@ -1,4 +1,5 @@
 import './drop-rewards.case';
+import './release-ui.case';
 import './market-preferences.case';
 import { test, expect } from './fixtures';
 import './gear-comparison.case';

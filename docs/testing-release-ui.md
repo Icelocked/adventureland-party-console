@@ -1,0 +1,13 @@
+# 1.5 account inspection and item controls
+
+Failure inventory was recorded in `e2e/release-ui.case.ts` and `e2e/steam-audio.case.ts` before implementation. Browser journeys retain screenshots and exact disposition ledgers. Run the console project with selectors covering donation previews, offline account inspection, offline character inventory, item batches, bank selections, exchange reward selections, player and merchant inventory batches, and the Steam pointer toggle.
+
+Offline inspection reads a separate persisted native observation, never a live status or a command target. Inventory/equipment changes save immediately; unchanged observations refresh at most every 30 seconds. Each saved entry excludes `meta.world` and retains only card metadata. First-time characters require one actual connection. The coordinator restart journey checks native stats, item identity, snapshot byte size, absence of the deliberately oversized world catalog, and the offline stat card. Appearance/stat cards remain sanitized through existing rendering components.
+
+Control-click toggles individual physical/prospective entries; Shift-click adds the inclusive displayed index range. Selection is scoped to character or bank pack/slot, with physical item identity invalidating moved/replaced stock. Metadata refreshes do not invalidate selected stock. Context menus replace individual actions with common safe dispositions for a batch. Mixed upgrade levels use one additional level for each item. Batch requests are sequential, stop on rejection, and surface the existing action error dialog; bank confirmation conflicts remain authoritative. Automatic compound rules shared by item name appear only when selected copies agree on their starting level.
+
+Bank exchange orders use existing merchant exchange retrieval and automatic exchange rules. Bank compound intent uses the storage-bound compound command and native retrieval; source-level idempotency prevents selecting a triplet from scheduling three copies of the same group.
+
+The Steam pointer toggle gates the native `map_click` CODE callback before its movement emission. It preserves PIXI NPC/monster/chest handlers, other game controls, keyboard movement, and CODE movement. The preference persists in native-client local storage and the original callback is restored on switcher disposal. It does not intercept all renderer pointer input.
+
+Donation previews use the merchant's actual donation XP rate and native per-level XP table. Level requests round the required gold upward; entered donations show resulting level and progress. No preview creates a job until Donate is clicked.

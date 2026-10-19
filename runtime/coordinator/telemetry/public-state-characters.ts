@@ -44,6 +44,7 @@ export function diagnosticCharacters(statuses: Readonly<Record<string, Presentat
     "activeEvent",
     "joinedEvent",
     "donationXpPerGold",
+    "donationLevelXp",
     "gatheringCooldowns",
     "gatheringPhase",
     "gatheringBlockedReason",
