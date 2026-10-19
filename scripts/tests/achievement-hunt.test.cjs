@@ -629,3 +629,49 @@ test('a target whose start throws is skipped and the hunt moves on', () => {
   f.advance(1_000); f.hunt.tick();
   assert.deepEqual(f.selected, ['snake']);
 });
+
+// Counts reads of each entry's definition, which every list build reads once per entry.
+function countedCatalog(entries) {
+  const reads = { count: 0 };
+  const list = entries.map((entry) => {
+    const copy = { ...entry };
+    delete copy.definition;
+    return Object.defineProperty(copy, 'definition', { enumerable: true, get() { reads.count++; return entry.definition; } });
+  });
+  return { list, reads };
+}
+
+test('the hunt builds its monster list once while the catalog and the choices stay the same (failure mode 32)', () => {
+  const counted = countedCatalog(catalog);
+  const f = fixture({}, { bestiaryCatalog: counted.list });
+  f.hunt.tick();
+  const perBuild = counted.reads.count;
+  assert.ok(perBuild > 0);
+  for (let tick = 0; tick < 20; tick++) { f.advance(1_000); f.hunt.tick(); }
+  assert.equal(counted.reads.count, perBuild);
+  assert.deepEqual(f.selected, ['goo']);
+});
+
+test('a new catalog or new monster choices rebuild the list (failure mode 33)', () => {
+  const counted = countedCatalog(catalog);
+  const f = fixture({}, { bestiaryCatalog: counted.list });
+  f.hunt.tick();
+  const perBuild = counted.reads.count;
+  f.state.monsterChoices = choices.slice();
+  f.advance(1_000); f.hunt.tick();
+  assert.equal(counted.reads.count, 2 * perBuild);
+  // A catalog without Goo moves the hunt on to Bee.
+  f.state.bestiaryCatalog = catalog.filter((entry) => entry.id !== 'goo');
+  f.advance(1_000); f.hunt.tick();
+  assert.deepEqual(f.selected, ['goo', 'bee']);
+});
+
+test('a repeated choice id resolves to the first choice, as a linear search did (failure mode 34)', () => {
+  const entry = { id: 'goo', name: 'Goo', xp: 1, definition: { achievements: ladder(1) } };
+  const order = achievementMonsters([entry], [
+    { id: 'goo', locations: [{}], spawnRecords: [{ map: 'main', x: 0, y: 0, count: 4, restrictions: [] }] },
+    { id: 'goo', locations: [{}], spawnRecords: [{ map: 'main', x: 0, y: 0, count: 1, restrictions: [], stype: 'randomrespawn' }] },
+  ]);
+  assert.equal(order[0].rare, false);
+  assert.equal(order[0].special, false);
+});

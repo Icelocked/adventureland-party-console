@@ -269,6 +269,24 @@ Found on the live party:
 31. **A rare as the target.** Selecting a rare made it the target, so the party
     waited at a spawn where it may not appear. See [Rare spawns](#rare-spawns).
 
+Found in the efficiency review, written before the change:
+
+32. **Rebuilding an unchanged list.** The coordinator ticks the hunt on every
+    status report. Each tick rebuilt and sorted the monster list, and looked up
+    each catalog entry's spawn data with a linear search of `monsterChoices`,
+    three times per entry: about 67,000 comparisons a tick with 149 monsters.
+    The hunt keeps the list while `bestiaryCatalog` and `monsterChoices` stay
+    the same arrays, and finds spawn data and monsters by id through a `Map`.
+33. **A stale list after a catalog reload.** `consumeStatusCatalogs`
+    (`runtime/coordinator/status/catalogs.ts`) replaces either array when a
+    character reports a new one. The hunt must then build the list again, or
+    it would target monsters by old spawns.
+34. **Another choice for a repeated id.** The linear search returned the first
+    choice with an id. The index keeps the first one too.
+35. **A caller editing the kept list.** Every tick reads the same list, so an
+    edit would leak into later ticks. The list is `readonly`, and the compiler
+    rejects an edit.
+
 ## Tests
 
 The console E2E journey `e2e/achievement-hunt.spec.ts` (failure modes in
