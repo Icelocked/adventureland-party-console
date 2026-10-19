@@ -141,9 +141,10 @@ export class MetricsJsonlStore {
   async close():Promise<void> {
     if(this.closed)return;
     this.closed=true;clearInterval(this.timer);
-    await this.flush();
-    if(this.handle!==undefined)fs.closeSync(this.handle);
-    if(this.lock!==undefined){fs.closeSync(this.lock);fs.unlinkSync(this.lockPath);}
-    if(this.guard!==undefined)fs.closeSync(this.guard);
+    try { await this.flush(); } finally {
+      if(this.handle!==undefined)fs.closeSync(this.handle);
+      if(this.lock!==undefined){fs.closeSync(this.lock);fs.unlinkSync(this.lockPath);}
+      if(this.guard!==undefined)fs.closeSync(this.guard);
+    }
   }
 }

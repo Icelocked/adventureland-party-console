@@ -45,8 +45,14 @@ export function installPartyMetrics(ports: Ports) {
       journal.runtime = saved.runtime;
       journal.sequence = saved.sequence;
       if ('goldMovement' in saved && metricNumber(saved.goldMovement, -Number.MAX_SAFE_INTEGER)) journal.goldMovement = saved.goldMovement;
-      for (const value of saved.queue.slice(-720)) {
+      for (const entry of saved.queue.slice(-720)) {
+        const value: unknown = typeof entry === 'number'
+          ? JSON.parse(ports.storage.getItem(frameKey(entry)) || 'null') : entry;
         const parsed = parseMetricFrame(value);
+        // A ring slot can be overwritten only after its old frame expires.
+        // Never adopt a mismatched sequence after an interrupted header write.
+        if (typeof entry === 'number' && parsed?.sequence !== entry) { journal.lost = true; continue; }
+        if (typeof entry === 'number' && parsed) persistedFrames.add(entry);
         if (parsed && value && typeof value === 'object' && 'server' in value && typeof value.server === 'string')
           journal.queue.push({ ...parsed, server: value.server });
         else journal.lost = true;
