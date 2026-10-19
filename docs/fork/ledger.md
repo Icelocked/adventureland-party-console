@@ -14,7 +14,7 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 | Status | Count |
 |---|---|
 | New issue | 1 |
-| Update / comment | 9 (1 to do) |
+| Update / comment | 9 (2 to do) |
 | Done upstream | 48 |
 | Matches | 17 (all done) |
 | Open upstream | 18 |
@@ -47,6 +47,8 @@ Not filed yet. Fork fix in the commit recording this (10-17).
 Issues filed before the work landed, features that changed with use, and maintainer replies that leave out what the fork already has.
 
 - 10-19: [third comment](https://github.com/Ryan-Haines/adventureland-party-console/issues/137#issuecomment-6274115408) for [e745f55](https://github.com/Thefonze74065/adventureland-party-console/commit/e745f55), crab kills per minute: Fan of Knives no longer needs the scatter primary among its targets, the stand covers the most one-shot mobs within Fan range (160, not 140) around any visible mob and holds while its spot covers as many, and the skill world's actor and context monsters carry `awidth`/`aheight` so the engine's range matches the server's edge-to-edge distance (the #136 class: copies lose PIXI getters). New `live-rogue-fan-crab-rate.spec.ts`: solo 282-294 → 320/min, against a competitor 246-269 → 291-293/min. Not yet commented on #136 or #137.
+
+- 10-19, not commented: [5697a48](https://github.com/Thefonze74065/adventureland-party-console/commit/5697a48), Mental Burst while fan farming: it goes to any mob within its reach that it one-shots (most HP left first), not only the scatter primary; a killing burst that refunds at least its cost skips the reserve and MP budget; the next burst is tried as its cooldown ends; a burst whose mob died first doesn't lock the skill out. Crab journey: 3.75 → 47-50 bursts a minute, 100 → 12-27 MP potions in 4 minutes, kills held (the spawn caps them near 340). Needs 64 int; FonzeRogue has 32.
 
 ### Configurable elixirs per character and gear set
 
