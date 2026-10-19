@@ -48,3 +48,21 @@ live stream so the dashboard reads characters from `section=fast`.
   `achievementTarget`, `achievementMessage`, `farmingProfiles`) can leave the
   config section. The journey reads the status line, which only
   `achievementMessage` from config fills.
+
+## Achievement Hunt save key (written before the persistence journey)
+
+docs/efficiency.md § Achievement Hunt state has the full failure inventory.
+The persistence journey seeds a layout 2 journal: settings with the marker
+and W's profile without Achievement Hunt fields, and the Achievement Hunt
+document with W's settings and a blacklisted Bat.
+
+- Load can ignore the Achievement Hunt document (item 2). The settings dialog
+  must show the saved death threshold and the Bat entry.
+- A running settings record can carry an Achievement Hunt field (item 1). No
+  settings record written before shutdown may contain one.
+- A target pick or a settings change can stay unsaved (item 5). The newest
+  Achievement Hunt record must carry the target, its status message and the
+  new death threshold.
+- Shutdown can leave the fields out of settings (item 4). After the real
+  coordinator restarts, the last settings record must hold them inside W's
+  profile, and the state must read them back.

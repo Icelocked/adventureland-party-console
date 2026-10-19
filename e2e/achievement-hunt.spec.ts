@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { test, expect } from './fixtures';
 
 // Failure modes: e2e/achievement-hunt-failures.md. The fixture has no party leader,
@@ -117,3 +118,54 @@ test.describe('Achievement Hunt under the enforced field registry', () => {
     await testInfo.attach('enforced-achievement-fields', { body: JSON.stringify({ fast: Object.keys(fast.W), full: Object.keys(full.W) }, null, 1), contentType: 'application/json' });
   });
 });
+
+// Failure modes: e2e/achievement-hunt-failures.md § Achievement Hunt save key.
+const achievementKey = 'party_dashboard_achievement_state_v1', settingsKey = 'party_dashboard_settings_state_v1';
+const batEntry = { monsterId: 'bat', at: Date.UTC(2026, 9, 18, 12), reason: '4 deaths while farming for achievements' };
+const layout2Journal = [
+  { [achievementKey]: { profiles: { W: { achievementHunt: { ...gooSettings, deathThreshold: 4 }, achievementBlacklist: { bat: batEntry }, achievementTarget: null, achievementPassive: null, achievementMessage: '' } } } },
+  { [settingsKey]: { farmingProfiles: { W: { farmingPolicy: 'achievements' } }, persistenceLayout: 2 } },
+];
+const journalRecords = (journal: string, key: string) => readFileSync(journal, 'utf8').split('\n')
+  .filter(line => line.startsWith(`{"${key}":`)).map(line => JSON.parse(line)[key]);
+
+test.describe('Achievement Hunt state under its own save key', () => {
+  // Playwright reads a two-element array whose second element is an object as [value, options].
+  test.use({ savedRecords: [layout2Journal, { scope: 'test' }] });
+  test('loads from the split document, saves changes there and leaves settings without it until shutdown', async ({ page, app }, testInfo) => {
+    const seededSettings = journalRecords(app.journal, settingsKey).length;
+    await page.goto('/');
+    const warrior = page.locator('article').filter({ has: page.getByRole('heading', { name: 'W', exact: true }) });
+    await warrior.getByRole('button', { name: 'Farming settings', exact: true }).click();
+    const section = page.getByRole('dialog', { name: 'Farming settings · W', exact: true }).getByRole('region', { name: 'Achievement Hunt settings' });
+    const deaths = section.getByRole('spinbutton', { name: 'Achievement Hunt deaths before blacklisting' });
+    await expect(deaths).toHaveValue('4');
+    await expect(section.getByLabel('Achievement Hunt blacklist')).toContainText(batEntry.reason);
+
+    await expect.poll(() => journalRecords(app.journal, achievementKey).at(-1)?.profiles?.W?.achievementTarget?.id).toBe('goo');
+    expect(journalRecords(app.journal, achievementKey).at(-1).profiles.W.achievementMessage).toMatch(/^Farming Goo: 0 \/ [\d,]+ kills \(step 1\)$/);
+    const saved = responseFor(page, '/achievement-hunt');
+    await deaths.fill('5');
+    await deaths.press('Enter');
+    expect((await saved).status()).toBe(200);
+    await expect.poll(() => journalRecords(app.journal, achievementKey).at(-1)?.profiles?.W?.achievementHunt?.deathThreshold).toBe(5);
+    const running = journalRecords(app.journal, settingsKey).slice(seededSettings);
+    expect(running.length, 'the coordinator saved settings while running').toBeGreaterThan(0);
+    for (const record of running) expect(keysOf(record).filter(key => key.startsWith('achievement'))).toEqual([]);
+
+    await app.restartCoordinator();
+    const shutdown = journalRecords(app.journal, settingsKey).at(-1);
+    expect(shutdown.farmingProfiles.W).toMatchObject({ achievementHunt: { deathThreshold: 5, monsters: ['goo'] }, achievementBlacklist: { bat: batEntry }, achievementTarget: { id: 'goo' } });
+    const restored = (await app.state()).farmingProfiles.W;
+    expect(restored).toMatchObject({ farmingPolicy: 'achievements', achievementHunt: { deathThreshold: 5 }, achievementBlacklist: { bat: batEntry } });
+    await testInfo.attach('achievement-save-key-records', { body: JSON.stringify({ achievement: journalRecords(app.journal, achievementKey), running, shutdown, restored }, null, 1), contentType: 'application/json' });
+  });
+});
+/** Every object key in a saved record, at any depth. */
+function keysOf(value: unknown): string[] {
+  if (!value || typeof value !== 'object') return [];
+  return Object.entries(value).flatMap(([key, entry]) => [key, ...keysOf(entry)]);
+}
+function responseFor(page: import('@playwright/test').Page, endpoint: string) {
+  return page.waitForResponse(response => new URL(response.url()).pathname.endsWith(endpoint) && response.request().method() === 'POST');
+}
