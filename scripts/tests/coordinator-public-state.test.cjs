@@ -9,7 +9,9 @@ test('pending command projection preserves empty entries and excludes absent val
  assert.deepEqual(JSON.parse(JSON.stringify(output)),{empty:null,P:{id:7,type:'travel',phase:null,convoyId:null}});
  assert.equal(state.P,command);assert.equal(command.privateValue,'keep private');
 });
-function read(r,query){let result;r.route({query},{json:value=>{result=value;}});return JSON.parse(JSON.stringify(result));}
+// The bank, logs and market sections send serialized text with an ETag (telemetry/section-revision.ts).
+function read(r,query){let result;const response={json:value=>{result=value;},set:()=>response,status:()=>response,send:body=>{result=JSON.parse(body);}};
+ r.route({query},response);return JSON.parse(JSON.stringify(result));}
 
 test('dashboard config and core partition settings without slowing live progress or changing legacy core', () => {
  const r=publicStateRuntime();
@@ -89,7 +91,8 @@ test('overview does not expose unlisted private state',()=>{
 // section stops getting the full payload; a known section changes shape.
 function respond(r,query){
  const result={status:200,body:undefined};
- const response={status(code){result.status=code;return response;},json(value){result.body=JSON.parse(JSON.stringify(value));return response;}};
+ const response={status(code){result.status=code;return response;},json(value){result.body=JSON.parse(JSON.stringify(value));return response;},
+  send(text){result.body=JSON.parse(text);return response;},set(){return response;},end(){return response;}};
  r.route({query},response);return result;
 }
 test('unknown sections answer 400 without building a payload; no section keeps the full payload',()=>{

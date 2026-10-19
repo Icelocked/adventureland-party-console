@@ -23,6 +23,7 @@ import {
   fullMetaStatuses,
 } from "./item-meta-projection.ts";
 import { giveawayDirectory } from "./giveaway-directory.ts";
+import { revisionSections, sendWithRevision } from "./section-revision.ts";
 import { randomUUID } from "node:crypto";
 import { requestObject } from "../http/contracts.ts";
 
@@ -297,6 +298,7 @@ export function createPublicStateRoute(state: Readonly<PublicState>, ports: Publ
     // into the multi-megabyte full payload.
     if (!Object.hasOwn(sections, section))
       return response.status(400).json({ error: "Unknown state section", sections: Object.keys(sections) });
+    if (revisionSections.has(section)) return sendWithRevision(request, response, sections[section]());
     return response.json(sections[section]());
   };
 }
