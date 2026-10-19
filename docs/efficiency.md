@@ -299,6 +299,54 @@ Tests: `scripts/tests/coordinator-retention.test.cjs` (1-6) and
 `e2e/console-persistence.spec.ts` (3, 4 and 6 through a saved journal and the
 real coordinator load).
 
+### Crash recovery (P6)
+
+A crash or power loss in the middle of an append leaves a half-written last
+line. v1.4.0 replay (`record` in `jsonl-store.ts`) passed every line to
+`JSON.parse` without a guard, so the coordinator could not start until someone
+edited the journal by hand.
+
+Each record goes to disk in one `writeFileSync` call of the whole line,
+newline included. The operating system may still split a large write, and
+power loss can leave a partial or zero-filled tail, so replay handles the last
+line on its own:
+
+- A last line that does not parse is a torn write. Replay copies its raw bytes
+  to `<journal>.torn-<time>`, truncates the journal to the last complete
+  line, logs a warning that names the key when the line starts with one, and
+  starts. The dropped record is the one write that was in flight.
+- A last line that parses but has no newline (a v1.4.0 journal can end this
+  way) gets its newline before the next append, so two records never share a
+  line.
+- A line that does not parse with records after it is corruption, not a torn
+  write. The store refuses to open and names the line, the byte offset and how
+  to recover, and it leaves the journal untouched.
+
+Shutdown stays bounded: `close()` compacts only when the live set is at most
+`CLOSE_COMPACT_MAX_BYTES` (64 MB), and leaves a larger journal for the next
+start. Measured times are in Measurements below.
+
+Failure inventory:
+
+1. A torn last line, with or without a newline, stops the coordinator from
+   starting.
+2. Recovery drops more than the torn line, or keeps no copy of its bytes.
+3. A record appended after recovery joins the torn bytes or a last line that
+   had no newline.
+4. Replay drops a corrupt line in the middle silently, or the error does not
+   say where it is.
+5. A crash mid-append, mid-compaction (before the rename, after it) or
+   mid-shutdown loses a record the store saved before the crash, or more
+   history or settings than the documented windows.
+6. The writer lock left by a killed process blocks the next start.
+7. Reopening after a crash hangs.
+8. Shutdown takes longer than the 30 s stop grace on a large journal.
+
+Tests: `scripts/tests/coordinator-jsonl-store.test.cjs` (1-4, 8) and
+`scripts/tests/coordinator-crash-recovery.test.cjs` (5-7), which SIGKILLs a
+writer process at random points and at each compaction and shutdown step, 50
+times, then reopens the journal in a fresh process with a time limit.
+
 ### Measurements
 
 All numbers come from `tools/benchmark-persistence.mts` (600 simulated
@@ -355,3 +403,29 @@ Dashboard latency through the real coordinator and dashboard
 
 The combat line latency is the dashboard's 1 s `logs` poll; both builds show
 one 1.5 s sample when a line lands shortly after a poll.
+
+Crash recovery (`scripts/tests/coordinator-crash-recovery.test.cjs`, 50
+SIGKILLs, run with `CRASH_ROOT` against v1.4.0 for comparison):
+
+| Case | Runs | v1.4.0 | This branch |
+|---|---:|---|---|
+| Random moment while saving | 14 | opens | opens |
+| Random moment past the 5 s history window | 6 | opens | opens |
+| Compaction, before the rename | 8 | opens | opens |
+| Compaction, after the rename | 8 | opens | opens |
+| Shutdown, during flush and close | 8 | opens | opens |
+| Torn last line, file cut inside it | 6 | fails to start: `SyntaxError: Unterminated string in JSON` | opens, drops the torn record, keeps a copy |
+
+Every run left the killed writer's lock behind except after a finished
+shutdown; every reopen took the stale lock, held every acknowledged direct
+save, every history line older than 5 s and every setting older than 1 s,
+and finished well inside the 15 s limit.
+
+Journal open and `close()` at the 128 MB inline bound (one key rewritten
+until one more record would pass 128 MB, a stale lock left behind):
+
+| Live set | v1.4.0 open / close | This branch open / close |
+|---:|---|---|
+| 8 MB | 626 / 0 ms | 563 / 33 ms (compacts to 9 MB) |
+| 60 MB | 749 / 0 ms | 807 / 180 ms (compacts to 61 MB) |
+| 70 MB | 833 / 0 ms | 831 / 0 ms (above `CLOSE_COMPACT_MAX_BYTES`, left for the next start) |

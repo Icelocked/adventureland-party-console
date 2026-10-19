@@ -70,9 +70,10 @@ test('a live writer is protected and closing releases its lock',t=>{
  const [main,rotation]=fixture(t),s=new Store(main,rotation);
  assert.throws(()=>new Store(main,rotation),/live writer/);s.close();const r=new Store(main,rotation);r.close();
 });
-test('malformed input preserves the source and releases the startup lock',t=>{
- const [main,rotation]=fixture(t);fs.writeFileSync(main,'{"valid":1}\n{"broken"');const original=fs.readFileSync(main);
- assert.throws(()=>new Store(main,rotation));assert.deepEqual(fs.readFileSync(main),original);assert.equal(fs.existsSync(main+'.writer.lock'),false);
+test('a corrupt line before other records preserves the source, names its place and releases the startup lock',t=>{
+ const [main,rotation]=fixture(t);fs.writeFileSync(main,'{"valid":1}\n{"broken"\n{"after":2}\n');const original=fs.readFileSync(main);
+ assert.throws(()=>new Store(main,rotation),/line 2, byte offset 12/);assert.deepEqual(fs.readFileSync(main),original);assert.equal(fs.existsSync(main+'.writer.lock'),false);
+ assert.deepEqual(fs.readdirSync(path.dirname(main)).filter(name=>name.includes('.torn-')),[],'corruption is not treated as a torn write');
 });
 test('recovers a completed replacement only if the main file is absent',t=>{
  const [main,rotation]=fixture(t);fs.writeFileSync(rotation,'{"keep":7}\n');const s=new Store(main,rotation);assert.equal(s.get('keep'),7);s.close();
@@ -201,4 +202,46 @@ test('a failed compaction at shutdown keeps the journal and releases the lock',t
  const warnings=t.mock.method(console,'warn',()=>{});
  assert.doesNotThrow(()=>s.close());assert.equal(fs.existsSync(main+'.writer.lock'),false);assert.equal(warnings.mock.callCount(),1);
  renames.fail=null;const r=new Store(main,rotation);try{assert.equal(r.get('a'),2);}finally{r.close();}
+});
+
+// Crash recovery: docs/efficiency.md (Persistence), failure inventory P6.
+const tornCopies=main=>fs.readdirSync(path.dirname(main)).filter(name=>name.startsWith(path.basename(main)+'.torn-'));
+for(const [name,tail] of [['without a newline','{"history":{"lines":[1,2'],['with a newline','{"history":{"lines":[1,2\n'],['of zero bytes','\0\0\0\0\0\0']])
+test('a torn last line '+name+' is copied aside and dropped, and the journal opens',t=>{
+ const [main,rotation]=fixture(t);fs.writeFileSync(main,'{"keep":1}\n{"history":{"lines":[1]}}\n'+tail);
+ const warnings=t.mock.method(console,'warn',()=>{});
+ const s=new Store(main,rotation);
+ assert.equal(s.get('keep'),1);assert.deepEqual(s.get('history'),{lines:[1]},'the record before the torn one survives');
+ const copies=tornCopies(main);assert.equal(copies.length,1);
+ assert.equal(fs.readFileSync(path.join(path.dirname(main),copies[0]),'utf8'),tail,'the copy holds the torn bytes');
+ assert.equal(warnings.mock.callCount(),1);
+ if(tail.startsWith('{"history"'))assert.match(String(warnings.mock.calls[0].arguments[0]),/"history"/);
+ s.set('next',2);s.close();
+ const r=new Store(main,rotation);try{assert.equal(r.get('next'),2);assert.equal(r.get('keep'),1);}finally{r.close();}
+ assert.equal(warnings.mock.callCount(),1,'nothing torn on the second start');
+});
+test('a last record without a newline keeps its own line when the next record is appended',t=>{
+ const [main,rotation]=fixture(t);fs.writeFileSync(main,'{"a":1}\n{"b":2}');
+ const s=new Store(main,rotation);s.set('c',3);s.close();
+ assert.deepEqual(journalLines(main).map(line=>JSON.parse(line)),[{a:1},{b:2},{c:3}]);
+});
+test('each record is appended with one write of the whole line',t=>{
+ const [main,rotation]=fixture(t),s=new Store(main,rotation);
+ const write=fs.writeFileSync,writes=[];
+ t.mock.method(fs,'writeFileSync',(target,data,...rest)=>{if(typeof target==='number')writes.push(String(data));return write(target,data,...rest);});
+ syncBuiltinESMExports();
+ try{s.set('a',{value:'x'.repeat(100000)});}finally{t.mock.restoreAll();syncBuiltinESMExports();}
+ s.close();
+ assert.equal(writes.length,1);assert.ok(writes[0].endsWith('}\n'));assert.deepEqual(JSON.parse(writes[0]),{a:{value:'x'.repeat(100000)}});
+});
+test('shutdown leaves a live set above the shutdown bound for the next start',t=>{
+ const {CLOSE_COMPACT_MAX_BYTES}=require('../../runtime/coordinator/persistence/jsonl-store.ts');
+ assert.ok(CLOSE_COMPACT_MAX_BYTES>=16*1024*1024);
+ const [main,rotation]=fixture(t),s=new Store(main,rotation);
+ const chunk='y'.repeat(1024*1024);
+ for(let i=0;i<Math.ceil(CLOSE_COMPACT_MAX_BYTES/chunk.length)+1;i++)s.set('live'+i,chunk);
+ s.set('live0',chunk+'changed');
+ const renames=countRenames(t);s.close();
+ assert.equal(renames.count,0,'no compaction at shutdown');
+ const r=new Store(main,rotation);try{assert.equal(r.get('live0'),chunk+'changed');}finally{r.close();}
 });

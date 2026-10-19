@@ -17,6 +17,11 @@ interface StoredValue { json?: string; value?: unknown; parsed: boolean; bytes: 
  */
 export const COMPACT_SUPERSEDED_BYTES = 32 * 1024 * 1024;
 export const COMPACT_GROWTH = 3;
+/**
+ * Shutdown compacts only a live set up to this size, so close() stays far
+ * inside the 30 s stop grace; a larger journal compacts at the next start.
+ */
+export const CLOSE_COMPACT_MAX_BYTES = 64 * 1024 * 1024;
 /** Bounds the journal even if a busy event loop delays the growth check. */
 const COMPACT_MAX_BYTES = 128 * 1024 * 1024;
 
@@ -85,20 +90,59 @@ export class CoordinatorJsonlStore implements CoordinatorFileStore {
   }
   private replay():void {
     const chunk=Buffer.allocUnsafe(64*1024);
-    let fragments:Buffer[]=[];
+    let fragments:Buffer[]=[],offset=0,number=0,terminated=true;
+    let failed:{number:number;offset:number;error:unknown}|undefined;
+    const line=(bytes:Buffer)=>{
+      number++;
+      const text=bytes.toString('utf8');
+      if(failed) {
+        // Records after an unreadable line mean corruption, not a torn write.
+        if(text.split('\0').join('').trim())throw this.corruption(failed);
+      } else {
+        try {this.record(text,bytes.length+1);}
+        catch(error) {failed={number,offset,error};}
+      }
+      offset+=bytes.length+1;
+    };
     for(;;) {
       const count=fs.readSync(this.handle!,chunk,0,chunk.length,null);
       if(!count)break;
       let start=0;
       for(let i=0;i<count;i++)if(chunk[i]===10) {
         fragments.push(Buffer.from(chunk.subarray(start,i)));
-        const line=Buffer.concat(fragments);
-        this.record(line.toString('utf8'),line.length+1);
+        line(Buffer.concat(fragments));
         fragments=[];start=i+1;
       }
       if(start<count)fragments.push(Buffer.from(chunk.subarray(start,count)));
     }
-    if(fragments.length){const line=Buffer.concat(fragments);this.record(line.toString('utf8'),line.length+1);}
+    if(fragments.length){line(Buffer.concat(fragments));terminated=false;}
+    if(failed)this.dropTornTail(failed);
+    // A v1.4.0 journal can end with a complete record and no newline; the
+    // next append must start on its own line.
+    else if(!terminated)fs.writeFileSync(this.handle!,'\n');
+  }
+  private corruption(failed:{number:number;offset:number;error:unknown}):Error {
+    return new Error('Coordinator journal '+this.mainPath+' is corrupt at line '+failed.number+', byte offset '+failed.offset+
+      ' ('+(failed.error as Error).message+'). Records follow it, so this is not a torn last write. Stop the console, back up the'+
+      ' file, then delete or repair that line; the coordinator starts with every other record.');
+  }
+  /**
+   * The last line of a journal written by a process that crashed mid-append.
+   * Its bytes go to a copy next to the journal, and the journal ends at the
+   * last complete record.
+   */
+  private dropTornTail(failed:{number:number;offset:number}):void {
+    const size=fs.fstatSync(this.handle!).size,tail=Buffer.alloc(size-failed.offset);
+    fs.readSync(this.handle!,tail,0,tail.length,failed.offset);
+    const copy=this.mainPath+'.torn-'+Date.now();
+    fs.writeFileSync(copy,tail);
+    // Windows refuses ftruncate on an append handle; truncate by path and reopen.
+    fs.closeSync(this.handle!);this.handle=undefined;
+    fs.truncateSync(this.mainPath,failed.offset);
+    this.handle=fs.openSync(this.mainPath,'a+');fs.fsyncSync(this.handle);
+    const key=/^\{"((?:[^"\\]|\\.)*)":/.exec(tail.toString('utf8'))?.[1];
+    console.warn('Coordinator journal ended with a torn write'+(key ? ' of "'+key+'"' : '')+' at line '+failed.number+
+      ' ('+tail.length+' bytes); dropped it and kept a copy at '+copy);
   }
   private record(line:string,bytes:number):void {
     if(!line.trim())return;
@@ -205,7 +249,7 @@ export class CoordinatorJsonlStore implements CoordinatorFileStore {
     if(this.pendingCompaction!==undefined)clearImmediate(this.pendingCompaction);
     // Leave a compact journal for the next start. A failed open keeps its
     // source untouched, and a failed compaction still releases the lock.
-    if(this.opened && this.bytes>this.liveBytes) {
+    if(this.opened && this.bytes>this.liveBytes && this.liveBytes<=CLOSE_COMPACT_MAX_BYTES) {
       try {this.refactor();}
       catch(error) {console.warn('Coordinator journal compaction at shutdown failed; the append journal is intact',error);}
     }
