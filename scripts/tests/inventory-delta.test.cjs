@@ -223,3 +223,34 @@ test('a refused report is sent again with inventory in the same request',async()
  c.context.reply=()=>({status:409,body:{code:'inventory-required'}});
  await assert.rejects(c.context.request('/status',{method:'POST',body:{name:'P',items:[]}}),/409/,'a refused full report is not retried');
 });
+
+// Failure inventory for skipping the bank comparison on a carried bank:
+// (1) consumeBankReport skips storing a changed bank; (2) a carried bank leaves
+// in place a snapshot that another character or the storage worker replaced;
+// (3) the observer stays the other character after the carried bank's report;
+// (4) consumeBankReport adopts reserved cargo on a report that changed nothing.
+const {consumeBankReport}=require('../../runtime/coordinator/status/bank.ts');
+test('a carried bank skips the comparison only while it produced the current snapshot',()=>{
+ const state={snapshot:null,observer:null},effects=[];
+ const ports={now:()=>100,adoptReservedCargo:()=>effects.push('adopt'),persist:()=>effects.push('persist')};
+ const carried={gold:5,packs:{items0:[null]}};
+ let reads=0;
+ const counted=new Proxy(carried,{get(target,key,receiver){if(key==='packs')reads++;return Reflect.get(target,key,receiver);}});
+ consumeBankReport({name:'M',bank:counted},state,ports);
+ assert.deepEqual(effects,['adopt','persist']);
+ reads=0;
+ for(let i=0;i<5;i++){const body={name:'M',bank:counted};consumeBankReport(body,state,ports);assert.equal('bank' in body,false);}
+ assert.equal(reads,0,'an unchanged carried bank is not serialized again');
+ assert.equal(state.observer,'M');assert.equal(effects.length,2);
+ consumeBankReport({name:'P',bank:{gold:6,packs:{items0:[null]}}},state,ports);
+ assert.equal(state.observer,'P');assert.equal(state.snapshot.gold,6);
+ consumeBankReport({name:'M',bank:counted},state,ports);
+ assert.equal(state.observer,'M','the carried bank is compared again after another observer');
+ assert.equal(state.snapshot.gold,5);
+ state.snapshot={gold:9,packs:{},character:'BankBoi',seenAt:1};
+ consumeBankReport({name:'M',bank:counted},state,ports);
+ assert.equal(state.snapshot.gold,5,'a snapshot the storage worker replaced is compared again');
+ const changed={gold:7,packs:{items0:[null]}};
+ consumeBankReport({name:'M',bank:changed},state,ports);
+ assert.equal(state.snapshot.gold,7);
+});

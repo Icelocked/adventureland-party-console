@@ -52,3 +52,20 @@ test('a report that omits unchanged inventory keeps it, and an unknown revision 
   expect((await inventory(app.url)).items[0].item).toEqual({ name: 'coat', level: 4 });
   await info.attach('carried-inventory', { body: JSON.stringify((await inventory(app.url)).items[0]), contentType: 'application/json' });
 });
+
+test('a carried bank keeps the bank snapshot until the bank changes', async ({ app }, info) => {
+  const report = await merchantReport(app);
+  const bank = (names: string[]) => ({ gold: 5000, packs: { items0: names.map((name, slot) => ({ slot, item: { name }, meta: { properties: {} } })) } });
+  const section = async () => (await (await fetch(`${app.url}/party-api/state?section=bank&dashboard=1`)).json()).bank;
+  await app.deliverStatus(report({ items: coat(3), slots: {}, bank: bank(['bkey']), map: 'bank', inventoryRevision: 'bank-1' }));
+  const first = await section();
+  expect(first).toMatchObject({ character: 'M', gold: 5000 });
+  expect(first.packs.items0.map((entry: any) => entry.item.name)).toEqual(['bkey']);
+  // Reports that omit the unchanged bank leave the stored snapshot as it was.
+  for (let index = 0; index < 3; index++) await app.deliverStatus(report({ map: 'bank', inventoryRevision: 'bank-1' }));
+  expect(await section()).toEqual(first);
+  await app.deliverStatus(report({ items: coat(3), slots: {}, bank: bank(['bkey', 'coat']), map: 'bank', inventoryRevision: 'bank-2' }));
+  const changed = await section();
+  expect(changed.packs.items0.map((entry: any) => entry.item.name)).toEqual(['bkey', 'coat']);
+  await info.attach('bank-snapshots', { body: JSON.stringify({ first, changed }), contentType: 'application/json' });
+});
