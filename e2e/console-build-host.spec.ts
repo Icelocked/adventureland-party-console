@@ -366,3 +366,69 @@ test('managed headless generations require explicit activation and retain the se
     await info.attach('explicit-headless-activation-and-busy-retry',{body:JSON.stringify({a,b,c,ledger,reports}),contentType:'application/json'});
   }finally{activator.dispose();await stopChild(worker);}
 });
+
+// Failure inventory: e2e/console-deployment-reload-failures.md.
+test('a rollback written under the activation\'s own id returns the workers to the previous generation',async({},info)=>{
+  const {fork}=await import('node:child_process');
+  const {watchGenerations}=await import('../runtime/lifecycle/generations');
+  const {classes}=await import('../tools/game/manifest');
+  const {atomicJson}=await import('../tools/build-store');
+  const directory=path.resolve('.build/e2e','rollback-code-'+randomUUID()),code=path.join(directory,'code');
+  await mkdir(code,{recursive:true});
+  async function generation(label:string){
+    const entries:any={};
+    for(const name of classes){const source=`globalThis.executed=${JSON.stringify(label+':'+name)};`,sha256=hash(source),file=`generated/${sha256}/${name}.js`;await mkdir(path.dirname(path.join(code,file)),{recursive:true});await writeFile(path.join(code,file),source);entries[name]={file,sha256,inputs:[]};}
+    return {schema:1 as const,generation:hash(classes.map(name=>name+':'+entries[name].sha256).join('\n')),classes:entries};
+  }
+  const a=await generation('A'),b=await generation('B');
+  await writeFile(path.join(code,'manifest.json'),JSON.stringify(a));
+  const activationFile=path.join(code,'activation.json'),workerFile=path.join(directory,'worker.cjs');
+  await writeFile(workerFile,`const fs=require('node:fs'),path=require('node:path');process.on('message',m=>{if(m.type!=='reload_code')return;const source=fs.readFileSync(path.join(${JSON.stringify(code)},m.script.replace('adventure_land/','')),'utf8');eval(source);process.send({type:'observed',generation:m.generation,executed:globalThis.executed});process.send({type:'code_reload_result',id:m.id,generation:m.generation,status:'ready'});});`);
+  const worker=fork(workerFile,[],{stdio:['ignore','pipe','pipe','ipc']}),ledger:any[]=[],reports:any[]=[];
+  worker.on('message',m=>{if((m as any)?.type==='observed')ledger.push(m);});
+  const liveWorker={name:'M',className:'merchant',process:worker,script:'adventure_land/'+a.classes.merchant.file};
+  const activator=watchGenerations({directory:code,activationFile,workers:()=>[liveWorker],current:()=>true,activated:(_w,script)=>{liveWorker.script=script;},restart:async()=>{throw Error('Unexpected native restart');},report:(message,detail)=>reports.push({message,detail})});
+  try{
+    // The host's activation, then its rollback: the same deployment id, the previous manifest.
+    await atomicJson(activationFile,{id:'deployment-1',manifest:b});
+    await expect.poll(()=>ledger.at(-1)?.executed,{timeout:8000}).toBe('B:merchant');
+    await atomicJson(activationFile,{id:'deployment-1',manifest:a});
+    await expect.poll(()=>ledger.at(-1)?.executed,{timeout:8000,message:'The rollback must return the worker to generation A'}).toBe('A:merchant');
+    // 3: rewriting the same record changes nothing.
+    const reloads=ledger.length;
+    await atomicJson(activationFile,{id:'deployment-1',manifest:a});
+    await new Promise(resolve=>setTimeout(resolve,2500));
+    expect(ledger.length,'An unchanged activation record is not reapplied').toBe(reloads);
+    await info.attach('same-id-rollback',{body:JSON.stringify({ledger,reports}),contentType:'application/json'});
+  }finally{activator.dispose();await stopChild(worker);}
+});
+
+test('during a deployment hold a paused merchant job does not block the reload the CODE allows',async({},info)=>{
+  const vm=await import('node:vm');
+  const {JSDOM}=await import('../.caracal/node_modules/jsdom/lib/api.js' as string) as any;
+  const {createRunnerHost}=await import('../runtime/lifecycle/runner-host.ts' as string) as any;
+  const directory=path.resolve('.build/e2e','merchant-hold-'+randomUUID());await mkdir(directory,{recursive:true});
+  const codeFile=path.join(directory,'entry.js'),upper:any={caracAL:{},loaded:[] as string[],canReload:true,record(value:string){this.loaded.push(value);}};
+  // What shared.js does while the lease holds: its job stays active (paused), and canReload()
+  // reports whether a bank or upgrade transaction is in flight.
+  const code=(label:string)=>`parent.record(${JSON.stringify(label)});globalThis.__merchantActiveJob={reason:'auto compound'};globalThis.sharedRoutine={canReload:()=>parent.canReload,isOccupied:()=>true,stop(){}};`;
+  await writeFile(codeFile,code('old'));
+  const messages:any[]=[];
+  const host=createRunnerHost({upper,codeFile,runnerFiles:[],
+    createContext(parent:any){const window=new JSDOM('',{url:'https://adventure.land/'}).window;window.globalThis=window;Object.defineProperty(window,'parent',{value:parent});vm.createContext(window);return window;},
+    async evaluateFiles(_files:any,context:any){vm.runInContext('var character={rip:false};function set_message(){}',context);},
+    async connected(){},send:(message:any)=>messages.push(message)} as any);
+  try{
+    await host.start();
+    // A transaction in flight keeps the reload waiting.
+    upper.canReload=false;await writeFile(codeFile,code('during transaction'));
+    await host.reload({id:'transaction',generation:'2'} as any);
+    expect(messages.at(-1)?.status,'A bank or upgrade transaction in flight still answers busy').toBe('busy');
+    // 1: the job is paused for the hold and canReload() allows it.
+    upper.canReload=true;await writeFile(codeFile,code('new'));
+    await host.reload({id:'hold',generation:'3'} as any);
+    expect(messages.at(-1)?.status,'The paused merchant job must not block the reload').toBe('ready');
+    expect(upper.loaded.at(-1)).toBe('new');
+    await info.attach('merchant-hold-reload',{body:JSON.stringify({messages,loaded:upper.loaded}),contentType:'application/json'});
+  }finally{await host.dispose();await filesystem.rm(directory,{recursive:true,force:true});}
+});

@@ -109,7 +109,9 @@ export function watchGenerations(ports: GenerationPorts): { dispose(): void } {
     reading = true;
     try {
       const requested = JSON.parse(await readFile(ports.activationFile!, 'utf8')) as {id: string; manifest: GameManifest};
-      if (typeof requested.id !== 'string' || !requested.id || requested.id === activation?.id) return;
+      // A rollback reuses its deployment's id with the previous manifest, so the generation counts too.
+      if (typeof requested.id !== 'string' || !requested.id ||
+        requested.id === activation?.id && requested.manifest?.generation === activation?.manifest.generation) return;
       // Validate before accepting; a partial/invalid record cannot replace the selection.
       await verifyManifest(ports.directory, requested.manifest);
       if (disposed) return;

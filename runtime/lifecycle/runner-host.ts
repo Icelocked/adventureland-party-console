@@ -7,9 +7,11 @@ import { ReloadBusyError, ReloadQueue, type CodeRunner } from "./reload-queue.ts
 
 type Routine = { stop?: () => void; isOccupied?: () => boolean; canReload?: () => boolean };
 function occupied(runner: Runner | undefined): boolean {
-  if (runner?.__merchantActiveJob) return true;
   const routine = runner?.sharedRoutine;
-  return routine?.canReload ? !routine.canReload() : !!routine?.isOccupied?.();
+  // CODE that answers canReload() owns the decision: during a deployment hold it pauses the
+  // merchant's job and refuses only while a bank or upgrade transaction is in flight.
+  if (routine?.canReload) return !routine.canReload();
+  return !!runner?.__merchantActiveJob || !!routine?.isOccupied?.();
 }
 interface Runner extends vm.Context {
   sharedRoutine?: Routine;
