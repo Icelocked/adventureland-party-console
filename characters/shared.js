@@ -3360,11 +3360,79 @@
     return pass.bosses;
   }
   var avoidedBossPass = null;
-  // A pull this close to a boss risks drawing it in: twice its attack range plus a margin.
-  function avoidedBossNear(target) {
-    return visibleAvoidedBosses().some(function (boss) {
-      var reach = 150 + 2 * (Number(G.monsters[boss.mtype] && G.monsters[boss.mtype].range) || 50);
-      return Math.hypot(Number(boss.x) - Number(target.x), Number(boss.y) - Number(target.y)) <= reach;
+  // A boss notices a player only through the server's aggro grid. node/server.js
+  // (line 14045) files an aggressive monster under its 32 px cell with
+  // set_ghash(aggressives, monster, 32), and get_nearby_ghash in
+  // node/server_functions.js (line 1186) hands each player the monsters in the
+  // 3x3 block of cells around its own. Entities in neighbouring cells sit under
+  // 64 px apart on each axis, so the reach is 64 * sqrt(2), about 91 px. The
+  // boss's attack range (Mr. Pumpkin 520) only limits the hit after it notices.
+  var BOSS_AGGRO_REACH = 64 * Math.SQRT2;
+  // The zone adds 1.5 s of the boss's own walk to cover position lag. The server
+  // files a boss with aggro above 0.99 (Mr. Green) on every tick instead of
+  // rolling its aggro chance (Mr. Pumpkin 0.05, Stompy 0.2), so it adds 40 px more.
+  var BOSS_LAG_SECONDS = 1.5, BOSS_CERTAIN_AGGRO_MARGIN = 40;
+  // Seconds of a walking boss's path that count: new pulls stay clear of it.
+  var BOSS_LEAD_SECONDS = 2;
+  var bossZoneCache = null;
+  /** A boss on the avoid list, outside a joined event for it. */
+  function avoidedBoss(target) {
+    return avoidMonsters.indexOf(target.mtype) >= 0 && !joinedEvent && !activeCombatEvent();
+  }
+  function bossPoint(entity) {
+    return { x: Number(entity.real_x !== undefined ? entity.real_x : entity.x),
+      y: Number(entity.real_y !== undefined ? entity.real_y : entity.y) };
+  }
+  /** Keep-out zones of the visible avoided bosses: live centre, radius and walking velocity (docs/achievement-hunt.md § Bosses). */
+  function bossZones() {
+    // visibleAvoidedBosses keeps one list per synchronous pass, so bossZones builds the
+    // zones once per pass too (failure mode 36).
+    var bosses = visibleAvoidedBosses();
+    if (bossZoneCache && bossZoneCache.bosses === bosses) return bossZoneCache.zones;
+    var zones = bosses.map(function (boss) {
+      var definition = G.monsters[boss.mtype] || {}, centre = bossPoint(boss);
+      var speed = Number(boss.speed || definition.speed) || 40;
+      var moving = boss.moving && Number.isFinite(boss.going_x) && Number.isFinite(boss.going_y);
+      var dx = moving ? boss.going_x - centre.x : 0, dy = moving ? boss.going_y - centre.y : 0, length = Math.hypot(dx, dy);
+      return { id: String(boss.id), mtype: boss.mtype, x: centre.x, y: centre.y,
+        radius: BOSS_AGGRO_REACH + speed * BOSS_LAG_SECONDS + (Number(definition.aggro) > 0.99 ? BOSS_CERTAIN_AGGRO_MARGIN : 0),
+        vx: length ? dx / length * speed : 0, vy: length ? dy / length * speed : 0, duration: length / speed };
+    });
+    bossZoneCache = { bosses: bosses, zones: zones };
+    return zones;
+  }
+  /** Seconds until `zone` covers `point`: 0 inside it, Infinity when the boss's walk never gets there. */
+  function bossZoneContact(point, zone) {
+    var dx = zone.x - point.x, dy = zone.y - point.y;
+    var c = dx * dx + dy * dy - zone.radius * zone.radius;
+    if (c <= 0) return 0;
+    var a = zone.vx * zone.vx + zone.vy * zone.vy, b = dx * zone.vx + dy * zone.vy;
+    if (!a || b >= 0 || b * b < a * c) return Infinity;
+    var seconds = (-b - Math.sqrt(b * b - a * c)) / a;
+    return seconds <= zone.duration ? seconds : Infinity;
+  }
+  /** The first zone to cover `point` within `lead` seconds, or null. */
+  function bossZoneReaching(point, lead) {
+    var found = null;
+    bossZones().forEach(function (zone) {
+      var seconds = bossZoneContact(point, zone);
+      if (seconds <= lead && (!found || seconds < found.seconds)) found = { zone: zone, seconds: seconds };
+    });
+    return found;
+  }
+  /** Whether a new pull keeps `target` and the spot this character attacks it from out of every zone. */
+  function bossClearPull(target) {
+    if (!bossZones().length) return true;
+    var inRange = typeof is_in_range === "function" && is_in_range(target);
+    var spot = inRange || typeof combatApproachPoint !== "function" ? bossPoint(character) : combatApproachPoint(target);
+    return !bossZoneReaching(bossPoint(target), BOSS_LEAD_SECONDS) && !bossZoneReaching(spot, BOSS_LEAD_SECONDS);
+  }
+  /** A combat step ends outside every zone, or moves away from the boss whose zone it is in. */
+  function bossZoneAllows(point) {
+    var self = bossPoint(character);
+    return bossZones().every(function (zone) {
+      var after = Math.hypot(point.x - zone.x, point.y - zone.y);
+      return after >= zone.radius || after > Math.hypot(self.x - zone.x, self.y - zone.y);
     });
   }
   /** Reported in status; the coordinator leaves the target once one of these attacks the party. */
@@ -14467,6 +14535,8 @@
     if (typeof rareTarget === "function" && rareTarget() && rareTarget().id === target.id) return true;
     if (target.type === "character") return validAbtestingOpponent(target);
     if (target.type !== "monster" || isExternallyClaimedMonster(target)) return reject("external claim or invalid entity");
+    // Achievement Hunt never fights its avoided bosses outside their own event (docs/achievement-hunt.md § Bosses).
+    if (typeof avoidedBoss === "function" && avoidedBoss(target)) return reject("avoided boss");
     if (huntTravel && farmApproach.failed[target.id]>Date.now()) return reject("failed approach cooldown");
     if (typeof passiveRareCandidate === "function" && passiveRareCandidate(target)) return true;
     if (isAttackingPartyMember(target)) return true;
@@ -14474,8 +14544,8 @@
       if (!inFarmArea(target, partyLocation)) return reject("farming engagement left selected area");
       return true;
     }
-    // Achievement Hunt keeps new pulls away from its target's bosses (docs/achievement-hunt.md § Bosses).
-    if (target.id !== combatTargetId && typeof avoidedBossNear === "function" && avoidedBossNear(target)) return reject("boss nearby");
+    // Achievement Hunt keeps new pulls out of its bosses' keep-out zones (docs/achievement-hunt.md § Bosses).
+    if (target.id !== combatTargetId && typeof bossClearPull === "function" && !bossClearPull(target)) return reject("boss keep-out zone");
     // Farm boundaries govern new pulls. The exact unfinished target must stay
     // eligible after it wanders out, or the lock and selector deadlock.
     if (typeof unfinishedFight === "function" && unfinishedFight() &&
@@ -16865,6 +16935,7 @@
   function safeCombatPoint(point, target) {
     formationPerformance.collisionChecks++;
     if (typeof can_move_to !== "function" || !can_move_to(point.x, point.y)) return false;
+    if (typeof bossZoneAllows === "function" && !bossZoneAllows(point)) return false;
     // Do not gain distance from one attacker by stepping closer to another
     // attacker already inside its striking range.
     return (formationFrame ? formationFrame.attackers : Object.keys(parent.entities || {}).map(function (id) {

@@ -84,18 +84,34 @@ is on.
 
 ## Bosses
 
-Stompy roams the whole White Wolf spawn, and Skeletor and the vampires share
-ground with regular monsters. Achievement Hunt tries to stay out of fights with
-them; deaths they cause still count toward the target's death blacklist.
+Stompy roams the whole White Wolf spawn, Mr. Pumpkin roams the Halloween
+scorpion spawn, and Skeletor and the vampires share ground with regular
+monsters. Achievement Hunt farms around them and stays out of fights with them;
+deaths they cause still count toward the target's death blacklist.
 
 - **Which bosses.** A boss is a monster the game flags `special`, or a
   boss-like one (§ 23). Each target lists the bosses whose spawn shares its
   ground (`achievementTarget.avoid`), and the status response sends that list
-  to the characters as `avoidMonsters`.
-- **Keeping distance.** A character never starts a new pull within
-  150 + 2 × the boss's attack range of a visible boss on the list, which is
-  278 for Stompy. A monster already attacking the party, or the fight already
-  under way, is still fought.
+  to the characters as `avoidMonsters`. Every boss on the list follows the
+  same rules.
+- **Never the target.** A character never attacks a boss on the list, even
+  one attacking the party. A joined event, such as the Mr. Pumpkin or Mr.
+  Green fight, is the exception.
+- **Keep-out zone.** Each visible boss on the list carries a zone around its
+  live position. The game server only lets a monster notice a player in the
+  3 × 3 block of 32 px cells around the player (`node/server.js` registers
+  aggressive monsters with `set_ghash(aggressives, monster, 32)`, and
+  `get_nearby_ghash` in `node/server_functions.js` reads the 3 × 3 block), so
+  a boss notices nobody farther than 64 × √2, about 91 px. The boss's attack
+  `range` (520 for Mr. Pumpkin) only limits the hit after it notices. The zone
+  adds 1.5 s of the boss's own walk (60 px at speed 40) for position lag, and
+  40 px more for a boss with aggro 1 (Mr. Green), which notices on every
+  tick: 151 px for Mr. Pumpkin and Stompy, 191 px for Mr. Green.
+- **New pulls.** A character only starts a new pull when the target and the
+  spot it attacks from both sit outside every zone, counting where a walking
+  boss is in the next 2 seconds. A monster already attacking the party, or the
+  fight already under way, is still fought. Combat steps never end inside a
+  zone, except a step that moves out of it.
 - **Leaving.** Characters report visible bosses on the list, with whom each one
   attacks (`avoidSightings`). When one attacks a party member, the hunt farms
   the next target as a stand-in, and returns once no member has seen the boss
@@ -290,13 +306,26 @@ Found in the efficiency review, written before the change:
     candidate against the avoided bosses, and `visibleAvoidedBosses` walked all
     of `parent.entities` for every check. One targeting pass on a crowded map
     cost entities times candidates. The fighter collects the visible avoided
-    bosses once per synchronous pass and reuses them for every candidate and
-    for `avoidSightings`.
+    bosses once per synchronous pass and reuses them for every candidate, for
+    the keep-out zones and for `avoidSightings`.
 37. **A boss list older than the entities.** The game client updates
     `parent.entities` from socket events, which run between passes. The kept
     list expires in a microtask after the pass that built it, so the next pass
     sees a boss that appeared, died or left sight. A change to the avoid list
     drops the kept list at once.
+
+Found on the live party on 2026-10-19:
+
+38. **A boss's attack range blocking its whole spawn.** On 2026-10-19 Mr.
+    Pumpkin roamed the Halloween scorpion box ([-671,571,-320,800]). The old
+    rule kept new pulls 150 + 2 × range from the boss, 1190 px for Mr.
+    Pumpkin's range of 520, so the party stood still with 6 scorpions in
+    range ("target outside allowed combat selection"). The keep-out zone now
+    follows the server's aggro reach instead of the attack range. See
+    [Bosses](#bosses).
+39. **The boss as a target.** A boss on the avoid list that attacked a party
+    member passed the combat selection like any attacker, so the party fought
+    it. Characters now never attack a boss on the list outside a joined event.
 
 ## Tests
 
@@ -310,3 +339,8 @@ restarts the coordinator and leaves the mode. Its evidence lands in
 in isolation. The console fixture publishes one Goo spawn and no kill counts, so
 the journey cannot reach a step sweep across several monsters, death
 thresholds, a lower step taking over, or the random-respawn list.
+
+`scripts/tests/achievement-boss-avoid.test.cjs` runs the real `shared.js` boss
+functions in a VM with the boss geometry (failure modes 29, 38 and 39). The
+E2E game server spawns no boss next to farm targets on demand, so no live
+journey covers the keep-out zone.
