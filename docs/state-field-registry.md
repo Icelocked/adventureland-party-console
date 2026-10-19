@@ -4,9 +4,9 @@ Summary: `section=fast` sent every character status field except a
 seven-entry omit list, so debug data such as the `combatTrace` ring buffer
 (146 KB per character) went out on every 250 ms poll whenever the live stream
 was down. A new registry, `runtime/coordinator/telemetry/character-fields.ts`,
-lists all 167 fields a status can carry and holds coded whitelists for the
+lists all 170 fields a status can carry and holds coded whitelists for the
 per-character sections. With `PARTY_STATE_FIELDS=enforce`, `section=fast`
-sends the 58 fields that some client reads: on a saved four-character state it
+sends the 60 fields that some client reads: on a saved four-character state it
 drops from 628 KB to 37 KB and builds in 0.2 ms instead of 2.6 ms. The default,
 `shadow`, keeps the v1.4.0 output so a console can audit reads before
 enforcing. The full `/party-api/state` request keeps every field.
@@ -30,6 +30,33 @@ enforcing. The full `/party-api/state` request keeps every field.
 - `tools/state-fields/scan-readers.mts`: a type-aware static scan of which
   character fields a TypeScript client reads.
 - `e2e/field-registry-speed.spec.ts`: the before and after speed check.
+
+## Fields added on 1.5
+
+Rebased onto Ryan's `1.5-feature-branch` (`c691d60e`), the registry adds
+three report fields and keeps 1.5's own section changes:
+
+- `cc`, the code call cost for the dashboard's CC meter
+  (`connected-character-card.tsx`): `fast`, and the live stream, where 1.5
+  added it to `liveFields`.
+- `donationLevelXp`, the XP per level from `G.levels` for
+  `donation-preview.tsx`: `fast`, next to `donationXpPerGold`, and
+  `diagnostics`, where 1.5 added it.
+- `inventoryRevision` (inventory deltas, `status/inventory-carry.ts`):
+  consumed at ingestion, not stored, in no section.
+
+The item `title` 1.5 added to each copy's meta stays in the compact meta
+fields (`public-state-characters.ts`). Rerunning `scan-readers.mts` on the
+1.5 dashboard, with #135's cards, `donation-preview.tsx` and
+`offline-character-view.tsx`, finds no other status field read outside the
+whitelists: the remaining names are `inspection` and `updatedAt` from the
+offline snapshots and inspection route, `length` on arrays, and the
+`travelPlaces` and `monsterChoices` catalogs. #87's Metrics workspace reads
+its own `/party-api/metrics` routes plus `conditions` (stream) and core's
+`accountId`, `activeSlots` and `accountGold`, all already sent.
+Coordinator-level fields 1.5 adds (`characterSnapshots` in config,
+`accountGold` in core) are state fields, not per-character status fields.
+The fork's whitelist still needs `cosmetics` and `reservedInventory`.
 
 ## Tiers
 
