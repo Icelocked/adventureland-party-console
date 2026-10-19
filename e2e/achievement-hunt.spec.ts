@@ -86,3 +86,34 @@ test('Achievement Hunt picks a target from Farming settings, keeps its mode and 
   expect(errors, 'The browser must not crash during Achievement Hunt controls').toEqual([]);
   await testInfo.attach('achievement-hunt-http-and-state', { body: Buffer.from(JSON.stringify({ exchanges, farming, restored, afterExit, browserErrors: errors }, null, 2)), contentType: 'application/json' });
 });
+
+// Settings as a v1.4.0 build saved them: one monolithic settings document, with
+// W's Achievement Hunt choices inside its farming profile.
+const gooSettings = { monsters: ['goo'], blacklistDeaths: true, deathThreshold: 6, fillIdle: true, fillSelectedOnly: true, bossRecheckMinutes: 10 };
+const monolithicJournal = [{ party_dashboard_settings_state_v1: { farmingProfiles: { W: { farmingPolicy: 'achievements', achievementHunt: gooSettings } } } }];
+const fastSection = async (url: string) => (await (await fetch(`${url}/party-api/state?section=fast&dashboard=1`)).json()).characters;
+
+// Failure modes: e2e/achievement-hunt-failures.md § Field registry in enforce mode.
+test.describe('Achievement Hunt under the enforced field registry', () => {
+  test.use({ stateFields: 'enforce', achievementKills: { goo: 1234 }, savedRecords: monolithicJournal });
+  test('shows kill progress and the status line from the whitelisted sections', async ({ page, app }, testInfo) => {
+    await expect.poll(async () => (await app.state()).farmingProfiles.W.achievementTarget?.id).toBe('goo');
+    const fast = await fastSection(app.url), full = (await app.state()).characters;
+    expect(fast.W.monsterAchievementKills).toEqual({ goo: 1234 });
+    expect(Object.hasOwn(fast.W, 'avoidSightings'), 'avoidSightings is debug data').toBe(false);
+    expect(full.W.avoidSightings, 'the coordinator stores the sightings it reads').toEqual([]);
+    // Without the live stream the dashboard reads characters from section=fast (query-cache.tsx).
+    await page.route('**/party-api/dashboard-stream**', route => route.abort());
+    await page.goto('/');
+    const warrior = page.locator('article').filter({ has: page.getByRole('heading', { name: 'W', exact: true }) });
+    await warrior.getByRole('button', { name: /^Farming settings .+/ }).click();
+    await expect(warrior.getByText(/^Farming Goo: 1,234 \/ [\d,]+ kills \(step \d+\)$/)).toBeVisible();
+    await warrior.getByRole('button', { name: 'Farming settings', exact: true }).click();
+    const settings = page.getByRole('dialog', { name: 'Farming settings · W', exact: true });
+    await settings.getByRole('region', { name: 'Achievement Hunt settings' }).getByRole('button', { name: 'Monsters (1)', exact: true }).click();
+    const chooser = page.getByRole('dialog', { name: 'Achievement Hunt monsters', exact: true });
+    await expect(chooser.getByRole('button', { name: 'Inspect Goo', exact: true })).toContainText(/1,234 \/ [\d,]+ · step \d+/);
+    await testInfo.attach('enforced-achievement-progress', { body: await page.screenshot(), contentType: 'image/png' });
+    await testInfo.attach('enforced-achievement-fields', { body: JSON.stringify({ fast: Object.keys(fast.W), full: Object.keys(full.W) }, null, 1), contentType: 'application/json' });
+  });
+});
