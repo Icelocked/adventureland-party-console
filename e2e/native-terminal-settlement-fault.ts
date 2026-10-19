@@ -12,6 +12,7 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
   const peerReceipts:any[]=[];
   const preBarrierRequests=new WeakMap<Request,{began:number;value:any;actual:any}>();
   let preBarrierReleased=false;
+  let retiredAt:number|undefined;
   let dropping=false,closed=false,peerReleased:any,receipt:any,nativeIssued:any,faultArmedAt:number|undefined,alignedNative:any,nativeAcknowledgement:any,nativeScatter:any;
   let arming:Promise<boolean>|undefined;
   const retiredRequests=new WeakSet<Request>(),pendingConvoyHolds=new Set<Promise<void>>(),pendingBarrierHolds=new Set<Promise<void>>();
@@ -31,10 +32,10 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
     return value;
   }
   async function armNaturalSettlement(sample:any){
-    if(!preBarrierReleased||!pendingConvoyHolds.size)return false;
+    if(closed||!preBarrierReleased||!pendingConvoyHolds.size)return false;
     const value=terminalReceipt(sample);if(!value)return false;
     const state=await live.state(),convoy=state.activeConvoy,member=state.characters[W],expected=convoy?.expected?.[W],now=Date.now();
-    if(!convoy || convoy.id!==owner.convoyId || convoy.epoch!==owner.epoch || convoy.routeVersion!==owner.routeVersion ||
+    if(closed || !convoy || convoy.id!==owner.convoyId || convoy.epoch!==owner.epoch || convoy.routeVersion!==owner.routeVersion ||
       convoy.routeServer!==value.terminalSettlement.server || convoy.completed?.includes(W) || !expected ||
       expected.commandId!==owner.commandId || expected.runtimeId!==owner.runtimeId || expected.revision!==owner.navigationRevision ||
       member?.combatSelection?.runtimeId!==owner.runtimeId || member?.lastCommandId!==owner.commandId ||
@@ -87,10 +88,12 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
     },startedAt);
   }
   async function armAfterAlignment(){
+    if(closed)return false;
     if(faultArmedAt)return true;
     if(arming)return arming;
     arming=(async()=>{
-      const sample=await nativeSnapshot();if(samples.length<32)samples.push({at:Date.now(),stage:'alignment-before-fault',...sample});
+      const sample=await nativeSnapshot();if(closed)return false;
+      if(samples.length<32)samples.push({at:Date.now(),stage:'alignment-before-fault',...sample});
       if(await armNaturalSettlement(sample))return true;
       const native=sample.native,current=sample.active;
       if(!preBarrierReleased || !owner || !pendingBarrierHolds.size || !current || current.id!==nativeIssued.report.id || current.progress?.phase!=='barrier' ||
@@ -114,7 +117,8 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
   function same(value:any){return owner && ['convoyId','epoch','commandId','navigationRevision','runtimeId','routeVersion'].every(key=>value?.[key]===owner[key]);}
   const status=async(route:Route)=>{
     const value=body(route);
-    if(dropping && value?.name===W){
+    if(!closed && dropping && value?.name===W){
+      const task=(async()=>{
       try{
         const response=await route.fetch({maxRetries:0,maxRedirects:0,timeout:5000});
         if(!response.ok())throw Error('Actual status observation rejected with HTTP '+response.status());
@@ -125,14 +129,17 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
           sequence:value.travelSample?.sequence,kind:value.combatOnly?'report':value.combatWait?'wait':'full',serverNow:result.serverNow,
           receipt:actualReceipt?{sequence:actualReceipt.sequence,receivedAt:actualReceipt.receivedAt,evaluatedAt:actualReceipt.evaluatedAt}:undefined});
       }catch(error){if(forwardingErrors.length<8)forwardingErrors.push(String(error));}
-      await route.abort('failed');
+      if(liveRequest(route))await route.abort('failed');
+      })();pendingHolds.add(task);try{await task;}finally{pendingHolds.delete(task);}
     }else await route.fallback();
   };
   const barrier=async(route:Route)=>{
+    if(closed)return route.fallback();
     const value=body(route);
     if((!owner||!preBarrierReleased) && value?.character===W && value.completed===false && value.destination?.method==='leave' && value.destination.map==='main'){
       const began=Date.now();
       const sample=await nativeSnapshot(),actual={...sample,report:sample.active};
+      if(closed)return route.fallback();
       const last=actual.plot?.[0],goal=actual.goal,current=actual.report?.owner;
       const final=actual.plot?.length===1 && last?.method==='leave' && last.map==='main' &&
         (['map','x','y'] as const).every(key=>last[key]===value.destination[key] && goal?.[key]===last[key]) &&
@@ -153,6 +160,7 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
     }else await route.fallback();
   };
   const complete=async(route:Route)=>{
+    if(closed)return route.fallback();
     const value=body(route);
     if(owner && value?.character===W && same(value) && (!peerReleased || naturalSettlement&&!completionResponsesLost)){
       ledger.push({at:Date.now(),action:'genuine-convoy-completion-held-unforwarded',request:value});
@@ -168,19 +176,19 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
     if(actual){peerReleased={...actual,proofPath:'coordinator-barrier-reconciliation'};ledger.push({action:'actual-peer-completion-released',...peerReleased});if(faultArmedAt)releaseCompletion?.();}
   }
   const response=(res:Response)=>{
-    if(!res.url().endsWith('/party-api/movement-barrier'))return;
+    if(closed||!res.url().endsWith('/party-api/movement-barrier'))return;
     const value=res.request().postDataJSON();
     if(value?.character===W&&value.completed===false){
       const candidate=preBarrierRequests.get(res.request());if(!candidate)return;
       void res.json().then(result=>{
-        if(res.ok()&&result.ready===true&&candidate.actual===nativeIssued&&same(candidate.value)&&!retiredRequests.has(res.request())&&!res.request().failure()){
+        if(!closed&&res.ok()&&result.ready===true&&candidate.actual===nativeIssued&&same(candidate.value)&&!retiredRequests.has(res.request())&&!res.request().failure()){
           preBarrierReleased=true;
           ledger.push({at:Date.now(),action:'genuine-final-pre-barrier-released-response-delivered',began:candidate.began,owner,response:{status:res.status(),ready:true}});
         }
       },()=>{});return;
     }
     if(value?.character!==P||value.completed!==true)return;
-    void res.json().then(result=>{if(res.ok()&&result.ready===true){
+    void res.json().then(result=>{if(!closed&&res.ok()&&result.ready===true){
       peerReceipts.push({at:Date.now(),request:value,response:result});if(peerReceipts.length>32)peerReceipts.shift();acceptPeerReceipt();
     }},()=>{});
   };
@@ -240,9 +248,10 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
       expect(['convoyId','epoch','commandId','navigationRevision','routeVersion'].every(key=>issued[0].data.owner?.[key]===owner[key])).toBe(true);
       return {startedAt,forceNaturalSettlement,controlLossPrologueAt,inductionPath:naturalSettlement?'natural-terminal-before-convoy-response-loss':'held-barrier-control-response-loss',completionResponsesLost,completionErrors,owner,nativeIssued,faultArmedAt,alignedNative,nativeAcknowledgement,nativeScatter,receipt,peerReleased,ledger,samples,forwarded,acceptedObservations,forwardingErrors,issued,acknowledgements,nativeEvents};
     },
-    async finish(){if(!closed){closed=true;dropping=false;release?.();releaseCompletion?.();await Promise.allSettled([...pendingHolds]);context.off('response',response);context.off('requestfailed',requestFailed);
+    async finish(){if(!closed){closed=true;dropping=false;release?.();releaseCompletion?.();context.off('response',response);context.off('requestfailed',requestFailed);
       await context.unroute('**/party-api/status',status);await context.unroute('**/party-api/movement-barrier',barrier);await context.unroute('**/party-api/convoy-complete',complete);
-      await Promise.all(transitionFlags.map(async value=>live.clients[value.name].frame.evaluate(previous=>{(window as any).__e2eObserveTransitions=previous;},value.previous)));}
-      return {forceNaturalSettlement,controlLossPrologueAt,inductionPath:naturalSettlement?'natural-terminal-before-convoy-response-loss':'held-barrier-control-response-loss',completionResponsesLost,completionErrors,owner,nativeIssued,faultArmedAt,alignedNative,nativeAcknowledgement,nativeScatter,receipt,peerReleased,ledger,samples,forwarded,acceptedObservations,forwardingErrors,pendingHeld:!!held};}
+      await Promise.allSettled([...pendingHolds]);
+      await Promise.all(transitionFlags.map(async value=>live.clients[value.name].frame.evaluate(previous=>{(window as any).__e2eObserveTransitions=previous;},value.previous)));retiredAt=Date.now();}
+      return {retiredAt,forceNaturalSettlement,controlLossPrologueAt,inductionPath:naturalSettlement?'natural-terminal-before-convoy-response-loss':'held-barrier-control-response-loss',completionResponsesLost,completionErrors,owner,nativeIssued,faultArmedAt,alignedNative,nativeAcknowledgement,nativeScatter,receipt,peerReleased,ledger,samples,forwarded,acceptedObservations,forwardingErrors,pendingHeld:!!held};}
   };
 }

@@ -394,7 +394,13 @@ for (const original of [{ id: 'mrgreen',terminalFault:false }, { id: 'mrpumpkin'
           await info.attach('native-green-exit-code-turnover',{body:JSON.stringify({before,after,observations,phases:returnPhases,native:await world(live,encounter.id)}),contentType:'application/json'});
         }
       }
-      if(terminalFault)await info.attach('native-terminal-settlement-fault-proof',{body:JSON.stringify(await terminalFault.prove(returnDeadline)),contentType:'application/json'});
+      if(terminalFault){
+        const proof=await terminalFault.prove(returnDeadline);
+        const retired=await terminalFault.finish();
+        expect(retired.forwardingErrors,'Fault transport must drain cleanly before normal checkpoint travel').toEqual([]);
+        expect(retired.pendingHeld,'No completed fault may retain a native request during checkpoint travel').toBe(false);
+        await info.attach('native-terminal-settlement-fault-proof',{body:JSON.stringify(proof),contentType:'application/json'});
+      }
       await expect.poll(async () => {
         const native = await world(live, encounter.id);
         return fighters.every(name => native.players[name] && native.players[name].map === savedCheckpoint.location.map && Math.hypot(native.players[name].x - savedCheckpoint.location.x, native.players[name].y - savedCheckpoint.location.y) < 100);

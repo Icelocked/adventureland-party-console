@@ -262,3 +262,17 @@ Before implementation: forward the actual pre-barrier normally, arm only after
 the real browser receives its matching successful ready response, and permit an
 unreleased candidate to be replaced by a genuine retry. Preserve current native
 journey/plot/geometry ownership and the exact one-leave/one-ack assertions.
+
+Same-revision one-worker parity passes both backends: native 217.440s, ChronAL
+59.154s; deselection-to-arrival 94.743 native seconds / 71.000 virtual seconds.
+All fault, native leave/ack, ownership and final physical arrival assertions pass;
+53 native and 61 ChronAL evidence hashes are verified. See the retained parity JSON.
+The completed fault still intercepts every later Warrior heartbeat through the
+checkpoint-return leg. Retire its three routes and listeners immediately after
+proof, drain actual in-flight status/terminal callbacks, and assert clean retirement
+before normal travel. Do not change the 180s deadline or any arrival tolerance.
+
+Final focused validation: 18/18 pass with eight workers, hardware RTX 5090 and
+ChronAL 4x; all 823 evidence hashes verify and all 16 owned gameplay workspaces
+are removed. Full TypeScript checks and the 340-scenario selection audit pass.
+The complete self-hosted run is the remaining release-quality validation gate.
