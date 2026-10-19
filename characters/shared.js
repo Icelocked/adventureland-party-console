@@ -16334,7 +16334,12 @@
       var e=observed && observed.visible?observed:t;
       var knownDead=root.partyRoleRunner && typeof root.partyRoleRunner.isKnownDead==='function' && root.partyRoleRunner.isKnownDead(t.id);
       var route=movement.report(),foreignOwned=route && route.owner && !independentApproachOwnsJourney();
-      var allowed=!!(!foreignOwned && !partyConvoyActive && !convoyTraveling && !root.sharedRoutine.isOccupied() && (coordinated || !groupedFarming()) && runtimeCurrent() && (!parent.socket || parent.socket.connected!==false) && !dungeonOwned() && !eventTraveling && character.ctype!=='merchant' &&
+      // A coordinator-owned farming encounter has released convoy walking to
+      // grouped combat. Its selected target still needs native range reports
+      // before either fighter can commit; unrelated convoy targets stay fenced.
+      var encounter=root.__partyFarmingEngagement;
+      var farmingHandoff=!!(coordinated && encounter && !encounter.finished && encounter.target && String(encounter.target.id)===String(t.id));
+      var allowed=!!(!foreignOwned && (!partyConvoyActive || farmingHandoff) && !convoyTraveling && !root.sharedRoutine.isOccupied() && (coordinated || !groupedFarming()) && runtimeCurrent() && (!parent.socket || parent.socket.connected!==false) && !dungeonOwned() && !eventTraveling && character.ctype!=='merchant' &&
         !navigationIntent.cancelled && !character.rip && !consoleMovementPaused() && !root.__partyMovementPaused &&
         !knownDead && (!observed || !observed.dead && !(Number(observed.hp)<=0)) && Number.isFinite(e.x) && Number.isFinite(e.y) &&
         (coordinated || e.visible && !e.dead && e.hp>0) && (!coordinated || t.map===character.map && t.in===character.in && t.server===reunionRealm()) &&

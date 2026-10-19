@@ -2121,3 +2121,11 @@ checkpoint: pending relocation waits for native event/return ownership and comba
 to finish, then authorizes the newly selected catalog area. A later manual
 navigation revision supersedes the pending relocation. Validate the natural
 Halloween focus-change journey and retain its native Bee hits for both fighters.
+
+A farm-relocation convoy's unfinished farming engagement releases its selected
+coordinated target to independent approach, including native range confirmation.
+The coordinator convoy flag remains set until the encounter finishes; it must not
+suppress those readiness reports. Local convoy walking, foreign movement owners,
+unrelated targets and cancelled navigation remain exclusive. Validate the natural
+Halloween completion and changed Bee focus journey in
+`live-event-runtime-recovery.spec.ts`, retaining native damage from both fighters.
