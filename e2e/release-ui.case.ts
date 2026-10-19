@@ -164,14 +164,14 @@ test("item batches support control and range selection and hide incompatible com
   await page.getByRole("button", { name: "Slot 0" }).click({ modifiers: ["Control"] });
   await page.getByRole("button", { name: "Slot 1" }).click({ modifiers: ["Control"] });
   await page.getByRole("button", { name: "Slot 0" }).click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Upgrade each by one level" }).click();
+  await page.getByRole("menuitem", { name: "Upgrade each by one level", exact:true }).click();
   expect(await page.evaluate(() => (window as any).commands)).toEqual([
     { type: "upgrade-mark", item: { name: "coat", level: 1 }, slot: 0, tiers: 1 },
     { type: "upgrade-mark", item: { name: "coat", level: 3 }, slot: 1, tiers: 1 },
   ]);
   await page.getByRole("button", { name: "Slot 2" }).click({ modifiers: ["Shift"] });
   await page.getByRole("button", { name: "Slot 0" }).click({ button: "right" });
-  await expect(page.getByRole("menuitem", { name: "Upgrade each by one level" })).toHaveCount(0);
+  await expect(page.getByRole("menuitem", { name: "Upgrade each by one level", exact:true })).toHaveCount(0);
   await page.getByRole("menuitem", { name: "Auto mark for bank" }).click();
   expect((await page.evaluate(() => (window as any).commands)).slice(2)).toHaveLength(3);
   await info.attach("multi-item-actions", {
@@ -218,6 +218,8 @@ test("bank selections preserve physical sources and offer exchange and compound 
     { type: "withdraw", pack: "items0", slot: 1, markAll: false, upgradeTiers: 1 },
   ]);
   await page.getByRole("button", { name: "Gem", exact: true }).click({ button: "right" });
+  expect(await page.getByRole('menu').evaluate(menu=>({background:getComputedStyle(menu).backgroundColor,opacity:getComputedStyle(menu).opacity}))).toEqual({background:'rgb(255, 255, 255)',opacity:'1'});
+  await info.attach('opaque-bank-context-menu',{body:await page.screenshot(),contentType:'image/png'});
   await page.getByRole("menuitem", { name: "Auto exchange", exact: true }).click();
   await page.getByRole("button", { name: "Gem", exact: true }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Compound one level", exact: true }).click();
@@ -412,4 +414,24 @@ test.describe("offline observation persistence", () => {
       contentType: "image/png",
     });
   });
+});
+
+test.describe('never-loaded account character inspection',()=>{
+ test.use({merchantConnected:false});
+ test('owned offline profiles load lazily without starting a character or exposing private account data',async({page,app},info)=>{
+  const before=await app.state();expect(before.characters.M).toBeUndefined();expect(before.characterSnapshots?.M).toBeUndefined();
+  await page.goto(app.url);const foreign=await page.request.get(app.url+'/party-api/characters/Unowned/inspection');expect(foreign.status()).toBe(404);
+  await page.getByRole('button',{name:'Interface settings',exact:true}).click();await page.getByRole('button',{name:'Inspect M',exact:true}).click();await expect(page.getByRole('button',{name:'Inspect Coat +2',exact:true})).toBeVisible();await page.getByRole('button',{name:'View M stats',exact:true}).click();await expect(page.getByText('Derived stats unavailable for this saved profile.',{exact:false})).toBeVisible();await expect(page.getByText('HP: 321',{exact:true})).toBeVisible();
+  const first=await(await page.request.get(app.url+'/party-api/characters/M/inspection')).json(),second=await(await page.request.get(app.url+'/party-api/characters/M/inspection')).json();expect(second).toEqual(first);expect(first.character.gold).toBe(124);expect(first.character.inspection.calculated).toBe(false);expect(JSON.stringify(first)).not.toMatch(/shells|session|billing|auth=/i);
+  const after=await app.state();expect(after.characters.M).toBeUndefined();expect(after.activeSlots).toEqual(before.activeSlots);await info.attach('owned-offline-profile',{body:JSON.stringify({first,second,beforeSlots:before.activeSlots,afterSlots:after.activeSlots}),contentType:'application/json'});await info.attach('offline-profile-basic-stats',{body:await page.screenshot(),contentType:'image/png'});
+ });
+});
+
+test.describe('offline comparison picker',()=>{
+ test.use({merchantConnected:false});
+ test('item comparison can select a never-loaded owned character from the roster',async({page,app},info)=>{
+  const initial=await app.state(),coat=initial.merchantCatalog.allItems.find((entry:any)=>entry.id==='coat');
+  const bundle=await build({bundle:true,write:false,format:'iife',platform:'browser',jsx:'automatic',tsconfig:path.resolve('dashboard/tsconfig.json'),stdin:{resolveDir:path.resolve('dashboard'),loader:'tsx',contents:`import React from'react';import{createRoot}from'react-dom/client';import{ItemDetails}from'./features/party/item-details';import{GearComparisonDialog}from'./features/party/gear-comparison-dialog';import{loadCharacterInspection}from'./features/party/load-character-inspection';function App(){const[c,s]=React.useState(null);return c?<GearComparisonDialog comparison={c} currentCharacter={c.character} onOpenChange={()=>s(null)}/>:<ItemDetails selected={{character:'Catalog',entry:{slot:-1,item:{name:'coat',level:2},meta:window.coat.meta}}} catalog={[window.coat]} monsters={[]} characters={[]} offlineCharacters={[{name:'M',ctype:'merchant'}]} onLoadCharacter={loadCharacterInspection} achievements={{}} standFull={false} onNavigate={()=>{}} onAddWTB={()=>{}} onAddStand={()=>{}} onCompare={(character,entry,slot)=>{window.selectedComparison={name:character.name,items:character.items,slot};s({character,entry,slot});}} onCompareCatalog={()=>{}} onOpenChange={()=>{}}/>;}createRoot(document.getElementById('root')).render(<App/>);`}});
+  await page.goto(app.url);const styles=await page.locator('style,link[rel="stylesheet"]').evaluateAll(nodes=>nodes.map(n=>n.outerHTML).join(''));await page.route('**/offline-comparison-harness',r=>r.fulfill({contentType:'text/html',body:`<head>${styles}</head><body><div id="root"></div></body>`}));await page.goto(app.url+'/offline-comparison-harness');await page.evaluate(coat=>(window as any).coat=coat,coat);await page.addScriptTag({content:bundle.outputFiles[0].text});await page.getByRole('button',{name:'Compare',exact:true}).click();await page.getByRole('button',{name:/M.*merchant.*offline/}).click();await expect(page.getByRole('dialog',{name:'Equipment comparison',exact:true})).toBeVisible();expect(await page.evaluate(()=>(window as any).selectedComparison.name)).toBe('M');expect((await app.state()).characters.M).toBeUndefined();await expect(page.getByText('Derived stats unavailable for this saved profile.',{exact:true})).toHaveCount(3);await info.attach('never-loaded-character-comparison',{body:await page.screenshot(),contentType:'image/png'});
+ });
 });

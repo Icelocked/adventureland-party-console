@@ -1,4 +1,5 @@
 "use client";
+import {loadCharacterInspection} from "./load-character-inspection";
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 
@@ -9,6 +10,7 @@ import { CharacterPortrait } from './character-portrait';
 import { API } from './api';
 import type { PartyState } from './party-state';
 export function AccountSettings({ state }: { state: PartyState }) {
+  const [loading,setLoading]=useState<string|null>(null);
   const [inspected, setInspected] = useState<
     (Char & { updatedAt?: number }) | null
   >(null);
@@ -35,8 +37,8 @@ export function AccountSettings({ state }: { state: PartyState }) {
             <button
               type="button"
               aria-label={`Inspect ${member.name}`}
-              disabled={!snapshot}
-              onClick={() => snapshot && setInspected(snapshot)}
+              disabled={!!loading}
+              onClick={async()=>{if(snapshot){setInspected(snapshot);return;}setLoading(member.name);setError('');try{setInspected(await loadCharacterInspection(member.name));}catch(error){setError(error instanceof Error?error.message:String(error));}finally{setLoading(null);}}}
               key={member.name}
               className="rounded border border-slate-600 bg-slate-950 p-2 text-center"
             >
