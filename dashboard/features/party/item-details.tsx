@@ -25,6 +25,7 @@ import { EQUIPMENT_TYPES } from "./equipment-types";
 import { propertiesAtLevel } from "./properties-at-level";
 import { titledName } from "./item-title";
 import { Item } from "./item";
+import type {ItemDropSource} from "./item-drop-source";
 import { ITEM_DETAIL_PROPERTY_RANK } from "./item-detail-property-rank";
 import { effectiveDropRate, formatDropRate as dropRate } from "./drop-rate";
 import { itemMaximumLevel } from "./item-maximum-level";
@@ -768,6 +769,9 @@ export function ItemDetails({
         {!!world?.drops?.length && ([true, false].map(home => {
           const sources=world.drops!.filter(source => (source.sourceType === "home") === home);
           if(!sources.length)return null;
+          const groups=new Map<string,ItemDropSource[]>();
+          for(const source of [...sources].sort((a,b)=>(dropSort === "percentage" ? effectiveDropRate(b)-effectiveDropRate(a) : 0)||a.monsterName.localeCompare(b.monsterName)))
+            groups.set(source.monsterId,[...groups.get(source.monsterId)||[],source]);
           return (
           <section key={String(home)} className="rounded border border-amber-900/80 bg-amber-950/10 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -784,10 +788,7 @@ export function ItemDetails({
             </div>
             {home && <p className="mt-2 text-xs text-emerald-100/70">Home-server bonus required; these rewards are separate from normal monster drops.</p>}
             <div className="mt-2 grid gap-1 sm:grid-cols-2">
-              {[...sources].sort((a, b) =>
-                (dropSort === "percentage" ? effectiveDropRate(b) - effectiveDropRate(a) : 0) ||
-                a.monsterName.localeCompare(b.monsterName),
-              ).map((source, index) => (
+              {[...groups.values()].map((rolls, index) => { const source=rolls[0]; return (
                 <button
                   type="button"
                   onClick={() => onInspectMonster(source.monsterId)}
@@ -805,9 +806,13 @@ export function ItemDetails({
                       </span>
                     </span>
                   </span>
-                  <span className="shrink-0 font-mono text-amber-300">{dropRate(source)}</span>
+                  <span className="shrink-0 font-mono text-amber-300">
+                    {rolls.map((roll,index)=><span key={index} className="block">{rolls.length>1 ? `Roll ${index+1}: ` : ""}{dropRate(roll)}
+                      {roll.sourceType==='zone' ? ` · ${roll.mapName||'Zone'}` : roll.sourceType==='world' ? ' · World' : (roll.acquisitionPath?.length||0)>1 ? ` · ${roll.acquisitionPath!.join(' → ')}` : ''}</span>)}
+                    {rolls.length>1&&<span className="block text-emerald-100/70">Independent rolls</span>}
+                  </span>
                 </button>
-              ))}
+              ); })}
             </div>
           </section>
         ); }))}

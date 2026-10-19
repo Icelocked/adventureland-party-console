@@ -1314,7 +1314,7 @@
 
   function trackerCatalogSignature(data) {
     if (!data) return "";
-    return JSON.stringify([data.drops || null, data.drops_home || data.monsters_home_server || null,
+    return JSON.stringify([data.drops || null, data.drops_home || null, data.monsters_home_server || null,
       data.maps || null, data.tables || null]);
   }
 
