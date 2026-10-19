@@ -594,3 +594,14 @@ requests so the context guard retains ownership. Do not suppress handler errors
 or change gameplay persistence. Three focused repetitions pass with all original
 reconnect, native-state persistence and clear-confirmation assertions, 48 verified
 evidence files, and three workspaces removed.
+
+The late-joining clock diagnostic in that run also exhausted its unchanged
+15-second child-process limit without retaining child diagnostics. Its deliberately
+delayed browser-frame acknowledgement remained active after all startup assertions,
+throttling the same private barrier used by later native HTTP and Node checks.
+End that injection after verifying browser startup timer counts and relative
+deadlines. Retain every native/accelerated I/O assertion, the deferred native-turn
+check, and the original limits. On child failure retain stdout/stderr, termination
+metadata, timestamped native I/O receipts and the private broker's participant
+snapshot. Three focused repetitions pass; the custom focused configuration starts
+only the diagnostic's own clock/HTTP fixtures and no gameplay pool.

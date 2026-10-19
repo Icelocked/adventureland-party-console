@@ -119,7 +119,8 @@ test('ChronAL late joining actors preserve relative startup timers',async({page,
   const startup=await frame.evaluate(()=>({initialAt:(window as any).initialStartupAt,parentNow:(parent as Window & typeof globalThis).Date.now(),now:Date.now(),join:(window as any).__e2eChronalClock.join}));
   await info.attach('late-iframe-synchronous-startup-date',{body:JSON.stringify({parentBeforeFrame,...startup}),contentType:'application/json'});
   expect(startup.initialAt,'Synchronous CODE initialization must not capture the old pool epoch').toBeGreaterThanOrEqual(parentBeforeFrame);
-  await page.context().exposeBinding('__e2eChronalFrame',()=>new Promise(resolve=>setTimeout(resolve,100)));
+  let delayStartupFrames=true;
+  await page.context().exposeBinding('__e2eChronalFrame',()=>delayStartupFrames?new Promise(resolve=>setTimeout(resolve,100)):undefined);
   const beforeApplication=await page.evaluate(()=>Date.now());
   await waitForBrowserClockStartup(page.context());
   late=await page.context().newPage();
@@ -139,6 +140,9 @@ test('ChronAL late joining actors preserve relative startup timers',async({page,
   expect(browser.timeouts).toHaveLength(1);expect(browser.intervals).toHaveLength(3);expect(browser.errors).toEqual([]);
   expect(browser.timeouts[0]-browser.join.at).toBeGreaterThanOrEqual(5000);
   browser.intervals.forEach((at:number,index:number)=>expect(at-browser.join.at).toBeGreaterThanOrEqual((index+1)*1000));
+  // The declared startup delay has served its assertions. Do not throttle the
+  // shared barrier during the separate native I/O and child startup checks.
+  delayStartupFrames=false;
   const probe=()=>new Promise<any>(resolve=>{
    const host=window as any,c=host.__e2eChronalClock,wall=()=>c?c.cpuNow():performance.now(),began=wall(),at=Date.now();
    host.$.ajax({url:'/party-api/io-probe',timeout:1000}).done((value:unknown)=>resolve({ok:true,value,wallMs:wall()-began,virtualMs:Date.now()-at}))
@@ -157,8 +161,18 @@ test('ChronAL late joining actors preserve relative startup timers',async({page,
       setTimeout(()=>{globalThis.__delayClockImmediate=false;console.log(JSON.stringify({startupAt,join:clock.join,timeouts,intervals,errors:clock.errors,io,nativeIo:clock.nativeIo,nativeTurn:{wallMs:clock.cpuNow()-turnBegan,virtualMs:Date.now()-turnAt}}));process.exit(0);},2000);
     },6000);`;
   const delayedImmediate=`const immediate=globalThis.setImmediate,timeout=globalThis.setTimeout;globalThis.setImmediate=(fn,...args)=>globalThis.__delayClockImmediate?immediate(()=>timeout(fn,100,...args)):immediate(fn,...args);`;
-  const child=await promisify(execFile)(process.execPath,['--import','data:text/javascript,'+encodeURIComponent(delayedImmediate),'--import',pathToFileURL(path.resolve('tools/sim/network-clock-preload.mjs')).href,'-e',script],{timeout:15_000,windowsHide:true,
-    env:environment({NODE_OPTIONS:'',E2E_CLOCK_PRELOAD:'1',E2E_CLOCK_RATE:'16',E2E_CLOCK_WALL_EPOCH:String(clock.epoch),E2E_CLOCK_VIRTUAL_EPOCH:String(clock.epoch),E2E_CLOCK_BROKER:broker,E2E_CLOCK_TOKEN:clock.token,E2E_CLOCK_SCOPE:'late-node'})});
+  let child;
+  try{
+    child=await promisify(execFile)(process.execPath,['--import','data:text/javascript,'+encodeURIComponent(delayedImmediate),'--import',pathToFileURL(path.resolve('tools/sim/network-clock-preload.mjs')).href,'-e',script],{timeout:15_000,windowsHide:true,
+      env:environment({NODE_OPTIONS:'',E2E_CLOCK_PRELOAD:'1',E2E_CLOCK_RATE:'16',E2E_CLOCK_WALL_EPOCH:String(clock.epoch),E2E_CLOCK_VIRTUAL_EPOCH:String(clock.epoch),E2E_CLOCK_BROKER:broker,E2E_CLOCK_TOKEN:clock.token,E2E_CLOCK_SCOPE:'late-node'})});
+  }catch(error){
+    const failure=error as Error&{stdout?:string;stderr?:string;code?:unknown;signal?:unknown;killed?:boolean};
+    const response=await page.request.get(broker+'/diagnostics?token='+clock.token);
+    await info.attach('late-node-startup-failure',{body:JSON.stringify({at:nativeWall(),message:failure.message,
+      code:failure.code,signal:failure.signal,killed:failure.killed,stdout:failure.stdout,stderr:failure.stderr,
+      broker:await response.json(),ioReceipts}),contentType:'application/json'});
+    throw error;
+  }
   const node=JSON.parse(child.stdout);
   expect(node.startupAt).toBeGreaterThanOrEqual(beforeFork);expect(node.errors).toEqual([]);
   expect(node.timeouts).toHaveLength(1);expect(node.intervals).toHaveLength(3);
