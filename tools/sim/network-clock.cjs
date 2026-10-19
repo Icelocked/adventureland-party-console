@@ -9,6 +9,7 @@ const realTimeout = setTimeout;
 const realImmediate = setImmediate;
 const http = require("node:http");
 const { randomUUID } = require("node:crypto");
+const { joinClock } = require("./join-clock.cjs");
 const chronalDirectory = () =>
   process.env.E2E_CHRONAL_DIR || path.resolve(__dirname, "../../.build/sim/chronal");
 const clockScope = () => process.env.E2E_CLOCK_SCOPE || "game";
@@ -115,6 +116,7 @@ function install({ dateOnly = false } = {}) {
   let stopped = false,
     first = true;
   const observations = { requests: 0, consecutiveFailures: 0, retries: [] };
+  const join = {};
   let readyResolve, readyReject;
   const ready = new Promise((resolve, reject) => {
     readyResolve = resolve;
@@ -170,7 +172,7 @@ function install({ dateOnly = false } = {}) {
       realImmediate(()=>{
         try{
           const next=windows.shift();
-          if(first){clock.now=next.now;first=false;}
+          if(first){Object.assign(join,joinClock(clock,next.now));first=false;}
           else{
             clock.runSync({before:next.now});
             // Pinned ChronAL's public sync window excludes its end. Complete
@@ -235,6 +237,7 @@ function install({ dateOnly = false } = {}) {
     windowMode:dateOnly?"observe":"node-sync-inclusive",
     errors,
     observations,
+    join,
     timers,
     ready,
     now: () => Math.floor(clock.now),

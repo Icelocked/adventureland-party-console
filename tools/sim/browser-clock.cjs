@@ -2,6 +2,7 @@
 // Bundled with the pinned ChronAL VirtualClock, without replacing browser I/O.
 const { VirtualClock } = require("chronal-clock");
 const { stats: taskStats } = require("./browser-task-queue.cjs");
+const { joinClock } = require("./join-clock.cjs");
 const config = globalThis.__e2eClockConfiguration;
 if (config && config.rate > 1) {
   const NativeDate = Date;
@@ -53,6 +54,7 @@ if (config && config.rate > 1) {
   let first = true;
   const state = { phase: "initial", ticks: 0, connectionAttempts: 0, connections: [] };
   const timing = { windows: 0, events: 0, wallMs: 0, maxWindowMs: 0 };
+  const join = {};
   function failedConnection(record,error) {
     record.error=String(error);record.phase='failed';
     if(state.connectionAttempts<3)nativeTimeout(connect,50*state.connectionAttempts);
@@ -69,7 +71,7 @@ if (config && config.rate > 1) {
       const advance = async(next,receivedWall) => {
         state.phase = "advance";
         const started = nativePerformance.now(), events = clock.events;
-        if(first){clock.now=next.now;first=false;}
+        if(first){Object.assign(join,joinClock(clock,next.now));first=false;}
         else await clock.run({until:next.now});
         const elapsed=nativePerformance.now()-started;
         timing.windows++;timing.events+=clock.events-events;
@@ -110,6 +112,7 @@ if (config && config.rate > 1) {
     state,
     timing,
     taskStats,
+    join,
     now: () => Math.floor(clock.now),
     cpuNow: () => nativePerformance.now(),
     nativeTimeOrigin: nativePerformance.timeOrigin,

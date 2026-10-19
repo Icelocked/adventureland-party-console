@@ -140,3 +140,45 @@ A simultaneous focused gameplay run exceeded Docker's 31.19-GiB VM memory and
 an owned game container was OOM-killed. Its results are diagnostic only. Its
 normal teardown completed; further gameplay runs are sequential. The complete
 self-hosted run remains eight workers. Final full-run results remain pending.
+## Late-join initialization investigation
+
+Mixed deployment still fails with a healthy observer (no errors or retries) and
+a headless participant holding one unacknowledged window. Its replacement
+coordinator also logs a premature planner-preparation timeout. New Node actors
+install a clock at the pool's original epoch and start application initialization
+before joining its current timeline. Startup deadlines/date values may therefore
+already be expired at first join. Browser scripts can similarly register timers
+before their first handshake.
+
+Before implementation: prove that late joining actors retain full relative
+one-shot/interval delays, do not replay startup deadlines immediately, preserve
+all callbacks and exact counts, and start Node application code only after its
+real authenticated broker acknowledgement. Preserve the common epoch, native
+I/O, permanent failures, and the existing watchdogs; do not enlarge deadlines.
+
+Second-run failure inventory before implementation: the coordinator executes
+inside a caracAL realm without global setImmediate, so the estimator's Node
+fast yield falls back to virtual setTimeout(0). Inject a native I/O yield from
+the coordinator module, preserving deterministic results, 60M rolls, cancellation
+checks and the 32768-roll cooperation cadence. Browser estimation stays intact.
+Delivery report withholding must begin before historical-intent restart and at
+the coordinator ingress, otherwise an already-dispatched report can legitimately
+reconcile the retained stock. Preserve the unreconciled-before-release assertions.
+Entry fault injection must sample current CODE movement/ownership directly in
+one round trip: initial planning may precede its first full status report. Keep
+every operation identity and the native request's original deadline intact.
+
+Cold-defense fault inventory: a genuine held command can install the local
+convoy between the dropped preparation and defense. Withhold every same-owner
+pre-defense command (including held), retaining the strict null-local-convoy
+assertion and genuine forwarded defending response. Realm picker failure image
+shows its selected US I row aligned behind the trigger while US II is visible;
+position this account-settings popup below its trigger so both remain actionable.
+
+The terminal-settlement fault misses the peer's earlier completion receipt:
+it starts matching only after Warrior establishes the final barrier, and listens
+on one Page. By the assertion, both actors have a fresh successor convoy and
+the old completion is no longer present in current state. Retain bounded actual
+peer barrier responses from the BrowserContext before arming; accept only the
+same convoy/epoch/route/step/exact destination with genuine ready=true. Preserve
+the one-leave/one-ack counts and all terminal ownership checks.

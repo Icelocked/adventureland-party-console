@@ -1005,6 +1005,10 @@ test.describe('real merchant economy and durable work', () => {
       expect(countCargo(await cargo())).toBe(retained ? 1 : 0);
       // Declare the interrupted historical intent only. Native clients perform the
       // actual failed equip, subsequent transfer and equip; no receipts are fabricated.
+      // Arm ingress before replacing the coordinator: an already-dispatched
+      // browser report must not cross the intended missing-inventory boundary.
+      holdInventory = true;
+      live.holdMerchantStatus(true);
       await live.restoreHistoricalSettings(() => ({ merchantDeliveries: {
         [recipient]: [{ id, item, slot: 10, equipOnDelivery: true, awaitingEquip: true }],
       } }));
@@ -1017,6 +1021,7 @@ test.describe('real merchant economy and durable work', () => {
       expect((await live.state()).merchantDeliveries[recipient]).toMatchObject([{ id, awaitingEquip: true }]);
       await live.restartCoordinator();
       expect((await live.state()).merchantDeliveries[recipient]).toMatchObject([{ id, awaitingEquip: true }]);
+      live.holdMerchantStatus(false);
       holdInventory = false;
       await expect.poll(async () => {
         const marks = (await live.state()).merchantDeliveries?.[recipient] || [];

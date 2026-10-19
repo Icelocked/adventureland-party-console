@@ -28,7 +28,7 @@ test('a lost native Hunt preparation response recovers cold defense, loot and th
     const body = await response.json();
     const command = body.command;
     if (command?.type === 'party-monster-travel' && command.purpose === 'monster-hunt' &&
-      ['assemble', 'shared-prepare'].includes(command.phase) && !deliveredDefense && (!convoyId || convoyId === command.convoyId)) {
+      command.phase !== 'defending' && !deliveredDefense && (!convoyId || convoyId === command.convoyId)) {
       convoyId = command.convoyId;
       dropped++;
       exchanges.push({ at: Date.now(), action: 'aborted-genuine-response', nativeRequest, command, convoySignal: body.convoySignal });

@@ -41,11 +41,15 @@ test(`native event entry recovers ${fault}`,async({live},info)=>{
   const rejectEntry=async(route:Route)=>{
     const req=route.request(),body=req.method()==='POST'?req.postDataJSON():null;
     if(body?.character!==W||body.to?.map!==seed.map||body.to?.x!==seed.x||body.to?.y!==seed.y)return route.fallback();
-    const started=Date.now(),sample=await observer.sample(body);
-    if(!sample){unmatched.push({at:Date.now(),body,elapsedMs:Date.now()-started,reason:'No current native movement sample'});return route.fallback();}
+    const started=Date.now(),sample=await live.clients[W].frame.evaluate(()=>{
+      const runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+      return {movement:runner?.__partyMovement?.report?.(),navigation:runner?.convoyNavigationReport?.()};
+    });
     const snapshot=latest,s=snapshot.state,c=s.activeConvoy;
-    const owner=sample.body.convoyNavigation,expected=c?.expected?.[W];
-    if(Date.now()-snapshot.at>=1000||c?.walkingActivity!=='event'||c.walkingEvent!=='mrpumpkin'||owner.id!==c.id||owner.epoch!==c.epoch||
+    const owner=sample.navigation,expected=c?.expected?.[W];
+    if(sample.movement?.id!==body.id||sample.movement.done||!owner||owner.communication||owner.phase==='communication-hold'||
+      !String(body.id).startsWith(W+':'+owner.runtimeId+':')||
+      Date.now()-snapshot.at>=1000||c?.walkingActivity!=='event'||c.walkingEvent!=='mrpumpkin'||owner.id!==c.id||owner.epoch!==c.epoch||
       owner.commandId!==expected?.commandId||owner.navigationRevision!==expected?.revision||owner.runtimeId!==expected?.runtimeId||
       body.to?.map!==c.location?.map||body.to.x!==c.location.x||body.to.y!==c.location.y||Date.now()-started>=1500){
       unmatched.push({at:Date.now(),body,owner,expected,elapsedMs:Date.now()-started});return route.fallback();

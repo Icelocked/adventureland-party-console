@@ -9,6 +9,7 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
   const context=page.context(),ledger:Record<string,any>[]=[];let owner:any,held:Route|undefined,release:(()=>void)|undefined,holdGate:Promise<void>|undefined;
   const pendingHolds=new Set<Promise<void>>(),samples:Record<string,unknown>[]=[];
   const forwardingErrors:string[]=[];let forwarded=0,acceptedObservations=0;
+  const peerReceipts:any[]=[];
   let dropping=false,closed=false,peerReleased:any,receipt:any,nativeIssued:any,faultArmedAt:number|undefined,alignedNative:any,nativeAcknowledgement:any,nativeScatter:any;
   let arming:Promise<boolean>|undefined;
   const retiredRequests=new WeakSet<Request>(),pendingConvoyHolds=new Set<Promise<void>>(),pendingBarrierHolds=new Set<Promise<void>>();
@@ -155,11 +156,20 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
       try{await armAfterAlignment();await task;}finally{pendingConvoyHolds.delete(task);pendingHolds.delete(task);}
     }else await route.fallback();
   };
+  function acceptPeerReceipt(){
+    if(!owner||peerReleased)return;
+    const actual=peerReceipts.find(({request:value})=>value.convoyId===owner.convoyId&&value.epoch===owner.epoch&&
+      value.routeVersion===owner.routeVersion&&value.step===owner.step&&
+      ['map','in','x','y','method'].every(key=>value.destination?.[key]===owner.destination?.[key]));
+    if(actual){peerReleased={...actual,proofPath:'coordinator-barrier-reconciliation'};ledger.push({action:'actual-peer-completion-released',...peerReleased});if(faultArmedAt)releaseCompletion?.();}
+  }
   const response=(res:Response)=>{
-    if(!owner || !res.url().endsWith('/party-api/movement-barrier'))return;
+    if(!res.url().endsWith('/party-api/movement-barrier'))return;
     const value=res.request().postDataJSON();
-    if(value?.character!==P || value.completed!==true || value.convoyId!==owner.convoyId || value.epoch!==owner.epoch || value.routeVersion!==owner.routeVersion || value.step!==owner.step || JSON.stringify(value.destination)!==JSON.stringify(owner.destination))return;
-    void res.json().then(result=>{if(result.ready===true){peerReleased={at:Date.now(),proofPath:'coordinator-barrier-reconciliation',request:value,response:result};ledger.push({action:'actual-peer-completion-released',...peerReleased});if(faultArmedAt)releaseCompletion?.();}},()=>{});
+    if(value?.character!==P||value.completed!==true)return;
+    void res.json().then(result=>{if(res.ok()&&result.ready===true){
+      peerReceipts.push({at:Date.now(),request:value,response:result});if(peerReceipts.length>32)peerReceipts.shift();acceptPeerReceipt();
+    }},()=>{});
   };
   async function independentlySettledPeer(){
     if(!receipt)return false;
@@ -185,7 +195,7 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
     ledger.push({action:'actual-peer-independently-settled',...peerReleased});if(faultArmedAt)releaseCompletion?.();return true;
   }
   await context.route('**/party-api/status',status);await context.route('**/party-api/movement-barrier',barrier);
-  await context.route('**/party-api/convoy-complete',complete);page.on('response',response);context.on('requestfailed',requestFailed);
+  await context.route('**/party-api/convoy-complete',complete);context.on('response',response);context.on('requestfailed',requestFailed);
   return {
     async prove(deadline:number){
       await expect.poll(()=>!!owner&&!!nativeIssued,{timeout:Math.max(1,deadline-Date.now()),message:'Fault must deliver the genuinely released native final leave pre-barrier'}).toBe(true);
@@ -200,7 +210,7 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
           receipt=value;return true;
         },{timeout:Math.min(10_000,Math.max(1,deadline-Date.now())),message:'A genuine acknowledged terminal settlement must replace the undelivered completion POST'}).toBe(true);
       }finally{dropping=false;release?.();}
-      await expect.poll(async()=>!!peerReleased || await independentlySettledPeer(),{timeout:Math.min(20_000,Math.max(1,deadline-Date.now())),message:'The peer must genuinely finish through its matching barrier or independently acknowledged terminal settlement before Warrior completion'}).toBe(true);
+      await expect.poll(async()=>{acceptPeerReceipt();return !!peerReleased || await independentlySettledPeer();},{timeout:Math.min(20_000,Math.max(1,deadline-Date.now())),message:'The peer must genuinely finish through its matching barrier or independently acknowledged terminal settlement before Warrior completion'}).toBe(true);
       releaseCompletion?.();
       if(forceNaturalSettlement)expect(naturalSettlement,'Forced natural mode must prove genuine natural terminal settlement').toBe(true);
       if(naturalSettlement){
@@ -217,7 +227,7 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
       expect(['convoyId','epoch','commandId','navigationRevision','routeVersion'].every(key=>issued[0].data.owner?.[key]===owner[key])).toBe(true);
       return {startedAt,forceNaturalSettlement,controlLossPrologueAt,inductionPath:naturalSettlement?'natural-terminal-before-convoy-response-loss':'held-barrier-control-response-loss',completionResponsesLost,completionErrors,owner,nativeIssued,faultArmedAt,alignedNative,nativeAcknowledgement,nativeScatter,receipt,peerReleased,ledger,samples,forwarded,acceptedObservations,forwardingErrors,issued,acknowledgements,nativeEvents};
     },
-    async finish(){if(!closed){closed=true;dropping=false;release?.();releaseCompletion?.();await Promise.allSettled([...pendingHolds]);page.off('response',response);context.off('requestfailed',requestFailed);
+    async finish(){if(!closed){closed=true;dropping=false;release?.();releaseCompletion?.();await Promise.allSettled([...pendingHolds]);context.off('response',response);context.off('requestfailed',requestFailed);
       await context.unroute('**/party-api/status',status);await context.unroute('**/party-api/movement-barrier',barrier);await context.unroute('**/party-api/convoy-complete',complete);
       await Promise.all(transitionFlags.map(async value=>live.clients[value.name].frame.evaluate(previous=>{(window as any).__e2eObserveTransitions=previous;},value.previous)));}
       return {forceNaturalSettlement,controlLossPrologueAt,inductionPath:naturalSettlement?'natural-terminal-before-convoy-response-loss':'held-barrier-control-response-loss',completionResponsesLost,completionErrors,owner,nativeIssued,faultArmedAt,alignedNative,nativeAcknowledgement,nativeScatter,receipt,peerReleased,ledger,samples,forwarded,acceptedObservations,forwardingErrors,pendingHeld:!!held};}

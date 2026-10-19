@@ -41,7 +41,7 @@ async function main() {
   const forwards = process.env.AL_DEBUG_INSTANCE === '1' ? [] :
     [await forwardPublishedPort(9003, 7192), await forwardPublishedPort(9004, 7193)];
   const clockEnvironment = Number(process.env.E2E_CLOCK_RATE || 1)>1
-    ? {...process.env,E2E_CLOCK_PRELOAD:'1',NODE_OPTIONS:[process.env.NODE_OPTIONS,'--require=/party-sim/network-clock.cjs'].filter(Boolean).join(' ')}
+    ? {...process.env,E2E_CLOCK_PRELOAD:'1',NODE_OPTIONS:[process.env.NODE_OPTIONS,'--import=/party-sim/network-clock-preload.mjs'].filter(Boolean).join(' ')}
     : process.env;
   const children = [spawn(process.execPath, ['main.js'], { stdio: 'inherit',env:clockEnvironment }), spawn(process.execPath, ['server.js', 'local'], { cwd: '/game/node', stdio: 'inherit',env:clockEnvironment })];
   if (require('../secretsandconfig/options.js').servers.local2)

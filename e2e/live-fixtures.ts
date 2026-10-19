@@ -10,7 +10,7 @@ import { createRequire } from 'node:module';
 import type { Page,Frame,BrowserContext } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gateway } from '../tools/hosting/gateway';
 import { Access } from '../tools/hosting/access';
 import { selectionFields, stateKeys } from '../runtime/coordinator/persistence/snapshots';
@@ -144,7 +144,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           E2E_GAME_WEB_URL: manifest.webUrl, E2E_GAME_AUTH: manifest.auth, E2E_MERCHANT_DEFAULT: JSON.stringify(merchantDefault), E2E_ALLOW_HEADLESS: String(liveHeadless), PARTY_MOVEMENT_MODE: movementMode, E2E_STALE_WORKER_REALM: staleWorkerRealm || '',
           E2E_CLOCK_RATE:process.env.E2E_CLOCK_RATE||'1',E2E_CLOCK_WALL_EPOCH:process.env.E2E_CLOCK_WALL_EPOCH||'',E2E_CLOCK_VIRTUAL_EPOCH:process.env.E2E_CLOCK_VIRTUAL_EPOCH||'',
           E2E_CLOCK_BROKER:process.env.E2E_CLOCK_BROKER||'',E2E_CLOCK_TOKEN:process.env.E2E_CLOCK_TOKEN||'',E2E_CLOCK_SCOPE:directory,
-          E2E_CLOCK_PRELOAD:'1',NODE_OPTIONS:[process.env.NODE_OPTIONS,`--require=${JSON.stringify(path.join(root,'tools/sim/network-clock.cjs'))}`].filter(Boolean).join(' '),...identityEnvironment }), log);
+          E2E_CLOCK_PRELOAD:'1',NODE_OPTIONS:[process.env.NODE_OPTIONS,`--import=${JSON.stringify(pathToFileURL(path.join(root,'tools/sim/network-clock-preload.mjs')).href)}`].filter(Boolean).join(' '),...identityEnvironment }), log);
       const current = coordinator;
       await new Promise<void>((resolve, reject) => {
         const details = () => existsSync(log) ? readFileSync(log, 'utf8').slice(-16000) : 'No coordinator output';

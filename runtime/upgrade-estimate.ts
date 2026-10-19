@@ -57,6 +57,8 @@ let scheduler: Promise<unknown> = Promise.resolve();
 export function estimateUpgradeBatch(
   lines: EstimateLine[],
   signal?: AbortSignal,
+  yieldToIO: () => Promise<void> = () => new Promise<void>((resolve) =>
+    typeof setImmediate === "function" ? setImmediate(resolve) : setTimeout(resolve, 0)),
 ): Promise<UpgradeEstimate[]> {
   const sorted = lines
     .map((line, index) => ({
@@ -70,7 +72,7 @@ export function estimateUpgradeBatch(
     signal?.throwIfAborted();
     let results = cache.get(key);
     if (!results) {
-      const budget = { remaining: 60_000_000, signal };
+      const budget = { remaining: 60_000_000, signal, yieldToIO };
       results = [];
       for (const entry of sorted) {
         signal?.throwIfAborted();
@@ -104,7 +106,7 @@ async function simulate(
   choice: UpgradeChoice,
   quantity: number,
   target: number,
-  budget: { remaining: number; signal?: AbortSignal },
+  budget: { remaining: number; signal?: AbortSignal; yieldToIO(): Promise<void> },
 ): Promise<UpgradeEstimate> {
   if (!target || !choice.upgradeable)
     return {
@@ -194,16 +196,12 @@ async function upgradeOne(
   grace: number[],
   scrolls: number[],
   random: () => number,
-  budget: { remaining: number; signal?: AbortSignal },
+  budget: { remaining: number; signal?: AbortSignal; yieldToIO(): Promise<void> },
 ): Promise<boolean | null> {
   for (let level = 1; level <= policy.target; level++) {
     if (!budget.remaining) return null;
     if (budget.remaining % 32768 === 0) {
-      // Node's zero-delay timers can still wait a Windows timer quantum on
-      // every batch. Yield to I/O directly; browsers retain their task yield.
-      await new Promise<void>((resolve) =>
-        typeof setImmediate === "function" ? setImmediate(resolve) : setTimeout(resolve, 0),
-      );
+      await budget.yieldToIO();
       budget.signal?.throwIfAborted();
     }
     budget.remaining--;
