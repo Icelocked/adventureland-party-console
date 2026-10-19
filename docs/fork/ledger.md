@@ -9,7 +9,7 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 | Upstream base | `1.5-feature-branch` @ 1832350, merged as 7d89bf8 on 10-18 (branch `adopt/1.5`, from `main`; previous merges 98f25b5 of 3ddec7d on 10-18 and 53a3cd6 of 849c38a on 10-16). Carries v1.4.0 (PR #64, b4443e4), the ChronAL simulation harness (7f81f71) and all gameplay E2Es on ChronAL (3ddec7d) |
 | Fork head | `adopt/1.5` @ the commit recording this (after 7d89bf8), not pushed (`origin/adopt/1.5` @ 098b897, pushed 10-18); `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
 | Divergence | 0 behind; 231 files differ from upstream’s tip (1832350) |
-| Checked | 2026-10-16, against every upstream issue, comment and PR (#13–#131); #136 and #137 filed 10-17, #138 filed 10-17, #142, #143, #144 and #145 filed 10-18; upstream's 88 commits to 1832350 checked on 10-18 against the issues they fix or implement |
+| Checked | 2026-10-16, against every upstream issue, comment and PR (#13–#131); #136 and #137 filed 10-17, #138 filed 10-17, #142, #143, #144 and #145 filed 10-18; upstream's 88 commits to 1832350 checked on 10-18 against the issues they fix or implement; #147 filed 10-19 |
 
 | Status | Count |
 |---|---|
@@ -17,7 +17,7 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 | Update / comment | 8 (2 to do) |
 | Done upstream | 48 |
 | Matches | 17 (all done but #129, not commented) |
-| Open upstream | 18 |
+| Open upstream | 19 |
 | Closed | 19 |
 | Fork-only | 7 |
 
@@ -243,6 +243,7 @@ A comment saying where it's implemented, with the commit link, is enough.
 | [#81](https://github.com/Ryan-Haines/adventureland-party-console/issues/81) | Show contribution-based multi-drops on monster details; investigate items listed twice for one monster with different rates (e.g. Broom). New, opened by the maintainer. | Not started |
 | [#82](https://github.com/Ryan-Haines/adventureland-party-console/issues/82) | Auto-cycle PVP-marked items (shadow stones that won't stack) and show the PVP mark on inventory icons. New, opened by the maintainer. | Not started |
 | [#95](https://github.com/Ryan-Haines/adventureland-party-console/issues/95) | “Go headless” fails with “Wait for the character’s active inventory operation to finish”. New, opened by the maintainer. | Not started |
+| [#147](https://github.com/Ryan-Haines/adventureland-party-console/issues/147) | Planner routes cut wall corners that the game's collision rejects: `alpathfinder` 0.6.0 accepts edges such as main (135, 72) → (153, -51) through the x=144 wall; 13% of sampled Mainland routes carry one, and each costs the client a bounded repair (convoys fail after three). Filed by the fork 10-19 from the live town trap. | Not started; the fork only has upstream's client repair |
 
 ## Closed: closed upstream, nothing outstanding
 
