@@ -169,3 +169,26 @@ test.describe('saved entries past their window', () => {
     expect(record.rarePursuitProgress).toHaveProperty(['USII|main|1|rare-100']);
   });
 });
+
+test('offline snapshots save on an inventory change, not on each 30 s refresh', async ({ page, app }, info) => {
+  // Offline character snapshots (docs/efficiency.md, Persistence): nativeOwnership
+  // saves the roster on every native fixture report, and a refresh that is not
+  // due stays in memory until the 5 min save.
+  const rosterKey = 'party_dashboard_roster_state_v1';
+  await page.waitForTimeout(5000);
+  const before = saved(app.journal, rosterKey).length, watched = Date.now();
+  // Every character's snapshot refreshes once in this window.
+  await page.waitForTimeout(36_000);
+  const memory = (await app.state()).characterSnapshots;
+  const refreshes = saved(app.journal, rosterKey).slice(before);
+  await report(info, 'roster-records-during-refreshes', { records: refreshes.length,
+    refreshedAt: Object.fromEntries(Object.entries(memory).map(([name, snapshot]: [string, any]) => [name, snapshot.updatedAt - watched])) });
+  for (const snapshot of Object.values(memory) as { updatedAt: number }[]) expect(snapshot.updatedAt).toBeGreaterThan(watched);
+  expect(refreshes).toEqual([]);
+  const priest = { ...(await app.state()).characters.P };
+  for (const field of ['seenAt', 'inventorySeenAt']) delete priest[field];
+  priest.items = priest.items.map((entry: unknown, slot: number) => slot === 5 ? { slot, item: { name: 'coat', level: 1 }, meta: { properties: {} } } : entry);
+  await app.deliverStatus(priest);
+  await expect.poll(() => saved(app.journal, rosterKey).slice(before)
+    .some(record => record.characterSnapshots?.P?.items?.[5]?.item?.name === 'coat')).toBe(true);
+});

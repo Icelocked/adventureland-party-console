@@ -15,6 +15,7 @@ import {
   historySnapshot,
   authSnapshot,
 } from "./snapshots.ts";
+import { rosterSnapshots } from "../status/character-appearance.ts";
 
 type PersistedCoordinator = Parameters<typeof settingsSnapshot>[0] &
   Record<
@@ -110,7 +111,8 @@ export function createCoordinatorPersistence(
     livenessTimer = undefined;
   }
   function roster(): void {
-    write(stateKeys.roster, selectSnapshot(state, rosterFields));
+    const fields = selectSnapshot(state, rosterFields);
+    write(stateKeys.roster, { ...fields, characterSnapshots: rosterSnapshots(state, fields.characterSnapshots) });
   }
   function bank(): void {
     write(stateKeys.bank, selectSnapshot(state, bankFields));
