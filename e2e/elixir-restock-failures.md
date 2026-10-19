@@ -20,3 +20,9 @@ fighter drinks it. Restock policies only cover HP and MP potions today. Live jou
 8. **No gold carried.** Restocks bought only with the merchant's carried gold. At 240k a
    Liquid Luck, a spare failed with "Insufficient gold to restock" and the job was dispatched
    again every couple of seconds. The restock now withdraws the shortfall from the bank first.
+9. **The dashboard never saves the elixir (seen live, 10-19).** Written before the fix.
+   `saveRestock` in `use-party-console.tsx` posts only `hp` and `mp` to `/restock`, so the
+   coordinator stores the elixir supply as 0/0 on every Save and the merchant never buys one.
+   The journey above posted `/restock` directly and never used the form. Expected: Save sends
+   the elixir supply too, and the fields show the saved values after the next status refresh.
+   **live**: setting "Luck elixir min/max" in the character card and pressing Save stores them.

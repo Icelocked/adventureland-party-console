@@ -31,9 +31,11 @@ export function createRestockRoute(
     const body = requestObject(req.body),
       name = body.character;
     if (!ports.owned(name)) return res.status(400).json({ error: "unknown character" });
-    const elixir = requestObject(body.elixir);
+    // Policies saved before the form sent its elixir stored the item as the text "undefined";
+    // the form echoes the stored item back, so that value falls back to the default too.
+    const sent = requestObject(body.elixir).item, item = sent === "undefined" ? undefined : sent;
     const policy = { hp: supply(body.hp, "hpot1", 5, 20), mp: supply(body.mp, "mpot1", 0, 0),
-      elixir: supply(body.elixir, requestText(elixir.item) || "elixirluck", 0, 0) };
+      elixir: supply(body.elixir, typeof item === "string" && item ? item : "elixirluck", 0, 0) };
     if (policy.hp.min > policy.hp.max || policy.mp.min > policy.mp.max || policy.elixir.min > policy.elixir.max)
       return res.status(400).json({ error: "minimum cannot exceed maximum" });
     state.restockPolicies[requestText(name)] = policy;

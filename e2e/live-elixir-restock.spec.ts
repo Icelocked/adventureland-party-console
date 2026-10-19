@@ -1,4 +1,5 @@
 import { test, expect, type LiveGame } from './live-fixtures';
+import type { Page } from '@playwright/test';
 
 // Failure inventory: e2e/elixir-restock-failures.md. The fighter's restock policy names Liquid
 // Luck (min 0, max 1); the merchant buys it from the Winter Inn bartender, delivers it, and the
@@ -35,4 +36,32 @@ test('the merchant buys and delivers a fighter\'s Liquid Luck, the fighter drink
   } finally {
     await info.attach('elixir-restock', { body: JSON.stringify({ samples, merchant: (await live.state().catch(() => ({})) as any).merchantActivity?.slice(-30) }), contentType: 'application/json' });
   }
+});
+
+// Failure 9: the character card's restock form saves the elixir supply.
+async function restockSection(page: Page) {
+  const card = page.locator('article').filter({ has: page.getByRole('heading', { name: W, exact: true }) });
+  const min = card.getByLabel('Luck elixir min', { exact: true }), toggle = card.getByRole('button', { name: /^Merchant restock/ });
+  // The section remembers it was open; read the toggle rather than racing hydration.
+  await expect(toggle).toHaveAttribute('aria-expanded', /true|false/);
+  if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+  await expect(min).toBeVisible();
+  return card;
+}
+test('the dashboard restock form saves the Liquid Luck min and max', async ({ live, page }, info) => {
+  test.setTimeout(300_000);
+  await page.goto(live.url);
+  const card = await restockSection(page);
+  await card.getByLabel('Luck elixir min', { exact: true }).fill('1');
+  await card.getByLabel('Luck elixir max', { exact: true }).fill('2');
+  await card.getByRole('button', { name: 'Save restock' }).click();
+  await expect.poll(async () => (await live.state()).restockPolicies?.[W]?.elixir ?? null, { timeout: 30_000,
+    message: 'The coordinator must store the elixir supply saved from the form' }).toEqual({ item: 'elixirluck', min: 1, max: 2 });
+  await expect.poll(async () => (await live.state()).restockPolicies?.[W]?.hp ?? null).toEqual({ item: 'hpot1', min: 5, max: 20 });
+  // The saved values survive a reload of the dashboard.
+  await page.reload();
+  const reloaded = await restockSection(page);
+  await expect(reloaded.getByLabel('Luck elixir min', { exact: true })).toHaveValue('1');
+  await expect(reloaded.getByLabel('Luck elixir max', { exact: true })).toHaveValue('2');
+  await info.attach('elixir-restock-form', { body: await page.screenshot(), contentType: 'image/png' });
 });
