@@ -303,3 +303,23 @@ test('the metrics collector keeps acknowledged frames until a commit writes them
   expect(Math.max(...exchanges.filter(exchange => exchange.status === 200).map(exchange => exchange.ms))).toBeLessThan(500);
 });
 
+test.describe('mail read marks', () => {
+  const old = Array.from({ length: 2100 }, (_, index) => `old-mail-${index}`);
+  test.use({ mailbox: true, savedRecords: [{ [settingsKey]: { mailbox: { settings: { autoCollect: false, autoDelete: false }, seenIds: old, outbox: [] } } }] });
+  test('opening the mail keeps the newest 2000 read marks, including every listed mail', async ({ page, app }, info) => {
+    // Mail read marks (docs/efficiency.md, Persistence): seenIds keeps the newest SEEN_IDS_KEPT ids.
+    await page.goto('/');
+    await expect(page.getByLabel('New mail')).toBeVisible();
+    await page.getByRole('button', { name: /^Mail/ }).click();
+    await expect(page.getByRole('dialog', { name: 'Mail', exact: true })).toBeVisible();
+    await expect(page.getByLabel('New mail')).toHaveCount(0);
+    await expect.poll(() => saved(app.journal, settingsKey).at(-1)?.mailbox?.seenIds?.length).toBe(2000);
+    const seen: string[] = saved(app.journal, settingsKey).at(-1).mailbox.seenIds;
+    await report(info, 'mail-read-marks', { kept: seen.length, first: seen[0], last: seen.slice(-4) });
+    expect(seen).toEqual(expect.arrayContaining(['mail-unclaimed', 'mail-pending', 'mail-text']));
+    expect(seen).not.toContain('old-mail-0');
+    expect(seen).toContain('old-mail-2099');
+    await app.restartCoordinator();
+    expect((await (await page.request.get(`${app.url}/party-api/mail`)).json()).newCount).toBe(0);
+  });
+});
