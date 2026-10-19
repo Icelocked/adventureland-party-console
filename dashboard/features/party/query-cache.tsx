@@ -164,6 +164,11 @@ export function useVisible() {
   }, []);
   return visible;
 }
+/** True in a hidden browser tab. A render without a document never pauses. */
+export function useHidden() {
+  const visible = useVisible();
+  return typeof document !== 'undefined' && !visible;
+}
 export const policies = {
   core: [1000, 1000, 300000],
   // Configuration/rules/marks the dashboard rarely needs fresher than a few

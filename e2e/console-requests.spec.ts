@@ -132,3 +132,47 @@ test('console deployment reports the missing activation record the loader would 
   expect(control).toEqual(expect.objectContaining({ activation: null, consoleMaintenance: null }));
   expect(record.status).toBe(404);
 });
+
+// H4 failure modes: a display-only timer keeps requesting while the tab is
+// hidden; a tab that becomes visible shows a stale view until the next tick;
+// a timer that drives a flow stops.
+test('display-only dashboard timers pause while the tab is hidden and read at once on return', async ({ page }, info) => {
+  const requests: { path: string; at: number }[] = [], previews: unknown[] = [];
+  page.on('request', request => {
+    const path = new URL(request.url()).pathname;
+    if (path.endsWith('/upgrade-preview')) previews.push(request.postDataJSON());
+    if (['/console-update', '/console-build', '/console-debug'].includes(path) || path.endsWith('/upgrade-preview')) requests.push({ path: path.replace(/^.*\/upgrade-preview$/, '/upgrade-preview'), at: Date.now() });
+  });
+  const count = (path: string) => requests.filter(entry => entry.path === path).length;
+  const setHidden = (hidden: boolean) => page.evaluate(hidden => {
+    Object.defineProperty(document, 'hidden', { value: hidden, configurable: true });
+    Object.defineProperty(document, 'visibilityState', { value: hidden ? 'hidden' : 'visible', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, hidden);
+  await page.goto('/');
+  const merchant = page.locator('article').filter({ has: page.getByRole('heading', { name: 'M', exact: true }) });
+  await merchant.getByText('sword', { exact: true }).click({ button: 'right' });
+  await page.locator('[data-slot="context-menu-content"]').getByRole('menuitem', { name: 'Mark for upgrade', exact: true }).hover();
+  await expect(page.getByRole('region', { name: 'Upgrade chances' })).toBeVisible();
+  await page.waitForTimeout(4500);
+  const visible = { update: count('/console-update'), preview: count('/upgrade-preview'), build: count('/console-build') };
+  expect(visible.update).toBeGreaterThan(0);
+  expect(visible.preview).toBeGreaterThan(1);
+  await setHidden(true);
+  await page.waitForTimeout(500);
+  const hiddenAt = { update: count('/console-update'), preview: count('/upgrade-preview'), build: count('/console-build') };
+  await page.waitForTimeout(7000);
+  const hidden = { update: count('/console-update') - hiddenAt.update, preview: count('/upgrade-preview') - hiddenAt.preview, build: count('/console-build') - hiddenAt.build };
+  const shownAt = Date.now();
+  await setHidden(false);
+  await expect.poll(() => count('/console-update') > hiddenAt.update + hidden.update && count('/upgrade-preview') > hiddenAt.preview + hidden.preview, { timeout: 5000 }).toBe(true);
+  const firstAfter = (path: string) => requests.find(entry => entry.path === path && entry.at >= shownAt)!.at - shownAt;
+  const returned = { update: firstAfter('/console-update'), preview: firstAfter('/upgrade-preview') };
+  await info.attach('hidden-tab-timers', { body: JSON.stringify({ visible, hidden, returned }, null, 1), contentType: 'application/json' });
+  console.log('hidden-tab-timers', JSON.stringify({ visible, hidden, returned }));
+  expect(hidden).toEqual({ update: 0, preview: 0, build: 0 });
+  expect(returned.update).toBeLessThan(500);
+  expect(returned.preview).toBeLessThan(500);
+  // Returning to the tab reads the stored preview; it never queues one.
+  for (const body of previews) expect(body).toMatchObject({ refresh: false });
+});
