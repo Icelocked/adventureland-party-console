@@ -765,22 +765,26 @@ export function ItemDetails({
           </section>
         )}
         <ItemExchangeDetails id={selected?.entry.item.name || ""} level={previewLevel} box={def.type === "box" || /box/i.test(selected?.entry.item.name || "")} exchanges={exchanges} onInspect={onInspectItem} renderReward={renderExchangeReward} />
-        {!!world?.drops?.length && (
-          <section className="rounded border border-amber-900/80 bg-amber-950/10 p-4">
+        {!!world?.drops?.length && ([true, false].map(home => {
+          const sources=world.drops!.filter(source => (source.sourceType === "home") === home);
+          if(!sources.length)return null;
+          return (
+          <section key={String(home)} className="rounded border border-amber-900/80 bg-amber-950/10 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="font-mono text-xs uppercase tracking-wider text-amber-300">Monster drops</h3>
+              <h3 className="font-mono text-xs uppercase tracking-wider text-amber-300">{home ? "Home rewards" : "Monster drops"}</h3>
               <label className="flex items-center gap-2 text-xs text-amber-100">
                 Sort
-                <select aria-label="Sort monster drops" value={dropSort}
+                <select aria-label={home ? "Sort home rewards" : "Sort monster drops"} value={dropSort}
                   onChange={event => setDropSort(event.target.value as "name" | "percentage")}
                   className="rounded border border-amber-700 bg-[#07100f] px-2 py-1 text-amber-100 hover:bg-amber-950">
                   <option value="name">Name</option>
-                  <option value="percentage">Percentage</option>
+                  <option value="percentage">Chance</option>
                 </select>
               </label>
             </div>
+            {home && <p className="mt-2 text-xs text-emerald-100/70">Home-server bonus required; these rewards are separate from normal monster drops.</p>}
             <div className="mt-2 grid gap-1 sm:grid-cols-2">
-              {[...world.drops].sort((a, b) =>
+              {[...sources].sort((a, b) =>
                 (dropSort === "percentage" ? effectiveDropRate(b) - effectiveDropRate(a) : 0) ||
                 a.monsterName.localeCompare(b.monsterName),
               ).map((source, index) => (
@@ -806,7 +810,7 @@ export function ItemDetails({
               ))}
             </div>
           </section>
-        )}
+        ); }))}
         {selected?.exchangeAdd && !selectedMonster && <Button disabled={!selected.exchangeAdd.enabled} onClick={selected.exchangeAdd.onAdd}
           className="w-full border border-emerald-500 bg-emerald-950 text-emerald-100 hover:bg-emerald-900">Add</Button>}
       </DialogContent>

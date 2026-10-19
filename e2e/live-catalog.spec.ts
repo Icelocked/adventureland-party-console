@@ -58,3 +58,18 @@ test('accepted native catalogs stop retransmitting on every character heartbeat'
     await info.attach('native-catalog-handshake', { body: JSON.stringify({ exchanges, errors }, null, 2), contentType: 'application/json' });
   }
 });
+
+
+test('native tracker home rewards refresh monster and item discovery after later table changes',async({live},info)=>{
+  test.setTimeout(240_000);
+  await expect.poll(async()=>!!(await live.state(true)).bestiaryCatalog?.find((m:any)=>m.id==='goo'),{timeout:90_000}).toBe(true);
+  const observations:any[]=[];
+  for(const rate of [0.004,0.008]){
+    const receipt=await live.admin(`output=(()=>{const p=get_player('E2EWarrior'),home=Object.assign({},D.drops.monsters_home_server||{},{goo:[[${rate},'helmet',2]]});
+      sockets[p.id].emit('tracker',{monsters:{},drops:D.drops.monsters,maps:D.drops.maps,drops_home:home,tables:{}});return {name:p.name,rate:${rate},item:'helmet',quantity:2};})()`);
+    await expect.poll(async()=>{const s=await live.state(true),monster=s.bestiaryCatalog?.find((m:any)=>m.id==='goo'),item=s.merchantCatalog?.allItems?.find((i:any)=>i.id==='helmet');
+      return {home:monster?.homeRewards?.find((d:any)=>d.id==='helmet')?.rate,source:item?.meta?.world?.drops?.find((d:any)=>d.monsterId==='goo'&&d.sourceType==='home')?.rate};},{timeout:90_000}).toEqual({home:rate,source:rate});
+    const s=await live.state(true);observations.push({at:Date.now(),receipt,monster:s.bestiaryCatalog.find((m:any)=>m.id==='goo'),sources:s.merchantCatalog.allItems.find((i:any)=>i.id==='helmet').meta.world.drops.filter((d:any)=>d.monsterId==='goo')});
+  }
+  await info.attach('native-home-reward-discovery',{body:JSON.stringify(observations),contentType:'application/json'});
+});

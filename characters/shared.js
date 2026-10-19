@@ -680,6 +680,7 @@
   var merchantCatalogVersion = "exchange-rewards-v4";
   var trackerDropData = typeof tracker !== "undefined" && tracker && Object.keys(tracker).length ? tracker : null;
   var trackerCatalogInitialized = !!trackerDropData;
+  var trackerTablesSignature = trackerCatalogSignature(trackerDropData);
   // The native game updates parent.tracker before calling render_tracker.
   // Silence automatic responses without hiding unrelated modals or blocking
   // deliberate clicks. Manual requests use the normal socket.emit entrypoint.
@@ -740,12 +741,14 @@
   };
   var trackerCatalogListener = function (data) {
     if (!data || typeof data !== "object") return;
+    var signature = trackerCatalogSignature(data);
+    var tablesChanged = signature !== trackerTablesSignature;
     trackerDropData = data;
+    trackerTablesSignature = signature;
     scheduleTrackerSnapshot(30000);
-    // Drop tables are account-wide and effectively static during a game-data
-    // version. Rebuild the large catalog only for the first live Tracktrix
-    // response; later polls merely refresh kill progress.
-    if (!trackerCatalogInitialized) {
+    // Kill counters change often; only actual discovery-table changes rebuild
+    // the catalogs, including home rewards learned after the initial response.
+    if (!trackerCatalogInitialized || tablesChanged) {
       trackerCatalogInitialized = true;
       itemWorldCache = {};
       itemDropCache = {};
@@ -1308,13 +1311,32 @@
     return definition && definition.compound ? 7 : definition && definition.upgrade ? 13 : 0;
   }
 
+  function trackerCatalogSignature(data) {
+    if (!data) return "";
+    return JSON.stringify([data.drops || null, data.drops_home || data.monsters_home_server || null,
+      data.maps || null, data.tables || null]);
+  }
+
+  function nativeMonsterDropTables() {
+    return Object.assign({}, G.drops && G.drops.monsters || {}, trackerDropData && trackerDropData.drops || {});
+  }
+
+  function nativeHomeDropTables() {
+    return Object.assign({}, G.drops && G.drops.monsters_home_server || {},
+      trackerDropData && trackerDropData.monsters_home_server || {}, trackerDropData && trackerDropData.drops_home || {});
+  }
+
+  function nativeLootTable(name) {
+    return trackerDropData && trackerDropData.tables && trackerDropData.tables[name] || G.drops && G.drops[name];
+  }
+
   function lootTableOutcome(tableName, itemName, seen) {
     var cacheKey = tableName + ":" + itemName;
     if (lootOutcomeCache[cacheKey]) return lootOutcomeCache[cacheKey];
     seen = seen || {};
-    if (seen[tableName] || !Array.isArray(G.drops && G.drops[tableName])) return null;
+    if (seen[tableName] || !Array.isArray(nativeLootTable(tableName))) return null;
     var nextSeen = Object.assign({}, seen); nextSeen[tableName] = true;
-    var table = G.drops[tableName], total = table.reduce(function (sum, drop) {
+    var table = nativeLootTable(tableName), total = table.reduce(function (sum, drop) {
       return sum + (Array.isArray(drop) ? Number(drop[0]) || 0 : 0);
     }, 0);
     if (total <= 0) return null;
@@ -1339,7 +1361,7 @@
       return opened && { probability: opened.probability, paths: ["open " + drop[2]].concat(opened.paths || []) };
     }
     var exchangeCount = G.items && G.items[reward] && Number(G.items[reward].e);
-    if (exchangeCount > 0 && G.drops && Array.isArray(G.drops[reward])) {
+    if (exchangeCount > 0 && Array.isArray(nativeLootTable(reward))) {
       var exchanged = lootTableOutcome(reward, itemName, seen);
       // For multi-item exchanges this is the long-run rolls-per-drop rate. It
       // avoids claiming that one leather immediately opens a 40-leather table.
@@ -1361,14 +1383,13 @@
   function itemDropSources(itemName) {
     if (itemDropCache[itemName]) return itemDropCache[itemName];
     var drops = [];
-    var trackedMonsterDrops = trackerDropData && (trackerDropData.drops || trackerDropData.monsters);
-    var monsterDrops = trackedMonsterDrops && Object.keys(trackedMonsterDrops).length
-      ? trackedMonsterDrops : G.drops && G.drops.monsters || {};
+    var monsterDrops = nativeMonsterDropTables();
     var trackedMapDrops = trackerDropData && trackerDropData.maps;
     var mapDropsById = trackedMapDrops && Object.keys(trackedMapDrops).length
       ? trackedMapDrops : G.drops && G.drops.maps || {};
-    Object.keys(monsterDrops).forEach(function (monsterId) {
-      (monsterDrops[monsterId] || []).forEach(function (drop) {
+    function addMonsterSources(tables, sourceType) {
+    Object.keys(tables).forEach(function (monsterId) {
+      (Array.isArray(tables[monsterId]) ? tables[monsterId] : []).forEach(function (drop) {
         var outcome = resolvedDropOutcome(drop, itemName);
         if (!outcome) return;
         var monsterDefinition = G.monsters[monsterId] || {};
@@ -1379,10 +1400,13 @@
           sprite: monsterSpriteDefinition(monsterDefinition.skin),
           rate: outcome.rate, originRate: outcome.originRate, quantity: outcome.quantity, acquisitionPath: outcome.path,
           threat: (Number(monsterDefinition.attack) || 0) * (Number(monsterDefinition.frequency) || 0),
-          sourceType: "monster",
+          sourceType: sourceType,
           goldPerKill: goldValues.length ? Math.min.apply(Math, goldValues) : null });
       });
     });
+    }
+    addMonsterSources(monsterDrops, "monster");
+    addMonsterSources(nativeHomeDropTables(), "home");
     Object.keys(mapDropsById).forEach(function (mapId) {
       if (mapId === "global" || mapId === "global_static" || !G.maps[mapId]) return;
       var mapDefinition = G.maps[mapId] || {};
@@ -1840,21 +1864,24 @@
 
   function bestiaryCatalog() {
     var spawns = {};
+    var monsterTables = nativeMonsterDropTables(), homeTables = nativeHomeDropTables();
     monsterChoices().forEach(function (choice) { spawns[choice.id] = choice.spawnRecords; });
     return Object.keys(G.monsters || {}).map(function (id) {
       var definition = G.monsters[id] || {};
-      var drops = (G.drops && G.drops.monsters && G.drops.monsters[id] || []).map(function (drop) {
+      function rewards(table) { return (Array.isArray(table) ? table : []).map(function (drop) {
         if (!Array.isArray(drop) || typeof drop[1] !== "string" || !G.items[drop[1]]) return null;
         var item = G.items[drop[1]] || {};
         return { rate: Number(drop[0]) || 0, id: drop[1], name: item.name || drop[1],
           quantity: Number(drop[2]) || 1, sprite: spriteDefinition(item.skin || drop[1]) };
-      }).filter(Boolean);
+      }).filter(Boolean); }
+      var drops = rewards(monsterTables[id]);
+      var homeRewards = rewards(homeTables[id]);
       return { id: id, name: definition.name || id, sprite: monsterSpriteDefinition(definition.skin),
         hp: Number(definition.hp) || 0,
         attack: Number(definition.attack) || 0, xp: Number(definition.xp) || 0,
         range: Number(definition.range) || 0,
         threat: (Number(definition.attack) || 0) * (Number(definition.frequency) || 0),
-        definition: catalogValue(definition), drops: drops, spawnRecords: spawns[id] };
+        definition: catalogValue(definition), drops: drops, homeRewards: homeRewards, spawnRecords: spawns[id] };
     });
   }
 
