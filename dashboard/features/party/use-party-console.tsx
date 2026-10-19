@@ -30,6 +30,7 @@ import { SelectedItem } from "./selected-item";
 import { StandListing } from "./stand-listing";
 import { STAT_SCROLLS } from "./stat-scrolls";
 import { auditedCharacters } from "./field-read-audit";
+import { joinItemMeta } from "./item-catalog-meta";
 
 export function usePartyConsole() {
   const npcSaleInFlight = useRef(false);
@@ -813,12 +814,8 @@ export function usePartyConsole() {
   const occupiedStandSlots = Object.entries(
     state.merchantCharacter ? state.characters[state.merchantCharacter]?.slots || {} : {},
   ).filter(([slot, entry]) => slot.startsWith("trade") && !!entry).length;
-  const detailMeta = useCallback((item: Item, live?: ItemMeta | null): ItemMeta | null | undefined => {
-    const known = state.merchantCatalog?.allItems?.find((entry) => entry.id === item.name)?.meta;
-    if (!known) return live;
-    if (!live) return known;
-    return { ...known, ...live, world: live.world || known.world };
-  }, [state.merchantCatalog]);
+  const detailMeta = useCallback((item: Item, live?: ItemMeta | null): ItemMeta | null | undefined =>
+    joinItemMeta(state.merchantCatalog, item.name, live), [state.merchantCatalog]);
   const statScrollInventory = useMemo(() => {
     const quantities: Record<string, number> = {};
     const add = (item?: Item | null) => {

@@ -538,7 +538,7 @@ export function startCoordinatorApplication(
       rareEncounter: () => rareControl.encounter(),
       huntOwns: huntTurnInOwnsTravel,
       mapSubscriberCount,
-      stackHomes: (bank, bankbois) => bankStackRouting.homes(bank, bankbois),
+      stackHomes: (bank, bankbois) => bankStackRouting.homes(bank, bankbois, party.merchantCatalog),
       groupedCombat: groupedCombatSnapshot,
       selectedEvents: (state, name) => selectedEvents(state, name).filter(event => eventInstanceAllowed(party, name, event)),
       anniversary: publicAnniversaryState,
@@ -565,7 +565,7 @@ export function startCoordinatorApplication(
       bankPorts: bankObservationPorts,
     } = coordinatorPolicies.createCoordinatorStorageObservations(party, {
       now: () => Date.now(),
-      stackHomes: (bank, bankbois) => bankStackRouting.homes(bank, bankbois),
+      stackHomes: (bank, bankbois) => bankStackRouting.homes(bank, bankbois, party.merchantCatalog),
       persistBank: persistBankState,
       log: merchantLog,
       persist: persistSettings,
@@ -1029,6 +1029,7 @@ export function startCoordinatorApplication(
       now: Date.now, statuses: () => party.statuses,
       active: (name) => activeNames().includes(name) && Date.now() - Number(party.statuses[name]?.seenAt || 0) < 10000,
       every: (callback, ms) => setInterval(callback, ms), cancel: clearInterval,
+      catalog: () => party.merchantCatalog,
     });
     const statusIngestion = coordinatorPolicies.createCoordinatorStatusIngestion(
       party,
@@ -1887,7 +1888,7 @@ export function startCoordinatorApplication(
       rareEncounter: () => rareControl.encounter(),
       huntOwns: huntTurnInOwnsTravel,
       mapSubscriberCount,
-      stackHomes: (bank, bankbois) => bankStackRouting.homes(bank, bankbois),
+      stackHomes: (bank, bankbois) => bankStackRouting.homes(bank, bankbois, party.merchantCatalog),
       groupedCombat: groupedCombatSnapshot,
       selectedEvents: (state, name) => selectedEvents(state, name).filter(event => eventInstanceAllowed(party, name, event)),
       anniversary: publicAnniversaryState,

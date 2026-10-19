@@ -429,3 +429,147 @@ until one more record would pass 128 MB, a stale lock left behind):
 | 8 MB | 626 / 0 ms | 563 / 33 ms (compacts to 9 MB) |
 | 60 MB | 749 / 0 ms | 807 / 180 ms (compacts to 61 MB) |
 | 70 MB | 833 / 0 ms | 831 / 0 ms (above `CLOSE_COMPACT_MAX_BYTES`, left for the next start) |
+
+## Report payload: per-copy item meta in status reports
+
+Status reports carry only the per-copy part of each item's meta. The per-type
+part comes from `merchantCatalog.allItems`, and readers join the two by item
+id. On the live stack the merchant's report falls from 5.1 MB to about 0.13 MB,
+each fighter's from 0.5-0.8 MB to about 0.16 MB, and the stored bank snapshot
+from 4.6 MB to about 19 KB. Dashboard and API speed show no regression beyond
+run-to-run noise.
+
+### Before
+
+`itemDefinition` in `characters/shared.js` built the full meta for every
+inventory item, equipment slot, bank slot and nearby stand listing in every
+report: `definition`, `upgradeable`, `compoundable`, `buyable`, `scaling`,
+`maxLevel`, `usage`, `sprite`, `properties` and `world` (drop graph, suggested
+prices, recipe with material drops, set and used-in lists). Only `properties`
+depends on the copy (level, `stat_type`, title). `merchantCatalog.allItems`
+already held the same per-type meta for all 623 items.
+
+Live size-only read (`GET /party-api/state` inside the live container, byte
+counts only):
+
+| Report | Status | `meta` | `meta.world` | Per-copy meta |
+|---|---:|---:|---:|---:|
+| Merchant (59 stand listings) | 5,055,127 | 4,929,054 | 4,853,910 | 5,598 |
+| Priest | 769,323 | 612,049 | 583,728 | 1,727 |
+| Warrior | 526,741 | 368,310 | 345,028 | 1,545 |
+| Mage | 628,578 | 469,839 | 448,369 | 1,151 |
+| Bank snapshot | 4,577,678 | 4,566,109 | 4,409,529 | 7,320 |
+
+### Change
+
+- **Character script.** Once a status response clears `needsCatalog`,
+  `itemDefinition` returns `{ properties }`, plus `sprite` for a copy whose
+  `skin` differs from its definition. Before that point it returns full meta,
+  so a fresh coordinator, a coordinator after a game update and a coordinator
+  that rejected the catalog keep every field they had.
+- **Coordinator join.** `runtime/coordinator/inventory/catalog-meta.ts`
+  `entryMeta(catalog, entry)` returns catalog meta with the report's fields on
+  top. It indexes `allItems` once per catalog object (O(1) per item) and caches
+  each join per report meta object. Readers: `merchant-item-commands.ts`
+  (merchant weapon), `stat-scroll-commands.ts`, `transfer-commands.ts`
+  (manual weapon, bank upgrades), `mark-reconciliation.ts` (auto upgrade
+  marks), `scripts/bank-stack-routing.cjs` (stack homes and storage worker
+  unloads) and `scripts/merchant-inventory-stacks.cjs` (stack merges).
+- **Public projections keep their shapes.** `compactEntry` joins before it
+  selects its field list, so the `inventory` section and the dashboard stream
+  send the same fields as before. The `bank` section sends those compact
+  fields too, without `world` and `usage`. The unsectioned debug state joins
+  full meta (`telemetry/item-meta-projection.ts`). The stream joins a record
+  published before the catalog arrived again on its next telemetry sample.
+- **Dashboard.** `features/party/item-catalog-meta.ts` joins catalog meta onto
+  inventory, equipment and bank entries in `usePanelModel`, so every panel
+  reads `entry.meta.world`, `usage` and the rest from the entry. The module
+  caches joins per entry and per catalog object, so React Query structural
+  sharing keeps unchanged tiles. `detailMeta` uses the same index in place of a
+  linear `allItems.find` per call.
+
+### Reader inventory
+
+A type-aware scan (TypeScript checker: every property read whose receiver has
+type `ItemMeta` in the dashboard or `ItemMetaRecord` in the coordinator) found
+188 dashboard reads in 32 files and 5 coordinator reads. A runtime check ran
+the full console E2E suite with a test-mode Proxy over every report meta
+object in the coordinator and the browser. It recorded each field read and
+each read of a per-type field the report no longer carried while the catalog
+had it. It found two readers the scan cannot type: `definition.s` in
+`scripts/bank-stack-routing.cjs` and `scripts/merchant-inventory-stacks.cjs`.
+Both now read through `entryMeta`. After that fix the run records no such
+reads in either process.
+
+### Compatibility
+
+- The mobile apps (PWA and Android) read `definition`, `upgradeable`,
+  `compoundable`, `buyable`, `scaling`, `maxLevel`, `sprite` and `properties`
+  from `inventory`, `bank` and stream entries; those fields keep their shape.
+  They read `world` and `usage` through their `detailMeta` catalog join or
+  straight from the catalog, which is unchanged.
+- The metrics service reads only `item.name`, `item.q`, `item.level` and
+  `bank.gold`.
+- Reports from clients that still send full meta join with the report's
+  values on top.
+
+### Speed
+
+Coordinator and character numbers come from `bench.cjs` on the E2E runner: a
+real coordinator receives reports built by each tree's own `shared.js` meta
+builders from installed game data 17175 (merchant: 42 items, 15 slots, 88
+stand listings; bank: 8 packs of 42). Each cell is the median of three runs,
+with 25 requests per section run, or 300 for `inventory` and `bank`.
+Dashboard numbers come from a Playwright probe against the console fixture on
+the vinext dev server, 11 runs on v1.4.0 and 10 on this branch, alternating;
+each cell is the median of the per-run medians.
+
+| Measure | v1.4.0 | This change |
+|---|---:|---:|
+| Character: build the item part of a merchant status | 43.1 ms | 1.3 ms |
+| Merchant report bytes | 1,734,916 | 29,721 |
+| Coordinator: POST merchant report | 24.1 ms | 5.3 ms |
+| Fighter report bytes | 554,088 | 8,683 |
+| Coordinator: POST fighter report | 8.3 ms | 2.6 ms |
+| Coordinator: POST merchant report with bank | 80.2 ms | 5.7 ms |
+| `section=fast` bytes / time | 2,457 / 0.7 ms | 2,457 / 0.7 ms |
+| `section=inventory` bytes / time | 101,311 / 1.3 ms | 101,311 / 1.1 ms |
+| `section=bank` bytes / time | 3,431,872 / 25.8 ms | 197,703 / 1.8 ms |
+| `section=catalog` bytes / time | 6,108,982 / 46.7 ms | 6,108,982 / 50.9 ms |
+| Dashboard: first meaningful render | 1,809 ms | 1,753 ms |
+| Dashboard: open item details | 225 ms | 212 ms |
+| Dashboard: open bank | 194 ms | 185 ms |
+| Dashboard: open stand | 214 ms | 224 ms |
+| Dashboard: open gear comparison | 509 ms | 472 ms |
+| Dashboard: status change to DOM | 58 ms | 51 ms |
+
+The `catalog` section time moves by less than its run-to-run spread
+(46-58 ms on v1.4.0, 41-63 ms here). The `inventory` section runs 1.1-1.3 ms
+on both trees; an in-process loop over the same projection with wire-parsed
+objects measures 255-286 us per call including `JSON.stringify` on v1.4.0 and
+229-271 us here. The dashboard probe's per-run medians overlap for every
+measure: first render 1,660-2,650 ms against 1,636-2,552 ms, bank
+134-274 ms against 139-426 ms.
+
+### Tests
+
+- `scripts/tests/inventory-loading.test.cjs`: full meta before the
+  acknowledgement, per-copy meta after it, a per-copy skin sprite.
+- `scripts/tests/coordinator-public-state.test.cjs`: the inventory, bank and
+  debug projections join catalog meta and keep per-copy fields.
+- `scripts/tests/bank-stack-routing.test.cjs`,
+  `scripts/tests/merchant-inventory-stacks.test.cjs`: stack limits from the
+  catalog.
+- `e2e/game-fixture.cjs` sends per-copy meta after its first report, so every
+  console E2E case reads joined meta.
+- `e2e/console-reports.spec.ts`: a saved snapshot with per-copy meta shows the
+  catalog's item name in the offline inspection after a restart (C3p).
+
+### Follow-ups for the game-card additions
+
+The same rule applies to the card fields from PR #135. `bonuses`
+(`itemBonuses(definition)`) is per-type, so it belongs in the catalog's
+`allItems[].meta` only and leaves the per-copy branch of `itemDefinition`.
+`title` is per-type data keyed by the copy's title id: the report already
+carries that id as `item.p`, the title definitions (`G.titles`) belong in the
+catalog once, and readers join `titles[item.p]` the way they join `allItems`.

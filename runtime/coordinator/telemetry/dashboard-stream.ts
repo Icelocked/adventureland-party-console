@@ -43,6 +43,8 @@ interface Ports<Timer> {
   active(name: string): boolean;
   every(callback: () => void, ms: number): Timer;
   cancel(timer: Timer): void;
+  /** merchantCatalog, which supplies the per-type meta reports leave out. */
+  catalog?(): unknown;
 }
 function entries(value: unknown): RecordValue {
   return Object.fromEntries(
@@ -74,16 +76,16 @@ function displayVitals(vitals: RecordValue): RecordValue {
     };
   }) };
 }
-function bag(status: PresentationStatus): RecordValue {
+function bag(status: PresentationStatus, catalog: unknown): RecordValue {
   return Object.fromEntries(
-    (status.items || []).map((value, index) => [String(index), compactEntry(value)]),
+    (status.items || []).map((value, index) => [String(index), compactEntry(value, catalog)]),
   );
 }
-function compactSlots(value: unknown): RecordValue {
+function compactSlots(value: unknown, catalog: unknown): RecordValue {
   return Object.fromEntries(
     Object.entries(entries(value)).map(([key, entry]) => [
       key,
-      entry ? compactEntry(requestObject(entry)) : null,
+      entry ? compactEntry(requestObject(entry), catalog) : null,
     ]),
   );
 }
@@ -93,6 +95,7 @@ export function createDashboardStream<Timer>(ports: Ports<Timer>) {
   const epoch = randomUUID();
   let sequence = 0;
   const records = new Map<string, LiveRecord>();
+  const joinedCatalogs = new Map<string, unknown>();
   const sessions = new Map<
     string,
     { runtime: string; generation: string; retired: Set<string>; sample: number }
@@ -186,13 +189,14 @@ export function createDashboardStream<Timer>(ports: Ports<Timer>) {
     if (!session) return;
     // Once fast telemetry is accepted, ordinary status owns diagnostics only.
     if (session.sample > 0) return;
+    joinedCatalogs.set(name, ports.catalog?.());
     publish(name, {
       generation: session.generation,
       sample: 0,
       sampledAt: ports.now(),
       vitals: pickVitals(status),
-      items: bag(status),
-      slots: compactSlots(status.slots),
+      items: bag(status, ports.catalog?.()),
+      slots: compactSlots(status.slots, ports.catalog?.()),
     });
   }
   function reconcile() {
@@ -250,8 +254,9 @@ export function createDashboardStream<Timer>(ports: Ports<Timer>) {
     if (!clients.size) return response.json({ accepted: false });
     const current = records.get(name)!;
     const data = requestObject(body.data);
-    const itemChanges = compactSlots(data.items),
-      slotChanges = compactSlots(data.slots);
+    const catalog = ports.catalog?.();
+    const itemChanges = compactSlots(data.items, catalog),
+      slotChanges = compactSlots(data.slots, catalog);
     if (Object.keys(itemChanges).length > 256 || Object.keys(slotChanges).length > 128)
       return response.status(400).json({ error: "oversized telemetry" });
     session.sample = Number(body.sample);
@@ -261,10 +266,16 @@ export function createDashboardStream<Timer>(ports: Ports<Timer>) {
       sample: session.sample,
       sampledAt: Number(body.sampledAt) || ports.now(),
       vitals: { ...current.vitals, ...displayVitals(entries(data.vitals)) },
-      items: { ...current.items, ...itemChanges },
-      slots: { ...current.slots, ...slotChanges },
+      // A record published before the catalog arrived gains its per-type
+      // meta here, because telemetry only resends the cells that changed.
+      items: { ...rejoined(name, current.items, catalog), ...itemChanges },
+      slots: { ...rejoined(name, current.slots, catalog), ...slotChanges },
     });
+    joinedCatalogs.set(name, catalog);
     return response.json({ accepted: true });
+  }
+  function rejoined(name: string, cells: RecordValue, catalog: unknown): RecordValue {
+    return joinedCatalogs.get(name) === catalog ? cells : compactSlots(cells, catalog);
   }
   function install(router: HttpRouter) {
     router.get("/party-api/dashboard-stream", stream);

@@ -13,6 +13,7 @@ import type { PartyConsoleModel } from './use-party-console';
 import type { Item } from './item';
 import type { PartyState } from './party-state';
 import { auditedCharacters } from './field-read-audit';
+import { bankWithCatalogMeta, inventoryWithCatalogMeta } from './item-catalog-meta';
 
 export function usePanelModel<T extends Pick<PartyConsoleModel, 'state' | 'chars'> & Partial<Pick<PartyConsoleModel, 'standItem'>>>(
   model: T,
@@ -40,12 +41,17 @@ export function usePanelModel<T extends Pick<PartyConsoleModel, 'state' | 'chars
   }, [needs.inventory, needs.vitals, needs.position, needs.diagnostics]);
   // useQueries structurally shares the combined result, including unchanged
   // characters when another character receives an inventory update.
+  // Item meta joins happen here so every panel reads catalog fields from the
+  // entry itself; item-catalog-meta.ts keeps each join stable across polls.
+  const catalog = model.state.merchantCatalog;
   const combineCharacters = useCallback((values: UseQueryResult<Partial<Char>>[]) =>
     Object.fromEntries(names.map((name, index) => [name, Object.assign(
       {}, baseCharacters[name], ...subscriptions.map(
-        (_, kind) => values[index * subscriptions.length + kind].data,
+        (kind, offset) => kind === 'inventory'
+          ? inventoryWithCatalogMeta(catalog, values[index * subscriptions.length + offset].data)
+          : values[index * subscriptions.length + offset].data,
       ),
-    ) as Char])), [names, baseCharacters, subscriptions]);
+    ) as Char])), [names, baseCharacters, subscriptions, catalog]);
   const combinedCharacters = useQueries({
     combine: combineCharacters,
     queries: names.flatMap((name) =>
@@ -69,10 +75,11 @@ export function usePanelModel<T extends Pick<PartyConsoleModel, 'state' | 'chars
     })),
     combine: combineDomains,
   });
-  const state: PartyState = useMemo(
-    () => Object.assign({}, model.state, ...queries.data, { characters }),
-    [model.state, characters, queries.data],
-  );
+  const state: PartyState = useMemo(() => {
+    const combined: PartyState = Object.assign({}, model.state, ...queries.data, { characters });
+    if (combined.bank) combined.bank = bankWithCatalogMeta(catalog, combined.bank);
+    return combined;
+  }, [model.state, characters, queries.data, catalog]);
   const merchant = characters[state.merchantCharacter || ''];
   const quantities: Record<string, number> = useMemo(() => {
     const totals: Record<string, number> = {};

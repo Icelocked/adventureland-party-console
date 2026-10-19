@@ -1642,13 +1642,20 @@
     return itemWorldCache[itemName];
   }
 
-  function itemDefinition(item) {
-    if (!item || !G.items[item.name]) return null;
-    var definition = G.items[item.name];
-    var skin = item.skin || definition.skin;
+  function itemSheetSprite(skin) {
     var position = G.positions[skin];
     var pack = position && G.imagesets[position[0] || "pack_20"];
-    var safeDefinition = safeItemDefinition(definition);
+    return pack && position ? {
+      url: "https://adventure.land" + pack.file,
+      tileSize: pack.size,
+      columns: pack.columns,
+      rows: pack.rows,
+      x: position[1],
+      y: position[2],
+    } : null;
+  }
+
+  function itemProperties(item) {
     var calculatedProperties = {};
     try {
       var calculated = item_properties(item) || {};
@@ -1663,12 +1670,32 @@
     } catch (_error) {
       // Base definitions still render if a legacy game build cannot calculate properties.
     }
+    return calculatedProperties;
+  }
+
+  function itemTitle(item) {
+    return item.p && G.titles && G.titles[item.p] ? safeFields(G.titles[item.p]) : null;
+  }
+
+  function itemDefinition(item) {
+    if (!item || !G.items[item.name]) return null;
+    var definition = G.items[item.name];
+    // merchantCatalog().allItems carries every per-type field below. Once a
+    // status response clears needsCatalog, the coordinator holds that catalog,
+    // so reports carry only what can differ between copies of one item.
+    if (catalogKnown) {
+      var perCopy = { properties: itemProperties(item) };
+      var title = itemTitle(item);
+      if (title) perCopy.title = title;
+      if (item.skin && item.skin !== definition.skin) perCopy.sprite = itemSheetSprite(item.skin);
+      return perCopy;
+    }
     return {
-      definition: safeDefinition,
+      definition: safeItemDefinition(definition),
       upgradeable: !!definition.upgrade,
       compoundable: !!definition.compound,
       buyable: !!itemSeller(item.name),
-      properties: calculatedProperties,
+      properties: itemProperties(item),
       scaling: safeFields(definition.upgrade || definition.compound || {}),
       maxLevel: maximumItemLevel(definition),
       usage: itemUsage(definition),
@@ -1677,15 +1704,8 @@
       // Until background preparation finishes, the dashboard uses its catalog.
       world: itemWorldCache[item.name],
       // The copy's title (docs/item-titles.md); the dashboard names it and adds its stats.
-      title: item.p && G.titles && G.titles[item.p] ? safeFields(G.titles[item.p]) : null,
-      sprite: pack && position ? {
-        url: "https://adventure.land" + pack.file,
-        tileSize: pack.size,
-        columns: pack.columns,
-        rows: pack.rows,
-        x: position[1],
-        y: position[2],
-      } : null,
+      title: itemTitle(item),
+      sprite: itemSheetSprite(item.skin || definition.skin),
     };
   }
 
@@ -1826,7 +1846,7 @@
       var item = G.items[name];
       if (item && item.type === "bank_key" && item.unlocks) floorKeys[item.unlocks] = {
         id: name, name: item.name || name,
-        sprite: itemDefinition({ name: name }) && itemDefinition({ name: name }).sprite,
+        sprite: itemSheetSprite(item.skin),
       };
     });
     return Object.keys(definitions).map(function (pack) {
@@ -4365,7 +4385,7 @@
       entry.operation = { type: pending.scroll.indexOf("cscroll") === 0 ? "compound" : "upgrade",
         fromLevel: Number(pending.level) || 0, toLevel: (Number(pending.level) || 0) + 1,
         chance: typeof pending.chance === "number" ? pending.chance : null,
-        sprite: (itemDefinition({ name: "placeholder" }) || {}).sprite || null };
+        sprite: G.items.placeholder ? itemSheetSprite(G.items.placeholder.skin) : null };
     }
     return entry;
   }
