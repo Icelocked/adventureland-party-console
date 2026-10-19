@@ -1,3 +1,4 @@
+import './character-sections.case';
 import './drop-rewards.case';
 import './release-ui.case';
 import './market-preferences.case';

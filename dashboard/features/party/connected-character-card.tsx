@@ -462,12 +462,9 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
           </div>
         </div>
       )}
-      <RestockControls
-        character={char.name}
-        value={state.restockPolicies?.[char.name]}
-        onSave={saveRestock}
-      />
-      <ConnectedInventory name={char.name} model={inventoryModel} />
+      <ConnectedInventory name={char.name} model={inventoryModel} restock={
+        <RestockControls character={char.name} value={state.restockPolicies?.[char.name]} onSave={saveRestock}/>
+      }/>
     </article>
   );
 });

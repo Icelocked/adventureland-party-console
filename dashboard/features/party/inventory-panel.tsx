@@ -1,4 +1,6 @@
 "use client";
+import {useStoredBoolean} from '@/hooks/use-stored-boolean';
+import {CharacterSectionToggle} from './character-section-toggle';
 import { useItemSelection, BatchItemActions } from './item-selection';
 import { AutomaticItemActions } from './automatic-item-actions';
 import { itemActionBanner } from "./item-action-banner";
@@ -44,7 +46,7 @@ import {
   Truck,
   X,
 } from "lucide-react";
-import { memo, useCallback, useState, type ReactNode } from "react";
+import { memo, useCallback, useId, useState, type ReactNode } from "react";
 import { AutoCompoundMark } from "./auto-compound-mark";
 import { ClearItemMarks } from "./clear-item-marks";
 import { AutoUpgradeMarks } from "./auto-upgrade-marks";
@@ -83,6 +85,7 @@ import { upgradeRuleTiers } from "./upgrade-rule-tiers";
 
 export const InventoryPanel = memo(function InventoryPanel({
   character,
+  restock,
   sharedRules = false,
   characters,
   leader,
@@ -134,6 +137,7 @@ export const InventoryPanel = memo(function InventoryPanel({
   onRemoveAutomaticSale,
 }: {
   character: Char;
+  restock?: ReactNode;
   sharedRules?: boolean;
   characters: Char[];
   leader?: string | null;
@@ -225,7 +229,8 @@ export const InventoryPanel = memo(function InventoryPanel({
     !!leader &&
     leader !== character.name &&
     characters.some((member) => member.name === leader && member.seenAt > 0);
-  const [inventoryOpen, setInventoryOpen] = useState(true);
+  const [inventoryOpen, setInventoryOpen] = useStoredBoolean(`party-section:${character.name}:inventory`, true);
+  const inventoryId=useId();
   const itemSelection = useItemSelection(
     character.items.filter((entry): entry is InventoryEntry => !!entry),
     (entry) => String(entry.slot),
@@ -631,42 +636,9 @@ export const InventoryPanel = memo(function InventoryPanel({
   };
   return (
     <div className="p-5">
-      <Equipment
-        character={character}
-        upgradeMarks={upgradeMarks}
-        autoUpgradeMarks={autoUpgradeMarks}
-        statScrollMarks={statScrollMarks}
-        statScrollInventory={statScrollInventory}
-        onSelect={onSelect}
-        onUnequip={onUnequip}
-        onUpgrade={onEquipmentUpgrade}
-        onAutoUpgrade={onEquipmentAutoUpgrade}
-        onStatScroll={onEquipmentStatScroll}
-        hasAutomaticMarks={hasAutomaticMarks}
-        onClearMarks={onEquipmentClearMarks}
-        onBuy={onEquipmentBuy}
-      />
-      <button
-        type="button"
-        aria-expanded={inventoryOpen}
-        onClick={() => setInventoryOpen((open) => !open)}
-        className="mb-3 mt-5 flex w-full items-center justify-between border-t border-emerald-900 pt-5 text-left"
-      >
-        <span className="flex items-center gap-2 font-mono text-xs uppercase text-emerald-100/55">
-          {inventoryOpen ? (
-            <ChevronDown className="h-4 w-4" />
-          ) : (
-            <ChevronRight className="h-4 w-4" />
-          )}
-          Inventory
-        </span>
-        <span
-          className={`font-mono text-xs ${capacityColor}`}
-          title={`${freeSlots} slots free`}
-        >
-          {occupiedSlots}/{totalSlots}
-        </span>
-      </button>
+      <CharacterSectionToggle label="Inventory" open={inventoryOpen} controls={inventoryId} onToggle={()=>setInventoryOpen(value=>!value)}
+        count={<span className={`font-mono text-xs ${capacityColor}`} title={`${freeSlots} slots free`}>{occupiedSlots}/{totalSlots}</span>}/>
+      <div id={inventoryId}>
       {inventoryOpen ? (
         <>
           <LuckySlotMenu
@@ -1600,6 +1572,23 @@ export const InventoryPanel = memo(function InventoryPanel({
           </div>
         </>
       ) : null}
+      </div>
+      <Equipment
+        character={character}
+        upgradeMarks={upgradeMarks}
+        autoUpgradeMarks={autoUpgradeMarks}
+        statScrollMarks={statScrollMarks}
+        statScrollInventory={statScrollInventory}
+        onSelect={onSelect}
+        onUnequip={onUnequip}
+        onUpgrade={onEquipmentUpgrade}
+        onAutoUpgrade={onEquipmentAutoUpgrade}
+        onStatScroll={onEquipmentStatScroll}
+        hasAutomaticMarks={hasAutomaticMarks}
+        onClearMarks={onEquipmentClearMarks}
+        onBuy={onEquipmentBuy}
+      />
+      {restock}
       {character.name !== merchant && (
         <div className="mt-5 grid gap-2 border-t border-emerald-900 pt-4">
           <Button

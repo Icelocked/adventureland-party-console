@@ -10,7 +10,7 @@ import type { InventoryModel } from './character-card-model';
 import type { InventoryEntry } from './inventory-entry';
 import type { Item } from './item';
 
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { DeconstructionConfirmation, type DeconstructionSelection } from './deconstruction-confirmation';
 import { committedLiveRecord } from './live-metrics';
 import { usePanelModel } from './use-panel-model';
@@ -18,9 +18,11 @@ import { emptyArray, emptyRecord } from './empty-values';
 export const ConnectedInventory = memo(function ConnectedInventory({
   name,
   model: base,
+  restock,
 }: {
   name: string;
   model: InventoryModel;
+  restock?: ReactNode;
 }) {
   const model = usePanelModel(base, { inventory: true });
   const {
@@ -174,6 +176,7 @@ export const ConnectedInventory = memo(function ConnectedInventory({
   return (
     <UpgradeOfferingProvider character={char.name} executor={state.merchantCharacter} stock={state.upgradeOfferingStock || emptyRecord()} rules={state.upgradeOfferingRules || emptyArray()} catalog={state.merchantCatalog?.allItems || emptyArray()} post={post}>
     <InventoryPanel
+      restock={restock}
       character={char}
       sharedRules={!!state.merchantRules}
       characters={chars}
