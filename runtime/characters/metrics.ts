@@ -33,6 +33,8 @@ function isMonsterTarget(target: Target | null | undefined): target is MonsterTa
 /** One collector per CODE generation. Retries keep their original bucket and sequence. */
 export function installPartyMetrics(ports: Ports) {
   const key = 'party-metrics-v1:' + ports.name();
+  const persistedFrames = new Set<number>();
+  const frameKey = (sequence: number) => key + ':frame:' + (sequence % 1024);
   const journal: Journal = { runtime: Date.now() + '-' + Math.random().toString(36).slice(2), sequence: 0, queue: [], lost: false, goldMovement: 0 };
   // Restored data crosses a storage boundary. Accept only our bounded versioned envelope;
   // the coordinator performs full frame validation before accepting measurements.
@@ -69,9 +71,25 @@ export function installPartyMetrics(ports: Ports) {
     seen.set(id, at);
     return true;
   }
-  function sample(at: number): MetricSample { return { ...ports.sample(), at, goldMovement: journal.goldMovement }; }
+  let connectedSince: number | null = ports.connected() ? ports.now() : null;
+  function sample(at: number): MetricSample {
+    const value = ports.sample();
+    // Native login pings include connection establishment and are not steady-state latency.
+    return { ...value, ping: connectedSince === null || at - connectedSince < 10_000 ? null : value.ping, at, goldMovement: journal.goldMovement };
+  }
   function persist() {
-    try { ports.storage.setItem(key, JSON.stringify(journal)); }
+    try {
+      // Frames are immutable after sealing. Write each once to a bounded ring,
+      // then publish its sequence in the small journal header. A growing outage
+      // never reserializes all historical damage/loot frames on every pulse.
+      for (const frame of journal.queue) if (!persistedFrames.has(frame.sequence)) {
+        ports.storage.setItem(frameKey(frame.sequence), JSON.stringify(frame));
+        persistedFrames.add(frame.sequence);
+      }
+      ports.storage.setItem(key, JSON.stringify({...journal,queue:journal.queue.map(frame=>frame.sequence)}));
+      const retained=new Set(journal.queue.map(frame=>frame.sequence));
+      for(const sequence of persistedFrames)if(!retained.has(sequence))persistedFrames.delete(sequence);
+    }
     catch { journal.lost = true; }
   }
   function seal() {
@@ -181,7 +199,8 @@ export function installPartyMetrics(ports: Ports) {
   function pulse() {
     if (!ports.current()) { clearInterval(timer); return; }
     const at = ports.now(), server = ports.context().server;
-    if (!ports.connected()) { seal(); previousAt = at; previousServer = ''; return; }
+    if (!ports.connected()) { seal(); connectedSince = null; previousAt = at; previousServer = ''; return; }
+    connectedSince ??= at;
     // Attribute observed elapsed time to its original server and bucket. Long
     // suspension/disconnect intervals remain gaps rather than invented inactivity.
     if (at >= previousAt && at - previousAt <= 2500 && server === previousServer) {

@@ -250,3 +250,13 @@ index, maintained through ingestion, expiry and resets.
 Later additions can extend acquisition sources and transaction attribution,
 bank history, XP transitions, death/activity breakdowns and event-specific drop
 models without relying on human-readable combat log messages.
+
+## Integration failure inventory
+
+Retried acknowledged frames must survive coordinator restart exactly once. Compaction must not block coordinator heartbeats, lose appends, or acknowledge unwritten records. Failed writes must reject acknowledgement and leave the journal recoverable. Shutdown must drain queued writes before exit. Offline assigned merchants must retain their last observed gold in account totals; unknown balances remain gaps. Startup pings must remain gaps until a connection settles. Character journal persistence must remain bounded when delivery is unavailable.
+
+### 1.5 integration reliability
+
+The metrics journal now queues ordered asynchronous appends and compacts one record at a time with asynchronous file writes; coordinator combat callbacks no longer synchronously rewrite retained history. Delivery acknowledgements wait for their queued writes, and graceful shutdown drains them. Receipt identities and totals remain one record, preserving retry deduplication. Startup still replays the journal before accepting metrics.
+
+Character retries persist each immutable frame once in a bounded 1,024-slot ring and rewrite a small header containing at most 720 retained sequence numbers. Existing full-frame journals migrate on their next persistence. Native startup ping samples are gaps for the first ten seconds of each observed connection. Assigned offline characters retain their last known carried gold in account totals; an unknown balance yields a gap rather than fabricated zero.

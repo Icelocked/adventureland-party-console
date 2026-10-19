@@ -1,4 +1,4 @@
-import { CoordinatorJsonlStore } from '../persistence/jsonl-store.ts';
+import { MetricsJsonlStore } from './jsonl-store.ts';
 import { requestObject, type HttpRouter } from '../http/contracts.ts';
 import { METRIC_BUCKET_MS, METRIC_RESET_KINDS, type MetricsKillsResponse, type MonsterKillSummary, type MetricResetKind, type MetricResets, type MetricDeathTotal, type MetricFrame, type MetricPoint, type MetricTotals, type MetricsResponse } from '../../metrics/contracts.ts';
 import { createMeasurementIndex } from './measurement-index.ts';
@@ -111,7 +111,7 @@ function storedBucket(value: unknown): StoredBucket {
 }
 
 export function createMetricsService(path: string, ports: Ports) {
-  const store = new CoordinatorJsonlStore(path, path + '.compact', 1_800_000);
+  const store = new MetricsJsonlStore(path, path + '.compact', 1_800_000);
   const buckets = new Map<string, StoredBucket>();
   const accountGold = new Map<number, AccountGoldPoint>();
   const measurements = createMeasurementIndex();
@@ -140,7 +140,7 @@ export function createMetricsService(path: string, ports: Ports) {
       if (!metricNumber(point.at) || (point.total !== null && !metricNumber(point.total))) throw Error('Invalid account gold history');
       accountGold.set(point.at, { at: point.at, total: point.total });
     }
-  } catch (error) { store.close(); throw error; }
+  } catch (error) { void store.close().catch(ports.warn); throw error; }
   let lastReceivedAt: number | null = null;
   let unavailable = false;
   let resetting = false;
@@ -236,7 +236,7 @@ export function createMetricsService(path: string, ports: Ports) {
       store.delete('bucket:' + key); buckets.delete(key);
     }
   }
-  try { retain(); } catch (error) { store.close(); throw error; }
+  try { retain(); } catch (error) { void store.close().catch(ports.warn); throw error; }
   for (const bucket of buckets.values()) { indexDeaths(bucket.kills); measurements.add(bucket.values); }
   const timer = setInterval(() => { if (unavailable) return; try { retain(); } catch (error) { storageFailed(error); } }, 300_000);
   timer.unref();
@@ -382,7 +382,7 @@ export function createMetricsService(path: string, ports: Ports) {
       const servers = typeof input.servers === 'string' ? input.servers.split(',').slice(0, 32) : [];
       return response.json(killsQuery(from, to, dayFrom, Math.min(dayTo, now), names, servers));
     });
-    router.post('/party-api/metrics', (request, response) => {
+    router.post('/party-api/metrics', async (request, response) => {
       if (unavailable) return response.status(503).json({ error: 'Metrics storage unavailable' });
       if (resetting) return response.status(503).json({ error: 'Metrics reset in progress' });
       const body = requestObject(request.body);
@@ -406,6 +406,7 @@ export function createMetricsService(path: string, ports: Ports) {
         storageFailed(error);
         return response.status(503).json({ error: 'Metrics storage unavailable' });
       }
+      try { await store.flush(); } catch(error) { storageFailed(error); return response.status(503).json({error:'Metrics storage unavailable'}); }
       lastReceivedAt = now;
       return response.json({ ok: true, expired });
     });
@@ -448,5 +449,5 @@ export function createMetricsService(path: string, ports: Ports) {
       } finally { resetting = false; }
     });
   }
-  return { install, close() { clearInterval(timer); clearInterval(goldTimer); store.close(); } };
+  return { install, async close() { clearInterval(timer); clearInterval(goldTimer); await store.close(); } };
 }
