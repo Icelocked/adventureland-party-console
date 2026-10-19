@@ -139,3 +139,87 @@ test('merchant collection queues marked items once across unchanged reports and 
  assert.deepEqual(queued,['F:marked items','F:marked items']);
 });
 
+// Character side of the same inventory: items, slots and bank leave the
+// report only while the coordinator acknowledged the current revision.
+const fs=require('node:fs'),vm=require('node:vm');
+const {namedFunction}=require('./helpers/named-function.cjs');
+function client(){
+ const source=fs.readFileSync('characters/shared.js','utf8');
+ const requests=[];let clock=100000;
+ const context=vm.createContext({
+  JSON,Math,Object,Array,String,Number,Error,Promise,
+  Date:{now:()=>clock},
+  character:{items:[{name:'coat',level:1},null],slots:{mainhand:{name:'sword',level:0}},bank:null},
+  activeUpgrade:null,catalogKnown:true,statusInventoryCache:null,statusInventoryAcknowledged:null,
+  statusInventoryFullAt:0,statusInventoryCount:0,statusInventorySession:'s',
+  inventoryOperationEntry:(item,slot)=>item?{slot,item:{...item},meta:{properties:{}}}:null,
+  fingerprint:item=>({...item}),itemDefinition:()=>({properties:{}}),
+  bankSnapshot:()=>context.character.bank?{gold:context.character.bank.gold,packs:{items0:context.character.bank.items0.map((item,slot)=>item?{slot,item:{...item}}:null)}}:null,
+  api:'http://coordinator',root:{},sampleTravelReport(){},convoyDiagnosticClock:()=>0,acceptTravelResponse(){},
+  applyEventReturnOwner:()=>Promise.resolve(),rememberConvoyStatusRequest(){},diagnosticText:value=>String(value),
+  $:{ajax(options){
+   const body=JSON.parse(options.data);requests.push(body);
+   const handlers={};
+   const reply=context.reply(body);
+   queueMicrotask(()=>reply.status===200?handlers.done(reply.body):handlers.fail({status:reply.status,responseJSON:reply.body},'error','Conflict'));
+   return {done(fn){handlers.done=fn;return this;},fail(fn){handlers.fail=fn;return this;}};
+  }},
+  reply:body=>({status:200,body:{inventoryRevision:body.inventoryRevision}}),queueMicrotask,
+ });
+ vm.runInContext(['statusInventory','attachStatusInventory','acknowledgeStatusInventory','withStatusInventory','request']
+  .map(name=>namedFunction(source,name)).join('\n'),context);
+ const send=async()=>{const body=context.attachStatusInventory({name:'P'});await context.request('/status',{method:'POST',body});return requests.at(-1);};
+ return {context,requests,send,time:value=>{clock=value;}};
+}
+
+test('a report omits inventory only while it matches the acknowledged revision',async()=>{
+ const c=client();
+ const first=await c.send();
+ assert.deepEqual(first.items.map(entry=>entry&&entry.item.name),['coat',null]);
+ assert.equal(first.slots.mainhand.item.name,'sword');
+ assert.equal('bank' in first,true);
+ const unchanged=await c.send();
+ assert.equal('items' in unchanged||'slots' in unchanged||'bank' in unchanged,false);
+ assert.equal(unchanged.inventoryRevision,first.inventoryRevision);
+ c.context.character.items[1]={name:'gem0',q:1};
+ const loot=await c.send();
+ assert.equal(loot.items[1].item.name,'gem0','a loot pickup is in the next report');
+ assert.notEqual(loot.inventoryRevision,first.inventoryRevision);
+ c.context.character.slots.offhand={name:'shield',level:0};
+ assert.equal((await c.send()).slots.offhand.item.name,'shield','an equip is in the next report');
+ c.context.character.bank={gold:10,items0:[{name:'coat',level:1}]};
+ assert.equal((await c.send()).bank.packs.items0[0].item.name,'coat','a bank deposit is in the next report');
+ c.context.character.items[0].level=2;
+ assert.equal((await c.send()).items[0].item.level,2,'a change inside an item object is in the next report');
+ c.context.activeUpgrade={slot:1,item:{name:'gem0',q:1}};
+ assert.ok((await c.send()).items,'an upgrade starting changes the reported inventory');
+ assert.equal('items' in await c.send(),false);
+});
+
+test('a coordinator that never acknowledges a revision receives every inventory',async()=>{
+ const c=client();c.context.reply=()=>({status:200,body:{}});
+ for(let i=0;i<3;i++)assert.ok((await c.send()).items);
+});
+
+test('inventory is sent at least every 10 seconds and always before the catalog acknowledgement',async()=>{
+ const c=client();await c.send();
+ c.time(109999);assert.equal('items' in await c.send(),false);
+ c.time(110000);assert.ok((await c.send()).items,'heartbeat');
+ assert.equal('items' in await c.send(),false);
+ c.context.catalogKnown=false;
+ assert.ok((await c.send()).items);assert.ok((await c.send()).items);
+});
+
+test('a refused report is sent again with inventory in the same request',async()=>{
+ const c=client();await c.send();
+ c.context.reply=body=>body.items?{status:200,body:{inventoryRevision:body.inventoryRevision}}:{status:409,body:{error:'inventory revision unknown',code:'inventory-required'}};
+ const before=c.requests.length;
+ const body=c.context.attachStatusInventory({name:'P',hp:5});
+ assert.equal('items' in body,false);
+ const value=await c.context.request('/status',{method:'POST',body});
+ assert.equal(value.inventoryRevision,body.inventoryRevision);
+ assert.equal(c.requests.length,before+2);
+ assert.equal(c.requests.at(-1).hp,5);assert.ok(c.requests.at(-1).items);
+ c.context.reply=()=>({status:409,body:{code:'inventory-required'}});
+ await assert.rejects(c.context.request('/status',{method:'POST',body:{name:'P',items:[]}}),/409/,'a refused full report is not retried');
+});

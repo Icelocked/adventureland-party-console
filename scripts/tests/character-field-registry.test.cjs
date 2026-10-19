@@ -35,6 +35,12 @@ function reportedKeys() {
       keys.add(node.left.name.text);
   });
   assert.ok(keys.size > 100, 'snapshot() status literal was not found');
+  // snapshot() hands the status to attachStatusInventory, which adds the inventory only when it changed.
+  for (const builder of ['attachStatusInventory', 'withStatusInventory']) visit(parse(namedFunction(shared, builder)), node => {
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+        ts.isPropertyAccessExpression(node.left) && node.left.expression.getText() === 'status')
+      keys.add(node.left.name.text);
+  });
   const sample = parse(namedFunction(shared, 'sampleTravelReport'));
   visit(sample, node => {
     if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
@@ -57,11 +63,11 @@ function coordinatorKeys() {
   return keys;
 }
 
-/** Report keys the coordinator deletes before storing (status/catalogs.ts, bank.ts, ponty.ts). */
+/** Report keys the coordinator deletes before storing (status/catalogs.ts, bank.ts, ponty.ts, inventory-carry.ts). */
 function consumedKeys() {
   const keys = new Set();
-  for (const file of ['catalogs.ts', 'bank.ts', 'ponty.ts']) visit(parse(read('runtime/coordinator/status/' + file), ts.ScriptKind.TS), node => {
-    if (ts.isDeleteExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.expression.getText() === 'body')
+  for (const file of ['catalogs.ts', 'bank.ts', 'ponty.ts', 'inventory-carry.ts']) visit(parse(read('runtime/coordinator/status/' + file), ts.ScriptKind.TS), node => {
+    if (ts.isDeleteExpression(node) && ts.isPropertyAccessExpression(node.expression) && ['body', 'raw'].includes(node.expression.expression.getText()))
       keys.add(node.expression.name.text);
     if (ts.isVariableDeclaration(node) && node.name.getText() === 'consumedFields')
       for (const element of node.initializer.expression.elements) keys.add(element.text);

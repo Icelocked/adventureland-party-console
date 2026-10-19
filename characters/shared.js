@@ -2956,15 +2956,9 @@
       oneShotEpoch: scatterEpoch,
       threats: threats,
       conditions: activeConditions(),
-      items: character.items.map(inventoryOperationEntry),
-      slots: Object.keys(character.slots || {}).reduce(function (out, slot) {
-        var item = character.slots[slot];
-        if (item) out[slot] = { item: fingerprint(item), meta: itemDefinition(item) };
-        return out;
-      }, {}),
-      bank: bankSnapshot(),
       bankVaults: bankVaultCatalog(),
     };
+    attachStatusInventory(status);
     if (!catalogKnown && catalogPrepared) {
       status.merchantCatalogVersion = merchantCatalogVersion;
       status.travelPlaces = travelPlaces();
@@ -3072,6 +3066,49 @@
     convoySignal = Object.assign({}, signal, {localDeadline:received + Math.max(0, Number(signal.validUntil)-sentAt-network)});
   }
 
+  // Status reports omit items, slots and bank while they match the revision the
+  // coordinator acknowledged (docs/efficiency.md, Inventory deltas). The key is
+  // every input of the three builders, so a change rebuilds them once and the
+  // next report carries them.
+  var statusInventoryCache = null, statusInventoryAcknowledged = null, statusInventoryFullAt = 0, statusInventoryCount = 0;
+  var statusInventorySession = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  function statusInventory() {
+    var key = JSON.stringify([character.items, character.slots || null, character.bank || null,
+      activeUpgrade && [activeUpgrade.slot, activeUpgrade.item]]);
+    // Before the catalog acknowledgement itemDefinition reads the world cache, which fills in over time.
+    if (catalogKnown && statusInventoryCache && statusInventoryCache.key === key) return statusInventoryCache;
+    statusInventoryCache = { key: catalogKnown ? key : null, revision: statusInventorySession + "." + (++statusInventoryCount),
+      items: character.items.map(inventoryOperationEntry),
+      slots: Object.keys(character.slots || {}).reduce(function (out, slot) {
+        var item = character.slots[slot];
+        if (item) out[slot] = { item: fingerprint(item), meta: itemDefinition(item) };
+        return out;
+      }, {}),
+      bank: bankSnapshot() };
+    return statusInventoryCache;
+  }
+  function attachStatusInventory(status) {
+    var inventory = statusInventory();
+    status.inventoryRevision = inventory.revision;
+    // A full inventory goes out at least every 10 s, so a coordinator that lost it recovers without a
+    // refusal, and an observer of ordinary reports (live-catalog.spec.ts) sees three within 45 s.
+    if (inventory.revision === statusInventoryAcknowledged && Date.now() - statusInventoryFullAt < 10000) return status;
+    return withStatusInventory(status);
+  }
+  function withStatusInventory(status) {
+    var inventory = statusInventory();
+    status.inventoryRevision = inventory.revision;
+    status.items = inventory.items;
+    status.slots = inventory.slots;
+    status.bank = inventory.bank;
+    return status;
+  }
+  function acknowledgeStatusInventory(body, value) {
+    if (body.combatOnly || body.combatWait) return;
+    statusInventoryAcknowledged = value && typeof value.inventoryRevision === "string" ? value.inventoryRevision : null;
+    if (Array.isArray(body.items)) statusInventoryFullAt = Date.now();
+  }
+
   function request(path, options) {
     options = options || {};
     if (path === '/status' && options.body && options.body.groupedCombat) sampleTravelReport(options.body);
@@ -3095,6 +3132,7 @@
           (root.__partyTravelTransport || (root.__partyTravelTransport={})).barrier={at:Date.now(),durationMs:duration,processingMs:Math.max(0,(t.sentAt||0)-(t.receivedAt||0)),eventLoopMaxMs:t.eventLoopMaxMs,outcome:'success'};
         }
         if (path === '/status') {
+          if (options.body) acknowledgeStatusInventory(options.body, value);
           acceptTravelResponse(value, transportStart, !!(options.body && (options.body.combatOnly || options.body.combatWait)));
           // The ordinary status tick can still be awaiting this exit handler.
           // Fast heartbeat ownership must fence it at the transport boundary.
@@ -3106,6 +3144,13 @@
         resolve(value);
       }).fail(function (xhr, status, error) {
         var httpStatus = Number(xhr && xhr.status) || 0;
+        // A coordinator without this inventory revision (restart, another runtime) refuses the report unapplied.
+        if (path === '/status' && httpStatus === 409 && xhr.responseJSON && xhr.responseJSON.code === "inventory-required" &&
+            options.body && !Array.isArray(options.body.items)) {
+          statusInventoryAcknowledged = null;
+          resolve(request(path, Object.assign({}, options, { body: withStatusInventory(Object.assign({}, options.body)) })));
+          return;
+        }
         var kind = status === "timeout" ? "timeout" : status === "parsererror" ? "invalid-json" :
           status === "abort" ? "aborted" : httpStatus ? "http" : "network";
         rememberConvoyStatusRequest(convoyStatusStarted, kind);

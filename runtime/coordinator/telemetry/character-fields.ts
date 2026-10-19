@@ -164,6 +164,7 @@ export const characterFields = {
   bank: consumed("Bank snapshot; bank.ts moves it to bankSnapshot (a null report stays on the status).", large("all bank packs with item metadata")),
   bankVaults: consumed("Bank vault catalog; catalogs.ts moves it to state.bankVaults.", { size: "small" }),
   ponty: consumed("Merchant's Ponty listings; ponty.ts moves them to state.ponty.", large("grows with the listing count")),
+  inventoryRevision: consumed("Revision of the items, slots and bank the report names; inventory-carry.ts removes it.", { size: "small" }),
   // Events
   activeEvent: debug("Selected live combat event name, or null."),
   activeEventId: debug("Id of the selected live event, or null."),
