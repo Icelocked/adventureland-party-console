@@ -1,4 +1,4 @@
-import { acknowledgeDelivery, deliveryMatches } from './delivery-recovery.ts';
+import { acknowledgeDelivery, deliveryMatches, deliveryReady } from './delivery-recovery.ts';
 import { requestObject, requestText } from "../http/contracts.ts";
 import { receiveBankDeconstruction } from "./bank-deconstruction.ts";
 import { receiveBankUpgrades } from '../inventory/bank-upgrade-receipts.ts';
@@ -53,6 +53,7 @@ export function createCompletionResults(state: CompletionState, ports: Completio
   }
   function appliedStatReceipts(name: string | null, body: CompletionReport): void {
     if (name !== state.merchantCharacter) return;
+    const readyRecipients=new Set<string>();
     for (const receipt of body.statScrollsApplied || []) {
       const mark=requestObject(receipt.mark), original=requestObject(mark.item), actual=receipt.item;
       if (mark.equipped || !Number.isSafeInteger(receipt.slot) || typeof mark.statType!=='string' || actual.stat_type!==mark.statType) continue;
@@ -62,14 +63,19 @@ export function createCompletionResults(state: CompletionState, ports: Completio
       if (!deliveryMatches(previous,original) || !deliveryMatches(original,previous)) continue;
       // Cleanup of stale marks is not a native outcome. Only this explicit,
       // observed mutation can advance an item's reserved delivery identity.
-      for(const deliveries of Object.values(state.merchantDeliveries)) for(const delivery of deliveries || []) {
+      for(const [recipient,deliveries] of Object.entries(state.merchantDeliveries)) for(const delivery of deliveries || []) {
         if ((delivery.slot===mark.slot || delivery.slot===receipt.slot) && deliveryMatches(delivery.item,original) && deliveryMatches(original,delivery.item)) {
           delivery.item={...actual};delivery.slot=receipt.slot;
           if(delivery.blocked==='Reserved delivery item missing') delete delivery.blocked;
+          if(deliveryReady(delivery)) readyRecipients.add(recipient);
         }
       }
       removeMatching(state.statScrolls[String(name)],[receipt.mark]);
     }
+    // The dependency gate may have retired an empty delivery job. Native stat
+    // completion is the wakeup: an idle recipient need not publish a full new bag.
+    if(state.merchantAutomations?.deliveries!==false && readyRecipients.size)
+      ports.queue([...readyRecipients], 'deliveries');
   }
   function successfulImprovements(name: string | null, body: CompletionReport): void {
     upgrades(name, body);

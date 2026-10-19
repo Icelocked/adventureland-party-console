@@ -1407,17 +1407,48 @@ for (const kind of ['upgrade', 'compound']) test(`auto merchant collects twelve 
 
 test('manual compound from native bank withdraws exactly its reserved triplet',async({live},info)=>{
  test.setTimeout(300_000);
- await live.post('/merchant/force-stand',{enabled:true});
- await live.admin(`output=(async()=>{const p=get_player('E2EMerchant'),u=await db.collection('user').findOne({_id:p.owner}),b=p.user||u.info; b.items0=b.items0||[];for(const slot of [30,31,32]){if(b.items0[slot])throw Error('Bank fixture occupied');b.items0[slot]={name:'strring',level:0};}if(!p.user)await db.collection('user').replaceOne({_id:u._id},u);return true;})()`);
- // Refresh native bank observation before issuing storage-bound intent.
- await live.post('/command',{character:'E2EMerchant',type:'bank'});
- await live.post('/merchant/force-stand',{enabled:false});
- await expect.poll(async()=>(await live.state()).bankSnapshot?.packs?.items0?.some((e:any)=>e?.item?.name==='strring'),{timeout:90_000}).toBe(true);
- await live.post('/merchant/force-stand',{enabled:true});
- const selected=(await live.state()).bankSnapshot.packs.items0.find((entry:any)=>entry?.item?.name==='strring');
- await live.post('/command',{character:'E2EMerchant',type:'compound-mark',pack:'items0',slot:selected.slot,item:selected.item});
- const before=await economy(live);
- await live.post('/merchant/force-stand',{enabled:false});
- await expect.poll(async()=>{const state=await live.state(),n=await economy(live);return !(state.compounds?.E2EMerchant||[]).length&&bankQuantity(n,'strring')===bankQuantity(before,'strring')-3;},{timeout:240_000}).toBe(true);
- await record(live,info,'native-manual-bank-compound',before);
+ // Failure modes: withdrawals alone masquerade as compounding; unrelated or locked
+ // stock is consumed; public bank snapshots lag; duplicate native results appear.
+ // Declare only this operation's success probability, scoped to its native socket
+ // handler. Travel, source withdrawal, scroll, operation and item result remain native.
+ const observations:any[]=[];
+ const account=(state:Economy,level:number)=>Object.values(state.characters).reduce((sum,character)=>sum+character.items.filter(item=>item?.name==='strring'&&(item.level||0)===level).length,0)+Object.values(state.bank).reduce((sum,items)=>sum+items.filter(item=>item?.name==='strring'&&(item.level||0)===level).length,0);
+ let before:Economy|undefined;
+ try{
+  await live.post('/merchant/force-stand',{enabled:true});
+  await live.admin(`output=(async()=>{const p=get_player('${merchant}'),u=await db.collection('user').findOne({_id:p.owner}),b=p.user||u.info;
+   b.items0=b.items0||[];for(const slot of [30,31,32,33,34])if(b.items0[slot])throw Error('Bank fixture occupied');
+   for(const slot of [30,31,32])b.items0[slot]={name:'strring',level:0};b.items0[33]={name:'strring',level:0,l:'l'};b.items0[34]={name:'beewings',q:3};
+   if(!p.user)await db.collection('user').replaceOne({_id:u._id},u);return true;})()`);
+  await live.post('/command',{character:merchant,type:'bank'});
+  await live.post('/merchant/force-stand',{enabled:false});
+  await expect.poll(async()=>(await live.state()).bank?.packs?.items0?.filter((entry:any)=>entry?.item?.name==='strring').length,{timeout:90_000}).toBe(4);
+  await live.post('/merchant/force-stand',{enabled:true});
+  const selected=(await live.state()).bank.packs.items0.find((entry:any)=>entry?.item?.name==='strring'&&!entry.item.l);
+  await live.clients[merchant].run(`(()=>{globalThis.__manualBankCompoundReceipts=[];parent.socket.on('game_response',data=>{const response=typeof data==='string'?data:data&&data.response;if(response==='compound_success'||response==='compound_fail')globalThis.__manualBankCompoundReceipts.push({at:Date.now(),response,data});});return true;})()`);
+  await live.admin(`output=(()=>{const p=get_player('${merchant}'),socket=p.socket,handlers=socket.listeners('compound');
+   if(handlers.length!==1)throw Error('Expected one native compound handler');
+   const original=handlers[0],log=[];
+   function wrapped(data){const selected=data&&!data.calculate&&Array.isArray(data.items)&&data.items.length===3&&data.items.every(slot=>p.items[slot]?.name==='strring'&&(p.items[slot].level||0)===0);
+    if(!selected)return original.apply(this,arguments);
+    const grade=G.items.strring.igrade,previous=D.compounds[grade][1];D.compounds[grade][1]=1;
+    try{log.push({at:Date.now(),items:data.items.slice(),declaredProbability:1});return original.apply(this,arguments);}finally{D.compounds[grade][1]=previous;}}
+   socket.removeListener('compound',original);socket.on('compound',wrapped);globalThis.__manualBankCompoundHook={socket,original,wrapped,log};return true;})()`);
+  await live.post('/command',{character:merchant,type:'compound-mark',pack:'items0',slot:selected.slot,item:selected.item});
+  before=await economy(live);
+  await live.post('/merchant/force-stand',{enabled:false});
+  await expect.poll(async()=>{
+   const state=await live.state(),native=await economy(live),receipts=await live.clients[merchant].run('globalThis.__manualBankCompoundReceipts');
+   observations.push({at:Date.now(),groups:state.compounds?.[merchant],native,receipts});
+   return !(state.compounds?.[merchant]||[]).length&&receipts.length===1&&receipts[0].response==='compound_success'&&account(native,0)===account(before!,0)-3&&account(native,1)===account(before!,1)+1;
+  },{timeout:240_000}).toBe(true);
+  const after=await economy(live),bankItems=Object.values(after.bank).flat();
+  expect(bankItems.filter(item=>item?.name==='strring'&&item.l)).toEqual([{name:'strring',level:0,l:'l'}]);
+  expect(bankItems.filter(item=>item?.name==='beewings').reduce((sum,item)=>sum+(item?.q||1),0)).toBe(3);
+  expect(bankQuantity(after,'strring')).toBe(bankQuantity(before,'strring')-3);
+  await record(live,info,'native-manual-bank-compound',before,{after,observations,declaredRolls:await live.admin('output=globalThis.__manualBankCompoundHook.log')});
+ }finally{
+  await info.attach('native-manual-bank-compound-observations',{body:JSON.stringify({before,observations,state:await live.state()}),contentType:'application/json'});
+  await live.admin(`output=(()=>{const hook=globalThis.__manualBankCompoundHook;if(hook){hook.socket.removeListener('compound',hook.wrapped);hook.socket.on('compound',hook.original);delete globalThis.__manualBankCompoundHook;}return true;})()`).catch(()=>{});
+ }
 });

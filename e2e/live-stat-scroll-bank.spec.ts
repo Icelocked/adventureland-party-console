@@ -33,7 +33,7 @@ for (const {deliver,stat} of [{deliver:false,stat:'str'},{deliver:true,stat:'str
       .toEqual({ name: 'helmet', level: 0, stat_type: 'dex' });
     if(stat==='luck') {
       await live.post('/command',{character:merchant,type:'bank'});
-      await expect.poll(async()=>Object.values((await live.state()).bankSnapshot?.packs||{}).flat().some((entry:any)=>entry?.item?.name===scroll),{timeout:90_000}).toBe(true);
+      await expect.poll(async()=>Object.values((await live.state()).bank?.packs||{}).flat().some((entry:any)=>entry?.item?.name===scroll),{timeout:90_000}).toBe(true);
     }
     const before = await native(live,scroll);
     expect(before).toMatchObject({ carried: 0, bank: 1 });
