@@ -584,3 +584,13 @@ must continue. Retain native farewell acknowledgement, independent path repair,
 and both participants' actual floor transitions. The corrected focused journey
 passes in 206.5 seconds including teardown, with 71 verified evidence files and
 its workspace removed.
+
+Full run 39333470950 exposed a separate reconnect-injection lifecycle failure in
+the Hunt blacklist browser scenario: `route.continue: Route is already handled`
+originated in the context network guard while the page's core fetch/fulfill handler
+was being removed without draining its callbacks. Drain page handlers with
+`unrouteAll({behavior:'wait'})` before continuing, and use fallback for non-core
+requests so the context guard retains ownership. Do not suppress handler errors
+or change gameplay persistence. Three focused repetitions pass with all original
+reconnect, native-state persistence and clear-confirmation assertions, 48 verified
+evidence files, and three workspaces removed.

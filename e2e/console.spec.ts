@@ -485,7 +485,7 @@ test('Hunt blacklist picker adds unseen monsters manually and survives restart',
   // no gameplay, persistence, other status request or timing is substituted.
   let emptyCoreSnapshots=0,recoveredCore=false;
   const observeReconnect=async(route:import('@playwright/test').Route)=>{
-    if(new URL(route.request().url()).searchParams.get('section')!=='core')return route.continue();
+    if(new URL(route.request().url()).searchParams.get('section')!=='core')return route.fallback();
     const response=await route.fetch();
     if(!response.ok())return route.fulfill({response});
     const state=await response.json();
@@ -504,7 +504,11 @@ test('Hunt blacklist picker adds unseen monsters manually and survives restart',
     await expect.poll(()=>emptyCoreSnapshots===2&&recoveredCore,{timeout:15_000}).toBe(true);
     await expect(settings.getByText('manually added',{exact:false})).toBeVisible();
     await info.attach('blacklist-dialog-after-empty-reconnect-snapshots',{body:await page.screenshot(),contentType:'image/png'});
-  }finally{await page.unroute('**/party-api/state?**',observeReconnect);}
+  }finally{
+    // Finish intercepted core fetch/fulfill operations before removing their
+    // page handler; the context's network guard must not handle the same route.
+    await page.unrouteAll({behavior:'wait'});
+  }
   await settings.getByRole('button',{name:'Clear all',exact:true}).click();
   const confirmation=page.getByRole('dialog',{name:'Clear Hunt blacklist?',exact:true});
   await expect(confirmation).toContainText('for W');
