@@ -10844,9 +10844,15 @@
       statusPhase = "snapshot";
       var statusSentAt = Date.now();
       var statusBody = snapshot();
+      var statusCatalogGeneration = catalogGeneration;
+      var statusCarriedCatalog = !!statusBody.merchantCatalog;
       statusPhase = "request status";
       var state = await request("/status", { method: "POST", body: statusBody });
       if (!runtimeCurrent()) return;
+      // A response accepting the coordinator's old catalog cannot acknowledge a
+      // newer local discovery that is still warming, or an in-flight newer table.
+      if (state.needsCatalog) catalogKnown = false;
+      else if (statusCarriedCatalog && statusCatalogGeneration === catalogGeneration) catalogKnown = true;
       receiveConsoleMaintenance(state.consoleMaintenance || null, state.serverNow);
       if(consoleMainTick()){
         root.__partyStatusSuccessAt=Date.now();if(dashboardSampler)dashboardSampler.renew(state.dashboardLease);
@@ -11108,7 +11114,6 @@
       farmingMode = character.ctype !== "merchant" && state.partyFarmingMode === "scatter" ? "scatter" : "default";
       partyFarmingMonsterType = typeof state.partyFarmingMonsterType === "string" ? state.partyFarmingMonsterType : null;
       scatterBreakTarget = state.scatterBreakTarget && state.scatterBreakTarget.id ? state.scatterBreakTarget : null;
-      catalogKnown = !state.needsCatalog;
       void prepareCatalog();
       flushStatusDiagnostics();
       statusPhase = "dispatch command";
