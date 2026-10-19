@@ -1,6 +1,7 @@
 import { requestObject, requestText, type HttpRequest, type HttpResponse } from "./contracts.ts";
 import { validAchievementHuntSettings, type AchievementHuntSettings } from "../hunt/achievement-settings.ts";
 import type { AchievementHuntState } from "../hunt/achievement-hunt.ts";
+import { keepNewestAchievementBlacklist } from "../navigation/rare-retention.ts";
 
 interface Ports {
   now(): number;
@@ -38,6 +39,7 @@ export function createAchievementHuntRoute(state: AchievementHuntState, ports: P
     else if (action === "add" && known.has(id)) {
       // The next tick moves on from a blacklisted target and restores its priorities.
       state.achievementBlacklist[id] = { monsterId: id, at: ports.now(), reason: "Manually blacklisted" };
+      keepNewestAchievementBlacklist(state.achievementBlacklist);
     } else return false;
     return true;
   }

@@ -453,6 +453,30 @@ Tests: `scripts/tests/coordinator-persistence-writer.test.cjs` (1, 4, 5, 6,
 `e2e/achievement-hunt.spec.ts` (1, 2, 4 and 5 through the real coordinator
 and dashboard).
 
+Retention (P5) of the Achievement Hunt collections:
+
+| Collection | Bound | Where |
+|---|---|---|
+| `achievementBlacklist` | one entry per monster id; the hunt adds its target (`recordDeaths`) and the route adds only known achievement monsters; the newest 500 by `at` | `keepNewestAchievementBlacklist` (`navigation/rare-retention.ts`), on each add (`hunt/achievement-hunt.ts`, `http/achievement-hunt.ts`) and at load for every scope (`navigation/initial-farming.ts`) |
+| `achievementHunt.monsters` | 500 ids | `validAchievementHuntSettings` (`hunt/achievement-settings.ts`) |
+| `achievementPassive` | one rule per rare monster the hunt switched on | game monster list |
+| `achievementTarget.counted`, `.savedPriorities` | one entry per party member, and per member and touched monster | party roster, game monster list; replaced with each target |
+| `profiles` in the Achievement Hunt document | one entry per farming profile | account roster |
+
+The 500 cap matches the monster limit of the settings validator. The game
+data has fewer monsters with achievements, so the cap only bounds a corrupt or
+hand-edited journal.
+
+Failure inventory, retention:
+
+9. The cap drops the newest entry, or any entry while a scope has 500 or fewer.
+10. Load keeps more than 500 entries in a scope.
+11. An absent blacklist becomes something other than an empty one at load.
+
+Tests: `scripts/tests/coordinator-retention.test.cjs` (9-11) and
+`scripts/tests/achievement-hunt.test.cjs` (9, on the hunt's own add).
+
+
 ### Crash recovery (P6)
 
 A crash or power loss in the middle of an append leaves a half-written last

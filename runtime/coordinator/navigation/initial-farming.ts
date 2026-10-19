@@ -2,7 +2,7 @@ import { migratePassiveSettings, type PassiveRule, type PassiveSettings } from "
 import type { HuntCycle, HuntTickState } from "../hunt/contracts.ts";
 import type { ReturnLocation } from "../events/return-types.ts";
 import type { FarmAreaState } from "./farm-area-types.ts";
-import { keepNewestRare } from "./rare-retention.ts";
+import { keepNewestAchievementBlacklist, keepNewestRare } from "./rare-retention.ts";
 
 import {defaultHuntSettings, migrateHuntFailures, type HuntFailureState} from "../hunt/settings.ts";
 import {defaultAchievementHuntSettings, type AchievementBlacklistEntry, type AchievementHuntSettings, type AchievementTargetState} from "../hunt/achievement-settings.ts";
@@ -38,8 +38,10 @@ function initialAchievementHunt(saved: SavedFarming) {
 
 /** Farming profiles keep their own copy for each scope (hunt/scopes.ts). */
 function capRarePursuits(saved: SavedFarming): void {
-  for (const scope of [saved, ...Object.values(saved.farmingProfiles || {})])
+  for (const scope of [saved, ...Object.values(saved.farmingProfiles || {})]) {
     keepNewestRare((scope as SavedFarming | undefined)?.rarePursuitProgress, (entry) => entry.progress);
+    keepNewestAchievementBlacklist((scope as SavedFarming | undefined)?.achievementBlacklist);
+  }
 }
 
 /** Restore durable Hunt/rare intent while rebuilding scatter decisions from fresh character reports. */
