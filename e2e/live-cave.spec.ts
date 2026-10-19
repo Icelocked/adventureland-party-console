@@ -1109,9 +1109,7 @@ async ({ live, page }, info) => {
     const room={id:'e2e-farewell',floor:0,map:p.map,x:${stairs.x},y:${stairs.y},kind:'encounter',required:false,revealed:true,started:false,done:false,actors:[],enemies:[],encounter:source};
     run.cave.rooms.push(room);cave_activate(run,room);cave_publish(run,true);return {run:run.key,room:room.id,map:room.map,x:room.x,y:room.y};
   })()`);
-  await acceptRoom(stairs);
   let answeredFarewell=false;
-  let farewellChoiceId='';
   const stairReplies:{id:string;title:string;option:string;room:string;run:string}[]=[];
   const stairNativeChoices:any[]=[];
   const stairSamples:any[]=[];
@@ -1126,20 +1124,27 @@ async ({ live, page }, info) => {
   const displaceCompletedStairs=async(route:Route)=>{
     const body=route.request().method()==='POST'?route.request().postDataJSON():null;
     if(body?.name!=='E2EWarrior')return route.fallback();
-    if(displacingStairArrival)return route.abort('failed');
     const receipt=body.dungeon?.action;
-    // The UI click promise can settle after native resolution already admitted
-    // stairs. Intercept the exact resolved native vote's first completion
-    // report, before its stale position can authorize that transport.
-    const resolvedFarewell=!!farewellChoiceId&&body.dungeon?.cave?.choice?.id===farewellChoiceId&&body.dungeon.cave.choice.resolved;
-    if(!resolvedFarewell||stairDisplacement||receipt?.status!=='complete'||receipt.command?.action!=='move'||
-      receipt.command?.target?.id!==stairs.id)return route.fallback();
+    const completedStairs=!body.dungeon?.cave?.paused&&receipt?.status==='complete'&&receipt.command?.action==='move'&&
+      receipt.command?.run===farewellDeclaration.run&&receipt.command?.target?.id===stairs.id;
+    if(displacingStairArrival&&completedStairs&&receipt.id===stairDisplacement?.receipt.id)return route.abort('failed');
+    // Register before selecting stairs and intercept the first matching movement
+    // completion after native movement resumes, without waiting for the choice
+    // publication to catch up. An
+    // already-published completion could otherwise authorize transport while the
+    // fixture itself moves the actor away. Unrelated reports continue normally.
+    if(!completedStairs||stairDisplacement)return route.fallback();
     displacingStairArrival=true;
     stairDisplacement={at:Date.now(),receipt};
     // Lose this completion packet while a real native walk displaces its actor.
     // Never fabricate a receipt, position, readiness flag or transport outcome.
     await route.abort('failed');
     try{
+      const before=await dungeon();
+      stairDisplacement.coordinatorBefore=before;
+      const actor=before.members.find((m:any)=>m.name==='E2EWarrior');
+      expect(actor?.observation?.action?.id===receipt.id&&actor.observation.action.status==='complete',
+        'Displacement must precede publication of the exact completed movement').toBe(false);
       const point=await live.admin(`output=(()=>{const p=get_player('E2EWarrior');
         const before={map:p.map,x:p.x,y:p.y};
         if(Math.hypot(p.x-${stairs.x},p.y-${stairs.y})>65)return {before,alreadyDisplaced:true};
@@ -1154,6 +1159,7 @@ async ({ live, page }, info) => {
     finally{displacingStairArrival=false;}
   };
   await stairContext.route('**/party-api/status',displaceCompletedStairs);
+  await acceptRoom(stairs);
   const captureStairPlanning=()=>{
     const thresholds=[15000,60000,120000];
     if(answeredFarewell||stairPlanningReads.length>=thresholds.length||Date.now()-stairPlanningStarted<thresholds[stairPlanningReads.length])return;
@@ -1212,7 +1218,6 @@ async ({ live, page }, info) => {
       const identity=await live.admin(`output=(()=>{const p=get_player('E2EWarrior'),run=generated_entry(p).record,vote=run.cave.vote;return {run:run.key,id:vote?.id,room:vote?.room?.id,map:vote?.room?.map,x:vote?.room?.x,y:vote?.room?.y,resolved:vote?.resolved,players:cave_players(run).map(p=>({name:p.name,map:p.map,x:p.x,y:p.y,hp:p.hp}))};})()`);
       stairNativeChoices.push({at:Date.now(),advertised:c.choice.id,...identity});if(stairNativeChoices.length>100)stairNativeChoices.splice(5,1);
       if(identity.run!==c.run||identity.id!==c.choice.id||identity.resolved)return false;
-      if(identity.run===farewellDeclaration.run&&identity.room===farewellDeclaration.room)farewellChoiceId=c.choice.id;
       const reply=c.choice.options.find((o:any)=>!o.unavailable&&!o.cost&&!o.amber);
       if(!stairMoveFlags.length&&identity.run===farewellDeclaration.run&&identity.room===farewellDeclaration.room){
         stairMoveFlags=await Promise.all(['E2EWarrior','E2EPriest'].map(name=>live.clients[name].frame.evaluate(name=>{

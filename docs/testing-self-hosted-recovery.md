@@ -570,3 +570,17 @@ provider, and inspection now subscribes to its live character cache. Wrap the
 harness in the same provider; preserve its saved-observation, comparison and
 absence-of-item-actions assertions. The corrected focused scenario passes, with
 13 verified evidence files and its workspace removed.
+
+The same full follow-up exposed a Cave displacement-fixture race. Its route was
+registered after selecting stairs and waited for the resolved farewell choice
+publication before dropping a completed-movement report. Earlier reports could
+already publish that receipt and position. A peer's arrival then legitimately
+authorized stairs while the fixture moved the warrior away, producing an uncertain
+native transport failure. Register the route before selection, match the first
+completed stairs movement after native movement resumes, and record/assert that
+the coordinator has not already accepted that exact completion. Drop only that
+operation's reports during displacement; unrelated status and vote operations
+must continue. Retain native farewell acknowledgement, independent path repair,
+and both participants' actual floor transitions. The corrected focused journey
+passes in 206.5 seconds including teardown, with 71 verified evidence files and
+its workspace removed.
