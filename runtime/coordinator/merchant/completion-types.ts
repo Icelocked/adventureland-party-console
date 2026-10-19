@@ -31,6 +31,7 @@ export interface CompletionReport {
   upgradesResolved?: unknown;
   upgradeMarksResolved?: UpgradeMark[];
   statScrollsResolved?: unknown[];
+  statScrollsApplied?: {mark:unknown;slot:number;item:Item}[];
   statScrollsReady?: unknown;
   compoundsResolved?: unknown;
   autoCompoundsResolved?: string[];
