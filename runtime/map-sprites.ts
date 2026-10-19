@@ -18,3 +18,19 @@ export interface MapVisual {
   y: number;
   layers: MapSpriteLayer[];
 }
+
+export interface MapProjectile {
+  ray?: boolean;
+  id: string;
+  url: string;
+  frames: number;
+  frameMillis: number;
+  scale: number;
+  directional: boolean;
+  startedAt: number;
+  expiresAt: number;
+  x: number;
+  y: number;
+  targetX: number;
+  targetY: number;
+}

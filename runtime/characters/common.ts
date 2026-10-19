@@ -1,3 +1,4 @@
+import './map-projectiles.ts';
 import "./geometry.ts";
 import "./dungeons.ts";
 import "./cave-recovery.ts";
