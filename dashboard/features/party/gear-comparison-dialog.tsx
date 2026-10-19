@@ -26,6 +26,7 @@ import { ItemSetInfo } from './item-set-info';
 import { propertiesAtLevel } from './properties-at-level';
 import { statBadgeClass } from './stat-badge-class';
 import { STAT_SCROLLS } from './stat-scrolls';
+import { audited } from './field-read-audit';
 import { GameBox } from './item-card';
 import { titledName } from './item-title';
 import { GAIN, LOSS, STAT_COLORS as S } from './stat-colors';
@@ -258,7 +259,7 @@ export function GearComparisonDialog({
       prop(actualTotals, key) +
       Number(setTotals[key] || 0) -
       Number(actualSets.totals[key] || 0);
-    const result = { ...character };
+    const result = audited('merged', { ...character });
     result.str = Number(character.str || 0) + delta('str');
     result.int = Number(character.int || 0) + delta('int');
     result.dex = Number(character.dex || 0) + delta('dex');

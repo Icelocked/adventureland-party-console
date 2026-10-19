@@ -190,7 +190,15 @@ export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantCo
     }
   },
   baseURL: async ({ app }, use) => { await use(app.url); },
-  context: async ({ context }, use) => {
+  context: async ({ context }, use, testInfo) => {
+    // Test-only read recording for the field registry (docs/state-field-registry.md).
+    // dashboard/features/party/field-read-audit.ts reports each first read per cache kind and field.
+    if (process.env.PARTY_FIELD_AUDIT === '1') {
+      const file = path.join(root, '.build/field-audit/reads.jsonl');
+      mkdirSync(path.dirname(file), { recursive: true });
+      await context.exposeBinding('__partyFieldAudit', (_source, record: object) =>
+        appendFileSync(file, JSON.stringify({ test: testInfo.titlePath.join(' > '), ...record }) + '\n'));
+    }
     await context.route('**/*', route => {
       const url = new URL(route.request().url());
       return isLoopback(url.hostname) || ['data:', 'blob:'].includes(url.protocol)

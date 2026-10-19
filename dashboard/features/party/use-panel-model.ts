@@ -12,6 +12,7 @@ import type { Char } from './char';
 import type { PartyConsoleModel } from './use-party-console';
 import type { Item } from './item';
 import type { PartyState } from './party-state';
+import { auditedCharacters } from './field-read-audit';
 
 export function usePanelModel<T extends Pick<PartyConsoleModel, 'state' | 'chars'> & Partial<Pick<PartyConsoleModel, 'standItem'>>>(
   model: T,
@@ -45,7 +46,7 @@ export function usePanelModel<T extends Pick<PartyConsoleModel, 'state' | 'chars
         (_, kind) => values[index * subscriptions.length + kind].data,
       ),
     ) as Char])), [names, baseCharacters, subscriptions]);
-  const characters = useQueries({
+  const combinedCharacters = useQueries({
     combine: combineCharacters,
     queries: names.flatMap((name) =>
       subscriptions.map((kind) => ({
@@ -57,6 +58,7 @@ export function usePanelModel<T extends Pick<PartyConsoleModel, 'state' | 'chars
       })),
     ),
   });
+  const characters = useMemo(() => auditedCharacters('merged', combinedCharacters), [combinedCharacters]);
   const domains = (['bank', 'market', 'logs'] as const).filter(
     (domain) => needs[domain],
   );

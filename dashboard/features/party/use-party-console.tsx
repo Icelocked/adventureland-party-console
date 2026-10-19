@@ -29,6 +29,7 @@ import { RestockPolicy } from "./restock-policy";
 import { SelectedItem } from "./selected-item";
 import { StandListing } from "./stand-listing";
 import { STAT_SCROLLS } from "./stat-scrolls";
+import { auditedCharacters } from "./field-read-audit";
 
 export function usePartyConsole() {
   const npcSaleInFlight = useRef(false);
@@ -154,9 +155,12 @@ export function usePartyConsole() {
   const coreQuery = useDomain("core");
   const configQuery = useDomain("config");
   const catalogQuery = useDomain("catalog");
-  const state = useMemo(() => ({ threshold: 100000, marked: {}, characters: {},
-    ...coreQuery.data, ...configQuery.data, ...catalogQuery.data }) as PartyState,
-    [coreQuery.data, configQuery.data, catalogQuery.data]);
+  const state = useMemo(() => {
+    const value = ({ threshold: 100000, marked: {}, characters: {},
+      ...coreQuery.data, ...configQuery.data, ...catalogQuery.data }) as PartyState;
+    value.characters = auditedCharacters('core', value.characters);
+    return value;
+  }, [coreQuery.data, configQuery.data, catalogQuery.data]);
   useEffect(() => {
     if (!thresholdDirty.current && configQuery.data?.threshold !== undefined) setThreshold(String(configQuery.data.threshold));
     if (!itemCollectionThresholdDirty.current && configQuery.data?.itemCollectionThreshold !== undefined)
