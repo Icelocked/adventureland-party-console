@@ -1327,6 +1327,13 @@
       trackerDropData && trackerDropData.monsters_home_server || {}, trackerDropData && trackerDropData.drops_home || {});
   }
 
+  // Bounded read-only diagnostics for discovery publication and cache ownership.
+  root.__partyCatalogDiagnostic = function (monsterId, itemId) {
+    return { generation: catalogGeneration, known: catalogKnown, prepared: catalogPrepared, preparing: catalogPreparing,
+      trackerHome: nativeHomeDropTables()[monsterId], itemCached: !!itemWorldCache[itemId],
+      cachedSources: itemWorldCache[itemId] && itemWorldCache[itemId].drops };
+  };
+
   function nativeLootTable(name) {
     return trackerDropData && trackerDropData.tables && trackerDropData.tables[name] || G.drops && G.drops[name];
   }
