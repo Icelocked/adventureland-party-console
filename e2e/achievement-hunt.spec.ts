@@ -153,6 +153,9 @@ test.describe('Achievement Hunt state under its own save key', () => {
     expect(running.length, 'the coordinator saved settings while running').toBeGreaterThan(0);
     for (const record of running) expect(keysOf(record).filter(key => key.startsWith('achievement'))).toEqual([]);
 
+    // docs/efficiency.md (Achievement Hunt state) item 12: no record repeats the one before it.
+    const achievementRecords = journalRecords(app.journal, achievementKey).map(record => JSON.stringify(record));
+    expect(achievementRecords.filter((record, index) => index > 0 && record === achievementRecords[index - 1])).toEqual([]);
     await app.restartCoordinator();
     const shutdown = journalRecords(app.journal, settingsKey).at(-1);
     expect(shutdown.farmingProfiles.W).toMatchObject({ achievementHunt: { deathThreshold: 5, monsters: ['goo'] }, achievementBlacklist: { bat: batEntry }, achievementTarget: { id: 'goo' } });

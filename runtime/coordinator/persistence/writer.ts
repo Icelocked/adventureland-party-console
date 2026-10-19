@@ -57,6 +57,8 @@ export function createCoordinatorPersistence(
   let savedLiveness = new Map<string, string | undefined>();
   let savedAt = 0;
   let savedMarket: unknown[] | undefined;
+  // JSON of the last Achievement Hunt document the writer saved.
+  let savedAchievement: string | undefined;
   function write(key: string, value: unknown): void {
     // KeyValueStorage.set copies or serializes before it returns, so the
     // snapshot can share arrays with live state.
@@ -97,8 +99,12 @@ export function createCoordinatorPersistence(
     return { ...selectSnapshot(state, splitSettingsFields),
       farmingProfiles: profilesWithoutAchievement(state.farmingProfiles) };
   }
+  /** Writes the Achievement Hunt document when its text differs from the last one written. */
   function achievement(): void {
-    write(stateKeys.achievement, achievementSnapshot(state));
+    const json = JSON.stringify(achievementSnapshot(state));
+    if (json === savedAchievement) return;
+    writeJson(stateKeys.achievement, json);
+    savedAchievement = json;
   }
   /** "same" saves nothing, "liveness" waits for the liveness window, "changed" saves now. */
   function settingsChange(fields: Map<string, string>, source: Record<string, unknown>): "same" | "liveness" | "changed" {
