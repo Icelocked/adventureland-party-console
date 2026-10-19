@@ -2249,6 +2249,7 @@ export function startCoordinatorApplication(
             express_inst,
             {
               publicStateRoute,
+              readyRoute: (_request, response) => response.json({ ready: true }),
               dashboardImportRoutes,
               anniversaryVisitRoutes,
               anniversaryNavigationRoutes,
