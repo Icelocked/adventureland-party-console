@@ -65,9 +65,10 @@ export const expect: typeof nativeExpect = new Proxy(nativeExpect, {
                   } catch (error) {
                     failure = error;
                   }
-                  if (Date.now() >= deadline || stalled())
+                  const stopped=stalled();
+                  if (Date.now() >= deadline || stopped)
                     throw new Error(
-                      `${options.message || "ChronAL gameplay poll expired"}: ${String(failure)}`,
+                      `${options.message || "ChronAL gameplay poll expired"}${stopped?` (shared clock stalled at ${Date.now()}, virtual deadline ${deadline})`:''}: ${String(failure)}`,
                     );
                   await new Promise((resolve) =>
                     setTimeout(

@@ -117,6 +117,7 @@ function install({ dateOnly = false } = {}) {
     first = true;
   const observations = { requests: 0, consecutiveFailures: 0, retries: [] };
   const join = {};
+  const transport = { phase: dateOnly ? 'observe' : 'connecting', window: null, completed: 0, startedWall: 0 };
   let readyResolve, readyReject;
   const ready = new Promise((resolve, reject) => {
     readyResolve = resolve;
@@ -172,6 +173,7 @@ function install({ dateOnly = false } = {}) {
       realImmediate(()=>{
         try{
           const next=windows.shift();
+          transport.phase='advancing';transport.window=next.now;transport.startedWall=realDate.now();
           if(first){Object.assign(join,joinClock(clock,next.now));first=false;}
           else{
             clock.runSync({before:next.now});
@@ -181,9 +183,11 @@ function install({ dateOnly = false } = {}) {
             while(clock.events_({},next.now,false,true))process._tickCallback();
           }
           // Retain a native I/O turn for socket and persistence completions.
+          transport.phase='native-io';
           realImmediate(()=>{
             readyResolve();
             if(socket.readyState===1)socket.send(JSON.stringify({now:clock.now}));
+            transport.completed++;transport.phase='idle';transport.window=null;
             advancing=false;advance();
           });
         }catch(error){advancing=false;failed(error);}
@@ -206,6 +210,15 @@ function install({ dateOnly = false } = {}) {
         process.exitCode = 1;
       }
     });
+    let warnings=0,lastObserved=clock.now,lastProgressWall=realDate.now();
+    const inspect=()=>{
+      if(stopped)return;
+      if(clock.now!==lastObserved){lastObserved=clock.now;lastProgressWall=realDate.now();}
+      if((transport.window!==null&&realDate.now()-transport.startedWall>=5000||realDate.now()-lastProgressWall>=5000)&&warnings++<3)
+        console.error('[ChronAL pending acknowledgement]',JSON.stringify({id,scope,now:clock.now,events:clock.events,pending:windows.length,socketState:socket.readyState,transport}));
+      realTimeout(inspect,5000).unref();
+    };
+    realTimeout(inspect,5000).unref();
   }
   if (!dateOnly) {
     const exit = process.exit.bind(process);
@@ -238,6 +251,7 @@ function install({ dateOnly = false } = {}) {
     errors,
     observations,
     join,
+    transport,
     timers,
     ready,
     now: () => Math.floor(clock.now),

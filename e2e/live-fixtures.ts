@@ -1,4 +1,5 @@
 import {measureBrowserRendering} from './browser-rendering';
+import {waitForBrowserClockStartup} from './chronal-browser-startup';
 import {waitForLiveRestartState, type RestartStateProbe} from './live-restart-readiness';
 import { test as base, unusedPort, child, environment, stop } from './fixtures';
 import {expect,installObservationClock} from './network-clock';
@@ -121,6 +122,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
       context.on('page',page=>page.on('framedetached',frame=>{const id=frames.get(frame);frames.delete(frame);if(id)void retire(id).catch(error=>exchanges.push({clockRetirementError:String(error)}));}));
       await context.addInitScript({content:
       `globalThis.__e2eClockConfiguration=${JSON.stringify({rate:observationClock.rate,wall:observationClock.wall,epoch:observationClock.epoch,broker:process.env.E2E_CLOCK_BROKER,token:process.env.E2E_CLOCK_TOKEN,scope:directory})};\n`+readFileSync(path.join(root,'.build/sim/browser-clock.js'),'utf8')});
+      await waitForBrowserClockStartup(context);
       }
       await clockContext(dashboardContext);await clockContext(context);
     }
@@ -177,7 +179,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           // Match the dashboard's existing catalog-free polling API. Catalog checks
           // explicitly request the full projection; never cache or synthesize state.
           const response = await fetch(url + '/party-api/state' + (catalogs === 'fast' ? '?section=fast' : catalogs ? '' : '?catalog=0'), { signal: AbortSignal.timeout(15_000) });
-          if (!response.ok) throw Error('Live state failed: ' + response.status);
+          if (!response.ok) throw Error('Live state failed: ' + response.status + ': ' + (await response.text()).slice(0,512));
           return response.json();
         },
         savedTownCycle() {
@@ -366,8 +368,13 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
       }
       const bodyClockSnapshot=async()=>{
         const url=new URL('/diagnostics',process.env.E2E_CLOCK_BROKER);url.searchParams.set('token',process.env.E2E_CLOCK_TOKEN||'');
-        const ownership=await live!.state();
-        return {host:{now:observationClock.now(),errors:observationClock.errors,observations:observationClock.observations},broker:await (await fetch(url)).json(),frames:await Promise.all(Object.entries(clients).map(async([name,client])=>{
+        let ownership:any;
+        const ownershipReads:Array<{at:number;error?:string}>=[];
+        await expect.poll(async()=>{
+          try{ownership=await live!.state('fast');ownershipReads.push({at:Date.now()});return !!ownership.characters;}
+          catch(error){ownershipReads.push({at:Date.now(),error:String(error)});throw error;}
+        },{timeout:15000,message:'Clock diagnostics require a fresh runtime ownership snapshot'}).toBe(true);
+        return {host:{now:observationClock.now(),errors:observationClock.errors,observations:observationClock.observations},ownershipReads,broker:await (await fetch(url)).json(),frames:await Promise.all(Object.entries(clients).map(async([name,client])=>{
           const runtime=ownership.characters[name]?.runtime;
           // Managed headless migration/logout legitimately retires the browser frame.
           // Its clock remains represented by the broker's actual participants.
@@ -420,7 +427,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
                 await expect.poll(async()=>{
                   latest=await client.frame.evaluate(()=>{
                     const w=window as any,r=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
-                    return [w.__e2eChronalClock,r?.__e2eChronalClock].map(c=>c&&({backend:c.backend,now:c.now(),errors:c.errors,epoch:c.epoch,rate:c.rate,state:c.state,timing:c.timing,taskStats:c.taskStats}));
+                    return [w.__e2eChronalClock,r?.__e2eChronalClock].map(c=>c&&({backend:c.backend,now:c.now(),errors:c.errors,epoch:c.epoch,rate:c.rate,state:c.state,timing:c.timing,taskStats:c.taskStats,join:c.join}));
                   });
                   const ready=Array.isArray(latest)&&latest.length===2&&latest.every(c=>c?.backend==='chronal-network'&&c.state?.ticks>0);
                   if(observations.length>=32)observations.shift();observations.push({at:Date.now(),ready});return ready;

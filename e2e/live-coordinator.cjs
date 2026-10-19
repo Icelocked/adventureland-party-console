@@ -57,6 +57,15 @@ fixtureExpress.json = (...args) => {
   const parse = nativeExpress.json(...args);
   return (req, res, next) => parse(req, res, error => {
     if (error) return next(error);
+    if (req.method === 'GET' && req.originalUrl.split('?')[0] === '/party-api/console-deployment' &&
+        fs.existsSync(path.join(directory,'observe-console-maintenance'))) {
+      const sendJson=res.json;
+      res.json=function(value){
+        try{fs.appendFileSync(path.join(directory,'console-maintenance-observations.jsonl'),JSON.stringify({at:Date.now(),value})+'\n');}
+        catch(error){console.error('Maintenance observation failed:',error);}
+        return sendJson.call(this,value);
+      };
+    }
     if (req.method === 'POST' && req.originalUrl.split('?')[0] === '/party-api/status' && req.body?.name === 'E2EBankBoi') {
       const sendJson = res.json;
       res.json = function(value) {

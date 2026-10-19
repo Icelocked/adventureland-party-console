@@ -8,6 +8,7 @@ import {promisify} from 'node:util';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {environment} from './fixtures';
+import {waitForBrowserClockStartup} from './chronal-browser-startup';
 
 test('ChronAL browser clock recovers an initial rejected handshake without losing virtual progress',async({page},info)=>{
  test.skip(process.env.E2E_GAMEPLAY_BACKEND==='native','This regression exercises only the ChronAL transport; native parity uses its native clock.');
@@ -73,7 +74,10 @@ test('ChronAL browser clock recovers an initial rejected handshake without losin
 
 test('ChronAL late joining actors preserve relative startup timers',async({page},info)=>{
  test.skip(process.env.E2E_GAMEPLAY_BACKEND==='native','ChronAL-only transport initialization regression.');
- const clock=await startNetworkClock(16),server=createServer((_req,res)=>res.end('<html><body>Late clock join</body></html>'));
+ const clock=await startNetworkClock(16),server=createServer((req,res)=>{
+  if(req.url==='/application.js'){res.setHeader('Content-Type','text/javascript');res.end('globalThis.applicationStartedAt=Date.now();');}
+  else res.end('<html><body>Late clock join<script src="/application.js"></script></body></html>');
+ });
  const sockets=new Set<Socket>();server.on('connection',socket=>{sockets.add(socket);socket.on('close',()=>sockets.delete(socket));});
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
  const address=server.address();if(!address||typeof address==='string')throw Error('Late-join HTTP fixture missing');
@@ -82,9 +86,20 @@ test('ChronAL late joining actors preserve relative startup timers',async({page}
  const bundle=readFileSync('.build/sim/browser-clock.js','utf8');
  let late:import('@playwright/test').Page|undefined;
  try{
-  await page.addInitScript({content:`globalThis.__e2eClockConfiguration=${JSON.stringify(config)};\n`+bundle});
+  await page.addInitScript({content:`globalThis.__e2eClockConfiguration=${JSON.stringify(config)};\n`+bundle+`\nglobalThis.initialStartupAt=Date.now();`});
   await page.goto(origin);
   await page.waitForFunction(()=>(window as any).__e2eChronalClock.now()>=(window as any).__e2eChronalClock.epoch+8000,undefined,{timeout:10_000});
+  const parentBeforeFrame=await page.evaluate(()=>Date.now());
+  await page.evaluate(origin=>{const frame=document.createElement('iframe');frame.id='late-code';frame.src=origin+'?late-code';document.body.append(frame);},origin);
+  const element=await page.$('#late-code'),frame=await element?.contentFrame();await element?.dispose();
+  if(!frame)throw Error('Late CODE iframe missing');
+  await frame.waitForLoadState('domcontentloaded');
+  const startup=await frame.evaluate(()=>({initialAt:(window as any).initialStartupAt,parentNow:(parent as Window & typeof globalThis).Date.now(),now:Date.now(),join:(window as any).__e2eChronalClock.join}));
+  await info.attach('late-iframe-synchronous-startup-date',{body:JSON.stringify({parentBeforeFrame,...startup}),contentType:'application/json'});
+  expect(startup.initialAt,'Synchronous CODE initialization must not capture the old pool epoch').toBeGreaterThanOrEqual(parentBeforeFrame);
+  await page.context().exposeBinding('__e2eChronalFrame',()=>new Promise(resolve=>setTimeout(resolve,100)));
+  const beforeApplication=await page.evaluate(()=>Date.now());
+  await waitForBrowserClockStartup(page.context());
   late=await page.context().newPage();
   await late.addInitScript({content:`globalThis.__e2eClockConfiguration=${JSON.stringify({...config,scope:'late-browser'})};\n`+bundle+`
     globalThis.startupTimeouts=[];globalThis.startupIntervals=[];
@@ -92,9 +107,10 @@ test('ChronAL late joining actors preserve relative startup timers',async({page}
     const interval=setInterval(()=>{startupIntervals.push(Date.now());if(startupIntervals.length===3)clearInterval(interval);},1000);`});
   await late.goto(origin);
   await late.waitForFunction(()=>(window as any).__e2eChronalClock.state.ticks>=3,undefined,{timeout:10_000});
-  const early=await late.evaluate(()=>({now:Date.now(),join:(window as any).__e2eChronalClock.join,timeouts:(window as any).startupTimeouts,intervals:(window as any).startupIntervals}));
+  const early=await late.evaluate(()=>({now:Date.now(),applicationStartedAt:(window as any).applicationStartedAt,join:(window as any).__e2eChronalClock.join,timeouts:(window as any).startupTimeouts,intervals:(window as any).startupIntervals}));
   await info.attach('late-browser-initial-observation',{body:JSON.stringify(early),contentType:'application/json'});
   expect(early.timeouts,'A startup deadline must not expire just because the pool is older than its actor').toEqual([]);
+  expect(early.applicationStartedAt,'Application scripts must start after their authenticated clock join').toBeGreaterThanOrEqual(beforeApplication);
   expect(early.join.at).toBeGreaterThanOrEqual(clock.epoch+8000);
   await late.waitForFunction(()=>Date.now()>=(window as any).__e2eChronalClock.join.at+6000,undefined,{timeout:10_000});
   const browser=await late.evaluate(()=>({join:(window as any).__e2eChronalClock.join,timeouts:(window as any).startupTimeouts,intervals:(window as any).startupIntervals,errors:(window as any).__e2eChronalClock.errors}));

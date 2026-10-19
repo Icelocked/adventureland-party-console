@@ -166,8 +166,12 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
           if(group?.independentApproach&&(observed[targetKey]||0)<3&&(Object.keys(observed).length<10||targetKey in observed)){
             observed[targetKey]=(observed[targetKey]||0)+1;
             game.__e2eIndependentObservedAttackCount=(game.__e2eIndependentObservedAttackCount||0)+1;
+            const codeAt=typeof runner?.Date?.now==='function'?runner.Date.now():undefined;
             independent={selection:group.selection,target:String(group.target?.id),committed:group.committed,confirmation:group.independentConfirmation,handoffTiming:group.handoffTiming,
-              serverAt:Date.now()+Number(runner?.sharedRoutine?.queueClockOffset?.()||0),
+              // The production readiness gate executes in CODE, not its game
+              // parent, which can occupy an adjacent acknowledged clock window.
+              gameAt:Date.now(),codeAt,
+              serverAt:codeAt===undefined?undefined:codeAt+Number(runner?.sharedRoutine?.queueClockOffset?.()||0),
               ready:group.independentReadiness&&Object.fromEntries(Object.entries(group.independentReadiness).map(([name,value]:[string,any])=>[name,
                 value&&{selection:value.selection,target:value.target,at:value.at,ready:value.ready,confirmation:value.confirmation}]))};
           }

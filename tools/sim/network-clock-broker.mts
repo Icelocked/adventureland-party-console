@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import path from "node:path";
+import type {Socket} from 'node:net';
 type ClockSocket = {
   readyState: number;
   send(data: string): void;
@@ -29,6 +30,7 @@ export async function startNetworkClock(rate: number) {
     lastWall = epoch,
     budget = 0;
   const sockets = new Map<string, ClockSocket>();
+  const connections=new Set<Socket>();
   const server = createServer((req, res) => {
     const { url, id, scope } = clockRequest(req.url);
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -71,6 +73,7 @@ export async function startNetworkClock(rate: number) {
       }),
     );
   });
+  server.on('connection',socket=>{connections.add(socket);socket.on('close',()=>connections.delete(socket));});
   const require = createRequire(import.meta.url);
   const { WebSocketServer } = require(
     require.resolve("ws", {
@@ -81,7 +84,7 @@ export async function startNetworkClock(rate: number) {
   server.on("upgrade", (req, socket, head) => {
     const url = new URL(req.url || "/", "http://localhost"),
       id = url.searchParams.get("id");
-    if (url.searchParams.get("token") !== token || !id || retired.has(id)) {
+    if (closed || url.searchParams.get("token") !== token || !id || retired.has(id)) {
       socket.destroy();
       return;
     }
@@ -158,10 +161,13 @@ export async function startNetworkClock(rate: number) {
     close: async () => {
       closed = true;
       clearInterval(timer);
-      for (const socket of sockets.values()) socket.terminate();
-      ws.close();
-      server.closeAllConnections();
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await new Promise<void>((resolve) => {
+        server.close(()=>resolve());
+        for (const socket of sockets.values()) socket.terminate();
+        ws.close();
+        // Includes incomplete upgrades, which closeAllConnections excludes.
+        for(const socket of connections)socket.destroy();
+      });
     },
   };
 }

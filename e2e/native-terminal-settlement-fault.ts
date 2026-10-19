@@ -15,6 +15,12 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
   let retiredAt:number|undefined;
   let dropping=false,closed=false,peerReleased:any,receipt:any,nativeIssued:any,faultArmedAt:number|undefined,alignedNative:any,nativeAcknowledgement:any,nativeScatter:any;
   let arming:Promise<boolean>|undefined;
+  let statusInstalled=false;
+  async function enableStatusLoss(){
+    if(!statusInstalled){await context.route('**/party-api/status',status);statusInstalled=true;}
+    if(closed){await context.unroute('**/party-api/status',status);return false;}
+    dropping=true;return true;
+  }
   const retiredRequests=new WeakSet<Request>(),pendingConvoyHolds=new Set<Promise<void>>(),pendingBarrierHolds=new Set<Promise<void>>();
   const completionErrors:string[]=[];let naturalSettlement=false,completionResponsesLost=0,controlLossPrologueAt:number|undefined;
   let completionGate:Promise<void>|undefined,releaseCompletion:(()=>void)|undefined,completionAttempt:Promise<void>|undefined;
@@ -103,12 +109,14 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
         Math.hypot(native.x-owner.destination.x,native.y-owner.destination.y)>1 || !sample.ack)return false;
       if(forceNaturalSettlement){
         if(!controlLossPrologueAt){
-          controlLossPrologueAt=Date.now();dropping=true;
+          if(!await enableStatusLoss())return false;
+          controlLossPrologueAt=Date.now();
           ledger.push({at:controlLossPrologueAt,action:'declared-forced-natural-control-response-loss-prologue',native,acknowledgement:sample.ack,pendingCompletions:pendingBarrierHolds.size});
         }
         return false;
       }
-      alignedNative=sample;nativeAcknowledgement=sample.ack;nativeScatter=sample.scatter;faultArmedAt=Date.now();dropping=true;
+      if(!await enableStatusLoss())return false;
+      alignedNative=sample;nativeAcknowledgement=sample.ack;nativeScatter=sample.scatter;faultArmedAt=Date.now();
       ledger.push({at:faultArmedAt,action:'control-response-loss-armed-after-actual-native-alignment',native,acknowledgement:sample.ack,pendingCompletions:pendingBarrierHolds.size});if(peerReleased)releaseCompletion?.();return true;
     })();
     try{return await arming;}finally{arming=undefined;}
@@ -215,7 +223,7 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
     peerReleased={at:Date.now(),proofPath:'peer-independently-settled',coordinator:{convoyId:convoy.id,epoch:convoy.epoch,routeVersion:convoy.routeVersion,routeServer:convoy.routeServer,location:convoy.location,expected,completed:convoy.completed},actual};
     ledger.push({action:'actual-peer-independently-settled',...peerReleased});if(faultArmedAt)releaseCompletion?.();return true;
   }
-  await context.route('**/party-api/status',status);await context.route('**/party-api/movement-barrier',barrier);
+  await context.route('**/party-api/movement-barrier',barrier);
   await context.route('**/party-api/convoy-complete',complete);context.on('response',response);context.on('requestfailed',requestFailed);
   return {
     async prove(deadline:number){
@@ -249,7 +257,7 @@ export async function installTerminalSettlementFault(live:LiveGame,page:Page){
       return {startedAt,forceNaturalSettlement,controlLossPrologueAt,inductionPath:naturalSettlement?'natural-terminal-before-convoy-response-loss':'held-barrier-control-response-loss',completionResponsesLost,completionErrors,owner,nativeIssued,faultArmedAt,alignedNative,nativeAcknowledgement,nativeScatter,receipt,peerReleased,ledger,samples,forwarded,acceptedObservations,forwardingErrors,issued,acknowledgements,nativeEvents};
     },
     async finish(){if(!closed){closed=true;dropping=false;release?.();releaseCompletion?.();context.off('response',response);context.off('requestfailed',requestFailed);
-      await context.unroute('**/party-api/status',status);await context.unroute('**/party-api/movement-barrier',barrier);await context.unroute('**/party-api/convoy-complete',complete);
+      if(statusInstalled)await context.unroute('**/party-api/status',status);await context.unroute('**/party-api/movement-barrier',barrier);await context.unroute('**/party-api/convoy-complete',complete);
       await Promise.allSettled([...pendingHolds]);
       await Promise.all(transitionFlags.map(async value=>live.clients[value.name].frame.evaluate(previous=>{(window as any).__e2eObserveTransitions=previous;},value.previous)));retiredAt=Date.now();}
       return {retiredAt,forceNaturalSettlement,controlLossPrologueAt,inductionPath:naturalSettlement?'natural-terminal-before-convoy-response-loss':'held-barrier-control-response-loss',completionResponsesLost,completionErrors,owner,nativeIssued,faultArmedAt,alignedNative,nativeAcknowledgement,nativeScatter,receipt,peerReleased,ledger,samples,forwarded,acceptedObservations,forwardingErrors,pendingHeld:!!held};}

@@ -23,8 +23,20 @@ if (config && config.rate > 1) {
     return u;
   };
   const errors = [];
+  // Replacement CODE runs synchronously before its first broker handshake. Use
+  // the live same-origin game clock so startup IDs and deadlines are current.
+  let start = config.epoch;
+  try {
+    const parentClock = globalThis.parent !== globalThis && globalThis.parent.__e2eChronalClock;
+    if (parentClock && parentClock.backend === 'chronal-network' &&
+        parentClock.broker === config.broker && parentClock.epoch === config.epoch &&
+        parentClock.rate === config.rate && parentClock.token === config.token) {
+      const now = parentClock.now();
+      if (Number.isSafeInteger(now) && now >= start) start = now;
+    }
+  } catch (_) { /* Cross-origin frames join through the authenticated broker. */ }
   const clock = new VirtualClock({
-    start: config.epoch,
+    start,
     seed: 1,
     onError(error) {
       errors.push(String(error.stack || error));
@@ -55,10 +67,13 @@ if (config && config.rate > 1) {
   const state = { phase: "initial", ticks: 0, connectionAttempts: 0, connections: [] };
   const timing = { windows: 0, events: 0, wallMs: 0, maxWindowMs: 0 };
   const join = {};
+  let resolveReady, rejectReady;
+  const ready = new Promise((resolve,reject)=>{resolveReady=resolve;rejectReady=reject;});
+  ready.catch(()=>{});
   function failedConnection(record,error) {
     record.error=String(error);record.phase='failed';
     if(state.connectionAttempts<3)nativeTimeout(connect,50*state.connectionAttempts);
-    else errors.push('ChronAL clock connection failed: '+record.error);
+    else {errors.push('ChronAL clock connection failed: '+record.error);rejectReady(Error(errors.at(-1)));}
   }
   async function connect() {
     state.connectionAttempts++;
@@ -77,6 +92,7 @@ if (config && config.rate > 1) {
         timing.windows++;timing.events+=clock.events-events;
         timing.wallMs+=elapsed;timing.maxWindowMs=Math.max(timing.maxWindowMs,elapsed);
         state.ticks++;state.phase="idle";
+        resolveReady();
         return {now:clock.now,receivedWall,completedWall:NativeDate.now(),workMs:elapsed};
       };
       const endpoint=url('/clock');endpoint.protocol=endpoint.protocol==='https:'?'wss:':'ws:';
@@ -113,6 +129,7 @@ if (config && config.rate > 1) {
     timing,
     taskStats,
     join,
+    ready,
     now: () => Math.floor(clock.now),
     cpuNow: () => nativePerformance.now(),
     nativeTimeOrigin: nativePerformance.timeOrigin,

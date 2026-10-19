@@ -14,6 +14,7 @@ test.use({liveHeadless:true,movementMode:'shadow',loadout:'god',initialPosition:
 test('one deployment barrier covers the native browser and real headless workers through coordinator restart',async({live},info)=>{
   test.setTimeout(360000);
   const names=[W,P,M],samples:any[]=[],hash=(text:string)=>createHash('sha256').update(text).digest('hex');
+  await writeFile(path.join(live.deploymentPaths.directory,'observe-console-maintenance'),'Observe real loader control receipts');
   await live.post('/merchant/force-stand',{enabled:true});await live.post('/focus',{monsterFocus:[],monsterPriorities:{}});
   for(const name of [P,M]){
     await live.post('/steam/action',{character:name,action:'logout'});
@@ -93,5 +94,12 @@ test('one deployment barrier covers the native browser and real headless workers
     const postRetirementDestination=await live.admin(`output=(()=>{const p=get_player('${P}');if(!p||p.moving)throw Error('Headless Priest is not settled');for(const [dx,dy] of [[75,0],[-75,0],[0,75],[0,-75]]){const point={map:p.map,x:p.x+dx,y:p.y+dy};if(can_move({...p,going_x:point.x,going_y:point.y})&&can_move({...p,x:point.x,y:point.y,going_x:point.x,going_y:point.y}))return point;}throw Error('No native post-retirement collision-clear endpoint');})()`);
     await nativeWalking(postRetirementDestination,'after CODE retirement');
     await info.attach('native-mixed-deployment-barrier',{body:JSON.stringify({operation,journal:await store.journal(),samples}),contentType:'application/json'});
-  }finally{await info.attach('native-headless-planner-code-retirement',{body:JSON.stringify({origin,destination,movementSamples,final:await live.state()}),contentType:'application/json'});await drain.releaseSafeWait((await store.journal())?.id||'');}
+  }finally{
+    const host={at:Date.now(),lease:drain.lease,
+      file:await readFile(path.join(live.deploymentPaths.directory,'updates/pause.json'),'utf8').then(JSON.parse).catch(error=>({error:String(error)})),
+      control:await fetch(live.deploymentPaths.apiUrl+'/party-api/console-deployment').then(response=>response.json())};
+    await info.attach('native-headless-planner-code-retirement',{body:JSON.stringify({origin,destination,movementSamples,samples,host,journal:await store.journal(),final:await live.state()}),contentType:'application/json'});
+    await info.attach('native-maintenance-control-receipts',{body:await readFile(path.join(live.deploymentPaths.directory,'console-maintenance-observations.jsonl'),'utf8').catch(String),contentType:'text/plain'});
+    await drain.releaseSafeWait((await store.journal())?.id||'');
+  }
 });

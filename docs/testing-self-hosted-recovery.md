@@ -272,7 +272,97 @@ checkpoint-return leg. Retire its three routes and listeners immediately after
 proof, drain actual in-flight status/terminal callbacks, and assert clean retirement
 before normal travel. Do not change the 180s deadline or any arrival tolerance.
 
-Final focused validation: 18/18 pass with eight workers, hardware RTX 5090 and
+Earlier focused validation: 18/18 pass with eight workers, hardware RTX 5090 and
 ChronAL 4x; all 823 evidence hashes verify and all 16 owned gameplay workspaces
 are removed. Full TypeScript checks and the 340-scenario selection audit pass.
 The complete self-hosted run is the remaining release-quality validation gate.
+
+Full run 39228381291 exposes a remaining browser startup clock issue: the
+replacement CODE's runtime ID and initial combat timestamp equal the original
+pool epoch, over twenty virtual minutes behind its already-running game parent.
+Timer rebasing cannot repair synchronous Date.now values captured before join.
+Before implementation, extend the actual browser regression with a late same-
+origin iframe whose synchronous startup timestamp must match its live parent.
+Use only that parent's matching clock domain; preserve authenticated broker
+acknowledgements, timer rebasing, cross-origin isolation and no clock rewind.
+
+The new iframe regression reproduces an 8-second synchronous startup date error,
+then passes with the matching live parent's clock as the initial epoch. The actual
+browser/Node transport pair passes 2/2; relative timeout and interval counts remain
+unchanged. This establishes the clock defect separately from the farming failure.
+
+The same full run's mixed deployment stopped at 52.75 virtual seconds of body
+progress, before its 60-second release poll could expire: the clock-stall guard
+ended observation while one headless worker lacked a 250ms acknowledgement.
+Before changing gameplay, capture real host lease/control replies, the journal,
+client maintenance reports and native Node window phases. A missing acknowledgement
+must remain fatal; never evict an active actor merely to let virtual time advance.
+
+Event-entry exhaustion counted four refusals, with the second native request
+aborted and repeated in the same recovery attempt. The fixture must deliver its
+declared HTTP response before waiting for its diagnostic state GET. Keep the fresh
+GET initiated before delivery, exact coordinator/runtime/epoch/revision checks,
+the original three-refusal assertion, and additionally reject any native aborts.
+Clock diagnostics also encountered a transient state HTTP 503 before the exchange
+scenario began. Acquire fresh ownership with a bounded poll and retain read errors;
+do not infer ownership from a retired browser or retry gameplay mutations.
+
+The home-realm failure screenshot contains an empty dashboard account model
+(CURRENT/HOME UNKNOWN), not an obscured populated option. Before implementation,
+extend the real browser transport case with an external application script and a
+delayed initial authenticated join. Require its synchronous startup Date to be
+current. If reproduced, gate application script delivery on clock readiness rather
+than increasing UI timeouts. Preserve native browser networking and all realm UI
+and server/database assertions. The terminal fault never reached its intended
+final leave: earlier unfaulted barrier requests aborted during transport to
+Cyberland. Keep this distinct from failure of terminal reconciliation itself.
+
+The delayed-join external-script regression reproduces a 10.75-second stale
+application startup date. It then stalls in shutdown after both pages close;
+inspect owned broker sockets, including TCP connections not yet upgraded. Stop
+accepting connections before destroying every owned TCP/WebSocket connection so
+a late handshake cannot escape cleanup. Do not discard live gameplay actors.
+
+The terminal fixture currently intercepts and parses every status POST before
+the response-loss fault is armed, adding CDP traffic during otherwise unfaulted
+travel. Register that interceptor only at the verified native settlement phase;
+retire it on finish as before. Retain all forwarding, ownership, one-leave,
+acknowledgement, peer completion, geometry and deadline assertions.
+
+The Boo Boo cache case proves the exact owned remainder was reused once, then
+fails its later reward milestone after repeated ordinary-travel regrouping.
+Its report-abort interceptor remains installed both before the declared hold
+and throughout the post-fault journey. Restrict installation to the declared
+communication fault and remove it immediately after the observed stopped hold.
+Keep the real resumed route/cache/Town/reward assertions and passive receipts.
+
+The next focused run passes all ten full-run failures, 24/25 overall. Its paired
+Hawk first-attack observer reports a 1124ms readiness age. Before changing the
+1000ms production/assertion limit, compare observer and CODE clock domains: the
+observer currently adds CODE's coordinator offset to the game window's Date,
+whereas the actual gate adds it to CODE's Date. Those separately acknowledged
+actors can occupy adjacent 250ms windows. Record both raw timestamps and evaluate
+the unchanged readiness and expiry assertions using the actual CODE clock.
+
+The repeat passes both Hawk variants but exposes two fixture checks: the added
+abort assertion includes an unrelated Priest return-planner cancellation, while
+all three declared Warrior refusals arrive. Scope it to the exact rejected request
+IDs and retain the complete cancellation ledger. The home picker passes visibility
+then closes before the separate click. Keep opening, actual option click and exact
+selected-label confirmation together inside the existing 20-second idempotent UI
+selection budget; issue the mutating realm action only after that confirmation.
+
+The next 25-case pass validates 24 cases and selects the correct home destination,
+but the added selected-label assertion expected option text while this trigger
+displays the realm value `SR_USI`. Check that exact visible ID token (not a prefix
+that also matches US II), then rerun both home-realm journeys before full CI.
+
+Latest local validation: the 25-case eight-worker set passes 24 cases; its sole
+remaining failure is the added home-picker label assertion. After correcting only
+that expected ID, both native home journeys pass, with all 103 evidence hashes
+verified and both workspaces removed. All 25 distinct focused scenarios are thus
+validated across their retained runs, including all ten failures from run
+39228381291. Both actual browser/Node startup transport cases pass (15 evidence
+hashes verified). Final TypeScript checks pass. Candidate `64c76ca1b04a` is complete,
+source-matched and deep-verified; active `7881dbb8120d` remains unchanged. A fresh
+complete self-hosted run is still required before claiming the branch green.
