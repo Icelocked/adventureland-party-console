@@ -124,3 +124,11 @@ test('bank tab shows marks, unmarks, withdrawals, rules and bank changes as fast
   // The bank section polls every 2 s; a change shows within one poll plus the request.
   for (const value of latency.bankChange) expect(value).toBeLessThan(4000);
 });
+
+test('console deployment reports the missing activation record the loader would get a 404 for', async ({ app }, info) => {
+  const control = await (await fetch(`${app.url}/party-api/console-deployment`)).json();
+  const record = await fetch(`${app.url}/CODE/adventure_land/activation.json`);
+  await info.attach('console-deployment', { body: JSON.stringify({ control, record: record.status }), contentType: 'application/json' });
+  expect(control).toEqual(expect.objectContaining({ activation: null, consoleMaintenance: null }));
+  expect(record.status).toBe(404);
+});

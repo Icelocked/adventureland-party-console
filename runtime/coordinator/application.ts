@@ -2313,7 +2313,13 @@ export function startCoordinatorApplication(
                 upgradePreviews.install(router);
                 router.get('/party-api/console-maintenance', (_req, res) => res.json(consoleUpdate.status(party.statuses,
                   [...party.headlessSlots, ...party.steamMembers], !!party.steamSwitch && party.steamSwitch.phase !== 'complete')));
-                router.get('/party-api/console-deployment',(_req,res)=>res.json({serverNow:Date.now(),consoleMaintenance:consoleUpdate.current()}));
+                const codeActivation = () => {
+                  try { return String(JSON.parse(fs_regular.readFileSync(__dirname + '/../CODE/adventure_land/activation.json', 'utf8')).id || '') || null; }
+                  catch { return null; }
+                };
+                // activation tells loaders whether this CODE directory has an activation
+                // record, so they stop polling activation.json for a 404.
+                router.get('/party-api/console-deployment',(_req,res)=>res.json({serverNow:Date.now(),consoleMaintenance:consoleUpdate.current(),activation:codeActivation()}));
                 router.get('/party-api/console-runtime', (_req,res)=>res.json({characters:Object.fromEntries(Object.entries(party.statuses).map(([name,report])=>[name,{
                   name,seenAt:report.seenAt,connected:report.connected,ctype:report.ctype,type:report.type,codeHash:report.codeHash,rip:report.rip,
                   consoleMaintenance:report.consoleMaintenance,map:report.map,in:report.in,x:report.x,y:report.y,
