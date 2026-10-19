@@ -1331,7 +1331,7 @@
   root.__partyCatalogDiagnostic = function (monsterId, itemId) {
     return { generation: catalogGeneration, known: catalogKnown, prepared: catalogPrepared, preparing: catalogPreparing,
       trackerHome: nativeHomeDropTables()[monsterId], itemCached: !!itemWorldCache[itemId],
-      cachedSources: itemWorldCache[itemId] && itemWorldCache[itemId].drops };
+      cachedSources: itemWorldCache[itemId] && itemWorldCache[itemId].drops.filter(function (source) { return source.monsterId === monsterId; }).slice(0, 24) };
   };
 
   function nativeLootTable(name) {
