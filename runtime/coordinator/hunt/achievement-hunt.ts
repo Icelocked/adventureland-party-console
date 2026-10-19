@@ -3,6 +3,7 @@
 // manual-monster convoy (docs/achievement-hunt.md § Failure modes).
 import type { ReturnLocation } from "../events/return-types.ts";
 import { defaultPassiveRule, type PassiveRule } from "../navigation/passive-settings.ts";
+import { keepNewestAchievementBlacklist } from "../navigation/rare-retention.ts";
 import {
   bossesOnGround,
   chooseAchievementTarget,
@@ -247,6 +248,7 @@ export function createAchievementHunt(state: AchievementHuntState, ports: Achiev
         monsterId: target.id, at: ports.now(), deaths: target.deaths, characters: died,
         reason: `${target.deaths} death${target.deaths === 1 ? "" : "s"} while farming for achievements`,
       };
+      keepNewestAchievementBlacklist(state.achievementBlacklist);
     }
     ports.persist();
   }
