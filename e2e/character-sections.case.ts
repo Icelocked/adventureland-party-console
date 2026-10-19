@@ -14,10 +14,13 @@ test('character sections collapse independently and retain inventory equipment r
   expect(positions[0]!.y).toBeLessThan(positions[1]!.y);expect(positions[1]!.y).toBeLessThan(positions[2]!.y);
   for(const button of [inventory,equipped]) if(await button.getAttribute('aria-expanded')==='true')await button.click();
   await expect(inventory).toHaveAttribute('aria-expanded','false');await expect(inventory).toContainText('/42');
+  const bag=merchant.locator(`[id="${await inventory.getAttribute('aria-controls')}"]`);
+  await expect(bag.getByText('sword',{exact:true})).toBeHidden();
   const other=warrior.getByRole('button',{name:/^Inventory/}),before=await other.getAttribute('aria-expanded');
-  await inventory.focus();await page.keyboard.press('Enter');await expect(inventory).toHaveAttribute('aria-expanded','true');
+  await inventory.focus();await page.keyboard.press('Enter');await expect(inventory).toHaveAttribute('aria-expanded','true');await expect(bag.getByText('sword',{exact:true})).toBeVisible();
   await expect(other).toHaveAttribute('aria-expanded',before!);
   await equipped.click();await expect(equipped).toHaveAttribute('aria-expanded','true');
+  const gear=merchant.locator(`[id="${await equipped.getAttribute('aria-controls')}"]`);await expect(gear.getByText('Helmet',{exact:true})).toBeVisible();
   const log=merchant.getByRole('button',{name:'Combat log',exact:true});
   await log.click();await expect(merchant.getByText('No combat events yet',{exact:true})).toBeVisible();
   await expect(merchant.getByRole('button',{name:'Combat log',exact:true})).toHaveCount(1);
@@ -32,7 +35,9 @@ test('character sections collapse independently and retain inventory equipment r
   await expect(merchant.getByRole('button',{name:'Merchant restock',exact:true})).toHaveAttribute('aria-expanded','false');
   await expect(merchant.getByRole('button',{name:/^Inventory/})).toHaveAttribute('aria-expanded','false');
   await expect(merchant.getByRole('button',{name:'Equipped',exact:true})).toHaveAttribute('aria-expanded','false');
-  await app.restartCoordinator();await expect.poll(async()=>(await app.state()).restockPolicies.M.hp.min).toBe(17);
+  await expect(gear.getByText('Helmet',{exact:true})).toBeHidden();
+  await page.setViewportSize({width:800,height:1000});
   await info.attach('character-sections-collapsed',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
+  await app.restartCoordinator();await expect.poll(async()=>(await app.state()).restockPolicies.M.hp.min).toBe(17);
   await info.attach('character-section-order-and-policy',{body:JSON.stringify({positions,restock:(await app.state()).restockPolicies.M}),contentType:'application/json'});
 });
