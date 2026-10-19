@@ -476,6 +476,22 @@ Failure inventory, retention:
 Tests: `scripts/tests/coordinator-retention.test.cjs` (9-11) and
 `scripts/tests/achievement-hunt.test.cjs` (9, on the hunt's own add).
 
+Saves by content (P1) of the Achievement Hunt document: the writer
+serializes it once per settings save and writes it only when the text differs
+from the last one it wrote. The journal's own comparison
+(`CoordinatorJsonlStore.set`) stays as a second guard, and a storage without
+one gets the same single record per change.
+
+Failure inventory, saves by content:
+
+12. Unchanged Achievement Hunt state appends a record on a storage without its
+    own comparison.
+13. A change after an unchanged save, including one made in place inside a
+    nested object, stays unsaved.
+14. A failed write counts as saved, so the next save skips the retry.
+
+Tests: `scripts/tests/coordinator-persistence-writer.test.cjs` (12-14) and
+`e2e/achievement-hunt.spec.ts` (12, through the real coordinator).
 
 ### Crash recovery (P6)
 

@@ -224,3 +224,18 @@ test('shutdown saves every Achievement Hunt field inside settings for a build wi
  for(const field of achievementFields)assert.deepEqual(settings[field],state[field],field);
  assert.deepEqual(settings.farmingProfiles.W,JSON.parse(JSON.stringify(state.farmingProfiles.W)));
 });
+test('the Achievement Hunt document is written only when its content changes',()=>{
+ // docs/efficiency.md (Achievement Hunt state), failure inventory items 12-14, on a storage without its own comparison.
+ const writes=[];let fail=false;
+ const state={aldata:{},farmingProfiles:{W:achievementProfile('Farming Goo')}};
+ for(const field of achievementFields)state[field]=state.farmingProfiles.W[field];
+ const writer=createCoordinatorPersistence(state,{set(key,value){if(key!=='party_dashboard_achievement_state_v1')return;if(fail)throw Error('disk');writes.push(JSON.parse(JSON.stringify(value)));}});
+ writer.settings();writer.settings();writer.settings();
+ assert.equal(writes.length,1,'unchanged state appends nothing');
+ state.farmingProfiles.W.achievementTarget.deaths=1;writer.settings();
+ assert.equal(writes.length,2);assert.equal(writes[1].profiles.W.achievementTarget.deaths,1,'a change in place saves');
+ state.farmingProfiles.W.achievementMessage='Waiting: W is dead';fail=true;
+ assert.throws(()=>writer.settings(),/disk/);fail=false;writer.settings();
+ assert.equal(writes.length,3);assert.equal(writes[2].profiles.W.achievementMessage,'Waiting: W is dead','a failed write is retried');
+ writer.flush();assert.equal(writes.length,3,'shutdown keeps the unchanged document');
+});
