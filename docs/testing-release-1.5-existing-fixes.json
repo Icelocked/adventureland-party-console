@@ -9,14 +9,15 @@
     "tests": 98,
     "pass": 98,
     "fail": 0,
-    "evidence": "Local .build/release-issue-audit/retained-regressions.tap"
+    "evidence": "Local .build/release-1.5-validation/existing-fixes/retained-regressions.tap"
   },
   "issues": {
     "23": {
       "source": "runtime/lucky-slot-tracking.ts:93",
       "behavior": "42-way posterior, >=100 samples and >=99.9% ordinary probability, recomputed ruledOut set; nextSlot skips eliminated; UI count/row retained",
       "e2e": "lucky discovery rules out ordinary slots and recomputes after new evidence",
-      "status": "requires root browser E2E before closure"
+      "status": "validated: retained regressions and focused browser/native gameplay E2E passed",
+      "evidenceArchive": "integrated-first"
     },
     "57": {
       "source": [
@@ -25,7 +26,8 @@
       ],
       "behavior": "WeakMap caches key by array/length/context; retained tombstones Set; randomized invalid/duplicate timestamp equivalence and warm-cache operation count passed",
       "e2e": "armadillo passing scene in live-hunt.spec.ts",
-      "status": "isolated regressions passed; preserve root gameplay evidence"
+      "status": "validated: retained regressions and focused browser/native gameplay E2E passed",
+      "evidenceArchive": "native-first"
     },
     "83": {
       "ancestorCommits": [
@@ -38,14 +40,16 @@
         "warrior recovers a blocked Targetron approach in the reported UHills layout",
         "planned Main hawks recover ranged actors from disconnected approach ring points"
       ],
-      "status": "requires root gameplay E2E before closure"
+      "status": "validated: retained regressions and focused browser/native gameplay E2E passed",
+      "evidenceArchive": "native-first"
     },
     "106": {
       "ancestorCommit": "4677651f7feee18bd9075349e5dfed33e7f23190",
       "source": "runtime/characters/native-planner.ts:sliceProfile",
       "behavior": "raw own-data descriptor saves native is_hidden, finally restores; normal/throw/cancel + CODE retirement isolated regressions passed",
       "e2e": "existing terrain scenarios exercise actual native planner",
-      "status": "isolated regressions passed; preserve root gameplay evidence"
+      "status": "validated: retained regressions and focused browser/native gameplay E2E passed",
+      "evidenceArchive": "native-first"
     }
   },
   "disposableSetup": "Existing native game assets provided read-only through a worktree junction; no live process or CODE changed."
