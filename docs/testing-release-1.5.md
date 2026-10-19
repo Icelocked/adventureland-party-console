@@ -26,8 +26,8 @@ $env:E2E_BROWSER_RENDERING='hardware'
 $env:E2E_EXPECT_GPU='NVIDIA GeForce RTX 5090'
 npm run typecheck
 npm run test:e2e:selection
-npm test -- --project=console --workers=1 --grep 'merchant donation|offline|never-loaded|item batches|inventory batches|bank selections|exchange reward selections|Steam pointer|metrics persists|metrics collector|monster rewards|access code|game.*card|character.*stats|catalog comparison|item titles|lucky discovery|equipment comparison|exact selection, rollback'
-npm test -- --project=live --workers=1 --grep 'accepted native catalogs|native tracker home rewards|compound from native bank|gathering tool crafting settings|missing fishing tool|missing mining tool|exchange rewards that merge|a missed fishing|armadillo Hunt kills|healthy warrior reaches an engaged Phoenix|warrior recovers a blocked Targetron|a merchant (str|luck) stat scroll|a stale stat mark|bank uses all initial slots|offline merchant logs in|offline merchant work permits'
+npm run test:e2e -- --project=console --workers=1 --grep 'merchant donation|offline|never-loaded|item batches|inventory batches|bank selections|exchange reward selections|Steam pointer|metrics persists|metrics collector|monster rewards|access code|game.*card|character.*stats|catalog comparison|item titles|lucky discovery|equipment comparison|exact selection, rollback'
+npm run test:e2e -- --project=live --workers=1 --grep 'accepted native catalogs|native tracker home rewards|compound from native bank|gathering tool crafting settings|missing fishing tool|missing mining tool|exchange rewards that merge|a missed fishing|armadillo Hunt kills|healthy warrior reaches an engaged Phoenix|warrior recovers a blocked Targetron|a merchant (str|luck) stat scroll|a stale stat mark|bank uses all initial slots|offline merchant logs in|offline merchant work permits'
 npm run test:e2e:verify
 ```
 
