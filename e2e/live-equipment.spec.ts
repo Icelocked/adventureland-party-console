@@ -182,3 +182,14 @@ test('Loaded Die equips through the priest inventory menu into the native orb sl
   await info.attach('loaded-die-native-equipment',{body:JSON.stringify({seed,after,restarted,events:await live.clients[name].events()}),contentType:'application/json'});
   await info.attach('loaded-die-priest-inventory',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
 });
+
+// Failure inventory: missing tools spend gold without consent; independent toggles
+// overwrite each other; restart loses consent; an existing tool gets duplicated.
+test('gathering tool crafting settings are opt in and persist independently', async ({live},info)=>{
+  const initial=(await live.state()).merchantAutomations;
+  expect(initial['craft fishing tools']).toBe(false);expect(initial['craft mining tools']).toBe(false);
+  await live.post('/merchant/routine-priorities',{priorities:{},enabled:{'craft fishing tools':true}});
+  await live.restartCoordinator();
+  await expect.poll(async()=>{const a=(await live.state()).merchantAutomations;return [a['craft fishing tools'],a['craft mining tools']];}).toEqual([true,false]);
+  await info.attach('gathering-craft-settings',{body:JSON.stringify((await live.state()).merchantAutomations),contentType:'application/json'});
+});

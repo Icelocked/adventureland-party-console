@@ -581,6 +581,7 @@
   var realmPlayers = [];
   var gatheringMode = null;
   var gatheringModes = [];
+  var gatheringAutoCraft = {};
   if (root.__merchantGatheringTimer) clearInterval(root.__merchantGatheringTimer);
   root.__merchantGatheringTimer = null;
   root.__merchantGatheringGeneration = (Number(root.__merchantGatheringGeneration) || 0) + 1;
@@ -6337,7 +6338,7 @@
     var needsBank = names.some(function (name) { return itemAvailability(name).onPlayer < needs[name]; });
     if (needsBank) await merchantVisitBank(command, activity);
     for (var n = 0; n < names.length; n += 1) {
-      await retrieveFromBankUntil(names[n], needs[n]);
+      await retrieveFromBankUntil(names[n], needs[names[n]]);
     }
     var purchasableStatScrolls = { strscroll: true, intscroll: true, dexscroll: true, vitscroll: true };
     for (var requiredIndex = 0; requiredIndex < names.length; requiredIndex += 1) {
@@ -6939,6 +6940,26 @@
     return true;
   }
 
+  async function prepareBankCompounds(command, activity) {
+    var groups=(command.compounds||[]).filter(function(group){return (group.items||[]).some(function(mark){return mark.storage;});});
+    if (!groups.length) return;
+    await merchantVisitBank(command,activity);
+    for(var gi=0;gi<groups.length;gi++) for(var mi=0;mi<groups[gi].items.length;mi++) {
+      var mark=groups[gi].items[mi],source=mark.storage;
+      if(!source || mark.storageReceived) continue;
+      var bankItem=character.bank && character.bank[source.pack] && character.bank[source.pack][source.slot];
+      if(!bankItem || bankItem.l || !sameItemState(bankItem,mark.item)) throw Error('Reserved bank compound item changed');
+      var before=character.items.filter(function(item){return sameItemState(item,mark.item);}).length;
+      await bank_retrieve(source.pack,source.slot);
+      var deadline=Date.now()+2500;
+      while(character.items.filter(function(item){return sameItemState(item,mark.item);}).length<=before && Date.now()<deadline) await sleep(100);
+      if(character.items.filter(function(item){return sameItemState(item,mark.item);}).length<=before) throw Error('Bank compound withdrawal unconfirmed');
+      mark.storageReceived=true;
+      (command._merchantWithdrawalsCompleted ||= []).push({pack:source.pack,slot:source.slot,item:mark.item});
+    }
+    activity.push({level:'info',message:'Withdrew reserved bank compound triplets'});
+  }
+
   async function prepareBankUpgrades(command, activity) {
     if (!(command.bankUpgradeRules || []).length) return;
     await merchantVisitBank(command, activity);
@@ -7031,6 +7052,7 @@
         if (typeof statMark.slot === "string" && sameItemState(character.slots[statMark.slot], statMark.item))
           await unequip(statMark.slot);
       }
+      await prepareBankCompounds(command, activity);
       if ((command.bankUpgradeRules || []).length) await prepareBankUpgrades(command, activity);
       await preloadUpgradeOfferings(command, activity);
       await preloadStatScrolls(command, activity);
@@ -7946,6 +7968,17 @@
     return null;
   }
 
+  // The server clears the exchange placeholder before add_item, so a stackable
+  // reward merges into a carried stack and exchange() reports no slot (#28).
+  // Rewards are the slots that are new or grew since the operation began.
+  function exchangeGains(held) {
+    return character.items.map(function (item, slot) {
+      var before = held[slot];
+      return item && !item.l && item.name !== "placeholder" &&
+        (!sameItemState(item, before) || itemQuantity(item) > itemQuantity(before)) ? fingerprint(item) : null;
+    }).filter(Boolean);
+  }
+
   async function merchantExchange(command) {
     var activity = [], lines = [], rewards = (command.exchangeRewards || []).slice();
     (command.exchanges || []).forEach(function (line) {
@@ -8049,7 +8082,7 @@
               !item.l && itemQuantity(item) >= required;
           });
           if (slot < 0) throw new Error("Exchange stack changed for " + line.id);
-          var result;
+          var result, held = character.items.map(fingerprint);
           if (line.reward) {
             // Select the verified stack explicitly; exchange_buy() otherwise
             // chooses the first stack, which may be locked or too small.
@@ -8062,8 +8095,9 @@
             await verifyMerchantItemMarks();
             result = await exchange(slot);
           }
-          if (result && Number.isInteger(result.num) && character.items[result.num])
-            rewards.push(fingerprint(character.items[result.num]));
+          exchangeGains(held).forEach(function (gain) {
+            if (!rewards.some(function (reward) { return sameItem(gain, reward); })) rewards.push(gain);
+          });
           var remaining = lines.slice(lineIndex).map(function (pendingLine, index) {
             return { id: pendingLine.id, level: pendingLine.level,
               ...(pendingLine.reward ? {reward:pendingLine.reward} : {}),
@@ -9354,6 +9388,24 @@
     return totals;
   }
 
+  /** Whether a finished channel succeeded. Current clients resolve the cast with `found`; older
+   *  ones resolve when the channel starts, so wait for it to end and read the game's cooldown,
+   *  which the server starts (skill_timeout) only on a success. */
+  async function gatheringOutcome(mode, result, castAt, current) {
+    if (result && typeof result.found === "boolean") return result.found;
+    var wait = function (ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); };
+    var channelling = function () { return !!(character.c && character.c[mode]); };
+    var appear = Date.now() + 1500;
+    while (!channelling() && Date.now() < appear && serverCooldownUntil(mode) <= castAt) {
+      await wait(100); if (current && !current()) return false;
+    }
+    var end = castAt + (Number(G.skills[mode] && G.skills[mode].duration_max) || 15000) + 5000;
+    while (channelling() && Date.now() < end) { await wait(200); if (current && !current()) return false; }
+    var settle = Date.now() + 1500;
+    while (serverCooldownUntil(mode) <= Date.now() && Date.now() < settle) { await wait(100); if (current && !current()) return false; }
+    return serverCooldownUntil(mode) > Date.now();
+  }
+
   async function reportGatheringResult(mode, before, result, current) {
     var fishing = mode === "fishing";
     if (result && result.found === false) {
@@ -9426,6 +9478,14 @@
     if (carried()) {
       session.baseline = gatheringBaseline();
       return true;
+    }
+    if (gatheringAutoCraft[session.mode] === true) {
+      var toolOrder = await request('/merchant/order', {method:'POST', body:{
+        buys:[], crafts:[{id:session.tool,quantity:1,level:0}]
+      }});
+      gatheringRetryAt = Date.now() + 5000;
+      gatheringStatus('Crafting replacement ' + session.tool, 'info', {jobId:toolOrder.jobId});
+      return false;
     }
     await request("/merchant/gather-status", { method: "POST", body: {
       character: character.name, mode: session.mode, noTool: true,
@@ -9770,13 +9830,20 @@
         var beforeGathering = gatheringInventoryTotals();
         gatheringStatus(mode === "fishing" ? "Fishing…" : "Mining…", "info");
         attempt.phase = "casting";
+        var castAt = Date.now();
         var gatheringResult = await use_skill(mode);
         if (!current()) return;
-        await reportGatheringResult(mode, beforeGathering, gatheringResult, current);
+        var caught = await gatheringOutcome(mode, gatheringResult, castAt, current);
         if (!current()) return;
-        session.cooldownUntil = Date.now() + (Number(G.skills[mode] && G.skills[mode].reuse_cooldown) || 0);
+        await reportGatheringResult(mode, beforeGathering, { found: caught }, current);
+        if (!current()) return;
+        // The server starts the reuse cooldown (skill_timeout) only on a success; a miss
+        // costs MP only and can be cast again at once.
+        var serverCooldown = serverCooldownUntil(mode);
+        session.cooldownUntil = !caught ? 0 : serverCooldown > Date.now() ? serverCooldown :
+          Date.now() + (Number(G.skills[mode] && G.skills[mode].reuse_cooldown) || 0);
         gatheringCooldowns[mode] = session.cooldownUntil;
-        attempt.phase = "cooldown";
+        attempt.phase = caught ? "cooldown" : "recast";
         if (freeInventorySlots() < 3 && generation === root.__merchantGatheringGeneration) {
           await depositGatheringGains(session, current);
           if (current()) await smart_move(destination);
@@ -10945,6 +11012,7 @@
       statusPhase = "apply merchant settings";
       bankboiStorage = state.bankboiStorage === true;
       bankStaging = state.bankStaging !== false;
+      gatheringAutoCraft = state.gatheringAutoCraft || {};
       var nextStandListings = state.standListings || gatheringStandListings;
       if (JSON.stringify(nextStandListings) !== JSON.stringify(gatheringStandListings) && gatheringSession)
         gatheringSession.atStandForCooldown = false;
