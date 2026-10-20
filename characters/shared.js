@@ -1642,13 +1642,20 @@
     return itemWorldCache[itemName];
   }
 
-  function itemDefinition(item) {
-    if (!item || !G.items[item.name]) return null;
-    var definition = G.items[item.name];
-    var skin = item.skin || definition.skin;
+  function itemSheetSprite(skin) {
     var position = G.positions[skin];
     var pack = position && G.imagesets[position[0] || "pack_20"];
-    var safeDefinition = safeItemDefinition(definition);
+    return pack && position ? {
+      url: "https://adventure.land" + pack.file,
+      tileSize: pack.size,
+      columns: pack.columns,
+      rows: pack.rows,
+      x: position[1],
+      y: position[2],
+    } : null;
+  }
+
+  function itemProperties(item) {
     var calculatedProperties = {};
     try {
       var calculated = item_properties(item) || {};
@@ -1663,12 +1670,32 @@
     } catch (_error) {
       // Base definitions still render if a legacy game build cannot calculate properties.
     }
+    return calculatedProperties;
+  }
+
+  function itemTitle(item) {
+    return item.p && G.titles && G.titles[item.p] ? safeFields(G.titles[item.p]) : null;
+  }
+
+  function itemDefinition(item) {
+    if (!item || !G.items[item.name]) return null;
+    var definition = G.items[item.name];
+    // merchantCatalog().allItems carries every per-type field below. Once a
+    // status response clears needsCatalog, the coordinator holds that catalog,
+    // so reports carry only what can differ between copies of one item.
+    if (catalogKnown) {
+      var perCopy = { properties: itemProperties(item) };
+      var title = itemTitle(item);
+      if (title) perCopy.title = title;
+      if (item.skin && item.skin !== definition.skin) perCopy.sprite = itemSheetSprite(item.skin);
+      return perCopy;
+    }
     return {
-      definition: safeDefinition,
+      definition: safeItemDefinition(definition),
       upgradeable: !!definition.upgrade,
       compoundable: !!definition.compound,
       buyable: !!itemSeller(item.name),
-      properties: calculatedProperties,
+      properties: itemProperties(item),
       scaling: safeFields(definition.upgrade || definition.compound || {}),
       maxLevel: maximumItemLevel(definition),
       usage: itemUsage(definition),
@@ -1677,15 +1704,8 @@
       // Until background preparation finishes, the dashboard uses its catalog.
       world: itemWorldCache[item.name],
       // The copy's title (docs/item-titles.md); the dashboard names it and adds its stats.
-      title: item.p && G.titles && G.titles[item.p] ? safeFields(G.titles[item.p]) : null,
-      sprite: pack && position ? {
-        url: "https://adventure.land" + pack.file,
-        tileSize: pack.size,
-        columns: pack.columns,
-        rows: pack.rows,
-        x: position[1],
-        y: position[2],
-      } : null,
+      title: itemTitle(item),
+      sprite: itemSheetSprite(item.skin || definition.skin),
     };
   }
 
@@ -1826,7 +1846,7 @@
       var item = G.items[name];
       if (item && item.type === "bank_key" && item.unlocks) floorKeys[item.unlocks] = {
         id: name, name: item.name || name,
-        sprite: itemDefinition({ name: name }) && itemDefinition({ name: name }).sprite,
+        sprite: itemSheetSprite(item.skin),
       };
     });
     return Object.keys(definitions).map(function (pack) {
@@ -3018,15 +3038,9 @@
       oneShotEpoch: scatterEpoch,
       threats: threats,
       conditions: activeConditions(),
-      items: character.items.map(inventoryOperationEntry),
-      slots: Object.keys(character.slots || {}).reduce(function (out, slot) {
-        var item = character.slots[slot];
-        if (item) out[slot] = { item: fingerprint(item), meta: itemDefinition(item) };
-        return out;
-      }, {}),
-      bank: bankSnapshot(),
       bankVaults: bankVaultCatalog(),
     };
+    attachStatusInventory(status);
     if (!catalogKnown && catalogPrepared) {
       status.merchantCatalogVersion = merchantCatalogVersion;
       status.travelPlaces = travelPlaces();
@@ -3134,6 +3148,49 @@
     convoySignal = Object.assign({}, signal, {localDeadline:received + Math.max(0, Number(signal.validUntil)-sentAt-network)});
   }
 
+  // Status reports omit items, slots and bank while they match the revision the
+  // coordinator acknowledged (docs/efficiency.md, Inventory deltas). The key is
+  // every input of the three builders, so a change rebuilds them once and the
+  // next report carries them.
+  var statusInventoryCache = null, statusInventoryAcknowledged = null, statusInventoryFullAt = 0, statusInventoryCount = 0;
+  var statusInventorySession = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  function statusInventory() {
+    var key = JSON.stringify([character.items, character.slots || null, character.bank || null,
+      activeUpgrade && [activeUpgrade.slot, activeUpgrade.item]]);
+    // Before the catalog acknowledgement itemDefinition reads the world cache, which fills in over time.
+    if (catalogKnown && statusInventoryCache && statusInventoryCache.key === key) return statusInventoryCache;
+    statusInventoryCache = { key: catalogKnown ? key : null, revision: statusInventorySession + "." + (++statusInventoryCount),
+      items: character.items.map(inventoryOperationEntry),
+      slots: Object.keys(character.slots || {}).reduce(function (out, slot) {
+        var item = character.slots[slot];
+        if (item) out[slot] = { item: fingerprint(item), meta: itemDefinition(item) };
+        return out;
+      }, {}),
+      bank: bankSnapshot() };
+    return statusInventoryCache;
+  }
+  function attachStatusInventory(status) {
+    var inventory = statusInventory();
+    status.inventoryRevision = inventory.revision;
+    // A full inventory goes out at least every 10 s, so a coordinator that lost it recovers without a
+    // refusal, and an observer of ordinary reports (live-catalog.spec.ts) sees three within 45 s.
+    if (inventory.revision === statusInventoryAcknowledged && Date.now() - statusInventoryFullAt < 10000) return status;
+    return withStatusInventory(status);
+  }
+  function withStatusInventory(status) {
+    var inventory = statusInventory();
+    status.inventoryRevision = inventory.revision;
+    status.items = inventory.items;
+    status.slots = inventory.slots;
+    status.bank = inventory.bank;
+    return status;
+  }
+  function acknowledgeStatusInventory(body, value) {
+    if (body.combatOnly || body.combatWait) return;
+    statusInventoryAcknowledged = value && typeof value.inventoryRevision === "string" ? value.inventoryRevision : null;
+    if (Array.isArray(body.items)) statusInventoryFullAt = Date.now();
+  }
+
   function request(path, options) {
     options = options || {};
     if (path === '/status' && options.body && options.body.groupedCombat) sampleTravelReport(options.body);
@@ -3157,6 +3214,7 @@
           (root.__partyTravelTransport || (root.__partyTravelTransport={})).barrier={at:Date.now(),durationMs:duration,processingMs:Math.max(0,(t.sentAt||0)-(t.receivedAt||0)),eventLoopMaxMs:t.eventLoopMaxMs,outcome:'success'};
         }
         if (path === '/status') {
+          if (options.body) acknowledgeStatusInventory(options.body, value);
           acceptTravelResponse(value, transportStart, !!(options.body && (options.body.combatOnly || options.body.combatWait)));
           // The ordinary status tick can still be awaiting this exit handler.
           // Fast heartbeat ownership must fence it at the transport boundary.
@@ -3168,6 +3226,13 @@
         resolve(value);
       }).fail(function (xhr, status, error) {
         var httpStatus = Number(xhr && xhr.status) || 0;
+        // A coordinator without this inventory revision (restart, another runtime) refuses the report unapplied.
+        if (path === '/status' && httpStatus === 409 && xhr.responseJSON && xhr.responseJSON.code === "inventory-required" &&
+            options.body && !Array.isArray(options.body.items)) {
+          statusInventoryAcknowledged = null;
+          resolve(request(path, Object.assign({}, options, { body: withStatusInventory(Object.assign({}, options.body)) })));
+          return;
+        }
         var kind = status === "timeout" ? "timeout" : status === "parsererror" ? "invalid-json" :
           status === "abort" ? "aborted" : httpStatus ? "http" : "network";
         rememberConvoyStatusRequest(convoyStatusStarted, kind);
@@ -3211,8 +3276,10 @@
       else history.failure = { at: now, kind: outcome, durationMs: Math.max(0, Math.round(now - started)) };
     } catch (_) {}
   }
-  function passingKey(target) {
-    return JSON.stringify([target.server || reunionRealm(), target.map || character.map,
+  // isPassingEncounter passes the realm it already read, so a key costs no
+  // second read of parent.server_region through the CODE facade.
+  function passingKey(target, realm) {
+    return JSON.stringify([target.server || (realm === undefined ? reunionRealm() : realm), target.map || character.map,
       String(target.in == null ? character.in || character.map : target.in), String(target.id)]);
   }
   function passingEncounterReport() {
@@ -3230,13 +3297,20 @@
     if (typeof passiveTravelInterruptible==='function' && passiveTravelInterruptible() && passiveStopRequired(target))return false;
     var rule=passiveHunting.rules[target.mtype];
     if (committedHuntEncounter(target) || typeof huntTravelDefense === "function" && huntTravelDefense() && !(rule && rule.enabled && rule.keepMoving)) return false;
-    var key = passingKey(target), now = Date.now() + coordinatorClockOffset;
+    var realm = reunionRealm(), key = passingKey(target, realm), now = Date.now() + coordinatorClockOffset;
     if (target.dead || target.hp === 0) return false;
     // Keep cache ownership inside this function: standalone runtime harnesses
     // install it without the surrounding script. Weak keys release replaced
     // coordinator lists; native deaths appended in place invalidate by length.
     var indexes = isPassingEncounter.indexes || (isPassingEncounter.indexes = new WeakMap());
-    var context = JSON.stringify([reunionRealm(), character.map, String(character.in || character.map)]);
+    // isPassingEncounter runs for every visible monster on each combat and
+    // travel check (docs/efficiency.md, CT8). It keeps the last context text
+    // and serializes again only when the realm, map or instance changes.
+    var place = isPassingEncounter.place, instance = String(character.in || character.map);
+    if (!place || place.realm !== realm || place.map !== character.map || place.instance !== instance)
+      place = isPassingEncounter.place = {realm:realm,map:character.map,instance:instance,
+        context:JSON.stringify([realm, character.map, instance])};
+    var context = place.context;
     function recent(list) {
       if (!list || !list.length) return false;
       var cached = indexes.get(list);
@@ -4447,7 +4521,7 @@
       entry.operation = { type: pending.scroll.indexOf("cscroll") === 0 ? "compound" : "upgrade",
         fromLevel: Number(pending.level) || 0, toLevel: (Number(pending.level) || 0) + 1,
         chance: typeof pending.chance === "number" ? pending.chance : null,
-        sprite: (itemDefinition({ name: "placeholder" }) || {}).sprite || null };
+        sprite: G.items.placeholder ? itemSheetSprite(G.items.placeholder.skin) : null };
     }
     return entry;
   }
@@ -12556,6 +12630,17 @@
   }
 
   function eventMonsterTypes(eventName) {
+    // activeCombatEvent derives this for every event on each target check, many
+    // times per combat tick. The list depends only on the game data, and a game
+    // update loads a new G object, so eventMonsterTypes caches it per G and
+    // event name. Callers get a copy.
+    var cache = eventMonsterTypes.cache;
+    if (!cache || cache.game !== G) cache = eventMonsterTypes.cache = { game: G, types: new Map() };
+    if (!cache.types.has(eventName)) cache.types.set(eventName, deriveEventMonsterTypes(eventName));
+    return cache.types.get(eventName).slice();
+  }
+
+  function deriveEventMonsterTypes(eventName) {
     var definition = G.events && G.events[eventName];
     var candidates = [];
     if (definition && definition.sprite) candidates.push(definition.sprite);
@@ -14661,8 +14746,26 @@
     var defense=typeof huntTravelDefense==='function' && huntTravelDefense() && (convoyTraveling.defenseTargets||[]).some(function(t){return passingKey(t)===passingKey(target);});
     if(!defense && !isAttackingPartyMember(target))return false;
     var deaths = typeof groupedCombat !== 'undefined' && groupedCombat && groupedCombat.deaths || [];
-    if(deaths.some(function(d){return String(d.id)===String(target.id) && d.map===character.map &&
-      String(d.in==null?d.map:d.in)===String(character.in==null?character.map:character.in) && d.server===reunionRealm();}))return false;
+    // departureTargetEngaged runs for every visible monster that attacks the
+    // party on each travel and target check, and the list holds up to 512
+    // tombstones (runtime/combat/queue.ts), so it indexes the ids that apply
+    // here once per list. The coordinator replaces the list or appends to it.
+    // A new list, a new length or another realm, map or instance rebuilds the
+    // index. The cache lives on the function, as in isPassingEncounter, so
+    // extracted test harnesses install it too.
+    var instance = String(character.in==null?character.map:character.in), realm = reunionRealm();
+    var context = realm + '|' + character.map + '|' + instance;
+    var indexes = departureTargetEngaged.deathIds || (departureTargetEngaged.deathIds = new WeakMap());
+    var index = indexes.get(deaths);
+    if(!index || index.length !== deaths.length || index.context !== context){
+      var ids = new Set();
+      deaths.forEach(function(d){
+        if(d.map===character.map && String(d.in==null?d.map:d.in)===instance && d.server===realm)ids.add(String(d.id));
+      });
+      index = {length:deaths.length,context:context,ids:ids};
+      indexes.set(deaths,index);
+    }
+    if(index.ids.has(String(target.id)))return false;
     return true;
   }
   function departureCombatPending() {

@@ -137,20 +137,41 @@ async function main() {
     request.on('error', reject);
     request.setTimeout(10000, () => request.destroy(new Error('Coordinator readiness timed out')));
   });
-  async function heartbeat(catalogs = false) {
-    for (const report of game.reports(catalogs)) await new Promise((resolveReport, reject) => {
+  // Like characters/shared.js attachStatusInventory: items, slots and bank go
+  // out on a change, on a refusal and at least every 10 s.
+  const inventories = {};
+  function inventoryDelta(report) {
+    const fields = ['items', 'slots', 'bank'].filter(field => Object.hasOwn(report, field));
+    const key = JSON.stringify(fields.map(field => report[field]));
+    const held = inventories[report.name] ||= { count: 0, fullAt: 0 };
+    if (held.key !== key) { held.key = key; held.revision = 'e2e-' + report.name + '.' + (++held.count); }
+    const delta = { ...report, inventoryRevision: held.revision };
+    if (held.acknowledged === held.revision && Date.now() - held.fullAt < 10000) for (const field of fields) delete delta[field];
+    return { full: { ...report, inventoryRevision: held.revision }, delta, held };
+  }
+  function post(report) {
+    return new Promise((resolveReport, reject) => {
       const body = JSON.stringify(report);
       const request = http.request({ hostname: '127.0.0.1', port, path: '/party-api/status', method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } }, response => {
         let result = '';
         response.on('data', chunk => { result += chunk; });
-        response.on('end', () => response.statusCode === 200 ? resolveReport() :
-          reject(new Error('Game fixture heartbeat failed: ' + response.statusCode + ' ' + result)));
+        response.on('end', () => resolveReport({ status: response.statusCode, result }));
       });
       request.on('error', reject);
       request.setTimeout(10000, () => request.destroy(new Error('Game fixture heartbeat timed out')));
       request.end(body);
     });
+  }
+  async function heartbeat(catalogs = false) {
+    for (const report of game.reports(catalogs)) {
+      const { full, delta, held } = inventoryDelta(report);
+      let sent = delta, reply = await post(delta);
+      if (reply.status === 409 && !Object.hasOwn(delta, 'items')) reply = await post(sent = full);
+      if (reply.status !== 200) throw new Error('Game fixture heartbeat failed: ' + reply.status + ' ' + reply.result);
+      held.acknowledged = JSON.parse(reply.result).inventoryRevision;
+      if (Object.hasOwn(sent, 'items')) held.fullAt = Date.now();
+    }
   }
   await heartbeat(true);
   // Serial recurring reports avoid overlapping samples while retaining real coordinator timers.

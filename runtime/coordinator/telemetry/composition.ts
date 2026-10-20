@@ -7,6 +7,7 @@ interface TelemetryPorts<Timer> {
   owned: (name: string) => unknown;
   now: () => number;
   persistHistory: () => void;
+  persistHistoryNow?: () => void;
   every: (callback: () => void, milliseconds: number) => Timer;
   cancel: (timer: Timer) => void;
   data: Parameters<typeof createCoordinatorGameData>[2];
@@ -30,6 +31,7 @@ export function createCoordinatorTelemetry<Timer>(
     owned,
     now: ports.now,
     persist: ports.persistHistory,
+    persistNow: ports.persistHistoryNow,
   });
   let definitions = createMapDefinitions(() => data.load());
   let data = createCoordinatorGameData(directory, version, ports.data);

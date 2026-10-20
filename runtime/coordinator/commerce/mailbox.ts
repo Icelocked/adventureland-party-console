@@ -2,6 +2,8 @@ import {requestObject} from '../http/contracts.ts';
 import type {MailInbox} from '../http/mail-inbox.ts';
 
 export interface SentMailRecord {id:string;recipient:string;subject:string;message:string;sent:string;item?:unknown;quantity?:number}
+/** The read marks the settings key keeps; 2000 mail ids are about 70 KB. */
+export const SEEN_IDS_KEPT = 2000;
 export interface MailboxState {settings:{autoCollect:boolean;autoDelete:boolean};seenIds:string[];outbox:SentMailRecord[]}
 export function initialMailbox(value:unknown):MailboxState {
   const saved=requestObject(value),settings=requestObject(saved.settings);
@@ -33,7 +35,8 @@ export function createMailbox(inner:MailInbox,state:{mailbox?:MailboxState},port
   return {snapshot,refresh,collect:async id=>{await inner.collect(id);return snapshot();},remove:async id=>{await inner.remove(id);return snapshot();},
     complete(id,success,error){inner.complete(id,success,error);void refresh().catch(()=>{});},
     async configure(input){const settings=requestObject(input);if(typeof settings.autoCollect!=='boolean'||typeof settings.autoDelete!=='boolean')throw Error('Choose both mailbox automation settings');saved.settings={autoCollect:settings.autoCollect,autoDelete:settings.autoDelete};ports.persist();return refresh();},
-    seen(){saved.seenIds=[...new Set([...saved.seenIds,...messages().flatMap(m=>typeof m.id==='string'?[m.id]:[])])];ports.persist();return snapshot();},
+    // seenIds only marks listed mail as read. It keeps the newest SEEN_IDS_KEPT ids, so the settings key stops growing with each mail received.
+    seen(){saved.seenIds=[...new Set([...saved.seenIds,...messages().flatMap(m=>typeof m.id==='string'?[m.id]:[])])].slice(-SEEN_IDS_KEPT);ports.persist();return snapshot();},
     removeSent(id){saved.outbox=saved.outbox.filter(m=>m.id!==id);ports.persist();return snapshot();},
     sent(id,input){const mail=requestObject(input);if(saved.outbox.some(m=>m.id===id)||typeof mail.recipient!=='string'||typeof mail.subject!=='string'||typeof mail.message!=='string')return;
       const source=requestObject(mail.source);saved.outbox.unshift({id,recipient:mail.recipient,subject:mail.subject,message:mail.message,sent:new Date(ports.now()).toISOString(),...(source.item?{item:structuredClone(source.item)}:{}),...(typeof mail.quantity==='number'?{quantity:mail.quantity}:{})});ports.persist();}

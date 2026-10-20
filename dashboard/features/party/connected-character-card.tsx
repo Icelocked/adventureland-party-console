@@ -33,6 +33,7 @@ import type { PassivePatch } from './passive-hunting-menu';
 import type { PartyState } from './party-state';
 import type { FarmingPolicy } from './farming-policy';
 import type { MerchantCatalogItem } from './merchant-catalog-item';
+import { audited } from './field-read-audit';
 
 export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
   name,
@@ -49,11 +50,11 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
     committedLiveRecord(name);
   }, [name, vitals]);
   const baseCharacter = model.state.characters[name];
-  const char = useMemo(() => ({
+  const char = useMemo(() => audited('merged', {
     ...baseCharacter,
     ...diagnostics,
     ...vitals,
-  }) as Char, [baseCharacter, diagnostics, vitals]);
+  } as Char), [baseCharacter, diagnostics, vitals]);
   const presence = useCharacterData(name, 'presence');
   const {
     state,
