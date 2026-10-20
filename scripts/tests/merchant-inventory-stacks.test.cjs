@@ -81,3 +81,13 @@ test('permission endpoint checks current reservations rather than the old dispat
  check();assert.equal(allowed,true);
  party.marked={M:[{slot:15,item:s.items[1].item}]};check();assert.equal(allowed,false);
 });
+
+// Failure inventory: a per-copy report carries no definition, so the stack
+// limit falls to 1 and the merchant never merges partial stacks.
+test('per-copy reports read the stack limit from the catalog',()=>{
+ const slim=(slot,name,q)=>({slot,item:{name,q},meta:{properties:{}}});
+ const s={name:'M',items:[slim(10,'gem1',43),slim(28,'gem1',1)]};
+ assert.equal(plan({merchantCharacter:'M'},s),null);
+ const merchantCatalog={allItems:[{id:'gem1',meta:{definition:{s:9999}}}]};
+ assert.deepEqual([plan({merchantCharacter:'M',merchantCatalog},s).to,plan({merchantCharacter:'M',merchantCatalog},s).from],[10,28]);
+});

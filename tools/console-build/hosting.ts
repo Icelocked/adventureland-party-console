@@ -63,6 +63,10 @@ async function publishCode(app:string,deployed:string,signal:AbortSignal,activat
   signal.throwIfAborted();await atomicJson(path.join(deployed,'activation.json'),{id:activation?.id||randomUUID(),manifest,maintenance:activation?.maintenance||null,serverNow:Date.now()});
   return manifest;
 }
+async function activationId(deployed:string):Promise<string|null>{
+  const record=await readJson<{id?:string}>(path.join(deployed,'activation.json')).catch(()=>undefined);
+  return record?.id||null;
+}
 /** Host gateway owns authorization; this module owns immutable code activation. */
 export async function createManagedConsole(root:string,services:Services,options:ManagedOptions){
   const store=new ConsoleBuildStore(root),dashboard=new ImmutableDashboard();
@@ -178,7 +182,9 @@ export async function createManagedConsole(root:string,services:Services,options
   return {
     code:{async route(req:import('node:http').IncomingMessage,res:import('node:http').ServerResponse,pathname:string){
       if(pathname==='/party-api/console-deployment'){
-        res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({serverNow:Date.now(),consoleMaintenance:maintenance.lease||null}));return true;
+        // activation tells loaders whether activation.json exists, so they stop polling it for a 404.
+        const activation=await activationId(deployed);
+        res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({serverNow:Date.now(),consoleMaintenance:maintenance.lease||null,activation}));return true;
       }
       if(!pathname.startsWith('/CODE/adventure_land/'))return false;
       if(!['GET','HEAD'].includes(req.method||'')){res.writeHead(405);res.end();return true;}

@@ -31,6 +31,7 @@ import { routineFor } from '../../../runtime/coordinator/merchant/routines';
 import { coordinatorMerchantTransferBlocked } from '../../../runtime/coordinator/merchant/job-policy';
 import { collectsPartyItems, pickupReason } from '../../../runtime/coordinator/merchant/pickup-jobs';
 import { useCharacterData } from './dashboard-live';
+import { audited } from './field-read-audit';
 
 export const MerchantCardControls = memo(function MerchantCardControls({
   state: baseState,
@@ -70,7 +71,7 @@ export const MerchantCardControls = memo(function MerchantCardControls({
   const [cleanupResult, setCleanupResult] = useState<string | null>(null);
   const inventory = useCharacterData(state.merchantCharacter || "", 'inventory');
   const merchantStatus = state.merchantCharacter ? state.characters[state.merchantCharacter] : null;
-  const merchant = merchantStatus ? {...merchantStatus, ...inventory} : null;
+  const merchant = merchantStatus ? audited('merged', {...merchantStatus, ...inventory}) : null;
   const inventoryAtCapacity = Array.isArray(merchant?.items) && merchant.items.filter((entry) => !entry).length <= 3;
   const readiness = (mode: "fishing" | "mining") => {
     const remaining = Math.max(

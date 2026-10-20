@@ -2,6 +2,7 @@ import { requestObject, requestText } from "../http/contracts.ts";
 import { statScrollName } from "../../prim-stack.ts";
 import type { Item, InventoryEntry } from "../contracts/item.ts";
 import type { CommandOutcome } from "../navigation/manual-commands.ts";
+import { entryMeta } from "./catalog-meta.ts";
 
 interface Definition {
   stat?: unknown;
@@ -9,7 +10,7 @@ interface Definition {
 }
 interface Equipment {
   item: Item;
-  meta?: { definition?: Definition };
+  meta?: InventoryEntry['meta'];
 }
 interface Status {
   items?: ((InventoryEntry & Equipment) | null)[];
@@ -28,6 +29,7 @@ interface StatState {
   statuses: Record<string, Status | undefined>;
   statScrolls: Record<string, Mark[] | undefined>;
   bankSnapshot?: { packs?: Record<string, (InventoryEntry | null)[] | undefined> } | null;
+  merchantCatalog?: unknown;
 }
 interface Ports {
   persist(): void;
@@ -121,7 +123,7 @@ export function createStatScrollCommands(state: StatState, ports: Ports) {
     if (inventory && body.remove !== true) ports.queue([name], "stat scrolls");
   }
   function validate(body: Request, equipped: Equipment, stat: string): CommandOutcome {
-    const definition = equipped.meta?.definition;
+    const definition = entryMeta(state.merchantCatalog, equipped)?.definition;
     if (!definition || !Number(definition.stat))
       return failure("this equipment does not accept stat scrolls");
     if (!supported.has(stat)) return failure("unsupported stat scroll");

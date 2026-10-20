@@ -31,13 +31,21 @@ export function installSkillRuntime(root: CombatRoot) {
     // Normalize the local skill world, never mutate the native player object.
     // Offensive skill definitions retain their own damage_type precedence.
     const actor: Actor = { ...character, damage_type: effectiveAttackDamageType(character, typeof G === 'undefined' ? undefined : G) };
-    const context: CombatContext = shared.combatContext?.() || {
-      leader: '', allies: [], monsters: [], mode: 'blocked', event: null, observedAt: 0,
+    // combatContext copies every visible monster, the largest console self
+    // time in a fighter thread (docs/efficiency.md, CT7). busy(), attack() for
+    // classes without attack skills and projectile pruning never read it, so
+    // world() builds it on the first read and keeps it for this world.
+    let context: CombatContext | undefined;
+    const build = (): CombatContext => {
+      const built: CombatContext = shared.combatContext?.() || {
+        leader: '', allies: [], monsters: [], mode: 'blocked', event: null, observedAt: 0,
+      };
+      if (host.is_disabled?.(actor)) built.mode = 'blocked';
+      return built;
     };
-    if (host.is_disabled?.(actor)) context.mode = 'blocked';
     const skills: Partial<Record<SkillId, SkillDefinition>> = G.skills;
     const result: SkillWorld = {
-      actor, context, skills, now: Date.now(),
+      actor, get context() { return context ??= build(); }, skills, now: Date.now(),
       item: name => (G.items as Record<string, { wtype?: string; type?: string; charge?: number }>)[name],
       condition: name => (G.conditions as Record<string, ReturnType<SkillWorld['condition']>>)[name],
       cooldown: id => id === 'invis' && !!shared.merchantVisibilityActive?.() || Number(host.next_skill?.[id]) > Date.now(),

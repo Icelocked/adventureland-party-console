@@ -50,3 +50,52 @@ test('metrics collector retries persisted browser frames after CODE replacement'
   const matching=received.flatMap((b:any)=>b.frames.filter((f:any)=>f.sequence===sequence));expect(matching).toHaveLength(1);expect(matching[0].last.gold).toBe(111);
   await info.attach('metrics-browser-replacement-retries',{body:JSON.stringify({pending,received}),contentType:'application/json'});
 });
+
+test('metrics outbox keeps ring keys only for unconfirmed frames across a reload',async({page},info)=>{
+  // Failure inventory: docs/efficiency.md, Persistence, P11. A confirmed frame keeps its
+  // ring key; a reload loses or changes an unconfirmed frame; the cleanup removes the slot
+  // of a queued frame or a key that is not the collector's.
+  const built=await build({entryPoints:['runtime/characters/metrics.ts'],bundle:true,write:false,format:'iife',platform:'browser'});
+  const script=built.outputFiles[0].text,key='party-metrics-v1:BrowserOutboxE2E';
+  const at=Math.floor(Date.now()/10000)*10000,sample={at,gold:4242,luck:1,ping:20,level:1,xp:0,maxXp:100};
+  const queued={at,sequence:41,observedMs:1000,partial:false,damage:[{monster:'goo',skill:'attack',amount:7,hits:1}],credits:[],kills:[],loot:[],first:sample,last:sample,server:'USII'};
+  await page.goto('/');
+  // The 1.5 collector kept every confirmed frame's ring key until the ring wrapped.
+  await page.evaluate(({key,queued})=>{
+    for(let sequence=1;sequence<=40;sequence++)localStorage.setItem(key+':frame:'+sequence,JSON.stringify({...queued,sequence}));
+    localStorage.setItem(key+':frame:41',JSON.stringify(queued));
+    localStorage.setItem(key,JSON.stringify({runtime:'outbox-e2e',sequence:41,queue:[41],lost:false,goldMovement:0}));
+    localStorage.setItem('cm_BrowserOutboxE2E_other','["fixture"]');
+  },{key,queued});
+  const ringKeys=()=>page.evaluate(key=>Object.keys(localStorage).filter(name=>name.startsWith(key+':frame:')).sort(),key);
+  const header=()=>page.evaluate(key=>JSON.parse(localStorage.getItem(key)||'null'),key);
+  const install=async(deliver:boolean)=>{
+    await page.addScriptTag({content:script});
+    await page.evaluate(deliver=>{
+      const host=window as any;host.metricsReceived=[];
+      host.installPartyMetrics({now:()=>Date.now(),current:()=>true,connected:()=>true,name:()=> 'BrowserOutboxE2E',own:()=>true,ownedCharacter:()=>true,
+        context:()=>({server:'USII',map:'main',instance:'main',party:[]}),sample:()=>({gold:1,luck:1,ping:20,level:1,xp:0,maxXp:100}),
+        storage:localStorage,send:async(batch:any)=>{if(!deliver)throw Error('Declared unavailable coordinator');host.metricsReceived.push(batch);return {ok:true};}});
+    },deliver);
+  };
+  await install(false);
+  expect(await ringKeys(),'install removes the confirmed 1.5 ring keys and keeps the queued slot').toEqual([key+':frame:41']);
+  await expect.poll(async()=>(await header()).queue.length,{timeout:15_000}).toBeGreaterThanOrEqual(3);
+  const pending=await header();
+  expect(await ringKeys()).toEqual(pending.queue.map((sequence:number)=>key+':frame:'+(sequence%1024)).sort());
+  await page.reload();await install(true);
+  await expect.poll(()=>page.evaluate(sequences=>{
+    const sent=(window as any).metricsReceived.flatMap((batch:any)=>batch.frames.map((frame:any)=>frame.sequence));
+    return sequences.every((sequence:number)=>sent.includes(sequence));
+  },pending.queue),{timeout:15_000}).toBe(true);
+  const received=await page.evaluate(()=>(window as any).metricsReceived);
+  const frames=received.flatMap((batch:any)=>batch.frames);
+  for(const sequence of pending.queue)expect(frames.filter((frame:any)=>frame.sequence===sequence),'frame '+sequence+' sent once').toHaveLength(1);
+  const original=frames.find((frame:any)=>frame.sequence===41);
+  expect(original.first.gold).toBe(4242);expect(original.damage).toEqual(queued.damage);
+  expect(received.every((batch:any)=>batch.runtime==='outbox-e2e')).toBe(true);
+  // Every confirmed frame leaves the store; at most the frames still queued keep a key.
+  await expect.poll(async()=>{const queue=(await header()).queue;return JSON.stringify(await ringKeys())===JSON.stringify(queue.map((sequence:number)=>key+':frame:'+(sequence%1024)).sort())&&queue.length<=2;},{timeout:15_000}).toBe(true);
+  expect(await page.evaluate(()=>localStorage.getItem('cm_BrowserOutboxE2E_other'))).toBe('["fixture"]');
+  await info.attach('metrics-outbox-ring-keys',{body:JSON.stringify({pending,received,ringKeys:await ringKeys()}),contentType:'application/json'});
+});
