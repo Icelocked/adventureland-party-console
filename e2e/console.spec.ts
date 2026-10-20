@@ -5,6 +5,7 @@ import './release-ui.case';
 import './market-preferences.case';
 import { test, expect } from './fixtures';
 import './gear-comparison.case';
+import './comparison-portrait.case';
 import './steam-audio.case';
 import './tracktrix-drilldown.case';
 import './item-card.case';
