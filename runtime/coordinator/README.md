@@ -254,6 +254,17 @@ not activate it.
 
 # Character coordinator
 
+Phoenix patrol splits the fighters instead of moving the party as one convoy
+(`navigation/phoenix-patrol.ts`, `navigation/rare-hunting.ts`, and the `search`,
+`converge` and `engage` controls in `characters/shared.js`). Each fighter takes
+the nearest unchecked, unclaimed spawn region by planned route. A sighting starts
+a converge stage that holds fire until every fighter is within 300 units, unless
+the Phoenix is already being fought. After a kill, only the leader loots; the
+others pre-position for the respawn. Starting a patrol no longer launches a
+party convoy. Failure inventory: `e2e/phoenix-search-failures.md`. Validate
+`live-phoenix-search.spec.ts` and publish character and coordinator assets
+through the ordinary full restart.
+
 Pane 1's final seven bank cells are reserved for transfers only while a saved
 BankBoi exists, including an offline worker. Without BankBois, native sorting,
 deposits, stack homes and the dashboard use the full pane. Adding the first
