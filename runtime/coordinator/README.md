@@ -531,6 +531,16 @@ journey in `e2e/live-economy.spec.ts`, with conserved cargo and restart evidence
 Publish character and coordinator assets through the supported full restart;
 CoordinatorOnly does not activate the inventory change.
 
+Realm hopping honors a saved party blacklist (`realmHopBlacklist`,
+`navigation/realm-hop-blacklist.ts`, `POST /party-api/realm/hop-blacklist` with
+`{realms}`). Boss chase and daily-event chase never pick a listed realm, and a
+trip whose realm becomes listed ends and returns home. PVP is always excluded.
+Manual realm changes and the return home are not hop choices and are unaffected.
+The control sits under the chase settings in Interface settings. Failure inventory:
+`e2e/realm-hop-blacklist-failures.md`. Validate `live-realm-hop-blacklist.spec.ts`
+and `scripts/tests/realm-hop-blacklist.test.cjs`; activate with the
+coordinator/dashboard-only restart.
+
 Marked withdrawals create merchant jobs by default at priority 90. The checkbox
 in Merchant settings controls the separate Marked withdrawals routine. Merchant
 heartbeats queue one bank visit for pending plain withdrawal marks, including

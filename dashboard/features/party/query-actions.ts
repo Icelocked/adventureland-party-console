@@ -34,6 +34,7 @@ export const actionDomains = {
   '/bank-party': ['core', 'config', 'bank'],
   '/realm/switch': inventory,
   '/realm/boss-chase': core,
+  '/realm/hop-blacklist': ['core', 'config'],
   '/steam/action': inventory,
   '/steam/recover': inventory,
   '/roster/create': core,
