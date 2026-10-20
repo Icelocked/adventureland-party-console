@@ -1300,7 +1300,7 @@ Publish character, coordinator and dashboard assets with the full restart.
 
 Prim stacking (upstream #65) raises a merchant inventory item's hidden grace without a
 level attempt: Mark for upgrade → Prim stack… posts `/party-api/prim-stack` with a
-target grace (0.5–15) and a method. Primling only adds +0.5 per Primling; Primling +
+target grace (0.5-15) and a method. Primling only adds +0.5 per Primling; Primling +
 stat scroll adds +1 and consumes the grade's scroll count (1/10/100/1000) of the item's
 current stat, so `stat_type` never changes. Offering grade does not change either gain,
 so only Primlings are used. The coordinator validates the item, method and supplies in

@@ -30,7 +30,7 @@ on the game server.
 7. **Lucky-slot sampling polluted.** Prim-stack operations must not be counted
    as upgrade-scroll rolls for lucky-slot discovery.
 8. **Invalid requests accepted.** Items outside the merchant inventory, items
-   that cannot be upgraded, targets outside 0.5–15, missing Primlings, and a
+   that cannot be upgraded, targets outside 0.5-15, missing Primlings, and a
    changed item are rejected before any work is queued.
 9. **Result invisible.** The upgrade chances panel shows the current grace
    from the server preview, and the job reports grace before and after.
