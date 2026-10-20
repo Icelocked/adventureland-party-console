@@ -361,6 +361,7 @@
   var lastCommand = Number(root.__partyLastCommand) || 0;
   var partyLocation = null;
   var leader = null;
+  var tank = null;
   var followLeader = false;
   var desiredPartyMembers = [];
   var partySyncBusy = false;
@@ -11606,6 +11607,7 @@
       farmTravelPaused = !!state.farmTravelPaused;
       bankQueued = !!state.bankQueued;
       leader = state.leader || null;
+      tank = state.designatedTank || null;
       var followedBeforeRefresh = followLeader;
       followLeader = !!state.followLeader;
       partyTownActive = character.ctype !== "merchant" && !!state.partyTownActive;
@@ -17075,6 +17077,10 @@
     if(!character.cave && root.partyQueueClient && root.partyQueueClient.independent && root.partyQueueClient.independent.movement())return true;
     if (typeof frankyCombatActive === "function" && frankyCombatActive()) return false;
     if(!character.cave && root.partyQueueClient && root.partyQueueClient.formation && root.partyQueueClient.formation.movement())return true;
+    // The priest formation orbits melee classes around their target, which pulls
+    // the designated tank off it. tankMovementTick owns the tank's movement while it has a
+    // straight step; a target behind terrain is left to the formation's terrain recovery.
+    if (designatedTankHolds() && (!target || target.dead || tankStep(target))) return false;
     var context = [character.map, character.in, character.rip, joinedEvent, eventTraveling].join(":");
     if (formationState.mapContext !== context) {
       formationState.mapContext = context; formationState.approachProgress = null; formationState.recovery = null;
@@ -17527,6 +17533,8 @@
         return enemy && enemy.type === "monster" && enemy.visible && !enemy.dead && enemy.target === character.name;
       }).sort(function (a, b) { return combatDistance(a) - combatDistance(b); })[0];
     if (!attacker || attacker.dead) { kiteState.targetId = null; return false; }
+    // The tank stands in its own target's attack range on purpose. Other attackers still kite it.
+    if (designatedTankHolds() && target && attacker.id === target.id) { kiteState.targetId = null; return false; }
     if (target && (target.id === attacker.id || eventBossMovement(target)) && !is_in_range(target) && await approachCombatTarget(target)) return true;
     if (kiteState.targetId !== attacker.id) { kiteState.targetId = attacker.id; kiteState.direction = 1; }
     var dx = character.x - attacker.x, dy = character.y - attacker.y;
@@ -17630,6 +17638,7 @@
   }
   async function approachCombatTarget(target) {
     if (typeof frankyCombatActive === "function" && frankyCombatActive()) return frankyMovementTick(target);
+    if (designatedTankHolds()) return tankMovementTick(target);
     if (!target || target.dead) { eventCombatDetour=null; return false; }
     var delta = combatDistance(target) - desiredCombatRange();
     var tolerance = Math.min(3, Math.max(0.5, Number(character.range) * 0.01));
@@ -17651,6 +17660,58 @@
       blockingAttacker: blockedKite && blockedKite.mode === "blocked" ? blockedKite.blockingAttacker : null,
       reason: "No collision-safe combat approach satisfying attacker clearance" };
     return false;
+  }
+
+  // Generalizes Franky's off-tank "stack tight" clamp (see the stackRange branch in
+  // frankyMovementTick) to normal grouped combat: the designated tank holds near-melee
+  // range regardless of its own weapon range, so a ranged class can be assigned to tank.
+  // The designated tank holds its ground only while it can take hits: above half HP and,
+  // when the party has a priest, inside that priest's heal range. Otherwise it moves like
+  // any other fighter. On 2026-10-13 a holding tank died on Spooky Town booboos while the
+  // priest sat 150-250 units away behind terrain.
+  function designatedTankHolds() {
+    if (typeof tank === "undefined" || !tank || tank !== character.name) return false;
+    if (Number(character.hp) < Number(character.max_hp) * 0.5) return false;
+    var roster = currentPartyList();
+    var priests = (partyPositions || []).filter(function (member) {
+      return member && member.ctype === "priest" && member.name !== character.name && roster.indexOf(member.name) >= 0;
+    });
+    if (!priests.length) return true;
+    return formationMembers().some(function (member) {
+      return member.ctype === "priest" && member.name !== character.name &&
+        formationDistance(character, member) <= (Number(member.range) || 0);
+    });
+  }
+  // The tank's own move toward its target: hold when already in melee range, otherwise one
+  // straight step at up to five angles. Null when terrain blocks every angle.
+  function tankStep(target) {
+    var stackRange = Math.min(desiredCombatRange(), 30);
+    if (combatDistance(target) <= stackRange + 5) return { hold: true };
+    var destination = combatApproachPoint(target, stackRange);
+    var dx = destination.x - character.x, dy = destination.y - character.y;
+    var step = Math.min(Math.hypot(dx, dy), Math.max(1, Number(character.speed || 40) * 0.6));
+    var angle = Math.atan2(dy, dx);
+    for (var offsets = [0, 0.4, -0.4, 0.8, -0.8], i = 0; i < offsets.length; i++) {
+      var point = { x: character.x + Math.cos(angle + offsets[i]) * step,
+        y: character.y + Math.sin(angle + offsets[i]) * step };
+      if (safeCombatPoint(point, target)) return { point: point };
+    }
+    return null;
+  }
+  function tankMovementTick(target) {
+    if (!target || target.dead) return false;
+    var step = tankStep(target);
+    if (step && step.hold) {
+      resetCombatMovement();
+      root.partyCombatPosition = { at: Date.now(), mode: "tank-holding", movementOwner: "combat",
+        target: target.id, reason: "Holding melee range as the designated tank" };
+      return true;
+    }
+    if (step) return sendCombatMove(target, step.point, "tank-approaching");
+    resetCombatMovement();
+    root.partyCombatPosition = { at: Date.now(), mode: "blocked", movementOwner: "combat",
+      target: target.id, reason: "No terrain-clear approach for the designated tank" };
+    return true;
   }
 
   root.sharedRoutine = {
@@ -17955,7 +18016,8 @@
     queueEvidence: function(target,state,action){return root.partyQueueClient && root.partyQueueClient.evidence(target,state,action);},
     usesGroupedCombat: groupedFarming,
     defensiveFormationMove: function () {
-      if (!groupedFarming()) return false;
+      // The tank takes hits instead of evading; groupedDefensiveTarget makes the attacker its target.
+      if (!groupedFarming() || designatedTankHolds()) return false;
       var threat = Object.keys(parent.entities || {}).map(function (id) { return parent.entities[id]; })
         .filter(function (enemy) { return enemy && enemy.visible && !enemy.dead && enemy.type === "monster" &&
           (!enemy.map || enemy.map === character.map) && (enemy.in == null || character.in == null || enemy.in === character.in) &&
@@ -18031,6 +18093,8 @@
       return !!(leaderStatus && leaderStatus.team === eventTeam(character));
     },
     isLeader: function () { return (leader || character.name) === character.name; },
+    hasDesignatedTank: function () { return !!tank; },
+    isTank: function () { return !!tank && tank === character.name; },
     combatContext: function () {
       var event = character.cave ? { name: "cave", types: [] } : activeCombatEvent();
       var roster = currentPartyList();
@@ -18049,7 +18113,7 @@
       var eventCombat = !!character.cave || event && (joinedEvent === event.name ||
         G.maps[character.map] && G.maps[character.map].event === event.name ||
         monsters.some(function(m){return event.types.indexOf(m.mtype) >= 0;}));
-      return { leader: leader || character.name, allies: allies, monsters: monsters,
+      return { leader: leader || character.name, tank: tank || null, allies: allies, monsters: monsters,
         event: eventCombat ? event.name : null,
         mode: root.sharedRoutine.isOccupied() || isLiveAbtesting() ? "blocked" : eventCombat ? "event" : !character.cave && farmingMode === "scatter" ? "scatter" : "grouped",
         observedAt: parent.socket && parent.socket.connected ? Date.now() : 0 };

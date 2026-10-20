@@ -46,6 +46,7 @@ export const publicStateFields = [
   "eventReturn",
   "deferredEventReturns",
   "leader",
+  "designatedTank",
   "followers",
   "eventsByCharacter",
   "eventSelectionsByCharacter", "eventPrioritiesByCharacter", "eventLimitsByCharacter", "eventAttendance",

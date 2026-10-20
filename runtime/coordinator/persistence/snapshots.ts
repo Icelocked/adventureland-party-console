@@ -98,6 +98,7 @@ export const settingsFields = [
   "goldTargets",
   "location",
   "leader",
+  "designatedTank",
   "followers",
   "eventsByCharacter",
   "eventSelectionsByCharacter", "eventPrioritiesByCharacter", "eventLimitsByCharacter", "eventAttendance",

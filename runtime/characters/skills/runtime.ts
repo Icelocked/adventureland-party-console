@@ -38,7 +38,7 @@ export function installSkillRuntime(root: CombatRoot) {
     let context: CombatContext | undefined;
     const build = (): CombatContext => {
       const built: CombatContext = shared.combatContext?.() || {
-        leader: '', allies: [], monsters: [], mode: 'blocked', event: null, observedAt: 0,
+        leader: '', tank: null, allies: [], monsters: [], mode: 'blocked', event: null, observedAt: 0,
       };
       if (host.is_disabled?.(actor)) built.mode = 'blocked';
       return built;
