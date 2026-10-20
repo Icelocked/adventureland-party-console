@@ -5,6 +5,13 @@ import { read, useVisible } from './query-cache';
 import { usePartyAction } from './query-actions';
 import type { DungeonView } from '../../../runtime/dungeons/contracts';
 
+// crypto.randomUUID exists only in secure contexts; a console opened over plain HTTP by
+// LAN address lacks it, while getRandomValues is always available.
+function operationId(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
 export function useDungeons() {
   const client = useQueryClient(),
     visible = useVisible(),
@@ -23,7 +30,7 @@ export function useDungeons() {
     try {
       const result = await mutation.mutateAsync({
         path: '/daily-dungeons',
-        body: { ...body, operationId: crypto.randomUUID() },
+        body: { ...body, operationId: operationId() },
       });
       client.setQueryData(['party', 'daily-dungeons'], result);
       return true;
