@@ -1,7 +1,7 @@
 # Giveaway entry: locating the host, bank, and expiry: failure inventory
 
 Written before the change (2026-10-14). Upstream #129 reports `Giveaway entry failed
-— <character> was not visible at the market` and "also cannot join giveaways in
+ -  <character> was not visible at the market` and "also cannot join giveaways in
 bank". Live on 2026-10-14 the coordinator queued 18 giveaways from buffett (EU IV)
 at 23:07:12 from ALData marketplace data, then deleted them without a log line while
 the merchant ran higher-priority work: marketplace-sourced jobs expired two minutes
