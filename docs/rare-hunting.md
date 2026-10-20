@@ -52,7 +52,7 @@ checked without a sighting, a new cycle starts.
 
 Each region is covered by observation points with a conservative rectangular
 footprint inside the game's 700-by-500 visibility half-extents. Four regions need
-one point; the tall western Mainland region gets overlapping north–south points.
+one point; the tall western Mainland region gets overlapping north-south points.
 A point counts after a one-second dwell, and only with a fresh observation from
 that fighter's current runtime. A failed route or 30 seconds without movement
 skips the point. A region whose points were all skipped is marked incomplete for
