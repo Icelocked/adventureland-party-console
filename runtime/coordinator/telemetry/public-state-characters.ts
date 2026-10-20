@@ -52,6 +52,7 @@ export function diagnosticCharacters(statuses: Readonly<Record<string, Presentat
     "monsterAchievementKills",
     "monsterAchievements",
     "tracktrix",
+    "cosmetics",
     "anniversaryVisit",
     "anniversaryState",
     "lootStatus",

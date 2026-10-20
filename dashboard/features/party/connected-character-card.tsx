@@ -25,6 +25,7 @@ import { memo, useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import { committedLiveRecord } from './live-metrics';
 import { useCharacterData } from './dashboard-live';
 import { ConnectedInventory } from './connected-inventory';
+import { CosmeticsPanel } from './cosmetics-panel';
 import { ConnectedCombatLog } from './connected-combat-log';
 import { emptyArray, emptyRecord } from './empty-values';
 import type { Char } from './char';
@@ -473,6 +474,7 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
           </div>
         </div>
       )}
+      <CosmeticsPanel name={char.name} cosmetics={char.cosmetics} post={post} />
       <ConnectedInventory name={char.name} model={inventoryModel} restock={restockControls}/>
     </article>
   );

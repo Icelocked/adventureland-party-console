@@ -531,6 +531,26 @@ journey in `e2e/live-economy.spec.ts`, with conserved cargo and restart evidence
 Publish character and coordinator assets through the supported full restart;
 CoordinatorOnly does not activate the inventory change.
 
+Each character card has a Cosmetics section. Characters report CX jars, owned
+cosmetics (`character.acx`, expanded by native `all_cx`) and worn cosmetics
+(`character.cx` plus skin) as the `cosmetics` status field, published through the
+diagnostics stream. A CX jar's `data` names one cosmetic or emote; Open runs native
+`equip(slot)`, which adds it to the collection and consumes the jar. Wear and
+Remove run native `equip_cx(slot, name)` / `equip_cx(slot)`; skins can be replaced
+but not removed, and emotes are shown as unlocked. Emotes use the game's
+name (`G.skills[id].name`); appearance pieces keep their ID, as in the game's own cosmetic info.
+Every cosmetic shows a preview from the game sprite sheets (the appearance layer,
+or the emote's skill icon). Owned emotes can be used from the card: `cx-emote`
+runs native `use_skill`, offering self (where allowed) and visible players within
+the emote's range as targets; the server still requires a party, account or friend
+target except for I Kiss You. The character reports the last emote result, so
+refusals (cooldown, MP, ownership, target) show their reason. The `cx-open-jar`, `cx-wear` and
+`cx-remove` commands (`characters/cosmetic-commands.ts`) are checked against the
+latest report, refused while another command is pending, re-checked by the
+character, and never take over navigation or combat. Failure inventory:
+`e2e/cx-failures.md`. Validate `live-cx.spec.ts`; publish character, coordinator
+and dashboard assets through the ordinary full restart.
+
 Marked withdrawals create merchant jobs by default at priority 90. The checkbox
 in Merchant settings controls the separate Marked withdrawals routine. Merchant
 heartbeats queue one bank visit for pending plain withdrawal marks, including
