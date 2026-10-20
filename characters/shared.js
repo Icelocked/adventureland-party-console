@@ -17398,6 +17398,7 @@
 
   async function approachCombatTarget(target) {
     if ((typeof bossCombatActive === "function" ? bossCombatActive() : typeof frankyCombatActive === "function" && frankyCombatActive())) return typeof bossMovementTick === "function" ? bossMovementTick(target) : frankyMovementTick(target);
+    if (designatedTankHolds()) return tankMovementTick(target);
     return engageMovementTick(target);
   }
 
