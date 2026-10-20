@@ -35,8 +35,7 @@ export function BestiaryDrops({
             <span className="min-w-0 flex-1">
               <span className="block truncate text-xs">{drop.name}</span>
               <span className="font-mono text-[9px] text-amber-300">
-                {rolls.map((roll, index) => <span className="block" key={index}>{rolls.length > 1 ? `Roll ${index + 1}: ` : ""}{formatDropRate(roll)}</span>)}
-                {rolls.length > 1 && <span className="block text-emerald-100/70">Independent rolls</span>}
+                {rolls.map((roll, index) => <span className="block break-all" key={index}>{formatDropRate(roll)}</span>)}
               </span>
               {indirect ? (
                 <span className="block truncate font-mono text-[9px] text-cyan-300/70">
@@ -58,7 +57,7 @@ export function BestiaryDrops({
       <h4 className="mb-2 mt-5 font-mono text-xs uppercase text-violet-300">Home rewards ({monster.homeRewards?.length || 0})</h4>
       <p className="mb-2 text-xs text-emerald-100/70">Home-server bonus required. These rolls are separate from normal monster drops.</p>
       {cards(monster.homeRewards || [])}
-      <p className="mt-4 text-xs text-emerald-100/70">Base odds at full contribution and neutral luck, level and event modifiers. Your contribution, luck and monster level scale each roll; independent rolls can each yield rewards.</p>
+      <p className="mt-4 text-xs text-emerald-100/70">Base odds at full contribution and neutral luck, level and event modifiers. Your contribution, luck and monster level scale each chance.</p>
       <h4 className="mb-2 mt-5 font-mono text-xs uppercase text-amber-300">
         Monster-specific drops ({monster.drops.length})
       </h4>

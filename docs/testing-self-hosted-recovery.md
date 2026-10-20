@@ -1,5 +1,9 @@
 # Self-hosted run 39199505087 recovery
 
+Final recovery validation: [run 39340661324](https://github.com/Ryan-Haines/adventureland-party-console/actions/runs/39340661324) succeeded on `party-console-5090-manual`: **340/340 passed**, all 338 original scenarios retained, eight workers, ChronAL at 4x, and RTX 5090 rendering. The E2E phase took 3003.767 seconds (50m 3.8s); the job including preparation and evidence upload took 3661 seconds (61m 1s). All 12,031 evidence hashes verify and all 313 owned scenario workspaces were removed. This is a complete ChronAL run, not a native-versus-ChronAL benchmark. Machine-readable evidence is in [testing-self-hosted-recovery-results.json](testing-self-hosted-recovery-results.json).
+
+The direct-drop UI follow-up requested after that full run has separate focused browser validation, documented in [testing-release-1.5.md](testing-release-1.5.md); it is not included in the earlier full-run source revision.
+
 Initial run: 309 passed, 29 failed, eight workers, all 338 selected scenarios.
 Failure inventory before implementation:
 - Optional timing collection assumes original browser frames survive managed
@@ -139,7 +143,7 @@ comparison: 4.0s and 4.3s, all original byte equality/footer/PNG checks retained
 A simultaneous focused gameplay run exceeded Docker's 31.19-GiB VM memory and
 an owned game container was OOM-killed. Its results are diagnostic only. Its
 normal teardown completed; further gameplay runs are sequential. The complete
-self-hosted run remains eight workers. Final full-run results remain pending.
+self-hosted run remains eight workers. The final 340-case full run passed; see the validation record above.
 ## Late-join initialization investigation
 
 Mixed deployment still fails with a healthy observer (no errors or retries) and
@@ -554,8 +558,7 @@ manual override and navigation supersession journeys pass: 381 verified evidence
 files and eight workspaces removed. The controlled handoff now admits both native
 boss attacks, rejects the old completion as stale, preserves event navigation
 ownership during the focus change, and resumes both fighters against native bees
-after the native boss death and event return. The full-suite follow-up remains
-required.
+after the native boss death and event return. The subsequent full-suite follow-up passes all 340 scenarios; see the final validation record above.
 
 Settings character inspection also merges the live inventory/vitals stream and
 saved appearance, renders equipment/item sprites, and opens read-only item

@@ -34,3 +34,43 @@ npm run test:e2e:verify
 Run the artifact verifier immediately after each run, before another run replaces the standard report directory. The final catalog-only report is also retained as `catalog-final`; verify its archived copy with `node e2e/verify-artifacts.cjs .build/release-1.5-validation/catalog-final`. Earlier failing reports still have intact hashes but intentionally fail the verifier's all-scenarios-passed gate.
 
 The final immutable candidate is completed and staged, with a source fingerprint matching the final code. No live console or game client was restarted or activated. Offline equipment-derived projections explicitly omit private permanent bonuses and temporary effects; when native calculation assets are unavailable, basic saved stats remain inspectable and derived values are labeled unavailable.
+
+
+## Direct drop cards and whole-number odds
+
+Failure inventory: forcing a numerator of one produces decimal denominators;
+exchange-derived acquisitions appear as monster drops; derivation labels and long
+odds overflow the sprite column; compacting duplicate rewards loses distinct
+chance/quantity lines. The retained browser journey covers each case at 1440,
+640 and 390 pixels, with measured sprite/odds/card bounds and screenshots.
+
+Official reference behavior is pinned with the test game:
+- [Mr. Green's table](https://github.com/kaansoral/adventureland_mongodb/blob/90052162eb3ebda36c893e1eb4af643913c8f984/design/drops.js#L388) specifies the CX Jar coefficient as `15 / 100000`, which reduces to `3/20,000`.
+- [Native monster drop rolls](https://github.com/kaansoral/adventureland_mongodb/blob/90052162eb3ebda36c893e1eb4af643913c8f984/node/server.js#L2212) compare a modified random draw with each table coefficient; values above one do not mean multiple awarded items.
+- [Native chest table selection](https://github.com/kaansoral/adventureland_mongodb/blob/90052162eb3ebda36c893e1eb4af643913c8f984/node/server_functions.js#L3988) chooses a weighted reward and opens nested tables directly into the chest. Those final items are direct drops. Trading a dropped candy cane or mistletoe for another reward requires an exchange, so the resulting Hot Chocolate is excluded from the monster-drop tables.
+
+Both item and bestiary views exclude acquisition paths containing an exchange.
+Native chest openings and direct zone/world drops remain visible. Chances use
+reduced whole-number numerators and denominators reconstructed at the reported
+floating-point precision, with an exact decimal-fraction fallback for values
+beyond safe numeric convergents. Distinct drops keep separate ratio lines and
+quantities. Cards omit roll numbers, roll-weight labels and acquisition arrows;
+the sprite has a dedicated column and the odds wrap within the text column.
+
+Repeat the focused browser check with:
+
+```powershell
+npm run test:e2e -- --project=console --workers=1 --grep 'monster rewards separate home drops'
+```
+
+This UI follow-up was requested after the successful 340-scenario CI recovery
+run and has its own focused evidence; that earlier full run did not include it.
+
+The final focused scenario passes with 18 verified evidence files and its owned
+workspace removed, retained under `.build/ci-recovery/direct-drop-ratios-complete-green`.
+`npm run typecheck` passes. Desktop and phone screenshots were reviewed. The
+completed, source-matched staged candidate is
+`3c8f69fd48a4c56137a3088e05684afcda079c4e73821bd3e9d331d7f99f2c77`;
+this follow-up did not activate or restart the running console.
+
+The shared-drop catalog preserves all distinct source rows while deduplicating catalog item definitions. An intermediate assertion had a Windows encoding error in its quantity string; the corrected UTF-8-safe fixture passes with the original exact quantity requirement.
