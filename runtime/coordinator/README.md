@@ -601,12 +601,12 @@ a full restart also publishes the current character assets.
 A per-party `POST /party-api/formation` field, `tank: string | null`, names one
 character (any class) to hold melee range and own aggro-pulling for normal grouped
 combat, addressing issue #39. `approachCombatTarget()` routes the designated tank
-through `tankMovementTick()` — a class-agnostic adaptation of Franky's off-tank
-"stack tight" clamp (`Math.min(desiredCombatRange(), 30)`) — instead of each class's
+through `tankMovementTick()` - a class-agnostic adaptation of Franky's off-tank
+"stack tight" clamp (`Math.min(desiredCombatRange(), 30)`) - instead of each class's
 own weapon-range `engageMovementTick()`; every other character's positioning is
 unchanged. `mayTaunt()` and the skill engine's `absorb`/`agitate` aggro-ownership
 checks (`CombatContext.tank`) are gated on the designated tank when one exists,
-falling back to the existing leader-only rule when none is set — this also lets a
+falling back to the existing leader-only rule when none is set - this also lets a
 non-leader priest tank via `absorb`, per the issue's own example. No hold-back is
 added for non-tank characters; they keep today's approach/attack timing and are only
 barred from *stealing* aggro via taunt/absorb.

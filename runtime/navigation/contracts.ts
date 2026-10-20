@@ -45,3 +45,33 @@ export function geometryFingerprint(g: GameData): string {
   for (let i = 0; i < value.length; i++) { a = Math.imul(a ^ value.charCodeAt(i), 16777619); b = Math.imul(b, 33) ^ value.charCodeAt(i); }
   return `${(a >>> 0).toString(16)}-${(b >>> 0).toString(16)}-${value.length}`;
 }
+type CollisionLines = { x_lines?: number[][]; y_lines?: number[][] };
+const sized = (value: unknown[] | undefined): unknown[] => [value, value?.length];
+function mapInputs(name: string, m: NavigationMap, collision: CollisionLines | undefined): unknown[] {
+  return [name, m, collision, ...sized(collision?.x_lines), ...sized(collision?.y_lines),
+    ...sized(m.spawns), ...sized(m.doors), ...sized(m.npcs), m.instance, m.event];
+}
+/**
+ * Objects, arrays and array lengths that geometryFingerprint reads. Replacing
+ * any input or adding to an array changes this list; renderer fields do not.
+ */
+function geometryInputs(g: GameData): unknown[] {
+  const geometry = g.geometry as Record<string, CollisionLines> | undefined;
+  const places = g.npcs.transporter?.places;
+  const inputs: unknown[] = [g.geometry, g.maps, g.npcs, places, places && Object.keys(places).length];
+  for (const name in g.maps) inputs.push(...mapInputs(name, g.maps[name], geometry?.[name]));
+  return inputs;
+}
+const fingerprints = new WeakMap<object, { inputs: unknown[]; value: string }>();
+/**
+ * geometryFingerprint for callers that check the same G many times, like
+ * movement on every move. It serializes all collision lines again only when an
+ * input from geometryInputs changes.
+ */
+export function cachedGeometryFingerprint(g: GameData): string {
+  const inputs = geometryInputs(g), cached = fingerprints.get(g);
+  if (cached && cached.inputs.length === inputs.length && cached.inputs.every((input, index) => input === inputs[index])) return cached.value;
+  const value = geometryFingerprint(g);
+  fingerprints.set(g, { inputs, value });
+  return value;
+}

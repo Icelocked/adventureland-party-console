@@ -91,8 +91,9 @@ export function createSkillEngine(ports: SkillPorts) {
       if (pending.get(id) === token) pending.delete(id);
     }
   }
-  async function first(choices: SkillDecision[]): Promise<boolean> {
-    const w = world();
+  // The caller's world comes from the same synchronous turn, so first() checks
+  // the choices against it and builds no second combat context.
+  async function first(choices: SkillDecision[], w: SkillWorld): Promise<boolean> {
     const d = choices.find(d => affordable(w, d));
     return d ? execute(d) : false;
   }
@@ -105,15 +106,16 @@ export function createSkillEngine(ports: SkillPorts) {
       const choices = w.actor.ctype === 'paladin' ? paladinSupport(w) :
         w.actor.ctype === 'rogue' ? rogueSupport(w) : combatBuffSupport(w);
       return first(choices.filter(d => d.skill !== 'paladin_aura' ||
-        w.now - auraAt >= 10000 && d.argument !== auraState));
+        w.now - auraAt >= 10000 && d.argument !== auraState), w);
     },
     offense(target: Combatant) {
       const w = world();
-      return first(damageChoices(w, target));
+      return first(damageChoices(w, target), w);
     },
     attack(target: Combatant): Promise<boolean> | null {
       const w = world();
-      if (w.context.mode === 'blocked' || !['ranger', 'rogue'].includes(w.actor.ctype)) return null;
+      // The class check comes first so other classes never build the context.
+      if (!['ranger', 'rogue'].includes(w.actor.ctype) || w.context.mode === 'blocked') return null;
       const opening = opener(w, target);
       if (opening && affordable(w, opening)) {
         openerPending = true;
