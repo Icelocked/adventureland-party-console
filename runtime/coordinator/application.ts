@@ -115,12 +115,11 @@ export function startCoordinatorApplication(
     async function prepareMovement(gameVersion: number) {
       try {
         const directory = './game_files/' + gameVersion + '/';
-        const geometry = loadCoordinatorGeometry(
-          fs_regular.readFileSync(directory + 'data.js', 'utf8'),
-          fs_regular.readFileSync(directory + 'old_common_functions.js', 'utf8'),
-        );
+        const data = fs_regular.readFileSync(directory + 'data.js', 'utf8');
+        const common = fs_regular.readFileSync(directory + 'old_common_functions.js', 'utf8');
+        const geometry = loadCoordinatorGeometry(data, common);
         canStand = (x, y) => geometry.canStand(x, y);
-        const prepared = movementPlanner.prepare(geometry.game, gameVersion);
+        const prepared = movementPlanner.prepare(geometry.game, gameVersion, {data, common});
         await prepared.ready;
         movementFingerprints.set(gameVersion, prepared.fingerprint);
         log.info({ version: gameVersion, fingerprint: prepared.fingerprint }, 'ALClient movement geometry ready');

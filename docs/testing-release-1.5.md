@@ -74,3 +74,42 @@ completed, source-matched staged candidate is
 this follow-up did not activate or restart the running console.
 
 The shared-drop catalog preserves all distinct source rows while deduplicating catalog item definitions. An intermediate assertion had a Windows encoding error in its quantity string; the corrected UTF-8-safe fixture passes with the original exact quantity requirement.
+
+
+## Planner wall corners (#147)
+
+Adopted Thefonze74065's native-collision/detour implementation from
+[9120e68](https://github.com/Thefonze74065/adventureland-party-console/commit/9120e685d5a913c96e5aaee43a3225318ed7fd09).
+The integration retains collision source files across worker recreation, reuses
+the shared movement Geometry contract, and preserves explicit instance identity
+on inserted points. Client validation and bounded repair remain the backstop
+when a single valid detour is unavailable. Fork bookkeeping and additional unit
+tests were not imported; the maintained native gameplay E2E is registered.
+
+The control used the pre-fix working planner bundle (its SHA-256 and absent fix
+marker are recorded) and reproduced the exact rejected edge from (135,72) to
+(153,-51). All 48 control evidence files verify. Shared/runtime/game outputs were
+then rebuilt before the passing run; creating a console candidate alone does not
+replace the working test coordinator bundles.
+
+The corner journey checks nine actual planner HTTP responses against native
+server collision, covering the town-to-tunnel route, six additional reported
+corner pairs, and small/large footprint variants. Both fighters then arrive
+within 35 units of the tunnel approach with no client repair logged. That case,
+Phoenix terrain approach, Desert transporter cargo collection and Town
+supersession all pass: 4/4 ChronAL E2Es, 187 verified evidence files, four owned
+workspaces removed and the owned game pool torn down. Typecheck passes. Selection
+retains 341 scenarios exactly once, with 230 gameplay scenarios using ChronAL by
+default. These are focused checks, not a new full-suite run.
+
+Repeat with:
+
+```powershell
+npm run test:e2e -- --project=live --workers=1 --grep 'Routes from a town corner contain no edge|native headless merchant approaches Desert transporter|healthy warrior reaches an engaged Phoenix|superseded native Town progress ends quietly'
+```
+
+[testing-planner-corner-results.json](testing-planner-corner-results.json) records
+source attribution, control and passing evidence archives, timing, cleanup and
+the completed source-matched candidate. Artifact
+`61842c08d71ad13a150778a8166217042048595cdb87894d368c13cc892db04a`
+is staged; this task did not activate it or restart the running console.

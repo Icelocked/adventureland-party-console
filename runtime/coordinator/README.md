@@ -1,3 +1,12 @@
+Planner workers load native collision from the installed game sources and detour
+same-map edges rejected by can_move, preserving the request's movement footprint
+and instance. Valid edges and map transitions remain intact. Retain collision
+sources across automatic worker recreation. Unresolved edges and unavailable
+native validation retain the existing bounded client repair as a backstop.
+Validate live-planner-corner.spec.ts plus transporter, Phoenix and supersession
+journeys; the corner E2E checks planned edges against native server collision and
+requires actual shared party arrival without repair. See e2e/planner-corner-failures.md.
+
 Shared event walking can supersede an unfinished farming convoy combat-handoff
 continuation at the same navigation revision. Require fresh authorized event
 requests from the participating runtimes, retain all other command ownership
