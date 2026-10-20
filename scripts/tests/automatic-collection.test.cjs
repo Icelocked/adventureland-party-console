@@ -104,3 +104,14 @@ test('character handoff helper yields immediately for Hunt ownership instead of 
  await assert.rejects(c.requestMerchantHandoff('/merchant/handoff',{}),e=>e.reason==='hunt_movement_owned');
  assert.equal(requests,1);
 });
+
+// Failure inventory: e2e/gear-sets-failures.md (entry 4). A luck swap's held gear was taken as
+// compound material mid-swap, destroying the tank's best ring.
+test('slots a gear set holds are never automatic compound or upgrade stock; spare copies still are',()=>{
+ const s=fixture();s.statuses.F.items=[item(0,'coat'),item(1,'ring'),item(2,'ring'),item(3,'gem')];
+ s.statuses.F.reservedInventory=[{slot:0,item:{name:'coat'}},{slot:1,item:{name:'ring'}}];
+ assert.deepEqual(collectionPickups(s,'F').keep.filter(m=>m.automaticPickup).map(m=>m.slot),[2]);
+ // A stale report naming a different item no longer protects the slot.
+ s.statuses.F.reservedInventory=[{slot:1,item:{name:'coat'}}];
+ assert.deepEqual(collectionPickups(s,'F').keep.filter(m=>m.automaticPickup).map(m=>m.slot).sort(),[0,1,2]);
+});

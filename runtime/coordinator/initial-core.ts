@@ -18,6 +18,7 @@ export function initialPartySelection(saved: SavedPartySelection) {
     location: saved.location || null,
     leader: saved.leader || null,
     designatedTank: saved.designatedTank || null,
+    gearSets: saved.gearSets || {},
     followers: saved.followers || {},
     eventsByCharacter: saved.eventsByCharacter || {},
     eventLimitsByCharacter: saved.eventLimitsByCharacter || {},

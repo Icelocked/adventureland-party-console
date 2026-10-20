@@ -2,7 +2,7 @@ import type { CombatRoot, Target } from '../roles/types.ts';
 import { effectiveAttackDamageType, monsterAttackBlock } from '../roles/monster-attack-policy.ts';
 import { createSkillEngine } from './engine.ts';
 import { decision, type Actor, type Combatant, type CombatContext, type SkillDefinition, type SkillDecision, type SkillId, type SkillWorld } from './types.ts';
-import { incomingDps } from './damage.ts';
+import { damage, endangered, incomingDps } from './damage.ts';
 import { createProjectileTracker } from './projectiles.ts';
 
 interface Host {
@@ -113,6 +113,13 @@ export function installSkillRuntime(root: CombatRoot) {
   host.socket?.on?.('action', action);
   host.socket?.on?.('hit', hit);
   return { ...engine,
+    // A basic attack that would drop the target below zero right now. Used to decide
+    // whether a kill-time gear swap (e.g. the designated tank's luck swap) needs to
+    // happen before this tick's attack, for a target with no HP-decline history yet.
+    lethalBasicAttack: (target: Combatant) => damage(world(), 'attack', target, true) >= target.hp,
+    // Used by the designated tank's kill-time luck swap to bail out of weaker gear
+    // immediately if it starts taking dangerous damage rather than finish a swap.
+    endangeredSelf: () => endangered(world(), world().actor as unknown as Combatant),
     reset() { engine.reset(); projectiles.clear(); },
     stop() {
       engine.stop(); projectiles.clear();

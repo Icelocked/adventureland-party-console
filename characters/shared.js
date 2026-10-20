@@ -2941,6 +2941,10 @@
       codeRevision: "realm-logistics-v3",
       consoleMaintenance: consoleMaintenanceReport(),
       bankSortProtocol: 1,
+      reservedInventory: swapReservedSlots().map(function (slot) {
+        var item = character.items[slot];
+        return { slot: slot, item: item ? { name: item.name, level: item.level } : null };
+      }),
       steamRealmProtocol: parent.__partySteamBridge && parent.__partySteamBridge.realmProtocol || 0,
       combatSelection: { id: combatSelection.id, revision: combatSelection.revision,
         map: combatSelection.map, runtimeId: convoyRuntimeId, target: groupedNomination() },
@@ -6079,6 +6083,17 @@
     return { ready: false, waited: waited };
   }
 
+  // Gear a luck swap holds in the bag (combat gear awaiting restore, luck pieces it wears) is
+  // never automatic merchant stock: compounding it destroyed the tank's best piece mid-swap.
+  function swapReservedSlots() {
+    try { return root.partyKillLuckSwap && root.partyKillLuckSwap.reservedSlots ? root.partyKillLuckSwap.reservedSlots() : []; }
+    catch (_swapReservationError) { return []; }
+  }
+  function swapReserved(request, slot) {
+    var mark = request.mark || {};
+    var automatic = request.kind === "cleanout" || mark.automaticPickup || mark.autoCompound || mark.auto;
+    return !!automatic && swapReservedSlots().indexOf(slot) >= 0;
+  }
   async function merchantHandoff(command) {
     var window = { deadline: Date.now() + 30000, revision: navigationIntent.revision, realm: reunionRealm(), approachPending: false, reason: null };
     var sent = [], banked = [], kept = [], cleaned = [], reserved = [];
@@ -6205,6 +6220,7 @@
         if (requests[i].mark && requests[i].mark.automaticPickup && slot !== requests[i].slot) { i -= 1; continue; }
         if (requests[i].mark && (requests[i].mark.autoCompound || requests[i].mark.automaticPickup) && !compoundAvailableStock(command)[slot]) continue;
         if (isPersonalTracker(character.items[slot]) || command.cleanout && cleanoutProtected(character.items[slot])) continue;
+        if (swapReserved(requests[i], slot)) continue;
         var sendQuantity = Math.min(Number(requests[i].quantity) || itemQuantity(character.items[slot]),
           itemQuantity(character.items[slot]));
         if (requests[i].mark && (requests[i].mark.deconstructionId || requests[i].mark.npcSaleId) && (character.items[slot].l || character.items[slot].b)) continue;
@@ -7106,6 +7122,28 @@
   function isDashboardEquipment(item) {
     var definition = G.items[item && item.name] || {};
     return ["helmet", "pants", "chest", "weapon", "amulet", "earring", "shoes", "gloves", "ring", "shield", "belt", "source", "orb", "quiver", "cape", "misc_offhand", "tool"].includes(definition.type);
+  }
+  // Gear-set Equip: wear every carried member in its slot and empty the slots the set left
+  // empty. The elixir is skipped: equipping one consumes it and the game refuses to unequip it.
+  var GEAR_SET_EQUIP_SLOTS = ["mainhand", "offhand", "chest", "pants", "helmet", "gloves", "shoes", "cape", "belt",
+    "orb", "amulet", "ring1", "ring2", "earring1", "earring2"];
+  async function equipGearSet(command) {
+    var slots = command.slots || {}, missing = [], taken = {};
+    if (root.partyPorcupineEquipment) await root.partyPorcupineEquipment.manual();
+    if (root.partyKillLuckSwap) await root.partyKillLuckSwap.manual();
+    for (var i = 0; i < GEAR_SET_EQUIP_SLOTS.length; i++) {
+      var slot = GEAR_SET_EQUIP_SLOTS[i], wanted = slots[slot];
+      if (!wanted) {
+        if (character.slots[slot]) await unequip(slot);
+        continue;
+      }
+      if (sameItem(character.slots[slot], wanted)) continue;
+      var index = character.items.findIndex(function (item, at) { return !taken[at] && sameItem(item, wanted); });
+      if (index < 0) { missing.push(slot + " (" + wanted.name + ")"); continue; }
+      taken[index] = true;
+      await equip(index, slot);
+    }
+    game_log("Equipped " + command.set + " set" + (missing.length ? "; not carried: " + missing.join(", ") : ""), missing.length ? "#fbbf24" : "#51D2E1");
   }
   async function equipDashboardItem(command) {
     if (!isDashboardEquipment(command.item)) throw new Error("item is not equipment; use its explicit Use action instead");
@@ -11303,6 +11341,7 @@
     if (command.type === "equip") {
       await equipDashboardItem(command);
     }
+    if (command.type === "gear-set-equip") await equipGearSet(command);
     if (command.type === "equip-deliveries") {
       var equipResults = await equipDeliveredItems(command.items || []);
       equipResults.forEach(function(result, index) { if (command.deliveryIds) result.deliveryId = command.deliveryIds[index]; });
@@ -11312,6 +11351,7 @@
     }
     if (command.type === "unequip") {
       if (root.partyPorcupineEquipment) await root.partyPorcupineEquipment.manual();
+      if (root.partyKillLuckSwap) await root.partyKillLuckSwap.manual();
       if (character.ctype === "merchant") await closeMerchantStandForTravel();
       if (typeof command.slot !== "string" || !sameItem(character.slots[command.slot], command.item))
         throw new Error("equipped item no longer matches that slot");
@@ -11608,6 +11648,7 @@
       bankQueued = !!state.bankQueued;
       leader = state.leader || null;
       tank = state.designatedTank || null;
+      root.partyGearSets = state.gearSets || {};
       var followedBeforeRefresh = followLeader;
       followLeader = !!state.followLeader;
       partyTownActive = character.ctype !== "merchant" && !!state.partyTownActive;
@@ -15867,6 +15908,7 @@
         if(!signal.immediateDeparture && now-convoy.scheduledAt>1500)throw new Error("Missed convoy departure window");
         released=true;convoy.departedAt=now;phase("travelling");
         if (root.partyPorcupineEquipment) root.partyPorcupineEquipment.depart(command.purpose);
+        if (root.partyKillLuckSwap) root.partyKillLuckSwap.depart();
         return walk();
       } catch(error){freeze();convoy.fail(error.message||String(error));}
       finally {smart.use_town=nativeTown;}
@@ -16005,6 +16047,7 @@
           convoy.departedAt = now;
           phase("travelling");
           if (root.partyPorcupineEquipment) root.partyPorcupineEquipment.depart(command.purpose);
+          if (root.partyKillLuckSwap) root.partyKillLuckSwap.depart();
           return gate.original();
         } catch (error) { convoy.fail(error.message || String(error)); }
         finally { smart.use_town = nativeTown; }

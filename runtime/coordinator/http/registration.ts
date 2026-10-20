@@ -76,6 +76,7 @@ export interface FarmingAndTravelHandlers<Handler> {
   achievementHuntRoute: Handler;
   focusRoute: Handler;
   formationRoute: Handler;
+  gearSetRoute: Handler;
   huntBlacklistRoute: Handler;
   huntSettingsRoute: Handler;
   huntModeRoute: Handler;
@@ -101,6 +102,7 @@ export function installFarmingAndTravelRoutes<Handler>(
   router.post("/party-api/rare-hunting", handlers.monsterSelectionRoutes.passive);
   router.post("/party-api/focus", handlers.focusRoute);
   router.post("/party-api/formation", handlers.formationRoute);
+  router.post("/party-api/gear-sets", handlers.gearSetRoute);
   router.post("/party-api/hunt-blacklist", handlers.huntBlacklistRoute);
   router.post("/party-api/hunt-settings", handlers.huntSettingsRoute);
   router.post("/party-api/achievement-hunt", handlers.achievementHuntRoute);
