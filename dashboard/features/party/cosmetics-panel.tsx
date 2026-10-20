@@ -13,6 +13,8 @@ const seconds = (ms: number) => ms >= 60000 ? `${Math.round(ms / 60000)}m` : `${
 
 /** The cosmetic's own sprite layer, or an emote's skill icon. Nothing when the game has no art for it. */
 function Preview({ sprite, label }: { sprite?: Sprite | null; label: string }) {
+  // SpriteCrop draws a sprite-sheet region as a CSS background, which an <img> cannot hold.
+  // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
   return <span role="img" aria-label={sprite ? `${label} preview` : `${label} has no preview`}
     className="relative inline-block size-8 shrink-0 overflow-hidden rounded border border-slate-700 bg-slate-900">
     {sprite && <SpriteCrop sprite={sprite} size={32} />}
@@ -92,9 +94,9 @@ export const CosmeticsPanel = memo(function CosmeticsPanel({ name, cosmetics, po
             </span>
           </li>;
         })}</ul> : <p className="text-slate-400">No emotes unlocked.</p>}
-        {last && <p role="status" className={last.ok ? "mt-1 text-emerald-300" : "mt-1 text-amber-200"}>
+        {last && <output className={last.ok ? "mt-1 block text-emerald-300" : "mt-1 block text-amber-200"}>
           Last emote: {lastLabel}{last.target ? ` → ${last.target}` : ""} · {last.ok ? "used" : last.reason === "pending" ? "sending…" : `refused: ${last.reason}`}
-        </p>}
+        </output>}
       </div>
       <div>
         <p className="mb-1 font-semibold text-fuchsia-100">Worn</p>
