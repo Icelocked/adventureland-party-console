@@ -50,6 +50,8 @@ export interface MerchantWork extends MerchantJob {
   slot?: string;
   rid?: string;
   realm?: string | null;
+  candidateKey?: string;
+  expectedItem?: { name?: string; level?: number } | null;
   expandLeaderCluster?: boolean;
   clusterExpanded?: boolean;
   expandLuckCluster?: boolean;

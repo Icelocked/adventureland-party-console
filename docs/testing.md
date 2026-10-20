@@ -61,6 +61,20 @@ The retained passive-healing and movement-service regressions cover delayed
 channel acknowledgement, rejection, cancellation, and arrival while a peer
 barrier remains pending. Recovery potions/regeneration remain available.
 
+## Giveaway entry
+
+Giveaway entry (#129) uses `npm test -- -- --project=live --grep "giveaway host away|expired giveaway job"`.
+The game's merchant directory lists only merchant-class stands and an account can have
+only one merchant online, so the directory journey hosts on the priest and adds one
+declared entry, built from the priest's live server position, to the real
+`/api/pull_merchants` response. It starts the merchant in the bank, hosts more than
+1,100 px from the market spot and requires the server to list the merchant on the host's
+slot. The expiry journey holds the merchant with force stand
+beside a priest's 5-minute giveaway and requires one warning, one requeue after the
+server restarts the empty giveaway, never two queued copies, and a join after release.
+A host inside the bank has no live coverage. Failure inventory:
+`e2e/giveaway-locate-failures.md`. Activate with the ordinary full restart.
+
 ## CI parallelism
 
 The full native workflow uses 16 isolated GitHub runners with one Playwright
