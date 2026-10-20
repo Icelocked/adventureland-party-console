@@ -46,6 +46,10 @@ export interface SharedCombat {
   sharedTargetId?(): string | null;
   frankyCombatActive?(): boolean;
   frankyMovementTick?(target: Target | null): boolean;
+  /** Boss-only attendance (Franky): no passing attacks, adds or area skills. */
+  bossCombatActive?(): boolean;
+  bossTargetAllowed?(target: Target): boolean;
+  bossMovementTick?(target: Target | null): boolean;
   getScatterTarget: TargetGetter;
   getLeaderTarget: TargetGetter;
   getPreferredTarget: TargetGetter;
@@ -64,6 +68,7 @@ export interface SharedCombat {
   }): Promise<boolean>;
   absorbSinsBelow(ratio: number): Promise<boolean>;
   healPartyBelow(ratio: number): Promise<boolean>;
+  frankySpamPartyHeal?(): Promise<boolean>;
   isPartyHealthy(ratio: number): boolean;
   monsterPriority?(this: void, target: Target): number;
   isCurrentPartyTarget(target: Target): boolean;

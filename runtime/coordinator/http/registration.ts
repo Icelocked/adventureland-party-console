@@ -80,6 +80,7 @@ export interface FarmingAndTravelHandlers<Handler> {
   huntBlacklistRoute: Handler;
   huntSettingsRoute: Handler;
   huntModeRoute: Handler;
+  encounterModeRoute: Handler;
   huntControlRoutes: { permission: Handler; retryReturn: Handler; interactionComplete: Handler };
   eventRecoveryRoutes: { disabled: Handler; ended: Handler };
   eventAcknowledgementRoutes: {
@@ -107,6 +108,7 @@ export function installFarmingAndTravelRoutes<Handler>(
   router.post("/party-api/hunt-settings", handlers.huntSettingsRoute);
   router.post("/party-api/achievement-hunt", handlers.achievementHuntRoute);
   router.post("/party-api/farming-mode", handlers.huntModeRoute);
+  router.post("/party-api/encounter-mode", handlers.encounterModeRoute);
   router.post("/party-api/hunt-event-permission", handlers.huntControlRoutes.permission);
   router.post("/party-api/monster-hunt/retry-return", handlers.huntControlRoutes.retryReturn);
   router.post(

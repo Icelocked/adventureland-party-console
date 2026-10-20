@@ -68,6 +68,9 @@ export const heartbeatStateFields = [
   "monsterHunt",
   "farmAreaState",
   "scatterBreakTarget",
+  "encounterRoutines",
+  "encounterAutoDeathLimits",
+  "encounterAutoDeaths",
 ] as const;
 
 export interface HeartbeatState extends Record<(typeof heartbeatStateFields)[number], unknown> {
@@ -89,6 +92,9 @@ export interface HeartbeatState extends Record<(typeof heartbeatStateFields)[num
   followers: Record<string, boolean>;
   escape: { stage?: string } | null;
   farmingPolicy: string;
+  encounterRoutines: Record<string, string>;
+  encounterAutoDeathLimits: Record<string, number>;
+  encounterAutoDeaths: Record<string, number>;
   achievementTarget?: { avoid?: string[] } | null;
   monsterHunt: HuntCycle | null;
   monsterFocus: string[];

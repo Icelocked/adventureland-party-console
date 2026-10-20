@@ -24,6 +24,7 @@ export const actionDomains = {
   '/gear-sets': core,
   '/focus': core,
   '/farming-mode': core,
+  '/encounter-mode': core,
   '/hunt-blacklist': core,
   '/hunt-settings': core,
   '/achievement-hunt': core,

@@ -486,6 +486,20 @@ export function usePartyConsole() {
       else setActionError(error instanceof Error ? error.message : "Farming mode update failed");
     }
   }
+  async function setEncounterMode(encounter: string, mode: string, character = state.leader || "") {
+    try {
+      await post("/encounter-mode", { character, encounter, mode });
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Encounter mode update failed");
+    }
+  }
+  async function setEncounterAutoLimit(encounter: string, deathLimit: number, character = state.leader || "") {
+    try {
+      await post("/encounter-mode", { character, encounter, deathLimit });
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Encounter auto-tank limit update failed");
+    }
+  }
   async function setFocus(
     character: string,
     monsterFocus: string[],
@@ -902,6 +916,8 @@ export function usePartyConsole() {
     monsters,
     post,
     setFarmingPolicy,
+    setEncounterMode,
+    setEncounterAutoLimit,
     setSelectedCondition,
     command,
     bankParty,

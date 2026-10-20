@@ -153,8 +153,14 @@ export type PartyState = {
     achievementMessage?: string;
     monsterFocus?: string[];
     location?: PartyState["partyLocation"];
+    encounterRoutines?: Record<string, string>;
+    encounterAutoDeathLimits?: Record<string, number>;
+    encounterAutoDeaths?: Record<string, number>;
   }>;
   farmingPolicy?: FarmingPolicy;
+  encounterRoutines?: Record<string, string>;
+  encounterAutoDeathLimits?: Record<string, number>;
+  encounterAutoDeaths?: Record<string, number>;
   partyFarmingMode?: "default" | "scatter";
   partyFarmingMonsterType?: string | null;
   monsterHunt?: MonsterHuntState | null;

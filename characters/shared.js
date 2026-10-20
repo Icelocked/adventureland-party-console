@@ -447,6 +447,7 @@
   var monsterSearchRadius = 400;
   var farmingMode = "default";
   var farmingPolicy = "auto";
+  var frankyRoutine = "auto";
   var huntCombatTarget = null;
   var farmingModeResetUntil = 0;
   var scatterMonsterTypes = {};
@@ -496,6 +497,13 @@
         live: !!status[id] && value.live !== false && value.active !== false,
         next: anniversaryEpoch(value.next || value.spawn) || undefined, expires: anniversaryEpoch(value.expires || value.end) || undefined };
     });
+  }
+  // Server event times arrive as epoch seconds/ms or, for monster events (`spawn`, `end`), ISO strings.
+  function eventEpoch(input) {
+    var numeric = anniversaryEpoch(input);
+    if (numeric) return numeric;
+    var parsed = Date.parse(input);
+    return Number.isFinite(parsed) ? parsed : 0;
   }
   var eventTargetTypes = [];
   var eventTraveling = false; travellingEventName = null;
@@ -957,6 +965,7 @@
         root.partyLootClient.rare.hit({id:String(data.id),realm:':'+String(parent.server_region||'')+String(parent.server_identifier||''),map:character.map,in:String(character.in||character.map)});
     }
     observeFarmHit(data);
+    observeFrankyHit(data);
     if (data && data.kill && rareKnown[String(data.id)]) {
       rareKills.push({ id: String(data.id), mtype: rareKnown[String(data.id)], map: character.map,
         in: String(character.in || character.map), at: Date.now() + coordinatorClockOffset,
@@ -11818,6 +11827,20 @@
         if (typeof monsterType === "string") scatterMonsterTypes[monsterType] = true;
       });
       farmingPolicy = typeof state.farmingPolicy === "string" ? state.farmingPolicy : "auto";
+      // Auto mode tries the tank engagement first; after enough deaths while doing so
+      // (configurable, matching runtime/coordinator/events/franky-auto-tank.ts's
+      // defaultFrankyAutoTankDeathLimit) it falls back to off-tank for good. A
+      // death limit of 0 skips the tank attempt entirely.
+      var encounterRoutine = function (encounter) {
+        var saved = state.encounterRoutines && typeof state.encounterRoutines[encounter] === "string"
+          ? state.encounterRoutines[encounter] : "auto";
+        if (saved !== "auto") return saved;
+        var limit = state.encounterAutoDeathLimits && typeof state.encounterAutoDeathLimits[encounter] === "number"
+          ? state.encounterAutoDeathLimits[encounter] : 3;
+        var deaths = (state.encounterAutoDeaths && state.encounterAutoDeaths[encounter]) || 0;
+        return limit > 0 && deaths < limit ? "tank" : "offtank";
+      };
+      frankyRoutine = encounterRoutine("franky");
       huntCombatTarget = state.huntCombatTarget || null;
       farmingMode = character.ctype !== "merchant" && state.partyFarmingMode === "scatter" ? "scatter" : "default";
       partyFarmingMonsterType = typeof state.partyFarmingMonsterType === "string" ? state.partyFarmingMonsterType : null;
@@ -13314,6 +13337,88 @@
       (!target.map || target.map === character.map) && (target.in == null || target.in === character.in);
   }
 
+  // Boss-only encounters share targeting, skill and hold policy (Franky today).
+  function bossEncounter() {
+    if (typeof frankyCombatActive === "function" && frankyCombatActive()) return "franky";
+    return null;
+  }
+  function bossCombatActive() { return !!bossEncounter(); }
+  function bossTargetAllowed(target) {
+    var encounter = bossEncounter();
+    return encounter === "franky" ? frankyTargetAllowed(target) : false;
+  }
+  function bossRoutine() { return frankyRoutine; }
+
+  // Off-tank waits until another visible, living player has held Franky this long.
+  var frankyHoldMinMs = 5000;
+  var frankyHold = { id: null, holder: null, since: 0 };
+  function frankyHeldByOther(target) {
+    var holder = target && target.target;
+    var entity = holder && holder !== character.name && get_player(holder);
+    if (!entity || entity.visible === false || entity.rip || entity.dead) {
+      frankyHold = { id: null, holder: null, since: 0 };
+      return false;
+    }
+    if (frankyHold.id !== target.id || frankyHold.holder !== holder)
+      frankyHold = { id: target.id, holder: holder, since: Date.now() };
+    return Date.now() - frankyHold.since >= frankyHoldMinMs;
+  }
+
+  // The server ends Franky's event once its 40-minute timer (S.franky.end) has passed and nobody has
+  // attacked him for 20 seconds (server_functions.js). From 5 minutes before the end, one off-tank
+  // keeper makes sure he is hit at least every 45s; from 60s before it, the keeper stays engaged and
+  // hits whenever 10s pass without one.
+  var frankyKeepaliveLeadMs = 5 * 60000, frankyKeepaliveDueMs = 45000;
+  var frankyKeepaliveHoldMs = 60000, frankyKeepaliveTightMs = 10000, frankyEventMs = 40 * 60000;
+  var frankyHits = {}, frankyFirstSeen = {};
+  function observeFrankyHit(data) {
+    var target = data && data.id != null && parent.entities && parent.entities[data.id];
+    var attacker = data && (data.hid || data.actor);
+    if (!target || target.mtype !== "franky" || !attacker || !(Number(data.damage) > 0)) return;
+    if (attacker === character.name || get_player(attacker)) frankyHits[target.id] = Date.now();
+  }
+  function frankySpawnedAt(target) {
+    var now = Date.now();
+    if (!frankyFirstSeen[target.id]) frankyFirstSeen[target.id] = now;
+    var spawned = frankyFirstSeen[target.id];
+    var schedule = (eventStatus() || {}).schedule || {}, offset = Number(schedule.time_offset);
+    if (Array.isArray(schedule.nightlies) && Number.isFinite(offset)) {
+      var serverNow = now + eventClockOffset;
+      schedule.nightlies.forEach(function (hour) {
+        var date = new Date(serverNow); date.setUTCHours((Number(hour) - offset + 24) % 24, 0, 0, 0);
+        var slot = date.getTime(); if (slot > serverNow) slot -= 86400000;
+        spawned = Math.min(spawned, slot - eventClockOffset);
+      });
+    }
+    return spawned;
+  }
+  function frankyKeeper() {
+    var members = currentPartyList().map(function (name) {
+      return name === character.name ? character : get_player(name);
+    }).filter(function (member) {
+      return member && !member.rip && member.ctype !== "merchant" && member.visible !== false &&
+        (!member.map || member.map === character.map);
+    });
+    members.sort(function (a, b) { return (Number(b.range) || 0) - (Number(a.range) || 0) || String(a.name).localeCompare(String(b.name)); });
+    return members[0] ? members[0].name : character.name;
+  }
+  function frankyEventEnd(target) {
+    var status = (eventStatus() || {}).franky, end = status && status.live !== false ? eventEpoch(status.end) : 0;
+    return end || frankySpawnedAt(target) + frankyEventMs;
+  }
+  /** Past the final minute the keeper stays in range; a 20s lull would end the event. */
+  function frankyKeepaliveHolding(target) {
+    return frankyTargetAllowed(target) && Date.now() >= frankyEventEnd(target) - frankyKeepaliveHoldMs &&
+      frankyKeeper() === character.name;
+  }
+  function frankyKeepaliveDue(target) {
+    if (!frankyTargetAllowed(target)) return false;
+    var untilEnd = frankyEventEnd(target) - Date.now();
+    if (untilEnd > frankyKeepaliveLeadMs) return false;
+    var lastHit = frankyHits[target.id] || frankyFirstSeen[target.id] || 0;
+    var interval = untilEnd <= frankyKeepaliveHoldMs ? frankyKeepaliveTightMs : frankyKeepaliveDueMs;
+    return Date.now() - lastHit >= interval && frankyKeeper() === character.name;
+  }
   function eventCombatReachable(target) {
     if (!target || target.dead || target.hp === 0) return false;
     if (typeof is_in_range === "function" && is_in_range(target)) return true;
@@ -13338,8 +13443,8 @@
 
   function nearestEventTarget() {
     if (joinedEvent && !eventSelected(joinedEvent) || travellingEventName && !eventSelected(travellingEventName)) return null;
-    if (typeof frankyCombatActive === "function" && frankyCombatActive()) {
-      var bosses = Object.values(parent.entities || {}).filter(frankyTargetAllowed);
+    if ((typeof bossCombatActive === "function" ? bossCombatActive() : typeof frankyCombatActive === "function" && frankyCombatActive())) {
+      var bosses = Object.values(parent.entities || {}).filter((typeof bossTargetAllowed === "function" ? bossTargetAllowed : frankyTargetAllowed));
       var retained = bosses.find(function (target) { return target.id === combatTargetId; });
       bosses.sort(function (a, b) {
         return Math.hypot(a.x - character.x, a.y - character.y) -
@@ -14297,6 +14402,20 @@
     } finally { healingBusy = false; }
   }
 
+  // At the gear level this event is being run, Franky's damage output requires
+  // continuous party-wide healing rather than the normal reactive threshold
+  // (two members critically injured). This bypasses that gate entirely while
+  // Franky combat is active and casts partyheal on cooldown, once someone has engaged him.
+  async function frankySpamPartyHeal() {
+    if (character.ctype !== "priest" || character.rip) return false;
+    var engaged = Object.values(parent.entities || {}).some(function (e) { return frankyTargetAllowed(e) && !!e.target; });
+    if (!engaged) return false;
+    if (!G.skills.partyheal || character.mp < Number(G.skills.partyheal.mp || 0)) return false;
+    if (is_on_cooldown("partyheal") || !can_use("partyheal")) return false;
+    await use_skill("partyheal");
+    return true;
+  }
+
   async function energizeLowestMana(reserveRatio) {
     if (character.ctype !== "mage" || character.max_mp <= 0) return false;
     reserveRatio = reserveRatio == null ? 0.35 : reserveRatio;
@@ -14330,7 +14449,7 @@
   }
 
   async function dashToward(target) {
-    if (typeof frankyCombatActive === "function" && frankyCombatActive()) return false;
+    if ((typeof bossCombatActive === "function" ? bossCombatActive() : typeof frankyCombatActive === "function" && frankyCombatActive())) return false;
     if (typeof groupedFarming === "function" && groupedFarming() && formationMembers().some(function (member) { return member.ctype === "priest"; })) return false;
     if (character.ctype !== "warrior" || !target || character.max_mp <= 0 ||
         character.mp / character.max_mp < 0.5 || character.mp < G.skills.dash.mp ||
@@ -15075,7 +15194,8 @@
     if (character.cave || typeof root !== "undefined" && root.__partyDungeonRuntime && root.__partyDungeonRuntime.owns()) return dungeonTargetAllowed(target);
     if(typeof returnCombatActive==='function' && returnCombatActive())return returnAttacker(target);
     function reject(reason) { if (diagnostic) diagnostic.reason = reason; return false; }
-    if (typeof frankyCombatActive === "function" && frankyCombatActive() && !frankyTargetAllowed(target))
+    var bossActive = (typeof bossCombatActive === "function" ? bossCombatActive() : typeof frankyCombatActive === "function" && frankyCombatActive());
+    if (bossActive && !(typeof bossTargetAllowed === "function" ? bossTargetAllowed : frankyTargetAllowed)(target))
       return reject("Franky attendance only permits the Franky monster");
     var huntTravel = huntTravelCommand && huntTravelCommand.purpose === "monster-hunt" &&
       huntTravelCommand.combatHandoffAllowed === true && huntTravelCommand.huntTarget === (target && target.mtype);
@@ -15091,8 +15211,18 @@
           return t.id===target.id && t.map===character.map && t.in===character.in && t.server===reunionRealm();
         }))) return reject("combat recovery owns target");
     if (typeof root !== "undefined" && root.partyRoleRunner && root.partyRoleRunner.isKnownDead && root.partyRoleRunner.isKnownDead(target.id)) return reject("confirmed death");
-    if (typeof frankyCombatActive === "function" && frankyCombatActive()) return true;
+    if (bossActive) {
+      // Off-tank positioning alone doesn't stop ranged pulls; attacks and skills wait for a proven holder.
+      if ((typeof bossRoutine === "function" ? bossRoutine() : frankyRoutine) === "offtank" && !frankyHeldByOther(target) && !frankyKeepaliveDue(target))
+        return reject("Off-tank waits for someone else to hold the boss for 5 seconds");
+      return true;
+    }
     if (target.mtype === "fieldgen0") return reject("excluded monster");
+    if (target.mtype === "phoenix" && typeof rareSearchKind === "function") {
+      // Scattered searchers hold fire until the party gathers, unless it is already a fight.
+      if (rareSearchKind() && !target.target) return reject("Phoenix search holds fire until the party gathers");
+      if (rareActive() && rareControlState.kind === "engage" && rareTarget() && rareTarget().id === target.id) return true;
+    }
     // Acquisition nominates a new target; only actual combat requires the group selection lock.
     // An attack already pending or engaged must still finish before another hunt pull.
     if (huntTravel && typeof unfinishedFight === "function" && unfinishedFight()) return reject("unfinished group fight");
@@ -16369,6 +16499,8 @@
   }
 
   var kiteState = { targetId: null, center: null, offset: 0, lastMoveAt: 0 };
+  var frankyLastKnown = null;
+  var frankyFleeState = { phase: "none", homeMap: null, since: 0 };
 
   function isCurrentlyKiting() {
     var target = kiteState.targetId && get_entity(kiteState.targetId);
@@ -17118,7 +17250,7 @@
   function formationMove(target) {
     independentApproachReference=target?{target:target,at:Date.now()}:null;
     if(!character.cave && root.partyQueueClient && root.partyQueueClient.independent && root.partyQueueClient.independent.movement())return true;
-    if (typeof frankyCombatActive === "function" && frankyCombatActive()) return false;
+    if ((typeof bossCombatActive === "function" ? bossCombatActive() : typeof frankyCombatActive === "function" && frankyCombatActive())) return false;
     if(!character.cave && root.partyQueueClient && root.partyQueueClient.formation && root.partyQueueClient.formation.movement())return true;
     // The priest formation orbits melee classes around their target, which pulls
     // the designated tank off it. tankMovementTick owns the tank's movement while it has a
@@ -17569,7 +17701,7 @@
     return best ? sendCombatMove(target, best, "event-kiting") : false;
   }
   async function kiteIfNeeded(target) {
-    if (typeof frankyCombatActive === "function" && frankyCombatActive()) return false;
+    if ((typeof bossCombatActive === "function" ? bossCombatActive() : typeof frankyCombatActive === "function" && frankyCombatActive())) return false;
     if(typeof returnCombatActive==='function' && returnCombatActive())return false;
     var attacker = target && target.target === character.name ? target : Object.keys(parent.entities || {})
       .map(function (id) { return parent.entities[id]; }).filter(function (enemy) {
@@ -17605,13 +17737,106 @@
     // collision-checked steps, retaining all secondary-attacker safeguards.
     return false;
   }
-  function frankyMovementTick(target) {
-    if (!frankyCombatActive()) return false;
-    if (!frankyTargetAllowed(target) || is_in_range(target)) {
+  function frankyExitDoor(mapName) {
+    // The door shared with the room's ordinary entrance, eastmost among those
+    // (see frankySafeCorner). Also used as the literal way out when fleeing:
+    // its own target map/spawn are what a real map transition needs.
+    var map = G.maps && G.maps[mapName];
+    var doors = (map && map.doors) || [];
+    if (!doors.length) return null;
+    var counts = {};
+    doors.forEach(function (door) { counts[door[4]] = (counts[door[4]] || 0) + 1; });
+    var primary = Object.keys(counts).reduce(function (best, key) {
+      return !best || counts[key] > counts[best] ? key : best;
+    }, null);
+    return doors.filter(function (door) { return door[4] === primary; })
+      .reduce(function (best, door) {
+        return !best || door[0] > best[0]
+          ? { x: door[0], y: door[1], map: door[4], spawn: Number(door[5] || 0) } : best;
+      }, null);
+  }
+  function frankySafeCorner() { return frankyExitDoor(character.map); }
+  function frankyReturnSpawn(awayMap, homeMap) {
+    // Best-effort: the eastmost door on the away map that leads back to home.
+    // If the room has more than one door back, this may not be the exact one
+    // we left through, but it lands back inside the same room either way.
+    var doors = (G.maps && G.maps[awayMap] && G.maps[awayMap].doors) || [];
+    return doors.filter(function (door) { return door[4] === homeMap; })
+      .reduce(function (best, door) { return !best || door[0] > best[0] ? Number(door[5] || 0) : best; }, null);
+  }
+  function frankyMoveToward(moveTarget, point, mode) {
+    var dx = point.x - character.x, dy = point.y - character.y;
+    var step = Math.min(Math.hypot(dx, dy), Math.max(1, Number(character.speed || 40) * 0.6));
+    var angle = Math.atan2(dy, dx);
+    for (var offsets = [0, 0.4, -0.4, 0.8, -0.8], i = 0; i < offsets.length; i++) {
+      var p = { x: character.x + Math.cos(angle + offsets[i]) * step, y: character.y + Math.sin(angle + offsets[i]) * step };
+      if (typeof can_move_to === "function" && can_move_to(p.x, p.y)) return sendCombatMove(moveTarget, p, mode);
+    }
+    return false;
+  }
+  function frankyFleeTick() {
+    if (frankyFleeState.phase === "toDoor") {
+      var door = frankyExitDoor(frankyFleeState.homeMap);
+      if (!door) { frankyFleeState.phase = "none"; return false; }
+      if (Math.hypot(character.x - door.x, character.y - door.y) <= 20) {
+        frankyFleeState.phase = "leaving";
+        return frankyFleeTick();
+      }
+      if (frankyMoveToward({ id: "franky-flee-door", x: door.x, y: door.y }, door, "franky-fleeing")) return true;
+      resetCombatMovement();
+      root.partyCombatPosition = { at: Date.now(), mode: "blocked", movementOwner: "combat",
+        target: null, reason: "No terrain-clear path to the exit door" };
+      return true;
+    }
+    if (frankyFleeState.phase === "leaving") {
+      if (!frankyFleeState.since) {
+        frankyFleeState.since = Date.now();
+        var exit = frankyExitDoor(frankyFleeState.homeMap);
+        if (!exit) { frankyFleeState.phase = "none"; return false; }
+        Promise.resolve(transport(exit.map, exit.spawn)).then(function () {
+          frankyFleeState.phase = "away"; frankyFleeState.since = Date.now();
+        }).catch(function () { frankyFleeState.phase = "none"; });
+      }
+      resetCombatMovement();
+      root.partyCombatPosition = { at: Date.now(), mode: "franky-fleeing", movementOwner: "combat",
+        target: null, reason: "Leaving the room" };
+      return true;
+    }
+    if (frankyFleeState.phase === "away") {
+      if (Date.now() - frankyFleeState.since < 3000) {
+        resetCombatMovement();
+        root.partyCombatPosition = { at: Date.now(), mode: "franky-fleeing", movementOwner: "combat",
+          target: null, reason: "Waiting outside the room for Franky to lose interest" };
+        return true;
+      }
+      frankyFleeState.phase = "returning"; frankyFleeState.since = 0;
+      return frankyFleeTick();
+    }
+    if (frankyFleeState.phase === "returning") {
+      if (!frankyFleeState.since) {
+        frankyFleeState.since = Date.now();
+        var spawn = frankyReturnSpawn(character.map, frankyFleeState.homeMap);
+        Promise.resolve(transport(frankyFleeState.homeMap, spawn == null ? undefined : spawn)).then(function () {
+          frankyFleeState.phase = "none";
+        }).catch(function () { frankyFleeState.phase = "none"; });
+      }
+      resetCombatMovement();
+      root.partyCombatPosition = { at: Date.now(), mode: "franky-fleeing", movementOwner: "combat",
+        target: null, reason: "Returning to the room" };
+      return true;
+    }
+    frankyFleeState.phase = "none";
+    return false;
+  }
+  // Tank approach: only terrain constrains it. Adds and healer coverage must not
+  // cause a retreat or prevent closing on Franky, and once in range he is held
+  // even when closer than the weapon range.
+  function frankyTankMovementTick(target) {
+    if (!(typeof bossTargetAllowed === "function" ? bossTargetAllowed : frankyTargetAllowed)(target) || is_in_range(target)) {
       resetCombatMovement();
       root.partyCombatPosition = { at: Date.now(), mode: target ? "franky-holding" : "franky-waiting",
         movementOwner: "combat", target: target && target.id || null,
-        reason: target ? "Franky is in attack range" : "Waiting for Franky" };
+        reason: target ? "The boss is in attack range" : "Waiting for the boss" };
       return true;
     }
     var destination = combatApproachPoint(target);
@@ -17621,10 +17846,117 @@
     for (var offsets = [0, 0.4, -0.4, 0.8, -0.8], i = 0; i < offsets.length; i++) {
       var point = { x: character.x + Math.cos(angle + offsets[i]) * step,
         y: character.y + Math.sin(angle + offsets[i]) * step };
-      // Only terrain constrains this approach. Adds and healer coverage must not
-      // cause a retreat or prevent closing on Franky.
       if (typeof can_move_to === "function" && can_move_to(point.x, point.y))
         return sendCombatMove(target, point, "franky-approaching");
+    }
+    resetCombatMovement();
+    root.partyCombatPosition = { at: Date.now(), mode: "blocked", movementOwner: "combat",
+      target: target.id, reason: "No terrain-clear approach to the boss" };
+    return true;
+  }
+  // Open-map off-tank: there are no doors to flee through, so a targeted off-tank
+  // steps out of the boss's own range and comes back once it holds someone else.
+  function bossMovementTick(target) {
+    return frankyMovementTick(target);
+  }
+  function frankyMovementTick(target) {
+    if (!frankyCombatActive()) { frankyLastKnown = null; frankyFleeState.phase = "none"; frankyFleeState.since = 0; return false; }
+    if (frankyRoutine === "tank") {
+      // A party that can actually tank Franky closes on him directly instead of
+      // running the off-tank/support state machine below (stacking on someone
+      // else's aggro, fleeing when targeted).
+      frankyFleeState.phase = "none"; frankyFleeState.since = 0;
+      if (frankyTargetAllowed(target)) frankyLastKnown = { x: target.x, y: target.y, at: Date.now() };
+      return frankyTankMovementTick(target);
+    }
+    // A flee sequence runs to completion once started, since Franky's aggro
+    // isn't observable while briefly off on the adjacent map.
+    if (frankyFleeState.phase !== "none") return frankyFleeTick();
+    // An off-tank's attack target is withheld until someone else holds Franky,
+    // including while he targets us, so read his aggro from the live entity.
+    if (!frankyTargetAllowed(target)) target = Object.values(parent.entities || {}).filter(frankyTargetAllowed)
+      .sort(function (a, b) { return Math.hypot(a.x - character.x, a.y - character.y) - Math.hypot(b.x - character.x, b.y - character.y); })[0] || null;
+    if (frankyTargetAllowed(target)) frankyLastKnown = { x: target.x, y: target.y, at: Date.now() };
+    var safeSpot = frankySafeCorner();
+    if (!frankyTargetAllowed(target)) {
+      // Franky isn't a currently-loaded entity, most likely because he's out
+      // of network range wherever we spawned in. Standing still here is how a
+      // character gets worked over by nerfedmummies while never closing the
+      // distance: chase his last known position while that memory is fresh,
+      // otherwise fall back to waiting at the safe corner rather than idling
+      // wherever we happened to stop.
+      var fresh = frankyLastKnown && Date.now() - frankyLastKnown.at <= 30000;
+      var seekAt = fresh ? frankyLastKnown : safeSpot;
+      if (!seekAt || Math.hypot(character.x - seekAt.x, character.y - seekAt.y) <= 40) {
+        resetCombatMovement();
+        root.partyCombatPosition = { at: Date.now(), mode: "franky-waiting", movementOwner: "combat",
+          target: null, reason: fresh ? "At Franky's last known position; waiting for him to load in" : "Waiting in the safe corner for Franky" };
+        return true;
+      }
+      if (frankyMoveToward({ id: "franky-seek-point", x: seekAt.x, y: seekAt.y }, seekAt, fresh ? "franky-seeking" : "franky-retreating")) return true;
+      resetCombatMovement();
+      root.partyCombatPosition = { at: Date.now(), mode: "blocked", movementOwner: "combat",
+        target: null, reason: "No terrain-clear path toward Franky" };
+      return true;
+    }
+    // Despawn keepalive outranks fleeing: land the hit, then the flee resumes next tick. In the
+    // final minute the keeper holds in range so a hit is always available.
+    if (frankyKeepaliveDue(target) || frankyKeepaliveHolding(target)) return engageMovementTick(target);
+    if (target.target === character.name) {
+      // Fragile gear: don't try to tank him. Actually leave the room through
+      // its exit door and wait a few seconds for the human tank to reclaim
+      // aggro, then come back, rather than just backing off to the doorway.
+      frankyFleeState.phase = "toDoor"; frankyFleeState.homeMap = character.map; frankyFleeState.since = 0;
+      return frankyFleeTick();
+    }
+    if (!target.target) {
+      // Nobody has aggro yet: wait at the safe corner instead of walking in cold.
+      if (!safeSpot || Math.hypot(character.x - safeSpot.x, character.y - safeSpot.y) <= 40) {
+        resetCombatMovement();
+        root.partyCombatPosition = { at: Date.now(), mode: "franky-waiting", movementOwner: "combat",
+          target: target.id, reason: "Waiting in the safe corner for Franky to engage someone" };
+        return true;
+      }
+      if (frankyMoveToward(target, safeSpot, "franky-retreating")) return true;
+      resetCombatMovement();
+      root.partyCombatPosition = { at: Date.now(), mode: "blocked", movementOwner: "combat",
+        target: target.id, reason: "No terrain-clear path to the safe corner" };
+      return true;
+    }
+    // Someone else has aggro: stack tight on Franky rather than fighting at our
+    // own weapon range, so a human off-tank rotation, Scare uptime and
+    // partyheal all stay effective. Ranged classes are capped down to
+    // near-melee distance instead of hanging back at their own range.
+    var stackRange = Math.min(desiredCombatRange(), 30);
+    if (combatDistance(target) <= stackRange + 5) {
+      resetCombatMovement();
+      root.partyCombatPosition = { at: Date.now(), mode: "franky-holding", movementOwner: "combat",
+        target: target.id, reason: "Standing with Franky" };
+      return true;
+    }
+    var destination = combatApproachPoint(target, stackRange);
+    var dx = destination.x - character.x, dy = destination.y - character.y;
+    var step = Math.min(Math.hypot(dx, dy), Math.max(1, Number(character.speed || 40) * 0.6));
+    var angle = Math.atan2(dy, dx);
+    // Prefer whichever terrain-clear offset keeps the most distance from other
+    // party members already stacked on Franky, so attacks that splash a small
+    // radius don't chain across the whole group.
+    var minSeparation = 25;
+    var allies = formationMembers().filter(function (member) { return member.name !== character.name; });
+    var candidates = [];
+    for (var offsets = [0, 0.4, -0.4, 0.8, -0.8, 1.2, -1.2], i = 0; i < offsets.length; i++) {
+      var point = { x: character.x + Math.cos(angle + offsets[i]) * step,
+        y: character.y + Math.sin(angle + offsets[i]) * step };
+      if (typeof can_move_to !== "function" || !can_move_to(point.x, point.y)) continue;
+      var clearance = allies.reduce(function (min, ally) {
+        return Math.min(min, Math.hypot(point.x - ally.x, point.y - ally.y));
+      }, Infinity);
+      candidates.push({ point: point, clearance: clearance });
+    }
+    if (candidates.length) {
+      var spaced = candidates.filter(function (c) { return c.clearance >= minSeparation; });
+      var chosen = (spaced.length ? spaced : candidates).sort(function (a, b) { return b.clearance - a.clearance; })[0];
+      return sendCombatMove(target, chosen.point, "franky-stacking");
     }
     resetCombatMovement();
     root.partyCombatPosition = { at: Date.now(), mode: "blocked", movementOwner: "combat",
@@ -17679,9 +18011,9 @@
     }
     return true;
   }
-  async function approachCombatTarget(target) {
-    if (typeof frankyCombatActive === "function" && frankyCombatActive()) return frankyMovementTick(target);
-    if (designatedTankHolds()) return tankMovementTick(target);
+  // Shared by ordinary combat and the Franky "tank" routine: approach and hold
+  // at this character's own weapon range, regardless of who currently has aggro.
+  function engageMovementTick(target) {
     if (!target || target.dead) { eventCombatDetour=null; return false; }
     var delta = combatDistance(target) - desiredCombatRange();
     var tolerance = Math.min(3, Math.max(0.5, Number(character.range) * 0.01));
@@ -17755,6 +18087,12 @@
     root.partyCombatPosition = { at: Date.now(), mode: "blocked", movementOwner: "combat",
       target: target.id, reason: "No terrain-clear approach for the designated tank" };
     return true;
+  }
+
+  async function approachCombatTarget(target) {
+    if ((typeof bossCombatActive === "function" ? bossCombatActive() : typeof frankyCombatActive === "function" && frankyCombatActive())) return typeof bossMovementTick === "function" ? bossMovementTick(target) : frankyMovementTick(target);
+    if (designatedTankHolds()) return tankMovementTick(target);
+    return engageMovementTick(target);
   }
 
   root.sharedRoutine = {
@@ -17984,6 +18322,7 @@
     smartLoot: smartLoot,
     absorbSinsBelow: absorbSinsBelow,
     healPartyBelow: healPartyBelow,
+    frankySpamPartyHeal: frankySpamPartyHeal,
     energizeLowestMana: energizeLowestMana,
     rejoinActiveEventAfterRespawn: rejoinActiveEventAfterRespawn,
     beginFarmReunion: beginFarmReunion,
@@ -18158,6 +18497,7 @@
         monsters.some(function(m){return event.types.indexOf(m.mtype) >= 0;}));
       return { leader: leader || character.name, tank: tank || null, allies: allies, monsters: monsters,
         event: eventCombat ? event.name : null,
+        bossRoutine: typeof bossCombatActive === "function" && bossCombatActive() ? bossRoutine() : null,
         mode: root.sharedRoutine.isOccupied() || isLiveAbtesting() ? "blocked" : eventCombat ? "event" : !character.cave && farmingMode === "scatter" ? "scatter" : "grouped",
         observedAt: parent.socket && parent.socket.connected ? Date.now() : 0 };
     },
@@ -18166,7 +18506,7 @@
       if (!target || target.type !== "monster" || !isAllowedTarget(target) || root.sharedRoutine.isOccupied() || isLiveAbtesting()) return false;
       if(dungeonOwned()) return dungeonTargetAllowed(target);
       if(huntTravelDefense() && !isAttackingPartyMember(target) && !(convoyTraveling.defenseTargets||[]).some(function(t){return passingKey(t)===passingKey(target);}))return false;
-      if (typeof frankyCombatActive === "function" && frankyCombatActive()) return frankyTargetAllowed(target);
+      if ((typeof bossCombatActive === "function" ? bossCombatActive() : typeof frankyCombatActive === "function" && frankyCombatActive())) return (typeof bossTargetAllowed === "function" ? bossTargetAllowed : frankyTargetAllowed)(target);
       if (target.target && !isAttackingPartyMember(target)) return false;
       if (groupedAttackAllowed(target)) return true;
       return groupedFarming() && groupedFresh() && groupedCombat.committed &&
@@ -18374,6 +18714,9 @@
     escapeOwnsRevival: function () { return escapeOwns() && escapeState.stage === "recovering"; },
     frankyCombatActive: frankyCombatActive,
     frankyMovementTick: frankyMovementTick,
+    bossCombatActive: bossCombatActive,
+    bossTargetAllowed: bossTargetAllowed,
+    bossMovementTick: bossMovementTick,
     isAggressiveEventCombat: isAggressiveEventCombat,
     getMonsterFocus: function () { return monsterFocus.slice(); },
     getFarmingMode: function () {

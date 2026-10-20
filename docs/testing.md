@@ -29,6 +29,13 @@ evidence files). The outsider-already-fighting rule has no live coverage: the
 harness has no player outside the party. The existing native Phoenix Hunt
 interruption journey still passes. Failure inventory:
 `e2e/phoenix-search-failures.md`. Activate with the ordinary full restart.
+Absorb Sins at a boss uses `npm test -- -- --project=live --grep "Franky's adds"`. A
+passive Franky (no range, aggro or native adds) puts the off-tank party in the safe
+corner; three harmless native `nerfedmummy` adds attack the warrior. The designated-tank
+priest, following with the party's off-tank routine, must not pull any of them for 30 s;
+switched to the tank routine it must (the control). Failure inventory:
+`e2e/boss-absorb-failures.md`.
+
 Designated tank (issue #39) uses
 `npm test -- -- --project=live --grep "designated tank persists through restart"`.
 The live journey sets a ranger (a ranged class, so the melee override is unmistakable)
