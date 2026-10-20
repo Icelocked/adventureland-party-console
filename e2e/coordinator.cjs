@@ -89,6 +89,10 @@ const adapters = {
   // Map references resolve against the launcher directory. Read the same pinned
   // catalog from this scenario, without modifying the installed game cache.
   'node:fs': { ...fs, readFileSync(file, ...args) {
+    // Activation belongs to this scenario's CODE, never the user's live launcher.
+    // Otherwise a locally activated console changes the missing-record contract.
+    if (typeof file === 'string' && path.resolve(file) === path.resolve(launcherDirectory, '../CODE/adventure_land/activation.json'))
+      return fs.readFileSync(path.join(directory, 'CODE/adventure_land/activation.json'), ...args);
     const installedCache=path.resolve(launcherDirectory,'../game_files',String(version));
     // This console fixture declares catalog-only offline profiles. Never let an
     // installed stats cache silently change the fallback case's input boundary.
@@ -112,7 +116,13 @@ const adapters = {
   'node:child_process': { fork: () => forbidden('character worker launch') },
   'bot-web-interface': function() { return forbidden('legacy monitor'); },
   '../monitoring_util': {},
-  express,
+  express: Object.assign((...args) => express(...args), express, {
+    static(file, ...args) {
+      const isolated = path.resolve(file) === path.resolve(launcherDirectory, '../CODE')
+        ? path.join(directory, 'CODE') : file;
+      return express.static(isolated, ...args);
+    },
+  }),
 };
 async function main() {
   const { startCoordinatorApplication } = require(path.join(root, '.build/runtime/coordinator-application.cjs'));
