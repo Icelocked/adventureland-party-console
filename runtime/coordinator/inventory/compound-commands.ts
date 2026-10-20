@@ -1,4 +1,5 @@
 import {protectedMerchantStorageStock} from './merchant-storage-stock.ts';
+import { entryMeta } from "./catalog-meta.ts";
 import { ruleOwner, type SharedScope } from "./shared-rules.ts";
 import { requestObject, requestText } from "../http/contracts.ts";
 import type { Item, InventoryEntry } from "../contracts/item.ts";
@@ -28,6 +29,8 @@ interface CompoundState extends SharedScope {
   statuses: Record<string, { items?: (Entry | null)[] } | undefined>;
   merchantQueue: { reason: string }[];
   merchantCurrent: { reason: string } | null;
+  /** Bank entries carry per-copy meta; compoundable comes from this catalog. */
+  merchantCatalog?: unknown;
 }
 interface CompoundPorts {
   selectAction?(item: Item, name: string): void;
@@ -89,7 +92,7 @@ export function createCompoundCommands(state: CompoundState, ports: CompoundPort
     const reserved = new Set(groups.flatMap(group=>group.items.map(mark=>mark.storage ? mark.storage.pack+':'+mark.storage.slot : 'inventory:'+mark.slot)));
     const matches = protectedMerchantStorageStock(state).filter(entry=>/^items\d+$/.test(entry.craftLocation) && entry.item && !entry.item.l && !entry.item.b && entry.item.name===item.name && (entry.item.level||0)===(item.level||0) && !reserved.has(entry.craftLocation+':'+entry.slot));
     const selected = matches.find(entry=>entry.craftLocation===body.pack && entry.slot===body.slot && JSON.stringify(entry.item)===JSON.stringify(item));
-    if (!selected || matches.length<3 || requestObject(selected.meta).compoundable !== true)
+    if (!selected || matches.length<3 || entryMeta(state.merchantCatalog, selected)?.compoundable !== true)
       return reply({error:'Need three available matching compoundable bank items'},409);
     const triplet=[selected,...matches.filter(entry=>entry!==selected).slice(0,2)];
     const next=nextGroup(groups);

@@ -133,6 +133,20 @@ function physicalInventory(items: unknown, slots: unknown): string {
       : [],
   ]);
 }
+/**
+ * A snapshot refresh without an inventory change stays in memory until this
+ * long after the last saved one. The roster key holds every character's
+ * items and slots, so a 30 s refresh per character rewrote it several times a
+ * minute (docs/efficiency.md, Persistence: Offline character snapshots).
+ */
+export const SNAPSHOT_SAVE_MS = 300_000;
+const snapshotSavedAt = new WeakMap<AppearanceState, Map<string, number>>();
+const savedSnapshots = new WeakMap<object, Map<string, unknown>>();
+/**
+ * Refreshes the offline-inspection snapshot in memory. Returns true when the
+ * caller should save the roster: the physical inventory changed, or the last
+ * saved snapshot of this character is SNAPSHOT_SAVE_MS old.
+ */
 export function rememberCharacterSnapshot(
   state: AppearanceState,
   report: Record<string, unknown>,
@@ -164,5 +178,27 @@ export function rememberCharacterSnapshot(
     ...state.characterSnapshots,
     [report.name]: JSON.parse(JSON.stringify({ ...snapshot, updatedAt: now, seenAt: now })),
   };
+  return snapshotSaveDue(state, report.name, inventoryChanged, now);
+}
+function snapshotSaveDue(state: AppearanceState, name: string, inventoryChanged: boolean, now: number): boolean {
+  let saved = snapshotSavedAt.get(state);
+  if (!saved) snapshotSavedAt.set(state, (saved = new Map()));
+  if (!inventoryChanged && now - (saved.get(name) ?? -Infinity) < SNAPSHOT_SAVE_MS) return false;
+  saved.set(name, now);
+  let versions = savedSnapshots.get(state);
+  if (!versions) savedSnapshots.set(state, (versions = new Map()));
+  versions.set(name, state.characterSnapshots?.[name]);
   return true;
+}
+/**
+ * The roster key's copy of the snapshots. nativeOwnership saves the roster on
+ * every native report, so the roster carries each character's snapshot from
+ * its last due save; a refresh that is not due stays in memory. A character
+ * without a refresh since load keeps its loaded snapshot.
+ */
+export function rosterSnapshots(state: object, current: unknown): unknown {
+  const versions = savedSnapshots.get(state);
+  if (!versions?.size || !current || typeof current !== "object") return current;
+  return Object.fromEntries(Object.entries(current).map(([name, snapshot]) =>
+    [name, versions.has(name) ? versions.get(name) : snapshot]));
 }
