@@ -5,6 +5,7 @@ import {
 import { requestObject, type HttpRequest, type HttpResponse } from "../http/contracts.ts";
 import { createCombatIngestion, preserveNewerCombat } from "./combat-ingestion.ts";
 import { receiveLuckySlotTracking, type LuckySlotState } from "./lucky-slot-tracking.ts";
+import { createInventoryCarry } from "./inventory-carry.ts";
 
 export interface StatusReport {
   name: string;
@@ -58,6 +59,7 @@ export function createStatusIngestion<Report extends StatusReport>(
   ports: IngestionPorts<Report>,
 ) {
   const channel = createCombatIngestion(state.statuses, ports);
+  const inventory = createInventoryCarry();
   function nativeOwnership(body: Report): void {
     if (
       body.runtime !== "native" ||
@@ -100,6 +102,11 @@ export function createStatusIngestion<Report extends StatusReport>(
       measureStatusStage('persist', () => ports.persist());
   }
 
+  function receiveRosterEvidence(raw: Record<string, unknown>, body: Report, receivedAt: number): void {
+    const snapshotChanged = rememberCharacterSnapshot(state, raw, receivedAt);
+    if (rememberCharacterAppearance(state, body, receivedAt) || snapshotChanged) ports.persistRoster();
+  }
+
   function handle(req: HttpRequest, res: HttpResponse): unknown {
     const receivedAt = ports.now();
     const sendJson = res.json.bind(res);
@@ -109,11 +116,13 @@ export function createStatusIngestion<Report extends StatusReport>(
       return res.status(400).json({ error: "unknown character" });
     if (raw.combatWait === true || raw.combatOnly === true)
       return channel.handle(raw.name, raw, res);
+    // The character sends the full inventory again on this reply, in the same request() call.
+    if (!inventory.complete(raw.name, raw))
+      return res.status(409).json({ error: "inventory revision unknown", code: "inventory-required" });
     // Report fields are decoded by their domain consumer; unrecognized fields remain available to the dashboard.
     const body = raw as unknown as Report;
     receiveLuckyEvidence(raw, raw.name);
-    const snapshotChanged = rememberCharacterSnapshot(state, raw, receivedAt);
-    if (rememberCharacterAppearance(state, body, receivedAt) || snapshotChanged) ports.persistRoster();
+    receiveRosterEvidence(raw, body, receivedAt);
     const learned = consume(body);
     const previous = state.statuses[body.name];
     if (body.name === state.merchantCharacter) ports.merchant(body, previous);
@@ -124,7 +133,7 @@ export function createStatusIngestion<Report extends StatusReport>(
     measureStatusStage('publishMarket', () => ports.publishMarket(body.name));
     if (measureStatusStage('convoyStep', () => ports.convoyStep())) measureStatusStage('persist', () => ports.persist());
     measureStatusStage('merchantScheduling', () => ports.merchantScheduling(body, !!previous));
-    return res.json(measureStatusStage('response', () => ports.response(body.name)));
+    return res.json(inventory.acknowledge(body.name, measureStatusStage('response', () => ports.response(body.name))));
   }
   return { handle };
 }

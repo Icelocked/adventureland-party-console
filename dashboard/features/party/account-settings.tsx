@@ -8,6 +8,7 @@ import type { Char } from './char';
 import { CharacterPortrait } from './character-portrait';
 
 import { API } from './api';
+import { inventoryWithCatalogMeta } from './item-catalog-meta';
 import type { PartyState } from './party-state';
 export function AccountSettings({ state }: { state: PartyState }) {
   const [loading,setLoading]=useState<string|null>(null);
@@ -35,7 +36,8 @@ export function AccountSettings({ state }: { state: PartyState }) {
       const characterClass = live?.ctype || member.ctype;
       const level = live?.level ?? member.level;
 
-          const snapshot = live || state.characterSnapshots?.[member.name];
+          // Saved snapshots carry per-copy item meta; the catalog supplies the rest.
+          const snapshot = live || inventoryWithCatalogMeta(state.merchantCatalog, state.characterSnapshots?.[member.name]);
           return (
             <button
               type="button"

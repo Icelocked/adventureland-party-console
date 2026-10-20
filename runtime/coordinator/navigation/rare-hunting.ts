@@ -2,6 +2,7 @@ import { refreshRareApproach } from './rare-progress.ts';
 import { migratePassiveSettings, applyPassivePatch, committedPassiveRules, validPassivePatch, passiveLevelAllowed } from "./passive-settings.ts";
 import { interruptibleTravel } from '../../combat/hunt-travel.ts';
 import { createRareRetryEvidence } from './rare-retry-evidence.ts';
+import { keepNewestRare } from './rare-retention.ts';
 // Rare encounters own temporary travel; the saved farming intent remains authoritative.
 import * as zones from "../../../dashboard/lib/farming-zones.ts";
 import type {
@@ -217,6 +218,7 @@ export function createRareHunting(input: unknown, hooks: Hooks) {
     if(!encounter)return;
     const e=encounter, saved=party.rarePursuitProgress||={};
     saved[key(e.target)]={start:e.start,progress:e.progress,lowHp:e.lowHp};
+    keepNewestRare(saved,entry=>entry.progress);
   }
   function restore(e: Encounter, travel = true) {
     if(e.convoyId){party.rareHuntReturn=null;return;}
