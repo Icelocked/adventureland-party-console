@@ -2181,6 +2181,11 @@ realm. It waits up to 10 minutes past the estimate, then follows the live boss a
 A return home stays pending (`bossChase.returning`) until its switch succeeds: a refused switch is
 retried after the 5-minute retry delay, no new trip starts meanwhile, and the return is dropped if
 the party is moved elsewhere by hand or the chase is disabled (`e2e/chase-return-failures.md`).
+The config section sends `bossChase` whole, with the latest sightings, respawns, `checkedAt` and
+`lastError`. Settings save `bossChaseSaved` instead: enabled, `minEtaMinutes`, the trip and a pending
+return, which is what a restart restores. A poll that only refreshes the observation writes no
+settings record (`scripts/tests/boss-chase-persistence.test.cjs`). A settings record saved before
+`bossChaseSaved` existed still loads from its `bossChase` key.
 Coordinator-only restart suffices.
 
 ## Account-wide home realm changes
