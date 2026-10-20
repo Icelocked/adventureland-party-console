@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 type Encounter = "franky";
 const encounterCopy: Record<Encounter, { title: string; boss: string; offtank: string; tank: string }> = {
@@ -63,9 +63,13 @@ export function FrankyDialog({
   const [limitDraft, setLimitDraft] = useState(String(autoDeathLimit));
   const [limitBusy, setLimitBusy] = useState(false);
   const [limitError, setLimitError] = useState<string | null>(null);
-  useEffect(() => {
-    if (open) setLimitDraft(String(autoDeathLimit));
-  }, [open, autoDeathLimit]);
+  // Opening the dialog, or a new saved limit while it is open, resets the draft.
+  const shownLimit = open ? String(autoDeathLimit) : null;
+  const [draftFor, setDraftFor] = useState(shownLimit);
+  if (draftFor !== shownLimit) {
+    setDraftFor(shownLimit);
+    if (shownLimit !== null) setLimitDraft(shownLimit);
+  }
   async function select(id: string) {
     setBusy(id);
     setError(null);

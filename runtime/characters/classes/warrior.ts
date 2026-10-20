@@ -17,6 +17,13 @@ function scareReady(target: Target): boolean {
   return character.mp >= (G.skills.scare?.mp ?? 0) && !is_on_cooldown("scare") &&
     is_in_range(target, "scare") && can_use("scare");
 }
+// An off-tank (not currently the boss's target) mitigates its damage with
+// Scare instead of contesting the tank's aggro for the kill.
+async function bossAttack(target: Target): Promise<boolean> {
+  if (target.target === character.name || !scareReady(target)) return false;
+  await scare(target);
+  return true;
+}
 function partyTarget() {
   return sharedRoutine.getEventTarget() || sharedRoutine.getNearestPartyAttacker() ||
     sharedRoutine.getNearestPartyTarget() || (sharedRoutine.shouldFollowLeader()
@@ -42,15 +49,7 @@ export const role: Partial<Role> = {
   },
   beforeAttack: async function (target) {
     // Boss movement belongs solely to approach-and-hold, including scatter mode.
-    if (sharedRoutine.bossCombatActive?.()) {
-      // An off-tank (not currently the boss's target) mitigates its damage with
-      // Scare instead of contesting the tank's aggro for the kill.
-      if (target.target !== character.name && scareReady(target)) {
-        await scare(target);
-        return true;
-      }
-      return false;
-    }
+    if (sharedRoutine.bossCombatActive?.()) return bossAttack(target);
     if (target.mtype === "porcupine" && mayTaunt(target)) {
       await taunt(target);
       return true;
