@@ -179,9 +179,13 @@ export function createSharedWalks(input: unknown, ports: WalkPorts) {
   function canReplace(r: WalkRequest): boolean {
     const c = state.activeConvoy;
     if (!c) return true;
-    if (failedEntry(c)) return runtimeTurnoverReady(c, r);
+    if (failedEntry(c)) return failedLegReplaceable(c, r);
     if (c.restartRecovery && c.walkingParents && !c.retryExhausted) return ports.allowed(r.activity);
     return r.activity === "event" && !sessions.has(c) && !c.navigationExempt && !c.nonPreemptible && ports.allowed(r.activity);
+  }
+  // A walk to a different event is a new journey, not a retry of the failed leg.
+  function failedLegReplaceable(c: SharedConvoy, r: WalkRequest): boolean {
+    return runtimeTurnoverReady(c, r) || otherEventAfterFailure(c, r) && ports.allowed(r.activity);
   }
   function replaceActive(): void { if (state.activeConvoy) ports.cancel(); }
   function leaderForRequest(r: WalkRequest): string | undefined {
@@ -321,8 +325,11 @@ export function createSharedWalks(input: unknown, ports: WalkPorts) {
     const failed = state.activeConvoy;
     if (r.activity !== "event" || !failed || !failedEntry(failed)) return null;
     if (failed.walkingParents?.[r.name]?.revision !== r.revision) return null;
-    if (runtimeTurnoverReady(failed, r)) return null;
+    if (runtimeTurnoverReady(failed, r) || otherEventAfterFailure(failed, r)) return null;
     return { ok: true, phase: "failed", reason: failed.failure || "Event walking retries exhausted" };
+  }
+  function otherEventAfterFailure(c: SharedConvoy, r: WalkRequest): boolean {
+    return r.activity === "event" && c.walkingActivity === "event" && !walkingEventMatches(c, r);
   }
   function runtimeTurnoverReady(c: SharedConvoy, r: WalkRequest): boolean {
     if (!turnoverFailure(c, r)) return false;
