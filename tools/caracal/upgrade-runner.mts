@@ -60,6 +60,17 @@ if (!source.includes('installGameRendering(game_context)')) {
   source = source.replace(anchor,
     '  require("../../.build/runtime/lifecycle.cjs").installGameRendering(game_context);\n' + anchor);
 }
+// Print party kills and finds from the named sibling's thread only
+// (runtime/characters/game-log-echo.ts). An older lifecycle bundle without the
+// installer keeps caracAL's own echo hook.
+if (!source.includes('installGameLogEcho')) {
+  const hook = source.indexOf('const old_add_log = add_log;');
+  const start = source.lastIndexOf('  vm.runInContext(', hook);
+  if (hook < 0 || start < 0) throw new Error('Unrecognized game log echo');
+  source = source.slice(0, start) +
+    '  if (!require("../../.build/runtime/lifecycle.cjs").installGameLogEcho?.(game_context, extensions.log, () => extensions.siblings))\n' +
+    source.slice(start);
+}
 // The long-lived native game context loads executable lifecycle code from the
 // selected immutable artifact while keeping its installed native dependencies.
 const lifecycleRequire = 'require(process.env.AL_CONSOLE_ARTIFACT ? require("node:path").join(process.env.AL_CONSOLE_ARTIFACT, ".build/runtime/lifecycle.cjs") : "../../.build/runtime/lifecycle.cjs")';

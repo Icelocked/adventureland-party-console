@@ -25,6 +25,7 @@ type DashboardHandlers<Handler> = AnniversaryAndCommerceHandlers<Handler> &
   MerchantControlsHandlers<Handler> &
   MerchantTransactionsHandlers<Handler> & {
     publicStateRoute: Handler;
+    readyRoute: Handler;
     dashboardImportRoutes: { metadata: Handler; exportState: Handler; preferences: Handler; preview: Handler; importState: Handler };
     characterCreationRoutes: { roster: Handler; bankboi: Handler };
     bankboiStorageRoutes: { checkpoint: Handler; complete: Handler };
@@ -63,6 +64,8 @@ export function installCoordinatorDashboard<
   router.use(ports.json({ limit: "32mb" }));
   router.use("/party-api", partyApiResponseHeaders);
   router.get("/party-api/state", handlers.publicStateRoute);
+  // The host health check asks this route, so it never builds the full state.
+  router.get("/party-api/ready", handlers.readyRoute);
   router.get("/party-api/dashboard-state/export", handlers.dashboardImportRoutes.exportState);
   router.post("/party-api/dashboard-preferences", handlers.dashboardImportRoutes.preferences);
   router.get("/party-api/dashboard-state", handlers.dashboardImportRoutes.metadata);

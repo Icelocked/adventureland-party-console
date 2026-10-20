@@ -244,6 +244,8 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           const selectionsPatch = Object.fromEntries(Object.entries(historical).filter(([field]) => selectionKeys.has(field)));
           const settingsPatch = Object.fromEntries(Object.entries(historical).filter(([field]) => !bankKeys.has(field) && !selectionKeys.has(field)));
           const restored: Record<string, unknown> = { [key]: { ...settings, ...settingsPatch } };
+          // Settings layout 2 loads production from its own key (docs/efficiency.md, Persistence).
+          if (Object.hasOwn(settingsPatch, 'production')) restored[stateKeys.production] = { production: settingsPatch.production };
           if (Object.keys(selectionsPatch).length)
             restored[stateKeys.selections] = { ...decoded(stateKeys.selections), ...selectionsPatch };
           if (Object.keys(bankPatch).length) {

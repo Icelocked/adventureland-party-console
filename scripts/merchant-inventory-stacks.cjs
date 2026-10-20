@@ -1,5 +1,6 @@
 // Plan one conservative merge at an existing idle/stand reconciliation boundary.
 const { identity } = require('./bank-stack-routing.cjs');
+const { entryMeta } = require('../runtime/coordinator/inventory/catalog-meta.ts');
 function plan(party, status) {
   const merchant = party.merchantCharacter;
   if (!status || status.name !== merchant || party.merchantCurrent || party.bankboiTransaction ||
@@ -16,7 +17,8 @@ function plan(party, status) {
     party.merchantQueue].forEach(reserve);
   const groups = new Map();
   for (const entry of status.items || []) {
-    const item = entry?.item, limit = Number(entry?.meta?.definition?.s) || 1;
+    // Reports carry per-copy meta, so the stack size comes from merchantCatalog.
+    const item = entry?.item, limit = Number(entryMeta(party.merchantCatalog, entry)?.definition?.s) || 1;
     if (!item || !Number.isSafeInteger(entry.slot) || item.l || item.b || reserved.has(item.name) ||
         limit <= 1 || !Number.isSafeInteger(item.q) || item.q <= 0 || item.q >= limit) continue;
     // PvP-marked loot cannot stack with unmarked loot. Timestamp equality is
