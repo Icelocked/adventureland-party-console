@@ -146,18 +146,19 @@ export function createDeconstruction(state: DeconstructionState, ports: Ports) {
   function automaticBank(name: string): void {
     if (name === state.merchantCharacter) enqueueAutomaticBankDeconstruction(state, ports, item => automaticRule(name, item));
   }
+  /** Not deconstructable, reserved, or held by a gear set or the luck swap. */
+  function protectedEntry(name: string, slot: number, item: Item): boolean {
+    return !deconstructable(item, state.deconstructionCatalog) ||
+      ports.reserved(name, slot, item) ||
+      swapHeld(state.statuses[name], slot, item);
+  }
   function automatic(name: string, items: (InventoryEntry | null)[]) {
     if (!sharedMember(state,name)) return;
     automaticBank(name);
     for (const entry of items) {
       if (!entry?.item || !Number.isInteger(entry.slot)) continue;
       if (!automaticRule(name,entry.item)) continue;
-      if (
-        !deconstructable(entry.item, state.deconstructionCatalog) ||
-        ports.reserved(name, entry.slot!, entry.item) ||
-        swapHeld(state.statuses[name], entry.slot, entry.item)
-      )
-        continue;
+      if (protectedEntry(name, entry.slot!, entry.item)) continue;
       // Do not recreate marks from a heartbeat sampled before the last acknowledgement.
       const recent = state.deconstructionMarks.some(
         (m) =>

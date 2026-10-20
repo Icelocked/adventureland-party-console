@@ -146,8 +146,8 @@ export function createKillLuckSwap(ports: LuckSwapPorts, memory: LuckSwapMemory 
   }
   /** Set members match by identity; lock state and quantity can change without it becoming another item. */
   function member(item: GearItem | null, wanted: GearItem): boolean {
-    return !!item && item.name === wanted.name && (item.level ?? undefined) === (wanted.level ?? undefined) &&
-      (item.p ?? undefined) === (wanted.p ?? undefined) && (item.stat_type ?? undefined) === (wanted.stat_type ?? undefined);
+    return !!item && item.name === wanted.name &&
+      (["level", "p", "stat_type"] as const).every(key => (item[key] ?? undefined) === (wanted[key] ?? undefined));
   }
   /** Each wanted item claims its own bag slot, so two identical rings fill both ring slots. */
   function locate(wanted: GearItem[]): number[] {
