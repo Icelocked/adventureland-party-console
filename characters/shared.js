@@ -2257,6 +2257,87 @@
     return unresolved ? null : html;
   }
 
+  // CX jars carry one cosmetic (a sprite in the cosmetics table T) or an emote.
+  // Native equip(slot) opens a jar into character.acx; equip_cx(slot, name)
+  // wears an owned cosmetic and equip_cx(slot) removes it (skin is replaced).
+  function cosmeticDescription(name) {
+    var type = parent.T && parent.T[name], slot = type && parent.cxtype_to_slot && parent.cxtype_to_slot[type];
+    // The game names emotes; appearance pieces are shown by ID, as in its own cosmetic info.
+    // Previews: an appearance piece's own sprite layer, an emote's skill icon.
+    var sprite = function (skin) { try { return skin && spriteDefinition(skin) || null; } catch (_) { return null; } };
+    if (type) return { kind: "appearance", type: type, slot: slot || null, label: name, sprite: sprite(name) };
+    var skill = G.skills && G.skills[name];
+    if (skill && skill.emote) {
+      var next = parent.next_skill && parent.next_skill[name];
+      return { kind: "emote", type: null, slot: null, label: skill.name || name, sprite: sprite(skill.skin),
+        explanation: skill.explanation || null, mp: Number(skill.mp) || 0, cooldownMs: Number(skill.cooldown) || 0,
+        range: skill.target === "player" ? Number(skill.range) || 0 : null, noSelf: !!skill.no_self,
+        cooldownLeftMs: next ? Math.max(0, new Date(next).getTime() - Date.now()) : 0 };
+    }
+    return { kind: "unknown", type: null, slot: null, label: name, sprite: null };
+  }
+  function cosmeticsSnapshot() {
+    var owned = typeof parent.all_cx === "function" ? parent.all_cx(character) : (character.acx || {});
+    var jars = [];
+    (character.items || []).forEach(function (item, slot) {
+      if (!item || item.name !== "cxjar") return;
+      var described = item.data ? cosmeticDescription(item.data) : { kind: "empty", type: null, slot: null, label: null };
+      jars.push(Object.assign({ inventorySlot: slot, data: item.data || null, locked: !!item.l,
+        usable: !!item.data && !item.l && described.kind !== "unknown" }, described));
+    });
+    return {
+      jars: jars,
+      owned: Object.keys(owned || {}).sort().map(function (name) {
+        return Object.assign({ name: name, count: Number(owned[name]) || 1 }, cosmeticDescription(name));
+      }),
+      worn: Object.assign({}, character.cx || {}, character.skin ? { skin: character.skin } : {}),
+      // Targeted emotes: visible players by distance; the server decides friendliness.
+      nearbyPlayers: Object.values(parent.entities || {}).filter(function (entity) {
+        return entity && entity.type === "character" && !entity.npc && !entity.rip && entity.name !== character.name;
+      }).map(function (entity) {
+        return { name: entity.name, distance: Math.round(Math.hypot(entity.x - character.x, entity.y - character.y)) };
+      }).filter(function (entry) { return entry.distance <= 300; }).sort(function (a, b) { return a.distance - b.distance; }),
+      lastEmote: root.__partyLastEmote || null,
+    };
+  }
+  async function runCosmeticCommand(command) {
+    if (command.type === "cx-open-jar") {
+      var jar = character.items[command.inventorySlot];
+      // Inventory may have shifted since the dashboard click: re-check the exact jar.
+      if (!jar || jar.name !== "cxjar" || !jar.data || jar.data !== command.data || jar.l)
+        throw new Error("That CX jar is no longer in slot " + command.inventorySlot);
+      await equip(command.inventorySlot);
+      game_log("Opened CX jar: " + jar.data, "#DB7AA9");
+    } else if (command.type === "cx-wear") {
+      var described = cosmeticDescription(command.name), owned = cosmeticsSnapshot().owned;
+      if (described.kind !== "appearance" || described.slot !== command.slot ||
+          !owned.some(function (entry) { return entry.name === command.name; }))
+        throw new Error(command.name + " is not an owned cosmetic for the " + command.slot + " slot");
+      await equip_cx(command.slot, command.name);
+    } else if (command.type === "cx-emote") {
+      var emote = cosmeticDescription(command.name), result = { name: command.name, target: command.target || null, at: Date.now() };
+      root.__partyLastEmote = Object.assign(result, { ok: false, reason: "pending" });
+      try {
+        if (emote.kind !== "emote" || !(character.acx && character.acx[command.name]))
+          throw new Error(command.name + " is not an owned emote");
+        if (emote.range === null) await use_skill(command.name);
+        else {
+          var target = command.target === character.name ? character : get_player(command.target);
+          if (!command.target || !target) throw new Error("Choose a visible player for " + emote.label);
+          if (emote.noSelf && target === character) throw new Error(emote.label + " can't target yourself");
+          await use_skill(command.name, target);
+        }
+        result.ok = true; result.reason = null;
+      } catch (error) {
+        result.reason = String(error && (error.reason || error.message) || error);
+        throw error;
+      }
+    } else if (command.type === "cx-remove") {
+      if (command.slot === "skin") throw new Error("A skin can be replaced but not removed");
+      await equip_cx(command.slot);
+    }
+  }
+
   function characterDollHtml() {
     var renderSprite = typeof sprite === "function" ? sprite : parent && typeof parent.sprite === "function" ? parent.sprite : null;
     if (!renderSprite) return null;
@@ -3013,6 +3094,7 @@
       skin: character.skin,
       characterSprite: spriteDefinition(character.skin),
       characterDollHtml: characterDollHtml(),
+      cosmetics: typeof cosmeticsSnapshot === "function" ? cosmeticsSnapshot() : null,
       target: combatTarget && !combatTarget.dead ? { id: combatTarget.id, type: combatTarget.type,
         name: combatTarget.name || null, team: eventTeam(combatTarget), mtype: combatTarget.mtype,
         hp: combatTarget.hp, max_hp: combatTarget.max_hp, x: combatTarget.x, y: combatTarget.y } : null,
@@ -10686,6 +10768,13 @@
     }
     // Stand return can travel safely before checking inventory recovery. Its
     // own guard runs before any listing, consolidation, or tidy mutation.
+    if (["cx-open-jar", "cx-wear", "cx-remove", "cx-emote"].indexOf(command.type) >= 0) {
+      // Cosmetics never take over navigation or combat.
+      lastCommand = command.id; root.__partyLastCommand = lastCommand;
+      try { await runCosmeticCommand(command); }
+      catch (error) { game_log("Cosmetics: " + (error && (error.reason || error.message) || error), "red"); }
+      return;
+    }
     var returningToStand = command.type === "merchant-idle" && !command.inPlace;
     if (!returningToStand && character.ctype === "merchant" && root.__merchantInventoryTidy) await root.__merchantInventoryTidy;
     if (!returningToStand && character.ctype === "merchant" && luckyUpgradeService && luckyUpgradeService.pending()) {
