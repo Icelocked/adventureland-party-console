@@ -1930,6 +1930,18 @@ The scoped settings endpoint merges per-monster patches and validates catalog me
 an empty key restores Automatic. Settings use the existing persistence/export path.
 Validate hunt-spawn-preferences and hunt-settings; activate with coordinator-only restart.
 
+## Achievement Hunt
+
+The `achievements` farming mode farms selected monsters for their kill
+achievements (docs/achievement-hunt.md). `hunt/achievement-hunt.ts` picks the
+target from `runtime/hunt/achievement-policy.ts` and moves the scope with the
+manual-monster convoy, keeping the farming mode. Each farming scope has its own
+`achievementHunt`, `achievementBlacklist`, `achievementTarget` and
+`achievementMessage`, like Hunt settings; followers use the leader's. The
+scoped `/party-api/achievement-hunt` route edits one character's settings.
+Settings use the existing persistence and export path. Validate
+achievement-hunt; activate with coordinator-only restart.
+
 ## Event entry and follower movement
 
 A follower that reaches a selected live event before its leader stays in that
@@ -2054,7 +2066,7 @@ before the kill for full loot luck. The move uses the dashboard realm-switch rou
 changing home, so all of its participant, Steam and bankboi guards still apply. After two polls
 without the chased boss, the party returns to the account home realm. A manual move off the
 chase realm ends the chase. Respawning seasonal bosses are also chased ahead of time: ALData lists a
-dead one with `estimatedRespawn`, and the party leaves 13–16 minutes before a respawn elsewhere (so Hop
+dead one with `estimatedRespawn`, and the party leaves 13-16 minutes before a respawn elsewhere (so Hop
 Sickness clears first) unless a selected boss is live or respawning within 30 minutes on the current
 realm. It waits up to 10 minutes past the estimate, then follows the live boss as usual or returns home.
 A return home stays pending (`bossChase.returning`) until its switch succeeds: a refused switch is
