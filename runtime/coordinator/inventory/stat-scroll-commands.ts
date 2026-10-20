@@ -1,4 +1,5 @@
 import { requestObject, requestText } from "../http/contracts.ts";
+import { statScrollName } from "../../prim-stack.ts";
 import type { Item, InventoryEntry } from "../contracts/item.ts";
 import type { CommandOutcome } from "../navigation/manual-commands.ts";
 import { entryMeta } from "./catalog-meta.ts";
@@ -60,9 +61,6 @@ const supported = new Set([
 function failure(error: string, status = 400): CommandOutcome {
   return { status, body: { error } };
 }
-function scrollName(stat: string): string {
-  return stat === "mp_cost" ? "mpcostscroll" : stat + "scroll";
-}
 function requiredScrolls(item: Item, definition: Definition): number {
   const grades = Array.isArray(definition.grades) ? definition.grades : [9, 10, 11, 12],
     level = Math.max(0, Number(item.level) || 0);
@@ -98,7 +96,7 @@ export function createStatScrollCommands(state: StatState, ports: Ports) {
   ): CommandOutcome {
     if (body.remove === true || primary.has(stat)) return null;
     const required = requiredScrolls(item, definition),
-      scroll = scrollName(stat);
+      scroll = statScrollName(stat);
     return available(scroll) < required
       ? failure("need " + required + " × " + scroll + " in merchant or bank inventory", 409)
       : null;
@@ -116,7 +114,7 @@ export function createStatScrollCommands(state: StatState, ports: Ports) {
         item,
         ...(!inventory ? { equipped: true } : {}),
         statType: stat,
-        scroll: scrollName(stat),
+        scroll: statScrollName(stat),
       };
       if (index >= 0) list[index] = mark;
       else list.push(mark);
