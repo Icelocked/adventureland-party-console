@@ -1,4 +1,5 @@
 "use client";
+import { automaticCommerceRuleKey } from './automatic-commerce-rule-key';
 import type { WTBOptions } from "./wtb-preferences";
 import { levelPriceHistory } from "./level-price-history";
 import { orderCharacters } from "./character-order";
@@ -142,7 +143,9 @@ export function usePartyConsole() {
   const [npcSaleError, setNpcSaleError] = useState<string | null>(null);
   const setNpcSaleItem: typeof setNpcSaleItemState = (value) => { setNpcSaleError(null); setNpcSaleItemState(value); };
   const [autoNpcSaleError, setAutoNpcSaleError] = useState<string | null>(null);
-  const setAutoNpcSaleItem: typeof setAutoNpcSaleItemState = (value) => { setAutoNpcSaleError(null); setAutoNpcSaleItemState(value); };
+  // #116: the amount to keep as typed; null shows the existing merchant-wide rule's amount.
+  const [autoNpcSaleKeepInput, setAutoNpcSaleKeep] = useState<string | null>(null);
+  const setAutoNpcSaleItem: typeof setAutoNpcSaleItemState = (value) => { setAutoNpcSaleError(null); setAutoNpcSaleKeep(null); setAutoNpcSaleItemState(value); };
   const [travelError, setTravelError] = useState<string | null>(null);
   const setTravelCharacter: typeof setTravelCharacterState = (value) => { setTravelError(null); setTravelCharacterState(value); };
   const [aldataAuthStatus, setALDataAuthStatus] = useState<string | null>(null);
@@ -651,6 +654,9 @@ export function usePartyConsole() {
       setNpcSaleBusy(false);
     }
   }
+  const savedAutoNpcSaleKeep = autoNpcSaleItem && !autoNpcSaleItem.character
+    ? state.autoNpcSales?.[automaticCommerceRuleKey(autoNpcSaleItem.item)]?.keep : undefined;
+  const autoNpcSaleKeep = autoNpcSaleKeepInput ?? (savedAutoNpcSaleKeep === undefined ? "" : String(savedAutoNpcSaleKeep));
   async function confirmAutoNpcSale() {
     setAutoNpcSaleError(null);
     if (!autoNpcSaleItem) return;
@@ -659,6 +665,7 @@ export function usePartyConsole() {
         item: autoNpcSaleItem.item,
         character: autoNpcSaleItem.character,
         action: "set",
+        ...(!autoNpcSaleItem.character && autoNpcSaleKeep.trim() !== "" ? { keep: autoNpcSaleKeep.trim() } : {}),
       });
       setAutoNpcSaleItem(null);
     } catch (error) {
@@ -861,6 +868,7 @@ export function usePartyConsole() {
     standError,
     npcSaleError,
     autoNpcSaleError,
+    autoNpcSaleKeep,
     travelError,
     aldataAuthStatus,
     setTravelError,
@@ -914,6 +922,7 @@ export function usePartyConsole() {
     setStandItem,
     setNpcSaleItem,
     setAutoNpcSaleItem,
+    setAutoNpcSaleKeep,
     clearAutomaticSales,
     removeAutomaticSale,
     statScrollInventory,

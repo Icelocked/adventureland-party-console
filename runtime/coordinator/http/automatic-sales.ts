@@ -44,14 +44,14 @@ export function createAutomaticSaleRoutes(state: AutomaticSaleState, ports: Auto
       return false;
     });
   }
-  function updateNpc(item: Item, action: string, character?: string): void {
+  function updateNpc(item: Item, action: string, character?: string, keep?: number): void {
     const key = character ? npcSaleRuleKey(item, character) : ports.key(item);
     if (action === "remove") {
       delete state.autoNpcSales[key];
       discardNpc(mark => mark.autoRuleKey === key);
     } else {
       ports.selectAction?.(item, character || String(state.merchantCharacter), 'npc');
-      state.autoNpcSales[key] = { item, createdAt: ports.now(), ...(character ? { character } : {}) };
+      state.autoNpcSales[key] = { item, createdAt: ports.now(), ...(character ? { character } : {}), ...(keep !== undefined ? { keep } : {}) };
       if (character || state.merchantRules) return;
       delete state.autoStandMarks[key];
       discardStand(listing => !!listing.auto && listing.autoRuleKey === key);
@@ -63,20 +63,32 @@ export function createAutomaticSaleRoutes(state: AutomaticSaleState, ports: Auto
     ports.publish();
     if (syncStand) ports.syncStand();
   }
+  function clearNpc(character?: string): void {
+    const keys = new Set(Object.keys(state.autoNpcSales).filter(key => state.autoNpcSales[key].character === character));
+    for (const key of keys) delete state.autoNpcSales[key];
+    discardNpc(mark => !!mark.auto && keys.has(mark.autoRuleKey!));
+  }
+  /** #116: a merchant-wide rule may keep some copies; blank sells every copy. Null is invalid. */
+  function requestedKeep(value: unknown, character?: string): number | undefined | null {
+    if (value === undefined || value === null || value === "") return undefined;
+    const keep = Number(value);
+    return character || !Number.isSafeInteger(keep) || keep < 0 ? null : keep;
+  }
+  function npcRuleError(item: Record<string, unknown>, keep: unknown, character?: string): string | null {
+    if (typeof item.name !== "string") return "invalid automatic NPC sale item";
+    return requestedKeep(keep, character) === null ? "enter a whole number of copies to keep, or leave it blank" : null;
+  }
   function npc(req: HttpRequest, res: HttpResponse): unknown {
     const body = requestObject(req.body),
       item = requestObject(body.item),
       action = requestText(body.action || "set");
     const character = state.merchantRules ? undefined : typeof body.character === "string" ? body.character : undefined;
     if (character && !state.statuses?.[character]) return res.status(400).json({ error: "Unknown character" });
-    if (action === "clear-all") {
-      const keys = new Set(Object.keys(state.autoNpcSales).filter(key => state.autoNpcSales[key].character === character));
-      for (const key of keys) delete state.autoNpcSales[key];
-      discardNpc(mark => !!mark.auto && keys.has(mark.autoRuleKey!));
-    } else {
-      if (typeof item.name !== "string")
-        return res.status(400).json({ error: "invalid automatic NPC sale item" });
-      updateNpc(item, action, character);
+    if (action === "clear-all") clearNpc(character);
+    else {
+      const error = npcRuleError(item, body.keep, character);
+      if (error) return res.status(400).json({ error });
+      updateNpc(item, action, character, requestedKeep(body.keep, character)!);
     }
     save(!character);
     return res.json({ ok: true, autoNpcSales: state.autoNpcSales });
