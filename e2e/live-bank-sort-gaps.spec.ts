@@ -6,10 +6,12 @@ import { test, expect, type LiveGame } from './live-fixtures';
 const merchant = 'E2EMerchant';
 type Cell = { pack: string; slot: number; item: any };
 
+// Reads every cell: items1's last seven are BankBoi staging only while a BankBoi exists,
+// and the sort fills them otherwise.
 async function nativeBank(live: LiveGame): Promise<Cell[]> {
   return live.admin(`output=(async()=>{const p=get_player('${merchant}'),user=p.user||(await db.collection('user').findOne({_id:p.owner})).info;
     return Object.keys(user).filter(k=>/^items\\d+$/.test(k)&&bank_packs[k]&&bank_packs[k][0]==='bank')
-      .sort((a,b)=>a.slice(5)-b.slice(5)).flatMap(pack=>user[pack].slice(0,pack==='items1'?35:42).map((item,slot)=>({pack,slot,item:item?{name:item.name,level:item.level,q:item.q}:null})))})()`);
+      .sort((a,b)=>a.slice(5)-b.slice(5)).flatMap(pack=>user[pack].slice(0,42).map((item,slot)=>({pack,slot,item:item?{name:item.name,level:item.level,q:item.q}:null})))})()`);
 }
 const sequence = (cells: Cell[]) => cells.filter(c => c.item).map(c => `${c.item.name}:${c.item.level ?? ''}:${c.item.q ?? 1}`);
 const changed = (a: Cell[], b: Cell[]) => a.filter((cell, i) => JSON.stringify(cell.item) !== JSON.stringify(b[i]?.item)).length;
