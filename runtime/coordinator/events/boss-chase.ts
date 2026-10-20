@@ -63,6 +63,8 @@ export interface BossChasePorts {
   currentRealm(): string | null;
   homeRealm(): string | null;
   realmExists(realm: string): boolean;
+  /** Not PVP and not on the party's realm-hop blacklist. */
+  hopAllowed(realm: string): boolean;
   realmSwitchBusy(): boolean;
   /** Whether any active character has this event (a G.events key) selected. */
   selected(event: string): boolean;
@@ -206,11 +208,18 @@ export function createBossChase(party: BossChaseParty, ports: BossChasePorts) {
 
   async function followTrip(trip: BossChaseTrip, live: LiveBoss[]): Promise<void> {
     const current = ports.currentRealm();
+    if (!ports.hopAllowed(trip.realm)) return endBlacklisted(trip, current);
     if (current !== trip.realm) return leftRealm(trip);
     trip.arrived = true;
     const chased = live.find((boss) => boss.boss === trip.boss && boss.realm === trip.realm);
     if (chased) return followLiveBoss(trip, chased);
     return bossMissing(trip, current);
+  }
+  async function endBlacklisted(trip: BossChaseTrip, current: string | null): Promise<void> {
+    party.bossChase.trip = null;
+    ports.persist();
+    ports.log("Boss chase: " + trip.realm + " is blacklisted for realm hopping; ending the chase", "info");
+    if (current === trip.realm && trip.returnRealm && trip.returnRealm !== current) await goHome(current, trip.returnRealm);
   }
   /** Arrival never happened (failed switch) or the party was moved elsewhere by hand. */
   function leftRealm(trip: BossChaseTrip): void {
@@ -255,7 +264,7 @@ export function createBossChase(party: BossChaseParty, ports: BossChasePorts) {
   function pick(live: LiveBoss[], current: string): (LiveBoss & { eta: number }) | null {
     const minEta = party.bossChase.minEtaMinutes, now = ports.now();
     return live
-      .filter((boss) => boss.realm !== current && !boss.realm.endsWith("PVP") && ports.realmExists(boss.realm))
+      .filter((boss) => boss.realm !== current && ports.hopAllowed(boss.realm) && ports.realmExists(boss.realm))
       .filter((boss) => !recentlyLeft(boss, now))
       .map((boss) => ({ ...boss, eta: etaMinutes(boss) }))
       // Worth the hop: long enough to outlast Hop Sickness, short enough that it will actually die.
@@ -283,7 +292,7 @@ export function createBossChase(party: BossChaseParty, ports: BossChasePorts) {
   /** The soonest respawn elsewhere that leaves enough time for Hop Sickness to clear before it. */
   function pickRespawn(current: string, now: number): BossChaseRespawn | null {
     return party.bossChase.respawns
-      .filter((entry) => entry.realm !== current && !entry.realm.endsWith("PVP") && ports.realmExists(entry.realm))
+      .filter((entry) => entry.realm !== current && ports.hopAllowed(entry.realm) && ports.realmExists(entry.realm))
       .filter((entry) => entry.respawnAt - now >= respawnMinLeadMs && entry.respawnAt - now <= respawnMaxLeadMs)
       .sort((a, b) => a.respawnAt - b.respawnAt)[0] || null;
   }

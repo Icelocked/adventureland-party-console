@@ -185,6 +185,7 @@ export type PartyState = {
   merchantForceStand?: boolean;
   merchantStandLocation?: MerchantStandLocation | null;
   bossChase?: BossChaseState | null;
+  realmHopBlacklist?: string[];
   merchantWeapon?: { item: Item } | null;
   luckyUpgradeSlots?: Record<string, number | null>;
   luckySlotLocks?: Record<string, number | null>;

@@ -21,6 +21,7 @@ import { initializeStandLocation, standLocationRoute } from './merchant/stand-lo
 import { createRareRouteDistance } from './navigation/rare-route-distance.ts';
 import { createMetricsService } from './metrics/service.ts';
 import { accountGoldSnapshot } from './telemetry/account-gold.ts';
+import { createRealmHopBlacklistRoute, realmHopAllowed } from './navigation/realm-hop-blacklist.ts';
 /** A farm-area snapshot saved while record() was idle keeps expired hits. */
 function pruneSavedFarmAreas(
   party: { farmAreaState?: object | null; farmingProfiles?: Record<string, { farmAreaState?: object | null } | null | undefined> },
@@ -1198,6 +1199,7 @@ export function startCoordinatorApplication(
       homeRealm: accountHomeRealm,
       realmSwitchBusy: () =>
         !!party.realmSwitch && ["switching", "setting-home"].includes(party.realmSwitch.phase),
+      hopAllowed: (realm: string) => realmHopAllowed(party.realmHopBlacklist, realm),
       selected: (event: string) =>
         realmParticipants().some((name) => {
           const selected = party.eventSelectionsByCharacter[name];
@@ -2386,6 +2388,11 @@ export function startCoordinatorApplication(
               bankboiDeleteRoute,
               realmRoutes,
               bossChaseRoute: bossChase.update,
+              realmHopBlacklistRoute: createRealmHopBlacklistRoute(party, {
+                realmExists: (realm) => !!my_acc.resolve_realm(realm),
+                log: (message, level) => merchantLog(message, level as Parameters<typeof merchantLog>[1]),
+                persist: persistSettings,
+              }),
               statusIngestion,
               monsterSelectionRoutes,
               achievementHuntRoute: scopedRoute(achievementHuntRoute, service => service.achievementHuntRoute, true),

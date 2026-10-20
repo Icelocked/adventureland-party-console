@@ -50,6 +50,14 @@ and `tank-melee-override` evidence, then run `npm run test:e2e:verify`.
 Boss chase needs live ALData, which the disposable server cannot reach, so
 `scripts/tests/chase-return.test.cjs` covers a refused return home with simulated
 payloads (failure inventory: `e2e/chase-return-failures.md`).
+The realm-hop blacklist uses `npm test -- -- --project=live --grep "realm-hop
+blacklist"` for the real control, route validation, PVP locking and restart.
+Chase choices need live ALData, which the disposable server cannot reach, so
+`scripts/tests/realm-hop-blacklist.test.cjs` drives both chases with simulated
+payloads (retained isolated exception; failure inventory written first).
+`scripts/tests/chase-return.test.cjs` covers a refused return home for both chases the
+same way (failure inventory: `e2e/chase-return-failures.md`).
+
 
 ## Roaming target setup
 

@@ -561,6 +561,15 @@ latest report, refused while another command is pending, re-checked by the
 character, and never take over navigation or combat. Failure inventory:
 `e2e/cx-failures.md`. Validate `live-cx.spec.ts`; publish character, coordinator
 and dashboard assets through the ordinary full restart.
+Realm hopping honors a saved party blacklist (`realmHopBlacklist`,
+`navigation/realm-hop-blacklist.ts`, `POST /party-api/realm/hop-blacklist` with
+`{realms}`). Boss chase and daily-event chase never pick a listed realm, and a
+trip whose realm becomes listed ends and returns home. PVP is always excluded.
+Manual realm changes and the return home are not hop choices and are unaffected.
+The control sits under the chase settings in Interface settings. Failure inventory:
+`e2e/realm-hop-blacklist-failures.md`. Validate `live-realm-hop-blacklist.spec.ts`
+and `scripts/tests/realm-hop-blacklist.test.cjs`; activate with the
+coordinator/dashboard-only restart.
 
 Marked withdrawals create merchant jobs by default at priority 90. The checkbox
 in Merchant settings controls the separate Marked withdrawals routine. Merchant

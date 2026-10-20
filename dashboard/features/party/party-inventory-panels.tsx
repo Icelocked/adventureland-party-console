@@ -8,6 +8,7 @@ import { DeconstructionConfirmation, type DeconstructionSelection } from "./deco
 import { DeferredPanel } from "./deferred-panel";
 import { DashboardStateImport } from "./dashboard-state-import";
 import { BossChaseSetting } from "./boss-chase-setting";
+import { RealmHopBlacklistSetting } from "./realm-hop-blacklist-setting";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -703,6 +704,7 @@ function PartyInventoryPanelsConnected({ base }: { base: PartyConsoleModel }) {
               </div>
             ) : null}
             <BossChaseSetting chase={state.bossChase} />
+            <RealmHopBlacklistSetting realms={state.realmControl?.realms || []} blacklist={state.realmHopBlacklist} />
           </div>
           <div className="rounded border border-cyan-900/70 bg-black/20 p-4">
             <div className="flex items-center justify-between gap-3">
