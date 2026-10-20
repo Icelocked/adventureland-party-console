@@ -109,6 +109,7 @@ export const InventoryPanel = memo(function InventoryPanel({
   deconstructionMarks = [],
   autoDeconstruction = {},
   deconstructionCatalog = {},
+  heldSlots = {},
   onDeconstruction,
   onRetryDeconstruction,
   onRemoveNpcSale,
@@ -160,6 +161,8 @@ export const InventoryPanel = memo(function InventoryPanel({
   deconstructionMarks?: DeconstructionMark[];
   autoDeconstruction?: Record<string, { item: Item }>;
   deconstructionCatalog?: DeconstructionCatalog;
+  /** Bag slot → gear set label; automatic rules skip these items, manual marks still apply. */
+  heldSlots?: Record<number, string>;
   onDeconstruction?: (entry: InventoryEntry, auto: boolean, remove: boolean, id?: string) => void;
   onRetryDeconstruction?: (id: string) => void;
   onRemoveNpcSale?: (id: string) => void;
@@ -819,8 +822,14 @@ export const InventoryPanel = memo(function InventoryPanel({
                 character.name === merchant && autoStandMarks[automaticSaleKey];
               const exchangeable =
                 !!merchant && Number(entry.meta?.definition.e || 0) > 0;
+              const held = heldSlots[entry.slot];
               const banner = itemActionBanner(
                 [
+                  !!held && {
+                    action: 'held',
+                    label: held,
+                    title: `${held}: automatic bank, merchant, compound, upgrade, sale and deconstruction rules skip this item`,
+                  },
                   !!deconstruction && {
                     action: 'deconstruction',
                     label: 'Deconstruction',
@@ -879,10 +888,12 @@ export const InventoryPanel = memo(function InventoryPanel({
                   },
                   (autoMarkMode === 'bank' || bankMarked) && {
                     action: 'bank',
+                    automatic: autoMarkMode === 'bank',
                     label: autoMarkMode === 'bank' ? 'Auto bank' : 'Bank',
                   },
                   (autoMarkMode === 'merchant' || merchantMarkedItem) && {
                     action: 'merchant',
+                    automatic: autoMarkMode === 'merchant',
                     label:
                       autoMarkMode === 'merchant'
                         ? 'Auto merchant'

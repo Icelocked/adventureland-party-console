@@ -3,9 +3,10 @@ import { requestObject } from '../http/contracts.ts';
 import { itemRuleConflicts, ruleOwner, sharedMember, type ConflictState } from '../inventory/shared-rules.ts';
 import { markedItem, sameMarkedItem } from '../inventory/item-identity.ts';
 import { availableCraftStock, craftProtection, type CraftReservationState } from './craft-reservations.ts';
+import { swapHeld } from '../inventory/swap-reservations.ts';
 
 export interface PickupState extends ConflictState, CraftReservationState {
-  statuses?: Record<string, {items?: (InventoryEntry | null)[]} | undefined>;
+  statuses?: Record<string, {items?: (InventoryEntry | null)[]; reservedInventory?: {slot: number; item: {name?: string} | null}[]} | undefined>;
   autoExchanges?: Record<string, unknown>;
   merchantAutomations?: Record<string, boolean | undefined>;
   marked?: Record<string, unknown[] | undefined>;
@@ -43,8 +44,13 @@ function upgradeMarks(state: PickupState, name: string): ItemMark[] {
     const m = requestObject(value); return m.auto && !m.equipped && typeof m.slot === 'number';
   }).map(mark);
 }
+/** Gear-set members and swapped-out gear the character holds for its luck swap: never compound or upgrade stock. */
+function swapReserved(state: PickupState, name: string, entry: InventoryEntry): boolean {
+  return swapHeld(state.statuses?.[name], entry.slot, entry.item);
+}
 function protectedEntry(state: PickupState, name: string, entry: InventoryEntry | null): boolean {
-  return !entry?.item || personalTracker(entry.item) || !!entry.item.l || !!entry.item.b || manuallyReserved(state, name, entry) || itemRuleConflicts(state, entry.item).length > 0;
+  return !entry?.item || personalTracker(entry.item) || !!entry.item.l || !!entry.item.b || manuallyReserved(state, name, entry) ||
+    swapReserved(state, name, entry) || itemRuleConflicts(state, entry.item).length > 0;
 }
 function personalTracker(item: Item | null | undefined): boolean { return item?.name === 'tracker' || item?.name === 'supercomputer'; }
 function collectable(value: ItemMark): boolean { return !personalTracker(markedItem(value)); }

@@ -611,6 +611,28 @@ non-leader priest tank via `absorb`, per the issue's own example. No hold-back i
 added for non-tank characters; they keep today's approach/attack timing and are only
 barred from *stealing* aggro via taunt/absorb.
 
+The designated tank also gets a kill-time luck swap built on **gear sets**
+(`runtime/coordinator/characters/gear-sets.ts`, `POST /party-api/gear-sets` with
+`{character, set: "luck" | "tank" | "gold", action: "save" | "clear"}`). A set is
+captured from the character's freshly reported worn gear in the non-weapon slots and
+persists per character; the dashboard's Gear sets control shows each set's worn/carried
+pieces and missing slots. `runtime/characters/roles/kill-luck-swap.ts` equips exactly
+the luck set's carried members right before a kill (each slot claims its own copy, so
+both rings and both earrings swap), starting `max(3, 1.5 + 0.35 × pieces)` seconds
+before the predicted death or on a lethal own attack while holding aggro, because
+`issue_monster_award()` rolls an ordinary drop only for the monster's current target.
+After the kill it restores the tank set, falling back to the gear worn when the swap
+began and emptying slots that were empty. Without a saved luck set nothing is swapped.
+Members of either set and swapped-out gear are reported as `reservedInventory`
+(`inventory/swap-reservations.ts`); automatic bank/merchant collection marks, automatic
+upgrade marks, compound/upgrade pickups (`collectionPickups`), automatic NPC sales,
+automatic deconstruction and emergency cleanouts skip those slots, and the character
+refuses to hand them off. Manual marks still apply. The dashboard labels held bag items
+`Luck set`, `Tank set` or `Swapped-out gear` in place of the automatic rules they are
+exempt from. It defers to `porcupine-equipment` while that
+module is mid-swap. Failure inventory: `e2e/gear-sets-failures.md`; validate
+`live-gear-sets.spec.ts`.
+
 Validate `live-designated-tank.spec.ts`. The role/route/broadcast plumbing activates
 with the supported coordinator-only restart; the movement, taunt-gating and luck-swap
 behavior are character-asset changes and require the full supported restart.

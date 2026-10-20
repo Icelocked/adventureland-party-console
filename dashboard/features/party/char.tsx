@@ -87,6 +87,8 @@ export type Char = {
   upgrading?: boolean;
   seenAt: number;
   inventorySize?: number;
+  /** Bag slots held by a gear set or by gear swapped out for one; automatic rules skip them. */
+  reservedInventory?: { slot: number; item: { name?: string; level?: number } | null }[];
   items: (InventoryEntry | null)[];
   slots: Record<string, EquippedEntry | null>;
   conditions?: Condition[];
