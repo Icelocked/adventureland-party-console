@@ -1,3 +1,4 @@
+import {waitForGameplay} from './network-clock';
 import { test, expect } from './live-fixtures';
 
 // Failure inventory: e2e/npc-sale-keep-failures.md (#116). Declared inputs: three stacks
@@ -66,7 +67,7 @@ test('an automatic NPC sale keeps the configured amount and sells the rest', asy
     await expect.poll(async () => { const n = await native(live); samples.push({ at: Date.now(), ...n }); return n.carried + n.bank; },
       { timeout: 300_000, intervals: [2000] }).toBe(250);
     // 4: and stops there.
-    await new Promise(resolve => setTimeout(resolve, 20_000));
+    await waitForGameplay(20_000);
     const settled = await native(live);
     samples.push({ at: Date.now(), ...settled });
     expect(settled.carried + settled.bank).toBe(250);
