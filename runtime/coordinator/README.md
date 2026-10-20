@@ -1213,6 +1213,13 @@ Unconfirmed swaps remain journaled, and departure waits for confirmed cleanup,
 including after cancellation or reload. Validate the native bank collection and NPC
 sale E2Es with ChronAL; they retain locked-stock conservation and exact sale counts.
 Build character and coordinator assets together and leave activation explicit.
+`bankSortLayout: "gapped"` (Merchant settings, "Leave gaps between item types";
+default `"packed"`) keeps the same sorted order but starts each item category on
+its own 7-slot row and leaves free slots. Items already in order stay, and new
+items take a nearby free slot, so a change moves a few items instead of shifting
+the whole floor. A full bank falls back to the packed layout. The checkpoint
+returns the layout with the mode. Failure inventory:
+`e2e/bank-sort-gaps-failures.md`; validate `live-bank-sort-gaps.spec.ts`.
 
 Bank sorting defaults to `bankSortMode: "automatic"`. Merchant settings can select
 `"request"`; the bank window then queues/cancels a durable, uniquely identified

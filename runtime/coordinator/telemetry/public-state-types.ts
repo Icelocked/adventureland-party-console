@@ -80,7 +80,7 @@ export const publicStateFields = [
   "merchantCargo",
   "merchantActivity",
   "combatLogs",
-  "bankSortMode", "bankSortRequest",
+  "bankSortMode", "bankSortLayout", "bankSortRequest",
   "gatheringModes",
   "gatheringNoTool",
   "gatheringCooldowns",
