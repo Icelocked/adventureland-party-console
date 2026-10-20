@@ -50,7 +50,7 @@ export interface LuckSwapPorts {
   /**
    * True while this monster's own `.target` is this character's name. Ordinary (non-cooperative)
    * monster deaths roll their drop using only whoever the monster was attacking at that instant
-   * (`issue_monster_award`'s `players[name_to_id[monster.target]]`, upstream `node/server.js`) —
+   * (`issue_monster_award`'s `players[name_to_id[monster.target]]`, upstream `node/server.js`)  - 
    * not a per-contributor share, and not the party's other members at all. A luck swap only pays
    * off if this character actually holds that aggro when the kill lands.
    */
@@ -226,7 +226,7 @@ export function createKillLuckSwap(ports: LuckSwapPorts, memory: LuckSwapMemory 
   function killImminent(target: LuckTarget, pieces: number): boolean {
     trackHpTrend(target);
     // A lethal attack from this character sets (or confirms) its own aggro as part of that same
-    // kill, even if the monster had no target yet — so the aggro check only gates the trend-based
+    // kill, even if the monster had no target yet - so the aggro check only gates the trend-based
     // prediction, where the kill (and whichever aggro was already in place) may come from elsewhere.
     if (ports.lethalBasicAttack(target)) return true;
     // Each piece is a server round trip, so a larger set needs a longer lead before the kill.
@@ -256,7 +256,7 @@ export function createKillLuckSwap(ports: LuckSwapPorts, memory: LuckSwapMemory 
     if (!target || target.dead || target.rip) return true;
     if (ports.endangered()) return true;
     if (lostItsKill(session, target)) return true;
-    // Safety timeout: covers a boss phase where the trend estimate dipped then stabilized —
+    // Safety timeout: covers a boss phase where the trend estimate dipped then stabilized  - 
     // don't stay in weaker gear indefinitely waiting for a death that isn't imminent anymore.
     if (ports.now() - (memory.swappedInAt || 0) > 10000) return true;
     return false;
