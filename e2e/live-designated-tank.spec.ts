@@ -48,7 +48,7 @@ test('designated tank persists through restart, renders in the dashboard, and ho
     expect(engaged!.distance).not.toBeNull();
     // tankMovementTick holds at a near-melee clamp (desiredCombatRange() capped to 30), but
     // combatDistance() is hitbox-adjusted while this raw center-to-center hypot is not, so the
-    // bound here is deliberately generous — the point is "near melee," not an exact number.
+    // bound here is deliberately generous - the point is "near melee," not an exact number.
     // A ranger's own range (869 in this live run) makes the contrast unmistakable either way.
     expect(engaged!.distance).toBeLessThanOrEqual(100);
     expect(engaged!.distance).toBeLessThan(engaged!.range / 2);
