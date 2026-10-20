@@ -64,7 +64,9 @@ export function createMonsterSelection(state: MonsterSelectionState, ports: Mons
     const sessions = state.eventSessions;
     reset(id, location);
     ports.authorize(names, location, true);
-    if (!ports.start(location, "the " + id + " spawn", names, "manual-monster-override"))
+    // Phoenix fighters split up from wherever they stand; a party convoy would
+    // first walk everyone to one spawn together.
+    if (id !== "phoenix" && !ports.start(location, "the " + id + " spawn", names, "manual-monster-override"))
       return null;
     skipManualEventOccurrences({...state, eventSessions: sessions, eventAttendance: state.eventAttendance ||= {}}, names, ports.now());
     for (const name of names) {
