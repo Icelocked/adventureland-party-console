@@ -91,3 +91,16 @@ export const METRIC_RESET_KINDS = ['kills', 'damage', 'gold', 'loot', 'ping'] as
 export type MetricResetKind = typeof METRIC_RESET_KINDS[number];
 export type MetricResets = Partial<Record<MetricResetKind, number>>;
 export const METRIC_BUCKET_MS = 10_000;
+/**
+ * Character outbox keys in caracAL's localStorage: `party-metrics-v1:<name>` holds the
+ * header and `party-metrics-v1:<name>:frame:<slot>` one unconfirmed frame. The coordinator
+ * keeps them in its journal, and only the owner's worker receives them
+ * (runtime/coordinator/characters/storage.ts).
+ */
+export const METRIC_OUTBOX_PREFIX = 'party-metrics-v1:';
+/** The character that owns an outbox key, or undefined for every other key. */
+export function metricOutboxOwner(key: string): string | undefined {
+  if (!key.startsWith(METRIC_OUTBOX_PREFIX)) return undefined;
+  const name = key.slice(METRIC_OUTBOX_PREFIX.length).split(':frame:')[0];
+  return name || undefined;
+}

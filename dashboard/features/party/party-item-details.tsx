@@ -12,6 +12,7 @@ import type { PartyConsoleModel } from "./use-party-console";
 
 import { usePanelModel } from "./use-panel-model";
 import { ExchangeRewardTile } from './exchange-reward-tile';
+import { inventoryWithCatalogMeta } from './item-catalog-meta';
 import { UpgradeOfferingProvider } from './upgrade-offering-controls';
 export function PartyItemDetails({ model }: { model: PartyConsoleModel }) {
   return model.selected ? <PartyItemDetailsConnected base={model} /> : null;
@@ -45,9 +46,10 @@ function PartyItemDetailsConnected({ base }: { base: PartyConsoleModel }) {
         skills={state.skillCatalog || []}
         characters={[
               ...chars,
+              // Saved snapshots carry per-copy item meta; the catalog supplies the rest.
               ...Object.values(state.characterSnapshots || {}).filter(
                 (saved) => !chars.some((live) => live.name === saved.name),
-              ),
+              ).map((saved) => inventoryWithCatalogMeta(state.merchantCatalog, saved)!),
             ]}
         offlineCharacters={(state.roster || []).filter(member=>!chars.some(live=>live.name===member.name) && !state.characterSnapshots?.[member.name])}
         onLoadCharacter={loadCharacterInspection}

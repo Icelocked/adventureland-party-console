@@ -1,15 +1,18 @@
 const {stackDepositPlan} = require('../runtime/bank-stacks.ts');
 const {bankStagingReserved} = require('../runtime/coordinator/inventory/reserved-cargo.ts');
+const {entryMeta} = require('../runtime/coordinator/inventory/catalog-meta.ts');
+// Reports carry per-copy meta, so the stack size comes from merchantCatalog.
+const stackLimit = (entry, catalog) => Number(entryMeta(catalog, entry)?.definition?.s) || 1;
 // A partial stack has one preferred home across physical and virtual panes.
 function identity(item) {
   return JSON.stringify(['name', 'level', 'p', 'stat_type', 'data', 'rid', 'b', 'm', 'l']
     .map(key => key === 'level' ? Number(item?.level) || 0 : item?.[key] ?? null));
 }
-function homes(bank, workers) {
+function homes(bank, workers, catalog) {
   const result = {};
   const staging = bankStagingReserved({bankbois:workers});
   const add = (entry, owner) => {
-    const limit = Number(entry?.meta?.definition?.s) || 1;
+    const limit = stackLimit(entry, catalog);
     if (!entry?.item || limit <= 1 || Number(entry.item.q || 1) >= limit) return;
     const key = identity(entry.item);
     if (!result[key]) result[key] = { owner, item: entry.item, limit, room: limit - Number(entry.item.q || 1) };
@@ -45,7 +48,7 @@ function unloadPlan(party, worker) {
   (worker.items || []).forEach((entry, slot) => {
     if (!entry?.item || withdrawals.some(request => request.pack === 'bankboi:' + worker.name &&
       identity(request.item) === identity(entry.item))) return;
-    const item = entry.item, limit = Number(entry.meta?.definition?.s) || 1;
+    const item = entry.item, limit = stackLimit(entry, party.merchantCatalog);
     const plan = stackDepositPlan(item, limit, slots);
     if (plan.remaining || !plan.moves.length) return;
     // Keep the public scheduling shape: one source entry, with capacity reserved
@@ -72,7 +75,7 @@ function servicePlan(party, { includeCoolingDown = false } = {}) {
   // Dispatch uses the default so it never starts a worker before its retry time.
   const merchant = party.merchantCharacter;
   const withdrawals = party.withdrawals[merchant] || [];
-  const routes = homes(party.bankSnapshot, party.bankbois);
+  const routes = homes(party.bankSnapshot, party.bankbois, party.merchantCatalog);
   const workers = Object.values(party.bankbois).sort((a, b) => Number(a.seenAt || 0) - Number(b.seenAt || 0));
   const available = entry => entry.state === 'ready' || entry.state === 'error' &&
     retryableStorageError(entry.error) &&
