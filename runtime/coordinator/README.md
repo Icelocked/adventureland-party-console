@@ -2044,7 +2044,7 @@ before the kill for full loot luck. The move uses the dashboard realm-switch rou
 changing home, so all of its participant, Steam and bankboi guards still apply. After two polls
 without the chased boss, the party returns to the account home realm. A manual move off the
 chase realm ends the chase. Respawning seasonal bosses are also chased ahead of time: ALData lists a
-dead one with `estimatedRespawn`, and the party leaves 13–16 minutes before a respawn elsewhere (so Hop
+dead one with `estimatedRespawn`, and the party leaves 13-16 minutes before a respawn elsewhere (so Hop
 Sickness clears first) unless a selected boss is live or respawning within 30 minutes on the current
 realm. It waits up to 10 minutes past the estimate, then follows the live boss as usual or returns home.
 A return home stays pending (`bossChase.returning`) until its switch succeeds: a refused switch is
