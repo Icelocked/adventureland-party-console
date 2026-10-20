@@ -49,7 +49,7 @@ interface GiveawayPorts {
 type EligibleGiveaway = Giveaway & { seller: string; slot: string };
 /** The game refuses `join_giveaway` while either side is inside the bank. */
 function inBank(giveaway: Giveaway): boolean {
-  return /^bank/.test(String(giveaway.map || ""));
+  return String(giveaway.map || "").startsWith("bank");
 }
 /** Claim key shared by discovery and expiry, so an expired job can release its claim. */
 export function giveawayAttemptKey(job: Pick<Giveaway, "candidateKey" | "seller" | "rid"> & { realm?: string | null }): string {
@@ -94,12 +94,15 @@ export function createGiveawayScheduler(state: GiveawayState, ports: GiveawayPor
     if (!safeMerchantRealm(merchant, realm)) return;
     for (const giveaway of status.nearbyGiveaways) {
       if (!eligible(giveaway, merchant) || queued(giveaway, realm)) continue;
-      // A slot's `giveaway` is its remaining minutes, so it ends no later than that.
-      const minutes = Number(giveaway.minutes);
-      const timed = giveaway.expiresAt === undefined && minutes > 0 ? { ...giveaway, expiresAt: ports.now() + minutes * 60_000 } : giveaway;
+      const timed = withExpiry(giveaway);
       if (!claimAttempt(timed, realm)) continue;
       enqueueGiveaway(timed, realm, merchant);
     }
+  }
+  // A slot's `giveaway` is its remaining minutes, so it ends no later than that.
+  function withExpiry(giveaway: EligibleGiveaway): EligibleGiveaway {
+    const minutes = Number(giveaway.minutes);
+    return giveaway.expiresAt === undefined && minutes > 0 ? { ...giveaway, expiresAt: ports.now() + minutes * 60_000 } : giveaway;
   }
   function enqueueGiveaway(giveaway: EligibleGiveaway, realm: string | null, merchant: string) {
       state.merchantQueue.push(
