@@ -2030,7 +2030,7 @@ section above) now sorts offers you currently hold a matching item for to the to
 existing freshness/price ordering, and "Hide stale" filters out anything not seen within the
 existing 120-second freshness window, mirroring Live WTS's filter row. A listing past that window
 still shows "List" (put the item on your own stand); when you hold a matching item it now also
-offers "Check", which queues the same `ALData marketplace sales` job as a live "Sell" — the
+offers "Check", which queues the same `ALData marketplace sales` job as a live "Sell" - the
 character travels and attempts the trade regardless of the cached snapshot's age, and if the
 buyer or matching offer is gone it fails safely and reports through normal merchant activity
 ("ALData marketplace sale failed") exactly like any other race against a live listing, rather than
