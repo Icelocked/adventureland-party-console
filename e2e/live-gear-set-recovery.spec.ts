@@ -1,3 +1,4 @@
+import {waitForGameplay} from './network-clock';
 import { test, expect, type LiveGame } from './live-fixtures';
 import { W, P } from './game/hunt-events';
 
@@ -50,7 +51,7 @@ test('a tank left in its luck set returns to its tank set at the start of a long
       const sample = { at: Date.now(), worn: await worn(live), hp: await live.admin(`output=(()=>{const m=Object.values(instances.main.monsters).find(m=>String(m.id)===${JSON.stringify(goo)});return m?m.hp:null;})()`) };
       samples.push(sample);
       restored = SLOTS.every(slot => sample.worn[slot] === tankWorn[slot]);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await waitForGameplay(1000);
     }
     // 16, 17, 20: the tank set is back, empty slots (the shield's included) emptied, while the long fight continues.
     expect(restored, 'The tank set must return during the fight').toBe(true);

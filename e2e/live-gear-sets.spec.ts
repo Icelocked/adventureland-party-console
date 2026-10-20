@@ -1,3 +1,4 @@
+import {waitForGameplay} from './network-clock';
 import { test, expect, type LiveGame } from './live-fixtures';
 import { location } from './game/hunt-lifecycle';
 import { W, P, M } from './game/hunt-events';
@@ -87,13 +88,13 @@ test('the tank wears its whole luck set at the kill, restores its tank set, and 
     await live.post('/travel', await location(live));
     const kills = async () => (await live.clients[W].events()).filter((event: any) => event.event === 'hit' && event.data?.hid === W && event.data?.kill);
     let sampling = true;
-    const sampler = (async () => { while (sampling) { samples.push({ at: Date.now(), worn: await worn(live).catch(() => null) }); await new Promise(r => setTimeout(r, 100)); } })();
+    const sampler = (async () => { while (sampling) { samples.push({ at: Date.now(), worn: await worn(live).catch(() => null) }); await waitForGameplay(100); } })();
     await expect.poll(async () => samples.some(sample => sample.worn && SLOTS.every(slot => sample.worn[slot] === LUCK[slot])) && (await kills()).length > 0,
       { timeout: 180_000, intervals: [500], message: 'The tank must wear all six luck pieces at once and land a kill' }).toBe(true);
     // 12: while goos keep dying the luck set stays on, past the 10 s safety timeout.
     const first = samples.findIndex(sample => sample.worn && SLOTS.every(slot => sample.worn[slot] === LUCK[slot]));
     const killsAtFirst = (await kills()).length;
-    await new Promise(resolve => setTimeout(resolve, 15_000));
+    await waitForGameplay(15_000);
     const chain = samples.slice(first).filter(sample => sample.worn);
     expect((await kills()).length - killsAtFirst, 'Kills must continue during the chain window').toBeGreaterThan(3);
     expect(chain.filter(sample => !SLOTS.every(slot => sample.worn[slot] === LUCK[slot])).length,
@@ -117,7 +118,7 @@ test('the tank wears its whole luck set at the kill, restores its tank set, and 
       amulets: await heldCount(live, 'spookyamulet') }; counts.push(now); return now; };
     await expect.poll(async () => (await count()).rings, { timeout: 180_000, intervals: [2000],
       message: 'The merchant must collect only the three spare Rings of Luck' }).toBe(2);
-    await new Promise(resolve => setTimeout(resolve, 20_000));
+    await waitForGameplay(20_000);
     const settled = await count();
     await info.attach('gear-sets-held-counts', { body: JSON.stringify(counts, null, 2), contentType: 'application/json' });
     expect(settled.rings, 'Set rings are never collected').toBe(2);

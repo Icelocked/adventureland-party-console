@@ -1,3 +1,4 @@
+import {waitForGameplay} from './network-clock';
 import { test, expect, type LiveGame } from './live-fixtures';
 import { W, P } from './game/hunt-events';
 
@@ -46,7 +47,7 @@ test('each gear set has an Equip button that wears the whole set and holds it fo
   await openSets();
   await page.getByRole('region', { name: 'Luck gear set' }).getByRole('button', { name: 'Equip Luck', exact: true }).click();
   await expect.poll(async () => { const now = await worn(live); return SLOTS.every(slot => now[slot] === LUCK[slot]); }, { timeout: 30_000 }).toBe(true);
-  await new Promise(resolve => setTimeout(resolve, 8000));
+  await waitForGameplay(8000);
   expect(await worn(live), 'The tank correction must not undo a manual set equip').toEqual(LUCK);
   await openSets();
   await expect(page.getByRole('region', { name: 'Luck gear set' })).toContainText(`(${Object.keys((await live.state()).gearSets[W].luck.slots).length} worn`);
