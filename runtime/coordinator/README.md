@@ -1298,6 +1298,19 @@ are tied to the original item; old sessions/commands cannot publish results.
 Validate upgrade-preview, upgrade-offerings-ui and merchant queue/dispatch tests.
 Publish character, coordinator and dashboard assets with the full restart.
 
+Prim stacking (upstream #65) raises a merchant inventory item's hidden grace without a
+level attempt: Mark for upgrade → Prim stack… posts `/party-api/prim-stack` with a
+target grace (0.5–15) and a method. Primling only adds +0.5 per Primling; Primling +
+stat scroll adds +1 and consumes the grade's scroll count (1/10/100/1000) of the item's
+current stat, so `stat_type` never changes. Offering grade does not change either gain,
+so only Primlings are used. The coordinator validates the item, method and supplies in
+merchant inventory and bank, then queues a "prim stack" job. The merchant reads grace
+through an offering-only calculate (inventories never carry `grace`), stacks until the
+target and reports grace before and after; a resumed or repeated job never overshoots.
+The upgrade chances panel shows the grace from its server preview. Lucky-slot tracking
+ignores these operations (no `uscroll`). Failure inventory: `e2e/prim-stack-failures.md`;
+live journey `e2e/live-prim-stack.spec.ts`.
+
 Lucky-slot discovery records only ordinary upgrade-scroll `q_data` rolls, excluding
 compound, stat-scroll and offering-only operations. Unknown slots no longer block
 upgrades. Normal jobs rotate through the least-sampled slots until a slot meets

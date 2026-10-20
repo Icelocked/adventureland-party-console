@@ -2448,6 +2448,89 @@
     await request("/merchant/complete",{method:"POST",body:{jobId:command.jobId,commandId:command.id,success:true,
       activity:[{level:"info",message:"Upgrade chances refreshed for "+previewRequest.item.name}]}});
   }
+  // Prim stacking (#65): an offering with no scroll adds +0.5 grace, an offering
+  // with the item's own stat scroll adds +1; neither attempts a level. Grace is
+  // never sent to clients, so only calculate responses report it.
+  async function primStackSupply(name, count, purchasable, command) {
+    if (inventoryQuantity(name) >= count) return;
+    var definitions = typeof bank_packs !== "undefined" ? bank_packs : parent.bank_packs || {};
+    await previewTravel("bank");
+    await waitForBankPack("items0");
+    for (var guard = 0; inventoryQuantity(name) < count && guard < 20; guard += 1) {
+      var found = findBankItem({name: name});
+      if (!found) break;
+      if (freeInventorySlots() < 1 && findInventoryItemByName(name) < 0) throw new Error("No inventory space for " + name);
+      await previewTravel(definitions[found.pack] && definitions[found.pack][0] || "bank");
+      await waitForBankPack(found.pack);
+      await bankRetrieveConfirmed(found.pack, found.slot);
+    }
+    var missing = count - inventoryQuantity(name);
+    if (missing <= 0 || !purchasable) return;
+    var cost = missing * Number(G.items[name].g || 0);
+    if (character.gold < cost) {
+      if (character.map !== "bank") await previewTravel("bank");
+      await withdrawMerchantCash(cost - character.gold, command);
+    }
+    await smart_move(find_npc("scrolls"));
+    await buyConfirmed(name, missing);
+  }
+  async function primStackGrace(slot) {
+    var preview = await upgrade(slot, null, findInventoryItemByName("offeringp"), true);
+    if (!preview || preview.calculate !== true || !Number.isFinite(Number(preview.grace)))
+      throw new Error("The server did not report the item's grace");
+    return Number(preview.grace);
+  }
+  async function primStackOperation(slot, scrollSlot, item) {
+    var before = inventoryQuantity("offeringp"), failure = null;
+    Promise.resolve(upgrade(slot, scrollSlot, findInventoryItemByName("offeringp"))).catch(function (error) { failure = error; });
+    for (var deadline = Date.now() + 30000; Date.now() < deadline;) {
+      var live = character.items[slot], busy = !!(character.q && character.q.upgrade) || !!(live && live.name === "placeholder");
+      if (!busy && inventoryQuantity("offeringp") === before - 1 && sameItemState(live, item)) return;
+      if (!busy && failure && inventoryQuantity("offeringp") === before) throw failure;
+      await new Promise(function (resolve) { setTimeout(resolve, 100); });
+    }
+    throw new Error("Prim-stack operation was not confirmed in slot " + slot);
+  }
+  async function merchantPrimStack(command) {
+    var job = command.primStack || {}, activity = [], gain = job.method === "stat" ? 1 : 0.5, stacks = 0, start, grace;
+    var label = (G.items[job.item && job.item.name] || {}).name || job.item && job.item.name;
+    var purchasable = { strscroll: true, intscroll: true, dexscroll: true, vitscroll: true };
+    try {
+      if (character.rip || character.q && character.q.upgrade) throw new Error("Upgrade operation still settling; try again");
+      if (findMarkedInventoryItem(job) < 0) throw new Error("Prim-stack item changed; reopen the menu");
+      upgrading = true;
+      await primStackSupply("offeringp", 1, false, command);
+      if (!inventoryQuantity("offeringp")) throw new Error("No Primling in merchant inventory or bank");
+      await previewTravel("newupgrade");
+      start = grace = await primStackGrace(findMarkedInventoryItem(job));
+      var needed = Math.max(0, Math.ceil((job.target - grace) / gain - 1e-9));
+      if (needed) {
+        await primStackSupply("offeringp", needed, false, command);
+        if (job.method === "stat") await primStackSupply(job.scroll, needed * job.scrolls, !!purchasable[job.scroll], command);
+        await previewTravel("newupgrade");
+      }
+      while (grace < job.target && inventoryQuantity("offeringp") > 0) {
+        var slot = findMarkedInventoryItem(job), scrollSlot = null;
+        if (slot < 0) throw new Error("Prim-stack item changed; stopped without spending more supplies");
+        if (job.method === "stat") {
+          if (inventoryQuantity(job.scroll) < job.scrolls) break;
+          scrollSlot = findInventoryItemByName(job.scroll);
+        }
+        await primStackOperation(slot, scrollSlot, job.item);
+        stacks += 1;
+        grace = inventoryQuantity("offeringp") ? await primStackGrace(slot) : grace + gain;
+      }
+      activity.push(stacks ? {level: grace >= job.target ? "success" : "info", message: "Prim stacked " + label + ": grace " + start + " → " + grace +
+          " (" + stacks + " × Primling" + (job.method === "stat" ? ", " + stacks * job.scrolls + " × " + job.scroll : "") + ")" +
+          (grace < job.target ? "; ran out of supplies before grace " + job.target : "")}
+        : {level: "info", message: "Prim stack: " + label + " already has grace " + start + " (target " + job.target + ")"});
+      await request("/merchant/complete", {method: "POST", body: {jobId: command.jobId, commandId: command.id, success: true, activity: activity}});
+    } catch (error) {
+      activity.push({level: "error", message: "Prim stack failed for " + label, details: String(error.reason || error.message || error)});
+      await request("/merchant/complete", {method: "POST", body: {jobId: command.jobId, commandId: command.id, success: false,
+        error: String(error.reason || error.message || error), activity: activity}});
+    } finally { upgrading = false; }
+  }
   function consoleMaintenanceReport() {
     var pause = root.__partyConsoleMaintenance;
     var combat = consoleDrainCombatActive();
@@ -8236,7 +8319,7 @@
     await heartbeat();
     var heartbeatTimer = setInterval(heartbeat, 5000), suspendedGathering = null, actionStarted = false;
     try {
-      if (["merchant-npc-sale", "merchant-deconstruct", "merchant-commerce", "merchant-upgrade-preview"].indexOf(command.type) >= 0) {
+      if (["merchant-npc-sale", "merchant-deconstruct", "merchant-commerce", "merchant-upgrade-preview", "merchant-prim-stack"].indexOf(command.type) >= 0) {
         suspendedGathering = gatheringMode;
         gatheringGeneration += 1; root.__merchantGatheringGeneration = gatheringGeneration;
         if (gatheringTimer) clearInterval(gatheringTimer);
@@ -8250,7 +8333,7 @@
           await new Promise(function (resolve) { setTimeout(resolve, 100); });
         }
       }
-    if (["merchant-commerce","merchant-upgrade-preview"].indexOf(command.type)>=0 && character.stand) await close_stand();
+    if (["merchant-commerce","merchant-upgrade-preview","merchant-prim-stack"].indexOf(command.type)>=0 && character.stand) await close_stand();
       if (command.commerceProgressVersion === 2) await recoverProductionJournal();
       if (root.localStorage.getItem("party-preview-supplies:"+character.name)) await restoreUpgradePreviewSupplies();
       luckyUpgradeSlot = command.luckyUpgradeSlot;
@@ -10321,6 +10404,8 @@
       }, "merchant potion restock"); });
     if (command.type === "merchant-upgrade-preview" && character.ctype === "merchant") return runMerchantJob(
       command, "upgrade preview", function () { return merchantUpgradePreview(command); });
+    if (command.type === "merchant-prim-stack" && character.ctype === "merchant") return runMerchantJob(
+      command, "prim stack", function () { return merchantPrimStack(command); });
     if (command.type === "merchant-commerce" && character.ctype === "merchant") return runMerchantJob(
       command, "merchant shopping and crafting", function () {
         return afterCombat(function () { return merchantCommerce(command); }, "merchant shopping and crafting");
