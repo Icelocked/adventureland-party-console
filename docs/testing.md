@@ -1,5 +1,9 @@
 # Testing
 
+Boss chase needs live ALData, which the disposable server cannot reach, so
+`scripts/tests/chase-return.test.cjs` covers a refused return home with simulated
+payloads (failure inventory: `e2e/chase-return-failures.md`).
+
 ## Roaming target setup
 
 The queued Goo regression holds its initial monster stationary until all clients

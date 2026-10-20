@@ -2025,6 +2025,33 @@ native E2E and the market editor layout journey. Coordinator-only restart suffic
 
 Cave encounter votes open an automatic dashboard dialog; resolved encounters remain reviewable. Dungeon ownership suppresses mainland farm reunion, and manual destinations clear stale travel errors. Generated map definitions are shared across participant streams so follower maps and reconnects retain geometry. These character and coordinator changes require the full restart workflow above; building does not update an existing debug session.
 
+## Event boss realm chase
+
+Upstream issue #107. Rotation-predictive hopping (the other half of the closed #46) was removed.
+`events/boss-chase.ts` polls ALData `/monsters/<types>` once a minute, in a single request through
+the shared ALData client budget. It covers Franky, Ice Golem and Giga Crab, plus the seasonal world
+bosses: Mr. Pumpkin and Mr. Green (each selected by its own row, `mrpumpkin` / `mrgreen`), Dragold (`lunarnewyear`) and Grinch
+(`holidayseason`). A boss is polled only while an active character has its event selected. Giga
+Crab usually dies well before Hop Sickness clears, so the lifetime gate below rarely lets it through.
+It acts only when enabled (Realm panel, `POST /party-api/realm/boss-chase`) and when
+no selected boss is being killed on the party's current realm. A local boss counts as stalled, and
+no longer holds the party, once its drain over at least 50 seconds shows no progress or projects
+more than 120 minutes to kill (an untouched 120M HP Franky on the home realm, say). A stalled local
+boss never triggers a respawn trip; only a live boss elsewhere that passes the gate below does. A candidate's remaining lifetime is
+estimated from its HP drain across polls (at least 50 seconds apart). The party moves only when
+that estimate meets `minEtaMinutes` (default 15), because Hop Sickness (12 minutes) must clear
+before the kill for full loot luck. The move uses the dashboard realm-switch route without
+changing home, so all of its participant, Steam and bankboi guards still apply. After two polls
+without the chased boss, the party returns to the account home realm. A manual move off the
+chase realm ends the chase. Respawning seasonal bosses are also chased ahead of time: ALData lists a
+dead one with `estimatedRespawn`, and the party leaves 13–16 minutes before a respawn elsewhere (so Hop
+Sickness clears first) unless a selected boss is live or respawning within 30 minutes on the current
+realm. It waits up to 10 minutes past the estimate, then follows the live boss as usual or returns home.
+A return home stays pending (`bossChase.returning`) until its switch succeeds: a refused switch is
+retried after the 5-minute retry delay, no new trip starts meanwhile, and the return is dropped if
+the party is moved elsewhere by hand or the chase is disabled (`e2e/chase-return-failures.md`).
+Coordinator-only restart suffices.
+
 ## Account-wide home realm changes
 
 The native home endpoint is per character and enforces a 36-hour cooldown.
