@@ -264,7 +264,7 @@ function PartyInventoryPanelsConnected({ base }: { base: PartyConsoleModel }) {
     (entry: InventoryEntry) =>
       setAutoNpcSaleItem({
         ...entry,
-        character: state.merchantCharacter || undefined,
+        character: undefined,
       }),
     [setAutoNpcSaleItem, state.merchantCharacter],
   );

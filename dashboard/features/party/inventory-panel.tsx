@@ -135,6 +135,7 @@ export const InventoryPanel = memo(function InventoryPanel({
   onAutoStand,
   onClearAutomaticSales,
   onRemoveAutomaticSale,
+  onUpdateNpcReserve,
 }: {
   character: Char;
   restock?: ReactNode;
@@ -163,7 +164,7 @@ export const InventoryPanel = memo(function InventoryPanel({
   onDeconstruction?: (entry: InventoryEntry, auto: boolean, remove: boolean, id?: string) => void;
   onRetryDeconstruction?: (id: string) => void;
   onRemoveNpcSale?: (id: string) => void;
-  autoNpcSales: Record<string, { item: Item; createdAt: number; character?: string }>;
+  autoNpcSales: Record<string, { item: Item; createdAt: number; character?: string; keep?: number }>;
   autoStandMarks: Record<string, { item: Item; price: number; createdAt: number }>;
   buyable: MerchantBuyItem[];
   catalog: MerchantCatalogItem[];
@@ -224,6 +225,7 @@ export const InventoryPanel = memo(function InventoryPanel({
   onAutoStand: (entry: InventoryEntry) => void;
   onClearAutomaticSales: (kind: "npc" | "stand") => void;
   onRemoveAutomaticSale: (kind: "npc" | "stand", item: Item) => void;
+  onUpdateNpcReserve: (item: Item, keep: number) => void;
 }) {
   const leaderOnline =
     !!leader &&
@@ -1619,6 +1621,9 @@ export const InventoryPanel = memo(function InventoryPanel({
               .map(([key, rule]) => ({
                 key,
                 item: rule.item,
+                edits: [{ id: 'reserve', value: rule.keep ?? 0,
+                  label: `Keep ${rule.keep ?? 0}`, min: 0, max: Number.MAX_SAFE_INTEGER,
+                  onSave: (keep: number) => onUpdateNpcReserve(rule.item, keep) }],
                 onRemove: () => onRemoveAutomaticSale('npc', rule.item),
               })),
             ...npcSaleMarks.map((mark) => ({

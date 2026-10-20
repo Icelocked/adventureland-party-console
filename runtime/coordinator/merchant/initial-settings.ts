@@ -111,7 +111,8 @@ export function initialMerchantSales(settings: SavedMerchantSettings, now: () =>
     autoDeconstruction: settings.autoDeconstruction || {},
     deconstructionCatalog: {} as DeconstructionCatalog,
     npcSaleMarks: Array.isArray(settings.npcSaleMarks) ? settings.npcSaleMarks : [],
-    autoNpcSales: settings.autoNpcSales || {},
+    autoNpcSales: Object.fromEntries(Object.entries(settings.autoNpcSales || {}).map(([key, rule]) =>
+      [key, { ...rule, keep: Number.isSafeInteger(rule.keep) && Number(rule.keep) >= 0 ? rule.keep! : 0 }])),
     autoStandMarks: settings.autoStandMarks || {},
     merchantRoutinePriorities: {
       ...defaultMerchantRoutinePriorities(),
