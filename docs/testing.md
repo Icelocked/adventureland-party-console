@@ -47,6 +47,9 @@ not cover the taunt/absorb aggro-gating or the kill-time luck swap live; those w
 verified by code review against the skill engine and `porcupine-equipment.ts`'s
 established swap/restore pattern. Retain the `tank-dashboard-before-restart` screenshot
 and `tank-melee-override` evidence, then run `npm run test:e2e:verify`.
+Boss chase needs live ALData, which the disposable server cannot reach, so
+`scripts/tests/chase-return.test.cjs` covers a refused return home with simulated
+payloads (failure inventory: `e2e/chase-return-failures.md`).
 
 ## Roaming target setup
 
