@@ -919,8 +919,10 @@ test('active Bankboi uses its dedicated card instead of a pending character card
 
 test('Live WTB counts bank stock after empty slots without withdrawing it', async ({ page }, info) => {
   // Failure modes: empty slot objects crash rendering; later stock is omitted;
-  // multiple bank stacks are undercounted; merchant-only stock stops matching.
+  // multiple bank stacks are undercounted; merchant-only stock stops matching;
+  // the market opens without loading the bank section, so bank stock reads as 0.
   // Inject the bank/market read boundary; the dashboard and its UI actions run normally.
+  // Like the coordinator, only section=bank carries the bank and only section=market the orders.
   const bank = { gold: 0, packs: { items0: [null, {}, { slot: 2, item: { name: 'leather', q: 4 } }],
     items1: [{ slot: 0, item: { name: 'leather', q: 2 } }] } };
   const orders = [
@@ -933,7 +935,10 @@ test('Live WTB counts bank stock after empty slots without withdrawing it', asyn
   await page.route('**/party-api/state*', async route => {
     const response = await fetchFullState(route);
     const state = await response.json();
-    await route.fulfill({ response, json: { ...state, bank, aldata: { ...state.aldata, buyOrders: orders } } });
+    const section = new URL(route.request().url()).searchParams.get('section');
+    if (section === 'bank') return route.fulfill({ response, json: { ...state, bank } });
+    if (section === 'market') return route.fulfill({ response, json: { ...state, aldata: { ...state.aldata, buyOrders: orders } } });
+    await route.fulfill({ response, json: state });
   });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'M', exact: true })).toBeVisible();
