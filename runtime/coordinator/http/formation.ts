@@ -3,6 +3,7 @@ import { requestObject, requestText, type HttpRequest, type HttpResponse } from 
 
 interface FormationState {
   leader: string | null;
+  designatedTank: string | null;
   merchantCharacter: string | null;
   followers: Record<string, boolean>;
   eventsByCharacter: Record<string, boolean>;
@@ -40,6 +41,11 @@ export function createFormationRoute(state: FormationState, ports: FormationPort
       ...(value ? ports.supported.filter((id) => id !== "anniversary") : []),
     ];
     return null;
+  }
+  function assignManaged(value: unknown): { name: string | null } | null {
+    if (value === null) return { name: null };
+    const name = requestText(value);
+    return ports.managed(name) ? { name } : null;
   }
   function priorities(name: string, value: unknown): FormationError | null {
     if (!Array.isArray(value) || value.length !== ports.supported.length ||
@@ -84,9 +90,14 @@ export function createFormationRoute(state: FormationState, ports: FormationPort
     const previous = { leader: state.leader, followers: { ...state.followers } };
     const body = requestObject(req.body);
     if (body.leader !== undefined) {
-      if (body.leader !== null && !ports.managed(requestText(body.leader)))
-        return res.status(400).json({ error: "unknown leader" });
-      state.leader = body.leader === null ? null : requestText(body.leader);
+      const next = assignManaged(body.leader);
+      if (!next) return res.status(400).json({ error: "unknown leader" });
+      state.leader = next.name;
+    }
+    if (body.tank !== undefined) {
+      const next = assignManaged(body.tank);
+      if (!next) return res.status(400).json({ error: "unknown tank" });
+      state.designatedTank = next.name;
     }
     const error = body.character !== undefined ? character(body) : null;
     if (error) return res.status(error.code).json({ error: error.error });
@@ -95,6 +106,7 @@ export function createFormationRoute(state: FormationState, ports: FormationPort
     return res.json({
       ok: true,
       leader: state.leader,
+      tank: state.designatedTank,
       followers: state.followers,
       eventsByCharacter: state.eventsByCharacter,
       eventLimitsByCharacter: state.eventLimitsByCharacter,

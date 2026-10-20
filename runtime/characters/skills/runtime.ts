@@ -32,7 +32,7 @@ export function installSkillRuntime(root: CombatRoot) {
     // Offensive skill definitions retain their own damage_type precedence.
     const actor: Actor = { ...character, damage_type: effectiveAttackDamageType(character, typeof G === 'undefined' ? undefined : G) };
     const context: CombatContext = shared.combatContext?.() || {
-      leader: '', allies: [], monsters: [], mode: 'blocked', event: null, observedAt: 0,
+      leader: '', tank: null, allies: [], monsters: [], mode: 'blocked', event: null, observedAt: 0,
     };
     if (host.is_disabled?.(actor)) context.mode = 'blocked';
     const skills: Partial<Record<SkillId, SkillDefinition>> = G.skills;

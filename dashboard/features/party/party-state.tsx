@@ -115,6 +115,7 @@ export type PartyState = {
   goldTargets?: Record<string, number>;
   withdrawals?: Record<string, Withdrawal[]>;
   leader?: string | null;
+  designatedTank?: string | null;
   followers?: Record<string, boolean>;
   eventsByCharacter?: Record<string, boolean>;
   eventAttendance?: Record<string, Record<string, Pick<import("../../../runtime/coordinator/events/attendance-limits").AttendanceInstance, "ignored" | "ended">>>;
