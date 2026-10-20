@@ -40,7 +40,7 @@ to packed gave the same sequence with no gaps, and nothing was left in the
 merchant's inventory. The setting survived a coordinator restart.
 
 On a copy of the live merchant's bank (98 items, 329 slots), the planner changes
-2–8 slots for a new type inside an existing category (packed: 19–48), 15 for a
+2-8 slots for a new type inside an existing category (packed: 19-48), 15 for a
 new category that sorts first (packed: 82), and 228 for 15 new types added one
 visit at a time (packed: 1,058). Switching an existing packed bank to gaps
 re-lays it once (148).
