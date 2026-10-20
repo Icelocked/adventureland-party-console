@@ -15,8 +15,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { Fragment, useMemo, useState } from 'react';
-import { sanitizeDollHtml } from './sanitize-doll-html';
+import { Fragment, useState } from 'react';
+import { CharacterPortrait } from './character-portrait';
 import { Char } from './char';
 import { comparisonSlotsFor } from './comparison-slots-for';
 import { EquippedEntry } from './equipped-entry';
@@ -49,13 +49,13 @@ export function GearComparisonDialog({
   currentCharacter?: Char | null;
   onOpenChange: (open: boolean) => void;
 }) {
-  const dollHtml =
-    currentCharacter?.characterDollHtml ||
-    comparison?.character.characterDollHtml;
-  const dollMarkup = useMemo(
-    () => ({ __html: sanitizeDollHtml(dollHtml) }),
-    [dollHtml],
-  );
+  // Headless characters report no doll HTML, so the portrait falls back to the
+  // sprite and then the skin name, as every other CharacterPortrait does.
+  const appearance = {
+    html: currentCharacter?.characterDollHtml || comparison?.character.characterDollHtml,
+    sprite: currentCharacter?.characterSprite || comparison?.character.characterSprite,
+    skin: currentCharacter?.skin || comparison?.character.skin,
+  };
   const [leftLevel, setLeftLevel] = useState(0);
   const [rightLevel, setRightLevel] = useState(0);
   const [leftStatType, setLeftStatType] = useState('none');
@@ -439,12 +439,9 @@ export function GearComparisonDialog({
       className={`row-span-4 grid grid-rows-subgrid gap-y-3 rounded-lg border p-4 ${proposed ? 'border-cyan-800 bg-cyan-950/10' : 'border-emerald-900 bg-black/20'}`}
     >
       <div className="flex items-center gap-3">
-        <div
-          className="h-20 w-16 shrink-0 overflow-hidden"
-          dangerouslySetInnerHTML={
-            character.characterDollHtml ? dollMarkup : undefined
-          }
-        />
+        <div data-comparison-portrait className="relative h-20 w-16 shrink-0 overflow-hidden">
+          <CharacterPortrait html={appearance.html} sprite={appearance.sprite} skin={appearance.skin} />
+        </div>
         <div className="min-w-0">
           <p className="font-semibold">
             {proposed
