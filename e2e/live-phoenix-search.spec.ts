@@ -1,3 +1,4 @@
+import {waitForGameplay} from './network-clock';
 import {test,expect} from './live-fixtures';
 import {W,P,M,world,quantity} from './game/hunt-events';
 import {zones} from '../dashboard/lib/farming-zones';
@@ -18,7 +19,7 @@ test('Phoenix patrol splits the fighters, holds fire until they gather, then spr
         const [state,positions]=await Promise.all([live.state(),world(live)]);
         timeline.push({at:Date.now(),rare:state.rareHuntState,positions:Object.fromEntries([W,P].map(n=>[n,{map:positions.players[n].map,x:Math.round(positions.players[n].x),y:Math.round(positions.players[n].y),hp:positions.players[n].hp}]))});
       } catch(error) { timeline.push({at:Date.now(),error:String(error)}); }
-      await new Promise(resolve=>setTimeout(resolve,1000));
+      await waitForGameplay(1000);
     }
   };
   let sampler:Promise<void>|undefined;
@@ -134,7 +135,7 @@ test('Phoenix already fighting the spotter: the other fighter keeps converging a
         timeline.push({at:Date.now(),encounter:state.rareHuntState?.encounter,
           positions:Object.fromEntries([W,P].map(n=>[n,{map:positions.players[n].map,x:Math.round(positions.players[n].x),y:Math.round(positions.players[n].y)}]))});
       } catch(error) { timeline.push({at:Date.now(),error:String(error)}); }
-      await new Promise(resolve=>setTimeout(resolve,1000));
+      await waitForGameplay(1000);
     }
   };
   let sampler:Promise<void>|undefined;
