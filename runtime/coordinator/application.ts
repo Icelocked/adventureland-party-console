@@ -515,6 +515,16 @@ export function startCoordinatorApplication(
       compounds: scheduleAutoCompound,
       exchanges: scheduleAutoExchange,
       policy: policyFor,
+      elixirReady: (name, rule, have) => {
+        const merchant=party.merchantCharacter;
+        if (!merchant || !party.statuses[merchant] || merchantOrderRoute.restockPending(rule.item)) return false;
+        const stock=coordinatorPolicies.protectedMerchantStorageStock(party).filter(entry=>entry.item?.name===rule.item && !entry.item.l && !entry.item.b &&
+          !entry.craftLocation.startsWith('bankboi:') && (name!==merchant || !entry.craftLocation.startsWith('inventory:')))
+          .reduce((sum,entry)=>sum+(Number(entry.item?.q)||1),0);
+        if (stock>0) return true;
+        if (rule.autoAcquire) merchantOrderRoute.restockSupply(rule.item,Math.max(1,rule.max-have));
+        return false;
+      },
       queue: queueMerchant,
       markedItem,
       sameItem: sameMarkedItem,

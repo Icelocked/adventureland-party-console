@@ -40,6 +40,7 @@ export interface EntityReference {
 }
 
 export const heartbeatStateFields = [
+  "restockPolicies",
   "combatRecovery",
   "combatResetByCharacter",
   "threshold",

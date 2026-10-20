@@ -8,6 +8,9 @@ export interface MetricSample {
   at: number; gold: number; luck: number; ping: number | null; level: number; xp: number; maxXp: number;
   /** Cumulative internal gold sent/deposited minus received/withdrawn. Older history omits it. */
   goldMovement?: number;
+  /** Cumulative catalog replacement cost consumed and actual consumable purchases. */
+  consumableCost?: number;
+  consumablePurchases?: number;
   /** Native Encouragement totals, separate from ordinary luckm. Older history omits this field. */
   encouragementLuck?: number;
 }
@@ -26,7 +29,7 @@ export interface MetricFrame {
 export interface MetricBatch extends MetricContext { runtime: string; frames: MetricFrame[] }
 export interface MetricTotals extends MetricContext {
   /** Independent gold baseline when other measurements survive a gold reset. */
-  goldStart?: Pick<MetricSample, 'at' | 'gold' | 'goldMovement'>;
+  goldStart?: Pick<MetricSample, 'at' | 'gold' | 'goldMovement' | 'consumableCost' | 'consumablePurchases'>;
   observedMs: number;
   partial: boolean;
   damage: MetricDamage[];
@@ -57,7 +60,7 @@ export interface MetricsResponse {
 }
 export interface AccountGoldPoint { at: number; total: number | null }
 export interface AccountGoldResponse { from: number; to: number; points: AccountGoldPoint[] }
-export type GoldSample = Pick<MetricSample, 'at' | 'gold' | 'goldMovement'>;
+export type GoldSample = Pick<MetricSample, 'at' | 'gold' | 'goldMovement' | 'consumableCost' | 'consumablePurchases'>;
 export interface GoldHistoryResponse {
   startedAt: number; from: number; to: number; resolutionMs: number; characters: string[]; resets?: MetricResets;
   points: { at: number; values: (Pick<MetricTotals, 'character' | 'server' | 'goldStart'> & { first: GoldSample; last: GoldSample })[] }[];

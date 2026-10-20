@@ -505,9 +505,10 @@ export function usePartyConsole() {
   }
   async function saveRestock(character: string, policy: RestockPolicy) {
     try {
-      await post("/restock", { character, hp: policy.hp, mp: policy.mp });
+      await post("/restock", { ...policy, character });
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Restock update failed");
+      throw error;
     }
   }
   async function gather(mode: string, enabled: boolean) {

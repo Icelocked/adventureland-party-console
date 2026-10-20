@@ -1118,6 +1118,16 @@
   var combatResponseListener = function (data) {
     if (!data || data.failed) return;
     partyMetrics.goldMovement(data);
+    if (data.success === true) {
+      var usedName = data.used && G.items[data.used] ? data.used :
+        data.response === 'elixir' && character.slots.elixir ? character.slots.elixir.name : null;
+      var usedDefinition = usedName && G.items[usedName];
+      if (usedDefinition && (usedDefinition.type === 'pot' || usedDefinition.type === 'elixir'))
+        partyMetrics.consumable(Number(usedDefinition.g) || 0);
+      if (data.response === 'buy_success' && G.items[data.name] &&
+          ['pot','elixir'].indexOf(G.items[data.name].type) >= 0)
+        partyMetrics.consumable(Number(data.cost) || 0, true);
+    }
     var skill = data.place === "skill" ? (data.skill || data.name) : data.place;
     if (skill && skill !== "attack" && G.skills && G.skills[skill]) {
       queueCombatEvent("skill", "Used " + (G.skills[skill].name || skill), { skill: skill }, "skill:" + skill);
@@ -1182,6 +1192,7 @@
     ["name", "level", "q", "p", "stat_type", "data", "price", "rid", "b", "m", "l", "v"].forEach(function (key) {
       if (item[key] != null) copy[key] = item[key];
     });
+    if (item.expires != null) copy.expires = typeof item.expires === 'number' ? item.expires : new Date(item.expires).getTime();
     return copy;
   }
 
@@ -1752,7 +1763,7 @@
   }
 
   function activeConditions() {
-    return Object.keys(character.s || {}).map(function (id) {
+    var conditions = Object.keys(character.s || {}).map(function (id) {
       var live = character.s[id] || {};
       var definition = G.conditions[id] || G.skills[id] || {};
       var skin = live.skin || definition.skin;
@@ -1768,7 +1779,15 @@
         live: safeFields(live),
         sprite: skin ? spriteDefinition(skin) : null,
       };
-    }).sort(function (a, b) { return a.name.localeCompare(b.name); });
+    });
+    var activeElixir = character.slots && character.slots.elixir;
+    if (activeElixir && G.items[activeElixir.name]) {
+      var elixirDefinition = G.items[activeElixir.name], expiry = new Date(activeElixir.expires).getTime();
+      conditions.push({id:'elixir:'+activeElixir.name,name:elixirDefinition.name || activeElixir.name,
+        explanation:elixirDefinition.explanation || '',remainingMs:isFinite(expiry)?Math.max(0,expiry-Date.now()):null,
+        stacks:null,source:character.name,definition:safeFields(elixirDefinition),live:{},sprite:spriteDefinition(elixirDefinition.skin)});
+    }
+    return conditions.sort(function (a, b) { return a.name.localeCompare(b.name); });
   }
 
   function monsterHuntStatus() {
@@ -6779,7 +6798,7 @@
         }
       }
       var deliveries = [];
-      var restockSupplies = ["hp", "mp"].map(function (kind) {
+      var restockSupplies = ["hp", "mp", "elixir"].map(function (kind) {
         var supply = command.restock && command.restock[kind];
         if (!supply || !supply.max) return null;
         return { kind: kind, supply: supply, have: statusQuantity(command.targetInventory, supply.item) };
@@ -6793,7 +6812,14 @@
           var restockEntry = restockSupplies[restockIndex];
           var supply = restockEntry.supply;
           var needed = Math.max(0, supply.max - restockEntry.have), seller = itemSeller(supply.item);
-          if (needed > 0 && seller) {
+          if (needed > 0 && restockEntry.kind === 'elixir') {
+            var elixirEntries = await restockElixirEntries(command, supply.item, needed);
+            for (var ei=0; ei<elixirEntries.length && needed>0; ei++) {
+              var elixirDelivery = Math.min(needed,Number(elixirEntries[ei].item.q)||1);
+              deliveries.push({name:supply.item,quantity:elixirDelivery,slot:elixirEntries[ei].slot});
+              needed-=elixirDelivery;
+            }
+          } else if (needed > 0 && seller) {
             var buyQuantity = Math.max(0, needed - inventoryQuantity(supply.item));
             if (character.gold >= G.items[supply.item].g * buyQuantity) {
               if (buyQuantity) {
@@ -6829,6 +6855,15 @@
         for (var d = 0; d < deliveries.length; d += 1) {
           if (deliveredRestocks[d]) continue;
           var deliverySlot = findInventoryItemByName(deliveries[d].name);
+          if (Number.isInteger(deliveries[d].slot)) {
+            // Travel/tidying can move a supplied copy. Refresh reservations before
+            // sending rather than trusting an old slot or taking another job's stock.
+            var supplyCheckpoint = await upgradeOfferingCheckpoint(command);
+            var supplied = availableOfferingEntries(supplyCheckpoint).find(function(entry) {
+              return !entry.pack && entry.item.name === deliveries[d].name && (Number(entry.item.q)||1) >= deliveries[d].quantity;
+            });
+            deliverySlot = supplied ? supplied.slot : -1;
+          }
           if (deliverySlot >= 0) await merchantSendItem(command.target, deliverySlot, deliveries[d].quantity);
           deliveredRestocks[d] = true;
         }
@@ -8310,7 +8345,8 @@
     await heartbeat();
     var heartbeatTimer = setInterval(heartbeat, 5000), suspendedGathering = null, actionStarted = false;
     try {
-      if (["merchant-npc-sale", "merchant-deconstruct", "merchant-commerce", "merchant-upgrade-preview"].indexOf(command.type) >= 0) {
+      // Delivery owns movement too: retire an idle return or gathering path before starting it.
+      if (["merchant-service", "merchant-npc-sale", "merchant-deconstruct", "merchant-commerce", "merchant-upgrade-preview"].indexOf(command.type) >= 0) {
         suspendedGathering = gatheringMode;
         gatheringGeneration += 1; root.__merchantGatheringGeneration = gatheringGeneration;
         if (gatheringTimer) clearInterval(gatheringTimer);
@@ -8913,9 +8949,32 @@
     }
   }
 
+  async function restockElixirEntries(command, name, required) {
+    var checkpoint = await upgradeOfferingCheckpoint(command);
+    function carried() { return availableOfferingEntries(checkpoint).filter(function(entry) { return !entry.pack && entry.item.name === name; }); }
+    function count() { return carried().reduce(function(total,entry) { return total + (Number(entry.item.q)||1); },0); }
+    if (count() < required) {
+      await merchantVisitBank(command, []);
+      checkpoint = await upgradeOfferingCheckpoint(command);
+      var bankEntries = availableOfferingEntries(checkpoint).filter(function(entry) {
+        var original = entry.pack && character.bank && character.bank[entry.pack] && character.bank[entry.pack][entry.slot];
+        return original && entry.item.name === name && (Number(original.q)||1) === (Number(entry.item.q)||1);
+      });
+      for (var index=0; index<bankEntries.length && count()<required; index++) {
+        await bankRetrieveConfirmed(bankEntries[index].pack, bankEntries[index].slot);
+        checkpoint = await upgradeOfferingCheckpoint(command);
+      }
+    }
+    return carried();
+  }
+
   async function merchantSelfRestock(command) {
     var activity = [];
     try {
+      var elixirSupply = command.restock && command.restock.elixir;
+      if (elixirSupply && elixirSupply.item && inventoryQuantity(elixirSupply.item) < elixirSupply.max) {
+        await restockElixirEntries(command, elixirSupply.item, elixirSupply.max);
+      }
       var supplies = [command.restock && command.restock.hp, command.restock && command.restock.mp]
         .filter(function (supply) { return supply && Number(supply.max) > 0; });
       var needs = supplies.map(function (supply) {
@@ -11240,6 +11299,17 @@
       void prepareCatalog();
       flushStatusDiagnostics();
       statusPhase = "dispatch command";
+      var elixirPolicy = state.restockPolicies && state.restockPolicies[character.name] && state.restockPolicies[character.name].elixir;
+      if (elixirPolicy && elixirPolicy.autoConsume !== false && elixirPolicy.item && !character.slots.elixir &&
+          (!state.command || state.command.type === "merchant-idle" && !merchantIdleActive) &&
+          !gatheringActive && !character.rip && !bankboiStorage && !banking && !stocking && !upgrading &&
+          !root.__merchantActiveJob && !root.__merchantInventoryTidy) {
+        var elixirSlot = character.items.findIndex(function (item) { return item && !item.l && !item.b &&
+          item.name === elixirPolicy.item && G.items[item.name] && G.items[item.name].type === 'elixir'; });
+        if (elixirSlot >= 0) {
+          try { await consume(elixirSlot); } catch (_elixirUseError) { /* Native failures retry on the next ordinary heartbeat. */ }
+        }
+      }
       handle(state.command).catch(function (error) {
         if (state.command && lastCommand === Number(state.command.id) &&
             (state.command.type === "town-party" || state.command.type === "event-return-town" ||

@@ -1,5 +1,6 @@
 import './character-sections.case';
 import './npc-sale-reserve.case';
+import './elixir-restock.case';
 import './map-sprites.case';
 import './drop-rewards.case';
 import './release-ui.case';
