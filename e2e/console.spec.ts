@@ -6,6 +6,7 @@ import './market-preferences.case';
 import { test, expect } from './fixtures';
 import { fetchFullState } from './state-route';
 import './gear-comparison.case';
+import './comparison-portrait.case';
 import './steam-audio.case';
 import './tracktrix-drilldown.case';
 import './item-card.case';
