@@ -7,6 +7,8 @@ import { reconcileNpcSales, type NpcSale } from "./npc-sales.ts";
 import type { StandMark } from "./stand-marks.ts";
 import { reconcilePlayerSales, type PlayerSaleState } from "./player-npc-sales.ts";
 import { bankCollectionReason } from './bank-collection.ts';
+import { protectedMerchantStorageStock } from '../inventory/merchant-storage-stock.ts';
+import { keptNpcSaleCopies, keptNpcSaleRule, npcSaleSpare } from './npc-sale-keep.ts';
 
 interface AutomaticStandMark extends StandMark {
   auto?: boolean;
@@ -42,20 +44,36 @@ interface SalesPorts {
 
 /** Materialize automatic sale intent, then recover runnable work from durable marks. */
 export function createAutomaticMerchantSales(state: SalesState, ports: SalesPorts) {
-  function markNpcSale(entry: SaleEntry, key: string): boolean {
-    const pending = state.npcSaleMarks.some(
+  /** #116: a rule with `keep` sells only its spare stock. One allowance serves a whole marking pass. */
+  function saleAllowance(): (key: string, quantity: number) => number {
+    const kept = Object.keys(state.autoNpcSales).flatMap(key => { const rule = keptNpcSaleRule(state, key); return rule ? [[key, rule.keep] as const] : []; });
+    if (!kept.length) return (_key, quantity) => quantity;
+    const stock = protectedMerchantStorageStock(state);
+    const spare = new Map(kept.map(([key, keep]) => [key, npcSaleSpare(state, key, keep, stock)] as const));
+    return (key, quantity) => {
+      const available = spare.get(key);
+      if (available === undefined) return quantity;
+      const allowed = Math.max(0, Math.min(quantity, available));
+      spare.set(key, available - allowed);
+      return allowed;
+    };
+  }
+  function npcSalePending(entry: SaleEntry): boolean {
+    return state.npcSaleMarks.some(
       (mark) =>
         mark.source === "merchant" &&
         mark.slot === entry.slot &&
         sameMarkedItem(entry.item, mark.item),
     );
-    if (pending) return false;
+  }
+  function markNpcSale(entry: SaleEntry, key: string, quantity = Math.max(1, Number(entry.item.q) || 1)): boolean {
+    if (npcSalePending(entry)) return false;
     state.npcSaleMarks.push({
       id: "auto-npc-sale-" + ports.now() + "-" + ports.nextCommand(),
       source: "merchant",
       slot: entry.slot,
       item: entry.item,
-      quantity: Math.max(1, Number(entry.item.q) || 1),
+      quantity,
       state: "queued",
       auto: true,
       autoRuleKey: key,
@@ -100,12 +118,17 @@ export function createAutomaticMerchantSales(state: SalesState, ports: SalesPort
   function bankEntry(entry: (InventoryEntry & {craftLocation:string}) | null): entry is BankEntry {
     return !!entry?.item && !entry.item.l && Number.isSafeInteger(entry.slot);
   }
-  function markBankNpc(entry: BankEntry): boolean {
+  function bankNpcEligible(entry: BankEntry, key: string): boolean {
+    return !!state.autoNpcSales[key] && !state.autoStandMarks[key] && !saleConflict(entry.item) &&
+      state.merchantAutomations?.['auto npc sales'] !== false;
+  }
+  function markBankNpc(entry: BankEntry, allow: ReturnType<typeof saleAllowance>): boolean {
     const key = automaticCommerceRuleKey(entry.item);
-    if (!state.autoNpcSales[key] || state.autoStandMarks[key] || saleConflict(entry.item) ||
-        state.merchantAutomations?.['auto npc sales'] === false) return false;
+    if (!bankNpcEligible(entry, key)) return false;
     const pending = ((state.withdrawals ||= {})[state.merchantCharacter!] ||= []);
     if (pending.some(mark => mark.pack === entry.craftLocation && mark.slot === entry.slot && sameMarkedItem(mark.item, entry.item))) return false;
+    // Withdrawals move whole stacks; the carried sale then sells only the spare part of one.
+    if (!allow(key, Math.max(1, Number(entry.item.q) || 1))) return false;
     pending.push({pack: entry.craftLocation, slot: entry.slot, item: entry.item, autoNpcRuleKey:key});
     return true;
   }
@@ -119,9 +142,10 @@ export function createAutomaticMerchantSales(state: SalesState, ports: SalesPort
   function markBankStock(): boolean {
     if (!bankStockReady()) return false;
     let changed = false, npcStacks = bankNpcStacks();
+    const allow = saleAllowance();
     for (const entry of availableBankStock()) {
       if (!bankEntry(entry)) continue;
-      if (npcStacks < bankNpcLimit() && markBankNpc(entry)) {
+      if (npcStacks < bankNpcLimit() && markBankNpc(entry, allow)) {
         npcStacks++; changed = true;
         continue;
       }
@@ -179,18 +203,23 @@ export function createAutomaticMerchantSales(state: SalesState, ports: SalesPort
     return !!entry?.item && !entry.item.l && !claimed.has(entry.slot) &&
       sameMarkedItem(entry.item, listing.item) && !saleConflict(entry.item);
   }
-  function markAutomaticNpc(entry: SaleEntry, key: string) { return state.merchantAutomations?.['auto npc sales'] !== false && markNpcSale(entry, key); }
+  function markAutomaticNpc(entry: SaleEntry, key: string, allow: ReturnType<typeof saleAllowance>) {
+    if (state.merchantAutomations?.['auto npc sales'] === false || npcSalePending(entry)) return false;
+    const quantity = allow(key, Math.max(1, Number(entry.item.q) || 1));
+    return quantity > 0 && markNpcSale(entry, key, quantity);
+  }
   function saleConflict(item: Item) { return deconstructionReserved(item) || itemRuleConflicts(state,item).length > 0; }
   function markInventory(items: readonly (SaleEntry | null)[]) {
     // Resume displaced sales before admitting new automatic listings.
     let changed = resumeDisplacedSales(items),
       standChanged = changed;
+    const allow = saleAllowance();
     for (const entry of items) {
       if (!entry?.item || !Number.isSafeInteger(entry.slot) || entry.item.l) continue;
       if (saleConflict(entry.item)) continue;
       const key = automaticCommerceRuleKey(entry.item);
       if (state.autoNpcSales[key]) {
-        if (markAutomaticNpc(entry, key)) changed = true;
+        if (markAutomaticNpc(entry, key, allow)) changed = true;
       } else if (markStandSale(entry, key)) standChanged = changed = true;
     }
     return { changed, standChanged };
@@ -216,12 +245,26 @@ export function createAutomaticMerchantSales(state: SalesState, ports: SalesPort
     return sales.changed;
   }
 
+  // #116: carried kept copies hold bank marks; a bank trip deposits them. Retry a full bank slowly.
+  let keptBankAt = -Infinity;
+  function keptCopiesCarried(items: readonly (SaleEntry | null)[]): boolean {
+    if (state.merchantCurrent || state.merchantQueue.some(job => job.target === state.merchantCharacter) ||
+        ports.now() - keptBankAt < 600000) return false;
+    const kept = keptNpcSaleCopies(state);
+    if (!items.some(entry => entry?.item && Number.isSafeInteger(entry.slot) && kept(entry))) return false;
+    keptBankAt = ports.now();
+    return true;
+  }
+  function queueBankTrip(items: readonly (SaleEntry | null)[]): void {
+    const collection = bankCollectionReason(state);
+    if (collection) ports.queue([state.merchantCharacter], collection);
+    else if (keptCopiesCarried(items)) ports.queue([state.merchantCharacter], "manual bank exchange");
+  }
   function reconcileMerchant(items: readonly (SaleEntry | null)[]): boolean {
     // Banked sales also reserve capacity against opportunistic buys.
     const marks = markInventory(items), bankChanged = markBankStock();
     const changed = reconcileSales(items) || marks.changed || bankChanged;
-    const collection = bankCollectionReason(state);
-    if (collection) ports.queue([state.merchantCharacter], collection);
+    queueBankTrip(items);
     if (bankChanged && bankStandPending())
       ports.queue([state.merchantCharacter], "manual bank exchange");
     if (marks.standChanged || bankChanged) {
