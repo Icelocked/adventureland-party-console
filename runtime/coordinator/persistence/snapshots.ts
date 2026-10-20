@@ -117,7 +117,7 @@ export const settingsFields = [
   "merchantQueue",
   "merchantCurrent",
   "merchantCargo",
-  "bankSortMode", "bankSortRequest",
+  "bankSortMode", "bankSortLayout", "bankSortRequest",
   "gatheringModes",
   "gatheringNoTool",
   "gatheringCooldowns",

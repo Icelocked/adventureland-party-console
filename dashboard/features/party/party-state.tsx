@@ -177,6 +177,7 @@ export type PartyState = {
   merchantActivity?: MerchantActivity[];
   combatLogs?: Record<string, CombatLogEntry[]>;
   bankSortMode?: "automatic" | "request";
+  bankSortLayout?: "packed" | "gapped";
   bankSortRequest?: { id: string; status: "queued" | "sorting" | "retry"; message?: string;
   } | null;
   gatheringModes?: string[];
