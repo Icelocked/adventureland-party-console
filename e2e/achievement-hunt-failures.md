@@ -25,3 +25,44 @@ death thresholds and scope crossing stay in `scripts/tests/achievement-hunt.test
   with the same journal and read both back.
 - Leaving the mode can strand the target. Choosing Default clears the target,
   and the selection stays for next time.
+
+## Field registry in enforce mode (written before the enforce journey)
+
+`PARTY_STATE_FIELDS=enforce` sends only the fast whitelist in
+`runtime/coordinator/telemetry/character-fields.ts`. The enforce journey seeds
+W with declared kill counts and an empty `avoidSightings` list, and aborts the
+live stream so the dashboard reads characters from `section=fast`.
+
+- The catalog can miss `avoidSightings`, the status key Achievement Hunt adds.
+  `scripts/tests/character-field-registry.test.cjs` fails on any reported key
+  outside the catalog.
+- Enforce mode can drop `monsterAchievementKills` from fast. The settings list
+  would then show 0 kills for Goo while the stream is down. The journey reads
+  Goo's row in the monster chooser.
+- `avoidSightings` can reach fast in enforce mode, as debug data on every poll.
+  The journey checks that fast leaves it out and the full request keeps it.
+- The coordinator can lose `avoidSightings` while storing the report, so the
+  boss check in `hunt/achievement-hunt.ts` never sees a sighting. The full
+  request reads the stored status.
+- The party-level fields (`achievementHunt`, `achievementBlacklist`,
+  `achievementTarget`, `achievementMessage`, `farmingProfiles`) can leave the
+  config section. The journey reads the status line, which only
+  `achievementMessage` from config fills.
+
+## Achievement Hunt save key (written before the persistence journey)
+
+docs/efficiency.md § Achievement Hunt state has the full failure inventory.
+The persistence journey seeds a layout 2 journal: settings with the marker
+and W's profile without Achievement Hunt fields, and the Achievement Hunt
+document with W's settings and a blacklisted Bat.
+
+- Load can ignore the Achievement Hunt document (item 2). The settings dialog
+  must show the saved death threshold and the Bat entry.
+- A running settings record can carry an Achievement Hunt field (item 1). No
+  settings record written before shutdown may contain one.
+- A target pick or a settings change can stay unsaved (item 5). The newest
+  Achievement Hunt record must carry the target, its status message and the
+  new death threshold.
+- Shutdown can leave the fields out of settings (item 4). After the real
+  coordinator restarts, the last settings record must hold them inside W's
+  profile, and the state must read them back.

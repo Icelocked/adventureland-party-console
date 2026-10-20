@@ -675,3 +675,16 @@ test('a repeated choice id resolves to the first choice, as a linear search did 
   assert.equal(order[0].rare, false);
   assert.equal(order[0].special, false);
 });
+
+// docs/efficiency.md (Achievement Hunt state), retention item 9.
+test('blacklisting a target past 500 entries drops only the oldest', () => {
+  const old = Object.fromEntries(Array.from({ length: 500 }, (_, index) => ['m' + index, { monsterId: 'm' + index, at: index, reason: 'Manually blacklisted' }]));
+  const f = fixture({}, { achievementBlacklist: old });
+  f.hunt.tick();
+  f.advance(1_000); f.state.statuses.L.lastDeath = { at: 1_000_500 }; f.hunt.tick();
+  f.advance(1_000); f.state.statuses.F.lastDeath = { at: 1_001_800 }; f.hunt.tick();
+  assert.equal(f.state.achievementBlacklist.goo.deaths, 2);
+  assert.equal(Object.keys(f.state.achievementBlacklist).length, 500);
+  assert.equal(f.state.achievementBlacklist.m0, undefined);
+  assert.ok(f.state.achievementBlacklist.m1);
+});
