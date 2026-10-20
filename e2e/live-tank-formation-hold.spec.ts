@@ -1,3 +1,4 @@
+import {waitForGameplay} from './network-clock';
 import { test, expect } from './live-fixtures';
 import { warrior as W, priest as P, location } from './game/hunt-lifecycle';
 
@@ -37,7 +38,7 @@ for (const tank of [W, P]) {
             at: { x: Math.round(character.real_x), y: Math.round(character.real_y) }, ownAt: own ? { x: Math.round(own.x), y: Math.round(own.y) } : null,
             inRange: !!(e && is_in_range(e)), ownInRange: !!(own && is_in_range(own)) }; })()`)));
         samples.push({ at: Date.now(), tank: t, mage });
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await waitForGameplay(1000);
       }
       // Natural goos share the farm, so measure each fighter against its own selected target.
       const engaged = samples.filter(s => s.tank.target != null);
