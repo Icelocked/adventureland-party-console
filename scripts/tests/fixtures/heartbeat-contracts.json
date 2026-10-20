@@ -146,7 +146,10 @@
       "useFieldGenerators": true,
       "rules": {}
     },
-    "passingEncounters": []
+    "passingEncounters": [],
+    "encounterRoutines": {},
+    "encounterAutoDeathLimits": {},
+    "encounterAutoDeaths": {}
   },
   {
     "serverNow": 1900000000000,
@@ -297,6 +300,9 @@
       "useFieldGenerators": true,
       "rules": {}
     },
-    "passingEncounters": []
+    "passingEncounters": [],
+    "encounterRoutines": {},
+    "encounterAutoDeathLimits": {},
+    "encounterAutoDeaths": {}
   }
 ]

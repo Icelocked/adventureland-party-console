@@ -94,9 +94,9 @@ export function installRoleRunner(
   function passingTarget(): Target | null {
     if (sharedRoutine.dungeonOwned?.()) return null;
     if (character.ctype === "merchant" || !active || character.rip || !resolvedRole().combat || ["pending","feed"].includes(sharedRoutine.getAbtestingMode())) return null;
-    const target = sharedRoutine.frankyCombatActive?.()
-      ? sharedRoutine.getWalkingPassiveTarget?.() || null
-      : sharedRoutine.getPassingTarget?.() || null;
+    // Boss attendance permits only the boss; passing attacks would pull adds or the map.
+    if (sharedRoutine.bossCombatActive?.()) return null;
+    const target = sharedRoutine.getPassingTarget?.() || null;
     return target && sharedRoutine.allowsPassingTarget(target) ? target : null;
   }
   function attackTarget(): Target | null {
@@ -139,7 +139,7 @@ export function installRoleRunner(
   function fallbackTarget() {
     if (sharedRoutine.dungeonOwned?.()) return sharedRoutine.getDungeonTarget?.() || null;
     if(sharedRoutine.returnCombatActive?.())return sharedRoutine.returnDefenseTarget?.() || null;
-    if (sharedRoutine.frankyCombatActive?.()) return sharedRoutine.getEventTarget();
+    if (sharedRoutine.bossCombatActive?.()) return sharedRoutine.getEventTarget();
     if (character.ctype === "merchant") return resolvedRole().chooseTarget();
     if (sharedRoutine.usesLeaderTarget?.()) return sharedRoutine.getGroupedTarget();
     const rare = sharedRoutine.getRareTarget?.();
@@ -147,7 +147,7 @@ export function installRoleRunner(
     return resolvedRole().chooseTarget();
   }
   function exclusiveCombat(): boolean {
-    return !!sharedRoutine.dungeonOwned?.() || !!sharedRoutine.returnCombatActive?.() || !!sharedRoutine.frankyCombatActive?.();
+    return !!sharedRoutine.dungeonOwned?.() || !!sharedRoutine.returnCombatActive?.() || !!sharedRoutine.bossCombatActive?.();
   }
   async function publishSelection(target: Target | null): Promise<void> {
     selectedTarget = target?.id || (!exclusiveCombat() && sharedRoutine.sharedTargetId?.()) || null;
@@ -202,10 +202,10 @@ export function installRoleRunner(
     const target = sharedRoutine.equipmentTarget ? sharedRoutine.equipmentTarget() : currentTarget();
     equipment?.tick(target, actor.damage_type, Number(character.range), combatAllowed());
   }
-  function frankyMovement(): boolean {
-    if (!sharedRoutine.frankyCombatActive?.()) return false;
+  function bossMovement(): boolean {
+    if (!sharedRoutine.bossCombatActive?.()) return false;
     if (selectedTarget && !currentTarget()) { invalidated = true; void selectTarget(); }
-    if (combatAllowed()) sharedRoutine.frankyMovementTick?.(currentTarget());
+    if (combatAllowed()) sharedRoutine.bossMovementTick?.(currentTarget());
     attacks.wake();
     return true;
   }
@@ -220,7 +220,7 @@ export function installRoleRunner(
           attacks.wake();
           return;
         }
-        if (frankyMovement()) return;
+        if (bossMovement()) return;
         if (sharedRoutine.pollRareHunting?.()) return;
         if (sharedRoutine.pollFarmingCombatHandoff) sharedRoutine.pollFarmingCombatHandoff();
         if (sharedRoutine.pollFarmingSpawnRecovery) sharedRoutine.pollFarmingSpawnRecovery();

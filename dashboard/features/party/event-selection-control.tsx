@@ -19,8 +19,8 @@ export function eventTimeLabel(next: number | undefined, now: number) {
   const remaining = Math.max(0, ms - now);
   return `${new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(ms)} (${Math.floor(remaining / 60000)}m ${Math.floor(remaining / 1000) % 60}s)`;
 }
-export const EventSelectionControl = memo(function EventSelectionControl({ state, name, onChange, onPriorityChange, onLimitsChange, onAnniversary }: {
-  onLimitsChange: (event: string, limits: EventLimits) => Promise<unknown> | void; onPriorityChange: (events: string[]) => Promise<unknown> | void; state: EventSelectionState; name: string; merchant: boolean; onAnniversary: () => void; onChange: (events: string[]) => void;
+export const EventSelectionControl = memo(function EventSelectionControl({ state, name, onChange, onPriorityChange, onLimitsChange, onAnniversary, onFranky }: {
+  onLimitsChange: (event: string, limits: EventLimits) => Promise<unknown> | void; onPriorityChange: (events: string[]) => Promise<unknown> | void; state: EventSelectionState; name: string; merchant: boolean; onAnniversary: () => void; onFranky?: () => void; onChange: (events: string[]) => void;
 }) {
   const [dragged, setDragged] = useState<string | null>(null);
   const savedOrder = eventPriorityOrder(state, name);
@@ -135,7 +135,7 @@ export const EventSelectionControl = memo(function EventSelectionControl({ state
       </div>
       {settings && <EventLimitsDialog key={settings} event={settings} label={eventDisplayNames[settings] ?? settings}
         limits={eventLimits(state, name)[settings] ?? {deathLimit:null,timeLimitMinutes:null}}
-        inherited={policy.inherited} onClose={() => setSettings(null)} onSave={onLimitsChange} onAnniversary={onAnniversary} />}
+        inherited={policy.inherited} onClose={() => setSettings(null)} onSave={onLimitsChange} onAnniversary={onAnniversary} onFranky={onFranky} />}
     </PopoverContent>
   </Popover></>;
 });

@@ -51,3 +51,4 @@ Deselecting Franky revokes voluntary boss targeting and installs the protected
 exit convoy immediately; departure does not require killing the boss first.
 The native evacuation journey verifies boss damage, deselection, both client
 exit owners, and actual Mainland arrival while Franky remains alive.
+
