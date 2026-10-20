@@ -14,3 +14,15 @@ LAN address or hostname is not one, and `dungeon-query.ts` builds every Cave act
    the second as already done (`operations.includes(id)`).
 4. **Secure contexts changed.** HTTPS and `localhost` consoles stop using
    `crypto.randomUUID`.
+
+## ALData key copy
+
+The Copy key button calls `navigator.clipboard.writeText`, and `navigator.clipboard` is
+also secure-context only. Same journey file, second test.
+
+5. **Nothing copied.** On the LAN origin the click throws (`navigator.clipboard` is
+   undefined) and the clipboard keeps its previous contents.
+6. **Silent failure.** When copying is impossible, the page says nothing; the key must
+   instead be offered for manual copying.
+7. **Wrong text.** The copied text differs from the stored key.
+8. **Secure contexts changed.** HTTPS and `localhost` stop using the Clipboard API.

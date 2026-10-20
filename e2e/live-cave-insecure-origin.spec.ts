@@ -67,3 +67,37 @@ test('Cave entry works from a plain-HTTP LAN origin', async ({ live, page }, inf
     await info.attach('insecure-origin-cave-actions', { body: JSON.stringify({ posts, errors, view: await dungeon().catch(String) }), contentType: 'application/json' });
   }
 });
+
+test('the ALData key copies from a plain-HTTP LAN origin', async ({ live, page, context }, info) => {
+  test.setTimeout(180_000);
+  const origin = new URL(live.url); origin.hostname = lan;
+  await page.route(url => url.hostname === lan, route => route.continue());
+  // Read the clipboard back from the secure loopback origin; the LAN page cannot read it.
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(live.url).origin });
+  const reader = await context.newPage();
+  await reader.goto(live.url + '/party-api/aldata/key');
+  await reader.evaluate(() => navigator.clipboard.writeText('clipboard-before-copy'));
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(String(error)));
+  let copied = '';
+  try {
+    await page.goto(origin.href);
+    expect(await page.evaluate(() => ({ secure: isSecureContext, clipboard: typeof navigator.clipboard })))
+      .toEqual({ secure: false, clipboard: 'undefined' });
+    const settings = page.getByRole('dialog', { name: 'Interface settings' });
+    await expect(async () => {
+      if (!await settings.isVisible()) await page.getByRole('button', { name: 'Interface settings', exact: true }).click();
+      await expect(settings).toBeVisible({ timeout: 1000 });
+    }).toPass({ timeout: 60_000 });
+    await settings.getByRole('button', { name: 'Generate key', exact: true }).click();
+    const key = (await (await page.request.get(live.url + '/party-api/aldata/key')).json()).key;
+    expect(typeof key === 'string' && key.length > 0).toBe(true);
+    await expect(settings.getByRole('button', { name: 'Copy key', exact: true })).toBeEnabled();
+    // 5, 7: the stored key reaches the clipboard.
+    await settings.getByRole('button', { name: 'Copy key', exact: true }).click();
+    await expect.poll(async () => (copied = await reader.evaluate(() => navigator.clipboard.readText())), { timeout: 10_000 }).toBe(key);
+    expect(errors).toEqual([]);
+  } finally {
+    await info.attach('insecure-origin-aldata-copy', { body: JSON.stringify({ copied, errors }), contentType: 'application/json' });
+  }
+});
