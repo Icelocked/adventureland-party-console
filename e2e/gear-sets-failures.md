@@ -1,6 +1,6 @@
 # Gear sets for the tank's kill-time luck swap: failure inventory
 
-Written before implementation. Reported live: (a) the tank swapped only 3 of the 5–6
+Written before implementation. Reported live: (a) the tank swapped only 3 of the 5-6
 luck pieces it carried, and (b) gear the swap had moved into the bag was taken by
 automatic compound/upgrade rules and destroyed. The auto-detecting planner caused both:
 it planned the same best ring/earring for both paired slots, valued luck from the base
