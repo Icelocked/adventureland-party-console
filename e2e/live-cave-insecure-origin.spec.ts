@@ -89,7 +89,10 @@ test('the ALData key copies from a plain-HTTP LAN origin', async ({ live, page, 
       if (!await settings.isVisible()) await page.getByRole('button', { name: 'Interface settings', exact: true }).click();
       await expect(settings).toBeVisible({ timeout: 1000 });
     }).toPass({ timeout: 60_000 });
+    // The click returns before the coordinator answers the POST that stores the key.
+    const generated = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/aldata/key'));
     await settings.getByRole('button', { name: 'Generate key', exact: true }).click();
+    expect((await generated).ok()).toBe(true);
     const key = (await (await page.request.get(live.url + '/party-api/aldata/key')).json()).key;
     expect(typeof key === 'string' && key.length > 0).toBe(true);
     await expect(settings.getByRole('button', { name: 'Copy key', exact: true })).toBeEnabled();
