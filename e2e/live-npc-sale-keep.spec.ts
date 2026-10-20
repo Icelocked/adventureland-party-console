@@ -11,7 +11,7 @@ const native = (live: { admin(code: string): Promise<any> }) => live.admin(`outp
   return {carried:count(p.items),bank,gold:p.gold+(Number(u.gold)||0)};})()`);
 
 test('an automatic NPC sale keeps the configured amount and sells the rest', async ({ live, page }, info) => {
-  test.setTimeout(420_000);
+  test.setTimeout(660_000);
   const samples: any[] = [];
   try {
     await expect.poll(async () => Date.now() - ((await live.state()).characters[merchant]?.seenAt || 0), { timeout: 90_000 }).toBeLessThan(3_000);
@@ -33,8 +33,6 @@ test('an automatic NPC sale keeps the configured amount and sells the rest', asy
       return Object.values(packs).flat().filter((entry: any) => entry?.item?.name === 'smoke').reduce((n: number, entry: any) => n + (entry.item.q || 1), 0);
     }, { timeout: 120_000, message: 'The bank visit must report the banked Pouches of Poof' }).toBe(300);
 
-    // The fixture starts with merchant automations off; this journey needs its sale and withdrawal routines.
-    await live.post('/merchant/routine-priorities', { priorities: {}, enabled: { 'auto npc sales': true, withdrawals: true } });
     await page.goto(live.url);
     const card = page.locator('article').filter({ has: page.getByRole('heading', { name: merchant, exact: true }) });
     const inventory = card.getByRole('button', { name: /^Inventory/ });
@@ -54,6 +52,15 @@ test('an automatic NPC sale keeps the configured amount and sells the rest', asy
     await dialog.getByRole('button', { name: 'Enable auto sale', exact: true }).click();
     await expect(dialog).toBeHidden();
     await expect.poll(async () => (Object.values((await live.state()).autoNpcSales || {}) as any[]).find(rule => rule.item?.name === 'smoke')?.keep).toBe(250);
+    // 5: the saved amount shows when the rule is reopened. The merchant still carries every copy:
+    // its automations stay off until here, so nothing has been sold or banked yet.
+    await openRule(/^Update auto sell to NPC/);
+    await expect(dialog.getByLabel('Keep in storage')).toHaveValue('250');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+
+    // The fixture starts with merchant automations off; this journey needs its sale and withdrawal routines.
+    await live.post('/merchant/routine-priorities', { priorities: {}, enabled: { 'auto npc sales': true, withdrawals: true } });
 
     // 2, 3: the merchant sells down to exactly 250 across bag and bank.
     await expect.poll(async () => { const n = await native(live); samples.push({ at: Date.now(), ...n }); return n.carried + n.bank; },
@@ -64,9 +71,9 @@ test('an automatic NPC sale keeps the configured amount and sells the rest', asy
     samples.push({ at: Date.now(), ...settled });
     expect(settled.carried + settled.bank).toBe(250);
     expect(settled.gold).toBeGreaterThan(before.gold);
-    // 5: the saved amount shows when the rule is reopened.
-    await openRule(/^Update auto sell to NPC/);
-    await expect(dialog.getByLabel('Keep in storage')).toHaveValue('250');
+    // 6: the kept copies go back to the bank rather than staying in the merchant's bag.
+    await expect.poll(async () => { const n = await native(live); samples.push({ at: Date.now(), ...n }); return n; },
+      { timeout: 240_000, intervals: [2000], message: 'Kept Pouches of Poof must be banked, not left carried' }).toMatchObject({ carried: 0, bank: 250 });
   } finally {
     await info.attach('npc-sale-keep-samples', { body: JSON.stringify({ samples, activity: (await live.state()).merchantActivity?.slice(-20) }), contentType: 'application/json' });
   }

@@ -4,8 +4,9 @@ import { reconcileCollectionMarks } from "./collection-marks.ts";
 import { reconcileUpgradeMarks, clearResolvedUpgradeMarks } from "./upgrade-marks.ts";
 import type { InventoryEntry, ItemMark } from "../contracts/item.ts";
 import type { UpgradeMark } from "./upgrade-marks.ts";
+import { keptNpcSaleCopies, type NpcSaleKeepState } from "../merchant/npc-sale-keep.ts";
 
-interface CollectionState extends ConflictState {
+interface CollectionState extends ConflictState, Omit<NpcSaleKeepState, "autoNpcSales"> {
   marked: Record<string, ItemMark[] | undefined>;
   merchantMarked: Record<string, ItemMark[] | undefined>;
   autoItemMarks: Record<string, Parameters<typeof reconcileCollectionMarks>[2] | undefined>;
@@ -35,6 +36,7 @@ export function reconcileCoordinatorCollectionMarks(
     state.merchantMarked[name] || [],
     state.autoItemMarks[ruleOwner(state, name)] || {},
     inventory(status),
+    name === state.merchantCharacter ? keptNpcSaleCopies(state as NpcSaleKeepState) : undefined,
   );
   if (state.merchantRules) {
     const allowed = (mark: ItemMark) => !mark.auto || !mark.item || !itemRuleConflicts(state, mark.item).length;

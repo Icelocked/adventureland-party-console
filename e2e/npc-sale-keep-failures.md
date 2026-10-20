@@ -15,3 +15,7 @@ configurable amount for crafting Pouchers. Live journey: `e2e/live-npc-sale-keep
 4. **Sells again.** Once at the keep amount, later passes sell nothing more.
 5. **Lost on edit.** Reopening the rule shows the saved amount, and saving a new amount
    updates it; a blank amount sells everything, as before.
+6. **Stranded in the bag.** Kept copies the merchant carries (its own stock, or the rest of
+   a withdrawn bank stack after the spare part is sold) stay in its bag forever: the NPC-sale
+   rule replaced the item's bank rule, so nothing deposits them. Once nothing is left to
+   sell, carried kept copies go back to the bank (all 250 end up banked, none carried).
