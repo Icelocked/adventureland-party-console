@@ -96,6 +96,9 @@ export function createBankSortRoutes(state: BankSortState & CraftReservationStat
     ports.persist();
     return res.json({ ok: true });
   }
+  function sortSettings() {
+    return { mode: state.bankSortMode || "automatic", layout: state.bankSortLayout || "packed" };
+  }
   function checkpoint(req: HttpRequest, res: HttpResponse) {
     const body = requestObject(req.body);
     if (!currentRuntime(body, ports))
@@ -110,10 +113,9 @@ export function createBankSortRoutes(state: BankSortState & CraftReservationStat
       } });
     }
     if (body.character !== state.merchantCharacter)
-      return res.json({ mode: state.bankSortMode || "automatic", layout: state.bankSortLayout || "packed", pending: null });
+      return res.json({ ...sortSettings(), pending: null });
     if (updatePending(state, body)) ports.persist();
-    return res.json({ mode: state.bankSortMode || "automatic", layout: state.bankSortLayout || "packed",
-      pending: state.bankSortRequest || null });
+    return res.json({ ...sortSettings(), pending: state.bankSortRequest || null });
   }
   return { configure, checkpoint, reconcile };
 }
