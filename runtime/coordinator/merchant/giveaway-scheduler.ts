@@ -47,6 +47,14 @@ interface GiveawayPorts {
   log(message: string, level: string, details: unknown): void;
 }
 type EligibleGiveaway = Giveaway & { seller: string; slot: string };
+/** The game refuses `join_giveaway` while either side is inside the bank. */
+function inBank(giveaway: Giveaway): boolean {
+  return String(giveaway.map || "").startsWith("bank");
+}
+/** Claim key shared by discovery and expiry, so an expired job can release its claim. */
+export function giveawayAttemptKey(job: Pick<Giveaway, "candidateKey" | "seller" | "rid"> & { realm?: string | null }): string {
+  return job.candidateKey || JSON.stringify([job.realm ?? null, job.seller, job.rid]);
+}
 function eligible(
   giveaway: Giveaway | null,
   merchant: string | null,
@@ -56,6 +64,7 @@ function eligible(
     !!giveaway.seller &&
     !!giveaway.slot &&
     (!!giveaway.rid || !!giveaway.candidateKey) &&
+    !inBank(giveaway) &&
     !(giveaway.entrants || []).includes(merchant)
   );
 }
@@ -85,9 +94,15 @@ export function createGiveawayScheduler(state: GiveawayState, ports: GiveawayPor
     if (!safeMerchantRealm(merchant, realm)) return;
     for (const giveaway of status.nearbyGiveaways) {
       if (!eligible(giveaway, merchant) || queued(giveaway, realm)) continue;
-      if (!claimAttempt(giveaway, realm)) continue;
-      enqueueGiveaway(giveaway, realm, merchant);
+      const timed = withExpiry(giveaway);
+      if (!claimAttempt(timed, realm)) continue;
+      enqueueGiveaway(timed, realm, merchant);
     }
+  }
+  // A slot's `giveaway` is its remaining minutes, so it ends no later than that.
+  function withExpiry(giveaway: EligibleGiveaway): EligibleGiveaway {
+    const minutes = Number(giveaway.minutes);
+    return giveaway.expiresAt === undefined && minutes > 0 ? { ...giveaway, expiresAt: ports.now() + minutes * 60_000 } : giveaway;
   }
   function enqueueGiveaway(giveaway: EligibleGiveaway, realm: string | null, merchant: string) {
       state.merchantQueue.push(
@@ -115,7 +130,7 @@ export function createGiveawayScheduler(state: GiveawayState, ports: GiveawayPor
   function claimAttempt(giveaway: EligibleGiveaway, realm: string | null): boolean {
     const attempts = (state.giveawayAttempts ||= {});
     for (const [key, expiry] of Object.entries(attempts)) if (expiry <= ports.now()) delete attempts[key];
-    const key = giveaway.candidateKey || JSON.stringify([realm, giveaway.seller, giveaway.rid]);
+    const key = giveawayAttemptKey({ ...giveaway, realm });
     if (attempts[key] > ports.now() || Number(giveaway.expiresAt || Infinity) <= ports.now()) return false;
     attempts[key] = ports.now() + 30 * 60_000;
     return true;
@@ -141,7 +156,7 @@ function marketOffers(merchant: MarketMerchant) {
   if (!/^(US|EU|ASIA)[A-Z0-9]+$/.test(realm)) return [];
   const seen = Date.parse(merchant.lastSeen);
   return Object.entries(merchant.slots || {}).filter(([slot, item]) => slot.startsWith('trade') && item?.name && Number(item.giveaway) > 0).map(([slot, item]) => ({server: realm, nearbyGiveaways: [{seller: merchant.id, slot, item, entrants: item.list, map: merchant.map, x: merchant.x, y: merchant.y,
-    candidateKey: JSON.stringify([realm, merchant.id, slot, item.name, item.level || 0]), expiresAt: Math.min(seen + 120_000, seen + Number(item.giveaway) * 60_000)}]}));
+    candidateKey: JSON.stringify([realm, merchant.id, slot, item.name, item.level || 0]), expiresAt: seen + Number(item.giveaway) * 60_000}]}));
 }
 
 function safeMerchantRealm(merchant: string | null, realm: string | null): merchant is string { return Boolean(merchant && !realm?.includes("PVP")); }

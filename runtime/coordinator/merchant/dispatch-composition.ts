@@ -12,6 +12,7 @@ import { localBankUpgrades, sharedCompoundRules, type BankImprovementState } fro
 import type { DeconstructionMark } from "./deconstruction.ts";
 import { createMerchantDispatcher, type DispatchPorts } from "./dispatcher.ts";
 import { readyNpcSales } from "./npc-sales.ts";
+import { giveawayAttemptKey } from "./giveaway-scheduler.ts";
 import type { BankboiInventory } from "../inventory/bankboi-completion.ts";
 import type {
   CharacterWork,
@@ -26,6 +27,7 @@ interface DispatchCoordinatorState extends BankImprovementState, MerchantEventSt
   merchantAutomations?: Record<string, boolean | undefined>;
   merchantQueue: MerchantWork[];
   merchantCurrent: MerchantWork | null;
+  giveawayAttempts?: Record<string, number>;
   nextCommandId: number;
   merchantCharacter: string | null;
   merchantHomeReturnAt?: unknown;
@@ -141,6 +143,13 @@ export function createCoordinatorMerchantDispatcher(
       productionPending: () => pendingProduction(state.production),
       eventReserved: () => merchantEventReserved(state, ports.now()),
       enabled: job => !(job.target && dungeonOwns(state, job.target)) && routineEnabled(job, state.merchantAutomations || {}),
+      // Release the discovery claim so a giveaway that is still running is queued again.
+      giveawayExpired: job => {
+        if (state.giveawayAttempts) delete state.giveawayAttempts[giveawayAttemptKey(job)];
+        ports.log("Giveaway from " + job.seller + " expired before the merchant could join", "warning", {
+          item: job.expectedItem?.name, slot: job.slot, realm: job.realm, queuedAt: job.queuedAt, expiresAt: job.expiresAt,
+        });
+      },
       nextCommand: () => state.nextCommandId++,
       merchant: () => state.merchantCharacter,
       returningHome: () => !!state.merchantHomeReturnAt && !state.merchantRealmRequests?.[String(state.merchantCharacter)]?.exhausted,

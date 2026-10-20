@@ -31,6 +31,8 @@ export interface DispatchPorts {
   productionPending?(): {id: string; name: string; level: number; kind: string}[];
   eventReserved?(): boolean;
   enabled?(job: MerchantWork): boolean;
+  /** A queued giveaway job that expired before it could be dispatched. */
+  giveawayExpired?(job: MerchantWork): void;
   travel?(realm: string): Promise<unknown>;
   headless?(): boolean;
   now(): number;
@@ -64,7 +66,7 @@ export interface DispatchPorts {
   command(name: string | null, command: MerchantCommand): void;
   idle(): void;
   persist(): void;
-  log(message: string, level: "info" | "error", details?: unknown): void;
+  log(message: string, level: "info" | "warning" | "error", details?: unknown): void;
 }
 
 /** Assigns one job while preserving storage, event, gathering, and realm ownership. */
@@ -243,7 +245,9 @@ export function createMerchantDispatcher(state: DispatchState, ports: DispatchPo
     // Preserve queued work until a fresh living merchant can execute it.
     if (!merchantAlive()) return false;
     state.queue = mergePickupJobs(state.queue, ports.merchant()).map(job => ports.stamp(job));
-    state.queue = state.queue.flatMap(job => splitLegacyWork(job)).filter(hasQueuedWork).filter((job) => !ports.bankboi(job.target) && (buyUpgradeOrder(job) || ports.enabled?.(job) !== false) && !(job.reason === "join giveaway" && Number(job.expiresAt) < ports.now()));
+    const expired = state.queue.filter((job) => job.reason === "join giveaway" && Number(job.expiresAt) < ports.now());
+    state.queue = state.queue.flatMap(job => splitLegacyWork(job)).filter(hasQueuedWork).filter((job) => !ports.bankboi(job.target) && (buyUpgradeOrder(job) || ports.enabled?.(job) !== false) && !expired.includes(job));
+    expired.forEach((job) => ports.giveawayExpired?.(job));
     return !state.current && !!ports.merchant() && !ports.manualEquipmentPending() && !reserved();
   }
 

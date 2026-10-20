@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Find giveaway hosts through the game's merchant directory when they are not in sight, walk to their stand and join, instead of failing at the market; report hosts on another realm, without an open stand, or inside the bank, and skip discovered giveaways inside the bank (#129). Expire queued giveaway jobs at the giveaway's real remaining time rather than two minutes after a marketplace observation, log a warning when one expires unattempted, and release its claim so a still-running giveaway is queued again.
 - Remove the arbitrary successor spawn-distance requirement from the queued Goo E2E test, retaining actual combat and fresh party confirmation checks. Allow 240 seconds for event-handoff checkpoint returns so communication safety holds can recover on slower CI runners.
 
 - Stabilize the roaming Goo E2E fixture by starting its declared native movement leg after all clients acknowledge target selection, preserving interception, damage and fresh whole-party confirmation checks.

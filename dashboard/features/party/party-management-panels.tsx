@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ChevronDown } from 'lucide-react';
+import { useState } from 'react';
 import { abbreviatedGold } from './abbreviated-gold';
 import { npcSaleValue } from './npc-sale-value';
 import { RoutinePrioritiesDialog } from './routine-priorities-dialog';
@@ -50,6 +51,8 @@ export function PartyManagementPanels({ model }: { model: PartyConsoleModel }) {
   ) : null;
 }
 function PartyManagementPanelsConnected({ base }: { base: PartyConsoleModel }) {
+  // A typed giveaway host: hosts who are not stand merchants on a realm without our characters are never loaded.
+  const [giveawaySearch, setGiveawaySearch] = useState('');
   const model = usePanelModel(base, {
     inventory: true,
     vitals: true,
@@ -135,7 +138,10 @@ function PartyManagementPanelsConnected({ base }: { base: PartyConsoleModel }) {
                 <span>Merchant name</span>
                 <Popover
                   open={giveawayMerchantOpen}
-                  onOpenChange={setGiveawayMerchantOpen}
+                  onOpenChange={(open) => {
+                    setGiveawayMerchantOpen(open);
+                    if (!open) setGiveawaySearch('');
+                  }}
                 >
                   <PopoverTrigger
                     render={<Button variant="outline" />}
@@ -158,10 +164,12 @@ function PartyManagementPanelsConnected({ base }: { base: PartyConsoleModel }) {
                       <CommandInput
                         placeholder="Search player name…"
                         className="text-cyan-50"
+                        value={giveawaySearch}
+                        onValueChange={setGiveawaySearch}
                       />
                       <CommandList>
                         <CommandEmpty className="text-cyan-100/55">
-                          No online players loaded for this realm.
+                          No loaded player matches. Type the host&apos;s exact name.
                         </CommandEmpty>
                         <CommandGroup>
                           {(state.giveawayPlayers?.[giveawayRealm] || []).map(
@@ -180,6 +188,24 @@ function PartyManagementPanelsConnected({ base }: { base: PartyConsoleModel }) {
                             ),
                           )}
                         </CommandGroup>
+                        {(() => {
+                          const typed = giveawaySearch.trim();
+                          if (!typed || typed.length > 40 || (state.giveawayPlayers?.[giveawayRealm] || []).includes(typed)) return null;
+                          return (
+                            <CommandItem
+                              forceMount
+                              value={`use-typed-host ${typed}`}
+                              onSelect={() => {
+                                setGiveawayMerchant(typed);
+                                setGiveawayMerchantOpen(false);
+                                setGiveawaySearch('');
+                              }}
+                              className="text-cyan-50 data-[selected=true]:bg-cyan-950 data-[selected=true]:text-white"
+                            >
+                              Use “{typed}”
+                            </CommandItem>
+                          );
+                        })()}
                       </CommandList>
                     </Command>
                   </PopoverContent>
