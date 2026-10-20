@@ -26,6 +26,7 @@ export const actionDomains = {
   '/encounter-mode': core,
   '/hunt-blacklist': core,
   '/hunt-settings': core,
+  '/achievement-hunt': core,
   '/rare-hunting': core,
   '/navigate-to-monster': core,
   '/town-party': core,

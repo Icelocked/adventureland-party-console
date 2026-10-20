@@ -93,6 +93,7 @@ export interface HeartbeatState extends Record<(typeof heartbeatStateFields)[num
   encounterRoutines: Record<string, string>;
   encounterAutoDeathLimits: Record<string, number>;
   encounterAutoDeaths: Record<string, number>;
+  achievementTarget?: { avoid?: string[] } | null;
   monsterHunt: HuntCycle | null;
   monsterFocus: string[];
   monsterFocusByCharacter: Record<string, string[]>;
