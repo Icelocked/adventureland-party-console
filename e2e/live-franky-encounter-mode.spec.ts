@@ -1,3 +1,4 @@
+import {waitForGameplay} from './network-clock';
 import { test, expect } from './live-fixtures';
 
 const W = 'E2EWarrior';
@@ -77,7 +78,7 @@ test('Franky encounter mode switches between off-tank fleeing and tank engaging 
     .toMatch(/door|Leaving the room|last known position|safe corner/);
   const disengagedAt = await world();
   await info.attach('franky-offtank-disengaged', { body: JSON.stringify({ disengagedAt, reason: await clientMode() }), contentType: 'application/json' });
-  await new Promise(resolve => setTimeout(resolve, 10_000));
+  await waitForGameplay(10_000);
   const stillFleeing = await clientMode();
   expect(stillFleeing).toMatch(/door|Leaving the room|last known position|safe corner|Waiting/);
   await info.attach('franky-offtank-stayed-disengaged', { body: JSON.stringify({ world: await world(), reason: stillFleeing }), contentType: 'application/json' });

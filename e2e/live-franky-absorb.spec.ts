@@ -1,3 +1,4 @@
+import {waitForGameplay} from './network-clock';
 import { test, expect } from './live-fixtures';
 
 const W = 'E2EWarrior', P = 'E2EPriest';
@@ -63,7 +64,7 @@ test('a designated-tank priest set to off-tank never pulls Franky\'s adds off th
     const w = await world();
     offtank.push(w);
     expect(w.adds.some((a: any) => a.target === P), 'An off-tank priest must not absorb the adds attacking the fighter').toBe(false);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await waitForGameplay(1000);
   }
   await info.attach('franky-absorb-offtank', { body: JSON.stringify(offtank), contentType: 'application/json' });
 
