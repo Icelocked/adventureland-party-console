@@ -52,8 +52,16 @@ export interface BossChaseState {
   sightings: BossChaseSighting[];
   respawns: BossChaseRespawn[];
 }
+/** The part of the chase a restart restores (initialBossChase). */
+export type SavedBossChase = Pick<BossChaseState, "enabled" | "minEtaMinutes" | "trip" | "returning">;
+/**
+ * `bossChase` is the whole chase, which the config section sends to every
+ * client. Settings save `bossChaseSaved` (persistence/snapshots.ts), so the
+ * observation that every 60 s poll rewrites stays out of the journal.
+ */
 export interface BossChaseParty {
   bossChase: BossChaseState;
+  bossChaseSaved: SavedBossChase;
 }
 export interface BossChasePorts {
   now(): number;
@@ -96,6 +104,14 @@ const stalledEtaMinutes = 120;
 const engageGraceMs = 5 * 60_000;
 const respawningBosses: readonly ChasedBoss[] = ["mrpumpkin", "mrgreen", "dragold", "grinch"];
 
+export function savedBossChase(chase: BossChaseState): SavedBossChase {
+  return { enabled: chase.enabled, minEtaMinutes: chase.minEtaMinutes, trip: chase.trip, returning: chase.returning };
+}
+/** Party fields from a settings record; a record saved before `bossChaseSaved` holds `bossChase` whole. */
+export function initialBossChaseFields(saved: { bossChase?: unknown; bossChaseSaved?: unknown }): BossChaseParty {
+  const bossChase = initialBossChase(saved.bossChaseSaved ?? saved.bossChase);
+  return { bossChase, bossChaseSaved: savedBossChase(bossChase) };
+}
 export function initialBossChase(saved: unknown): BossChaseState {
   const value = requestObject(saved);
   const minEta = Number(value.minEtaMinutes);
@@ -147,6 +163,20 @@ function parseLive(bosses: readonly ChasedBoss[], value: unknown, now: number): 
 }
 
 export function createBossChase(party: BossChaseParty, ports: BossChasePorts) {
+  // The getter keeps the saved copy in step with every change to bossChase.
+  Object.defineProperty(party, "bossChaseSaved", {
+    enumerable: true, configurable: true, get: () => savedBossChase(party.bossChase),
+  });
+  // Many polls change nothing a restart restores. persist() skips their save
+  // requests, so the settings writer does not serialize every settings field
+  // for an unchanged record.
+  let persisted = JSON.stringify(party.bossChaseSaved);
+  function persist(): void {
+    const json = JSON.stringify(party.bossChaseSaved);
+    if (json === persisted) return;
+    persisted = json;
+    ports.persist();
+  }
   const samples = new Map<string, { at: number; hp: number }[]>();
   const key = (boss: LiveBoss) => boss.boss + ":" + boss.id;
 
@@ -195,14 +225,14 @@ export function createBossChase(party: BossChaseParty, ports: BossChasePorts) {
   /** Go home, keeping the return pending until the switch succeeds; a refusal is retried. */
   async function goHome(from: string, to: string): Promise<void> {
     party.bossChase.returning = { from, to };
-    ports.persist();
-    if (await travel(to)) { party.bossChase.returning = null; ports.persist(); }
+    persist();
+    if (await travel(to)) { party.bossChase.returning = null; persist(); }
   }
   /** Retry after the delay; drop the return once home or after a manual move elsewhere. */
   async function resumeReturn(pending: ChaseReturn): Promise<void> {
     const current = ports.currentRealm();
     if (!current) return;
-    if (current !== pending.from) { party.bossChase.returning = null; return ports.persist(); }
+    if (current !== pending.from) { party.bossChase.returning = null; return persist(); }
     if (ports.now() >= party.bossChase.retryAt) await goHome(pending.from, pending.to);
   }
 
@@ -217,7 +247,7 @@ export function createBossChase(party: BossChaseParty, ports: BossChasePorts) {
   }
   async function endBlacklisted(trip: BossChaseTrip, current: string | null): Promise<void> {
     party.bossChase.trip = null;
-    ports.persist();
+    persist();
     ports.log("Boss chase: " + trip.realm + " is blacklisted for realm hopping; ending the chase", "info");
     if (current === trip.realm && trip.returnRealm && trip.returnRealm !== current) await goHome(current, trip.returnRealm);
   }
@@ -226,14 +256,14 @@ export function createBossChase(party: BossChaseParty, ports: BossChasePorts) {
     if (!trip.arrived && ports.now() - trip.startedAt <= 5 * 60_000) return;
     ports.log("Boss chase: party is no longer on " + trip.realm + "; ending the chase", "info");
     party.bossChase.trip = null;
-    ports.persist();
+    persist();
   }
   async function bossMissing(trip: BossChaseTrip, current: string | null): Promise<void> {
     // Waiting ahead of a respawn: the boss isn't expected yet, so its absence means nothing.
-    if (trip.respawnAt && ports.now() < trip.respawnAt + respawnGraceMs) return ports.persist();
-    if (++trip.missingPolls < goneAfterMissingPolls) return ports.persist();
+    if (trip.respawnAt && ports.now() < trip.respawnAt + respawnGraceMs) return persist();
+    if (++trip.missingPolls < goneAfterMissingPolls) return persist();
     party.bossChase.trip = null;
-    ports.persist();
+    persist();
     const home = trip.returnRealm;
     if (!home || !current || home === current) return;
     ports.log("Boss chase: " + bossNames[trip.boss] + " is gone from " + trip.realm + "; returning home", "info");
@@ -250,10 +280,10 @@ export function createBossChase(party: BossChaseParty, ports: BossChasePorts) {
     trip.missingPolls = 0;
     delete trip.respawnAt;
     trip.liveSince ??= now;
-    if (now - trip.liveSince < engageGraceMs || !stalled(boss, trip.liveSince)) return ports.persist();
+    if (now - trip.liveSince < engageGraceMs || !stalled(boss, trip.liveSince)) return persist();
     party.bossChase.trip = null;
     left.set(key(boss), now);
-    ports.persist();
+    persist();
     const eta = etaMinutes(boss, trip.liveSince);
     ports.log("Boss chase: " + bossNames[boss.boss] + " on " + trip.realm + " won't die in time (" +
       (eta === null ? "no HP drain" : "~" + Math.round(eta) + " min left") + "); leaving it", "info");
@@ -304,9 +334,9 @@ export function createBossChase(party: BossChaseParty, ports: BossChasePorts) {
       boss: target.boss, realm: target.realm, respawnAt: target.respawnAt, returnRealm: ports.homeRealm() || current,
       bossId: "", startedAt: now, arrived: false, missingPolls: 0,
     };
-    ports.persist();
+    persist();
     ports.log("Boss chase: " + bossNames[target.boss] + " respawns on " + target.realm + " at " + new Date(target.respawnAt).toISOString() + "; moving the party ahead of it", "info");
-    if (!(await travel(target.realm))) { chase.trip = null; ports.persist(); }
+    if (!(await travel(target.realm))) { chase.trip = null; persist(); }
   }
 
   /** Any wanted boss being killed here, or about to respawn here, beats hopping for another. */
@@ -332,16 +362,16 @@ export function createBossChase(party: BossChaseParty, ports: BossChasePorts) {
       arrived: false,
       missingPolls: 0,
     };
-    ports.persist();
+    persist();
     const leaving = local.length ? "; leaving stalled " + local.map((boss) => bossNames[boss.boss]).join(", ") + " on " + current : "";
     ports.log("Boss chase: " + bossNames[target.boss] + " live on " + target.realm + " (~" + Math.round(target.eta) + " min left" + leaving + "); moving the party", "info");
-    if (!(await travel(target.realm))) { chase.trip = null; ports.persist(); }
+    if (!(await travel(target.realm))) { chase.trip = null; persist(); }
   }
 
   async function tick(): Promise<void> {
     const chase = party.bossChase;
     if (!chase.enabled) {
-      if (chase.trip || chase.returning) { chase.trip = null; chase.returning = null; ports.persist(); }
+      if (chase.trip || chase.returning) { chase.trip = null; chase.returning = null; persist(); }
       return;
     }
     if (ports.realmSwitchBusy()) return;
@@ -376,7 +406,7 @@ export function createBossChase(party: BossChaseParty, ports: BossChasePorts) {
     }
     if (!chase.enabled) { chase.trip = null; chase.returning = null; }
     ports.log("Boss chase " + (chase.enabled ? "enabled (min " + chase.minEtaMinutes + " min left)" : "disabled"), "info");
-    ports.persist();
+    persist();
     return res.json({ ok: true, bossChase: chase });
   }
 

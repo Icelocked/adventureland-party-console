@@ -3,7 +3,7 @@
 // both chases with simulated payloads and realm switching.
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {createBossChase,initialBossChase}=require('../../runtime/coordinator/events/boss-chase.ts');
+const {createBossChase,initialBossChaseFields}=require('../../runtime/coordinator/events/boss-chase.ts');
 const {initialRealmHopBlacklist,realmHopAllowed}=require('../../runtime/coordinator/navigation/realm-hop-blacklist.ts');
 
 const MIN=60_000, HOME='SR_USII';
@@ -11,7 +11,7 @@ const crab=(realm,hp)=>({type:'crabxx',id:realm,hp,serverRegion:'US',serverIdent
 
 function bossFixture(blacklist) {
   let time=1_000_000, realm=HOME;
-  const hp={SR_USIII:900_000,SR_USV:900_000}, switches=[], party={bossChase:initialBossChase({enabled:true,minEtaMinutes:15})};
+  const hp={SR_USIII:900_000,SR_USV:900_000}, switches=[], party=initialBossChaseFields({bossChase:{enabled:true,minEtaMinutes:15}});
   const chase=createBossChase(party,{
     now:()=>time,
     fetchLive:async()=>Object.entries(hp).map(([at,value])=>({...crab(at,value),lastSeen:new Date(time).toISOString()})),

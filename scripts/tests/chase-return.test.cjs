@@ -4,14 +4,14 @@
 // these drive the boss chase with simulated payloads and a switch that can refuse.
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {createBossChase,initialBossChase}=require('../../runtime/coordinator/events/boss-chase.ts');
+const {createBossChase,initialBossChaseFields}=require('../../runtime/coordinator/events/boss-chase.ts');
 
 const MIN=60_000, HOME='SR_USII', AWAY='SR_USV';
 const refusal={ok:false,error:'every active character must be connected before switching'};
 
 function bossFixture(saved) {
   let time=1_000_000, realm=HOME, crab=960_000, refuse=false, other=null;
-  const attempts=[], party={bossChase:initialBossChase(saved||{enabled:true,minEtaMinutes:15})};
+  const attempts=[], party=initialBossChaseFields({bossChase:saved||{enabled:true,minEtaMinutes:15}});
   const ports={
     now:()=>time,
     fetchLive:async()=>[{type:'crabxx',id:'83862',hp:crab,lastSeen:new Date(time).toISOString(),serverRegion:'US',serverIdentifier:'V'},

@@ -2,12 +2,12 @@
 // unwinnable Giga Crab (ETK ~115,000 minutes) never ended.
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {createBossChase,initialBossChase}=require('../../runtime/coordinator/events/boss-chase.ts');
+const {createBossChase,initialBossChaseFields}=require('../../runtime/coordinator/events/boss-chase.ts');
 
 const MIN=60_000, HOME='SR_USII', AWAY='SR_USV';
 function fixture() {
   let time=1_000_000, realm=HOME, crab=960_000, drain=0;
-  const switches=[], party={bossChase:initialBossChase({enabled:true,minEtaMinutes:15})};
+  const switches=[], party=initialBossChaseFields({bossChase:{enabled:true,minEtaMinutes:15}});
   const chase=createBossChase(party,{
     now:()=>time,
     fetchLive:async()=>[{type:'crabxx',id:'83862',hp:crab,lastSeen:new Date(time).toISOString(),serverRegion:'US',serverIdentifier:'V'}],

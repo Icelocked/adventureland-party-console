@@ -138,7 +138,7 @@ export const settingsFields = [
   "gatheringCooldowns",
   "mluckCastAt",
   "activeRealm",
-  "bossChase",
+  "bossChaseSaved",
   "realmHopBlacklist",
   "activeConvoy",
   "convoyCompletionReceipts",
