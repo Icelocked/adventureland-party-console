@@ -157,6 +157,7 @@ export const characterFields = {
   monsterAchievementKills: lean("Kill counts per monster toward achievements.", ["dashboard", "android", "metrics"], large("1.7 KB")),
   monsterAchievements: lean("Achievement progress per monster.", all, large("4.3 KB")),
   tracktrix: lean("Tracktrix status and bonuses.", all),
+  cosmetics: lean("CX jars, owned and worn cosmetics, emotes and nearby emote targets (cosmeticsSnapshot).", ["dashboard"]),
   items: lean("Bag entries with item fingerprints and metadata.", [...all, "metrics"], large("117 to 273 KB")),
   slots: lean("Equipped entries with item fingerprints and metadata.", [...all, "metrics"], large("457 to 484 KB")),
   nearbyStandListings: debug("Player stand listings near the character.", large("up to 1.9 MB")),
@@ -272,6 +273,7 @@ export const sectionFields = {
     "banking", "bankQueued", "stocking", "upgrading", "farmingMode", "monsterHunt", "donationXpPerGold", "donationLevelXp",
     "luckySlotTracking", "gatheringCooldowns", "monsterAchievementKills", "monsterAchievements", "tracktrix",
     "anniversaryVisit", "anniversaryState",
+    "cosmetics",
   ],
   inventory: ["items", "slots", "characterDollHtml"],
   /**
@@ -289,6 +291,8 @@ export const sectionFields = {
     "donationLevelXp", "gatheringCooldowns", "gatheringPhase", "gatheringBlockedReason", "gatheringAttemptId",
     "monsterAchievementKills", "monsterAchievements", "tracktrix", "anniversaryVisit", "anniversaryState",
     "lootStatus",
+    // The Cosmetics panel (topic15/cosmetics) reads cosmetics from this section.
+    "cosmetics",
   ],
   coreSummary: ["name", "ctype", "level", "server"],
 } as const satisfies Record<string, readonly CharacterFieldName[]>;
