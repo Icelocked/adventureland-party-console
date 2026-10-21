@@ -240,7 +240,7 @@ test.describe('October Cipher inventory decisions',()=>{
     })()`);
     // Native day claims survive earlier rounds on this fixture's shared realm.
     // Assert an exact unchanged counter, in addition to zero brew receipts.
-    const startingMixes=await live.admin(`output=(await witch_cipher_info(get_player('${merchant}'))).mixes`);
+    const startingMixes=await live.admin(`output=witch_cipher_info(get_player('${merchant}')).then(info=>info.mixes-info.mixes_left)`);
     await live.post('/formation',{character:merchant,eventSelections:['witchcipher'],eventLimits:{event:'witchcipher',limits:{deathLimit:null,timeLimitMinutes:null,cipher:{minClues:0,automatic:true}}}});
     if(shortage){
       await expect.poll(()=>live.clients[merchant].run(`get('party-october-${merchant}')?.gathering`),{timeout:90_000}).toMatchObject({mode:'gathering',ingredient:'frostscale',monster:'arcticbee',reason:'recipe shortage'});
