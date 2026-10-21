@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { requestObject, requestText, type HttpRequest, type HttpResponse, type HttpRouter } from '../http/contracts.ts';
 import { isPrimStackMethod, primStackOffering, statScrollName, statScrollsPerStack, validPrimStackTarget, type PrimStackMethod, type PrimStackRequest } from '../../prim-stack.ts';
 import { protectedMerchantStorageStock } from '../inventory/merchant-storage-stock.ts';
+import { entryMeta } from '../inventory/catalog-meta.ts';
 import type { InventoryEntry, Item } from '../contracts/item.ts';
 import type { MerchantWork } from './work.ts';
 
@@ -9,6 +10,7 @@ interface Definition { stat?: unknown; grades?: number[] }
 interface Entry extends InventoryEntry { meta?: (InventoryEntry['meta'] & { definition?: Definition }) | null }
 interface State {
   merchantCharacter?: string | null;
+  merchantCatalog?: unknown;
   statuses: Record<string, { items?: (Entry | null)[] } | undefined>;
   merchantCurrent: MerchantWork | null;
   merchantQueue: MerchantWork[];
@@ -34,7 +36,8 @@ export function createPrimStacks(state: State, ports: Ports, now = Date.now) {
     const entry = state.statuses[executor]?.items?.find(value => value?.slot === body.slot);
     const live = entry?.item;
     return live && typeof item.name === 'string' &&
-      Object.entries(item).every(([key, value]) => JSON.stringify(live[key]) === JSON.stringify(value)) ? entry : null;
+      Object.entries(item).every(([key, value]) => JSON.stringify(live[key]) === JSON.stringify(value))
+      ? { ...entry, meta: entryMeta(state.merchantCatalog, entry) } as Entry : null;
   }
   /** A stat scroll rewrites stat_type, so only the item's current stat may be used. */
   function statRequest(request: PrimStackRequest, entry: Entry): Outcome {
