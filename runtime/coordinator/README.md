@@ -1,3 +1,21 @@
+Planner workers load native collision from the installed game sources and detour
+same-map edges rejected by can_move, preserving the request's movement footprint
+and instance. Valid edges and map transitions remain intact. Retain collision
+sources across automatic worker recreation. Unresolved edges and unavailable
+native validation retain the existing bounded client repair as a backstop.
+Validate live-planner-corner.spec.ts plus transporter, Phoenix and supersession
+journeys; the corner E2E checks planned edges against native server collision and
+requires actual shared party arrival without repair. See e2e/planner-corner-failures.md.
+
+Shared event walking can supersede an unfinished farming convoy combat-handoff
+continuation at the same navigation revision. Require fresh authorized event
+requests from the participating runtimes, retain all other command ownership
+checks, and do not restore that obsolete farm continuation after event arrival.
+Newer navigation commands remain authoritative; delayed old completion receipts
+remain fenced by command identity. Validate the natural Halloween completion and
+changed farming-focus journey with a declared retry of one real farm handoff
+completion, plus manual event overrides and navigation supersession E2Es.
+
 Completed Cave destination movement is a historical receipt, not proof of current
 arrival. After every participant completes its move and is freshly ready, displaced
 actors receive independent native paths to the same destination, with three bounded
@@ -2278,3 +2296,21 @@ suppress those readiness reports. Local convoy walking, foreign movement owners,
 unrelated targets and cancelled navigation remain exclusive. Validate the natural
 Halloween completion and changed Bee focus journey in
 `live-event-runtime-recovery.spec.ts`, retaining native damage from both fighters.
+
+Native explicitly unintentional stacked hits, like explosion splash, do not
+nominate an outside player's fight for convoy defense. A verified outside-party
+native target is required; direct hits, unknown targets and party attacks keep
+their conservative defense path. Validate both Targetron collateral journeys.
+sharedRoutine.convoyNavigationReport exposes the existing read-only current
+navigation ownership for diagnostics before the next full status publication.
+
+An older native missing-tool report must not disable gathering after automatic
+replacement crafting has been enabled. The coordinator checks the current
+per-tool opt-in and rejects that obsolete disabling effect; the client retains
+the mode until fresh settings arrive. Validate both native replacement-tool
+journeys, including an in-flight no-tool report crossing opt-in, unavailable
+materials, and exactly one actual craft. Build and stage character/coordinator
+assets together; activate only through an explicitly requested console load.
+New gathering attempts also wait for ordinary inventory commands to finish, so
+a manual Equip can complete after cancelling its old cast. Validate native hand
+receipts, subsequent gathering, exact item ownership and restart restoration.

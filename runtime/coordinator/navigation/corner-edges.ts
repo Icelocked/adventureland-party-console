@@ -1,6 +1,6 @@
-import type { Point, Step } from '../../navigation/contracts.ts';
+import type { Geometry, Point, Step } from '../../navigation/contracts.ts';
 
-type Base = { h: number; v: number; vn: number };
+type Base = Geometry;
 type Walk = (from: Point, to: Point, base: Base) => boolean;
 
 /**
@@ -26,7 +26,8 @@ export function detourRejectedEdges(plot: Step[], base: Base, walk: Walk) {
 }
 
 function walkingEdge(from: Step, to: Step): boolean {
-  return from.map === to.map && !to.transport && !to.town && (to.method === undefined || to.method === 'move');
+  return from.map === to.map && (from.in === undefined || to.in === undefined || String(from.in) === String(to.in)) &&
+    !to.transport && !to.town && (to.method === undefined || to.method === 'move');
 }
 
 /** The shortest single point near the edge's elbows or midpoint that both legs can walk. */
@@ -44,7 +45,7 @@ function detourPoint(from: Step, to: Step, base: Base, walk: Walk): Step | null 
   for (const c of candidates) {
     const total = Math.hypot(c.x - from.x, c.y - from.y) + Math.hypot(to.x - c.x, to.y - c.y);
     if (total >= bestLength) continue;
-    const point = { map: from.map, x: Math.round(c.x), y: Math.round(c.y), method: 'move' } as Step;
+    const point: Step = { map: from.map, ...(from.in === undefined ? {} : {in:from.in}), x: Math.round(c.x), y: Math.round(c.y), method: 'move' };
     if (walk(from, point, base) && walk(point, to, base)) { best = point; bestLength = total; }
   }
   return best;

@@ -7,6 +7,7 @@ import type { ItemMark } from "../contracts/item.ts";
 interface AutomaticSaleMark {
   id?: string;
   character?: string;
+  state?: string;
   auto?: boolean;
   autoRuleKey?: string;
 }
@@ -17,7 +18,8 @@ interface AutomaticSaleState extends SharedScope {
   autoStandMarks: Record<string, { item: Item; price: number; createdAt: number }>;
   npcSaleMarks: AutomaticSaleMark[];
   standListings: AutomaticSaleMark[];
-  withdrawals?: Record<string, { standListingId?: string }[] | undefined>;
+  withdrawals?: Record<string, { standListingId?: string; autoNpcRuleKey?: string }[] | undefined>;
+  merchantCurrent?: { reason?: string } | null;
 }
 interface AutomaticSalePorts {
   selectAction?(item: Item, name: string, action: 'npc' | 'stand'): void;
@@ -50,8 +52,15 @@ export function createAutomaticSaleRoutes(state: AutomaticSaleState, ports: Auto
       delete state.autoNpcSales[key];
       discardNpc(mark => mark.autoRuleKey === key);
     } else {
+      if (!character && (state.autoNpcSales[key]?.keep ?? 0) !== (keep ?? 0)) {
+        // Unsent quantities were computed under the old reserve. Reconcile them
+        // from current stock after replacing the rule, including whole-stack trips.
+        discardNpc(mark => !!mark.auto && mark.autoRuleKey === key);
+        for (const [name, entries] of Object.entries(state.withdrawals || {}))
+          state.withdrawals![name] = entries?.filter(entry => entry.autoNpcRuleKey !== key);
+      }
       ports.selectAction?.(item, character || String(state.merchantCharacter), 'npc');
-      state.autoNpcSales[key] = { item, createdAt: ports.now(), ...(character ? { character } : {}), ...(keep !== undefined ? { keep } : {}) };
+      state.autoNpcSales[key] = { item, createdAt: ports.now(), ...(character ? { character } : {}), ...(!character ? { keep: keep ?? 0 } : {}) };
       if (character || state.merchantRules) return;
       delete state.autoStandMarks[key];
       discardStand(listing => !!listing.auto && listing.autoRuleKey === key);
@@ -70,7 +79,8 @@ export function createAutomaticSaleRoutes(state: AutomaticSaleState, ports: Auto
   }
   /** #116: a merchant-wide rule may keep some copies; blank sells every copy. Null is invalid. */
   function requestedKeep(value: unknown, character?: string): number | undefined | null {
-    if (value === undefined || value === null || value === "") return undefined;
+    if (value === undefined || value === "") return undefined;
+    if (value === null || !["number", "string"].includes(typeof value)) return null;
     const keep = Number(value);
     return character || !Number.isSafeInteger(keep) || keep < 0 ? null : keep;
   }
@@ -88,6 +98,12 @@ export function createAutomaticSaleRoutes(state: AutomaticSaleState, ports: Auto
     else {
       const error = npcRuleError(item, body.keep, character);
       if (error) return res.status(400).json({ error });
+      const key = character ? npcSaleRuleKey(item, character) : ports.key(item);
+      if (action !== 'remove' && !character &&
+          (state.autoNpcSales[key]?.keep ?? 0) !== (requestedKeep(body.keep, character) ?? 0) &&
+          ['npc sales', 'auto npc sales'].includes(state.merchantCurrent?.reason || '') &&
+          state.npcSaleMarks.some(mark => mark.autoRuleKey === key))
+        return res.status(409).json({ error: 'Wait for the current NPC sale to finish before changing its reserve' });
       updateNpc(item, action, character, requestedKeep(body.keep, character)!);
     }
     save(!character);

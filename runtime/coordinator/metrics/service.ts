@@ -8,6 +8,8 @@ import type { AccountGoldPoint } from '../../metrics/contracts.ts';
 import { metricNumber, metricText, parseMetricFrame, parseMetricSample } from '../../metrics/parse.ts';
 
 const DAY = 86_400_000;
+/** Below the 1 s collector pulse (runtime/characters/metrics.ts), so a backlog still drains one batch per pulse. */
+export const METRICS_COMMIT_MS = 750;
 interface StoredBucket extends MetricPoint {
   width: number;
   receipts: string[];
@@ -153,6 +155,36 @@ export function createMetricsService(path: string, ports: Ports) {
     store.set('bucket:' + key, bucket);
     buckets.set(key, bucket);
   }
+  // Group commit for accepted frames (docs/efficiency.md § Metrics history).
+  // Every character's frame rewrote the whole 10 s bucket; frames that arrive
+  // within METRICS_COMMIT_MS of each other now share one write of each bucket.
+  // A POST answers once memory holds its frames and does not wait for the
+  // commit. Characters in one browser share its connections to the
+  // coordinator, and a POST held for the window delayed their status and
+  // combat requests (live-hunt-sparkbot-follow lost its target selection in
+  // 3-4 of 12 runs). Each answer names the commit that will write its frames
+  // (`commit`) and the last commit on disk (`durableCommit`), both counted
+  // within this process (`commitEpoch`). The collector keeps a frame in its
+  // outbox until an answer from the same process shows its commit on disk.
+  const dirty = new Set<string>();
+  const commitEpoch = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+  // nextCommit counts the commit that frames accepted now join; commits finish in order.
+  let nextCommit = 1, durableCommit = 0, previousCommit: Promise<void> = Promise.resolve();
+  let commit: Promise<void> | undefined;
+  function writeDirty() {
+    for (const key of dirty) { const bucket = buckets.get(key); if (bucket) store.set('bucket:' + key, bucket); }
+    dirty.clear();
+  }
+  function committed(): Promise<void> {
+    return commit ??= new Promise<void>(resolve => setTimeout(resolve, METRICS_COMMIT_MS)).then(() => {
+      commit = undefined;
+      const id = nextCommit++;
+      writeDirty();
+      const written = previousCommit.then(() => store.flush()).then(() => { durableCommit = id; });
+      previousCommit = written.catch(() => undefined);
+      return written;
+    });
+  }
   function seen(id: string, at: number) {
     const start = Math.floor(at / METRIC_BUCKET_MS) * METRIC_BUCKET_MS;
     for (const time of [start - METRIC_BUCKET_MS, start, start + METRIC_BUCKET_MS])
@@ -199,7 +231,7 @@ export function createMetricsService(path: string, ports: Ports) {
     mergeTotals(bucket.values, incoming);
     allCharacters.add(character); allServers.add(server);
     bucket.receipts.push(receipt);
-    write(key, bucket);
+    buckets.set(key, bucket); dirty.add(key);
     indexDeaths(acceptedDeaths);
     measurements.add([incoming]);
   }
@@ -406,9 +438,9 @@ export function createMetricsService(path: string, ports: Ports) {
         storageFailed(error);
         return response.status(503).json({ error: 'Metrics storage unavailable' });
       }
-      try { await store.flush(); } catch(error) { storageFailed(error); return response.status(503).json({error:'Metrics storage unavailable'}); }
-      lastReceivedAt = now;
-      return response.json({ ok: true, expired });
+      // A batch without frames only reads durableCommit.
+      if (frames.length) { committed().catch(storageFailed); lastReceivedAt = now; }
+      return response.json({ ok: true, expired, commitEpoch, commit: nextCommit, durableCommit });
     });
     router.get('/party-api/metrics', async (request, response) => {
       if (unavailable) return response.status(503).json({ error: 'Metrics storage unavailable' });
@@ -449,5 +481,8 @@ export function createMetricsService(path: string, ports: Ports) {
       } finally { resetting = false; }
     });
   }
-  return { install, async close() { clearInterval(timer); clearInterval(goldTimer); await store.close(); } };
+  return { install, async close() {
+    clearInterval(timer); clearInterval(goldTimer);
+    try { writeDirty(); } finally { await store.close(); }
+  } };
 }

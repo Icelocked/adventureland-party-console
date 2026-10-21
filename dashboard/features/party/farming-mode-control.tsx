@@ -38,7 +38,10 @@ export const FarmingModeControl = memo(function FarmingModeControl({
   passiveRareHunts, passiveHunting,
   onRareChange,
   radius, onRadiusSave, radiusContext, farmArea,
+  settingsOpen, onSettingsOpenChange: setSettingsOpen,
 }: {
+  settingsOpen: boolean;
+  onSettingsOpenChange: (open: boolean) => void;
   farmArea?: PartyState["farmAreaState"];
   followingLeader?: string; effectivePolicy?: FarmingPolicy; settingsOwner?: string;
   huntSettings?: PartyState["huntSettings"];
@@ -62,8 +65,7 @@ export const FarmingModeControl = memo(function FarmingModeControl({
 }) {
   const followDescription = useId();
   const inherited = !!followingLeader;
-  const [open, setOpen] = useState(false),
-    [settingsOpen, setSettingsOpen] = useState(false);
+  const [open, setOpen] = useState(false);
   const [confirmBlacklistClear, setConfirmBlacklistClear] = useState(false);
   const [blacklistBusy, setBlacklistBusy] = useState(false),
     [blacklistError, setBlacklistError] = useState<string | null>(null);

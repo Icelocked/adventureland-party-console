@@ -27,11 +27,29 @@ test.describe('planner corner edges',()=>{
     await info.attach('planner-corner-plan',{body:JSON.stringify({request,plot:plan.plot,edges},null,2),contentType:'application/json'});
     expect(edges.filter((e:any)=>!e.walkable),'The planned route must contain no edge the game rejects').toEqual([]);
 
+    // Exercise the other reported corners through the real planner HTTP route,
+    // and compare its output with native server collision for each footprint.
+    const cases=[
+      [87,-208,105,-235],[-457,261,-337,280],[-457,280,-439,261],
+      [343,-200,311,-219],[-119,149,-137,168],[-345,-656,-327,-616],
+    ].map(([x,y,tx,ty])=>({from:{map:'main',x,y},to:{map:'main',x:tx,y:ty},base:{h:8,v:7,vn:2}}));
+    cases.push({from:start,to:door,base:{h:6,v:5,vn:1}},
+      {from:{map:'main',x:100,y:100},to:{map:'main',x:100,y:-100},base:{h:12,v:9,vn:4}});
+    for(const [index,sample] of cases.entries()){
+      const input={...request,...sample,id:request.id+'-sample-'+index},result=await live.post('/movement-plan',input);
+      expect(result.error,'Reported corner '+index+' must produce a route').toBeFalsy();
+      const checked=await live.admin(`output=(()=>{const points=${JSON.stringify([input.from,...result.plot])},base=${JSON.stringify(sample.base)};
+        return points.slice(1).flatMap((b,i)=>{const a=points[i];if(a.map!==b.map||b.transport||b.town)return [];
+          return [{from:a,to:b,walkable:can_move({map:a.map,x:a.x,y:a.y,going_x:b.x,going_y:b.y,base})}];});})()`);
+      await info.attach('planner-corner-sample-'+index,{body:JSON.stringify({input,result,checked}),contentType:'application/json'});
+      expect(checked.filter((edge:any)=>!edge.walkable),'Every sampled edge must pass native collision').toEqual([]);
+    }
+
     // The party walks it as a shared route without spending repairs.
     const travelAt=Date.now();
     await live.post('/travel',door);
     await expect.poll(async()=>{const s=await world(live);
-      return [W,P].every(n=>s.players[n].map==='main'&&Math.hypot(s.players[n].x-door.x,s.players[n].y-door.y)<120);},
+      return [W,P].every(n=>s.players[n].map==='main'&&Math.hypot(s.players[n].x-door.x,s.players[n].y-door.y)<35);},
       {timeout:120_000,intervals:[1000],message:'Both fighters must reach the tunnel door'}).toBe(true);
     const logs=(await live.state()).combatLogs||{};
     const repairs=[W,P].flatMap(n=>((logs[n]?.events||logs[n]||[]) as any[]).filter(e=>e.at>=travelAt&&/Repairing rejected walking segment|Shared connector repair failed/.test(e.message))

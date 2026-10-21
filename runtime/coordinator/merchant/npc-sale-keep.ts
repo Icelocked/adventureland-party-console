@@ -12,7 +12,7 @@ export interface NpcSaleKeepState {
 /** #116: the merchant-wide rule that keeps some copies, if any. */
 export function keptNpcSaleRule(state: NpcSaleKeepState, key: string): { keep: number } | undefined {
   const rule = state.autoNpcSales?.[key];
-  return rule && !rule.character && Number.isSafeInteger(rule.keep) ? { keep: rule.keep! } : undefined;
+  return rule && !rule.character && Number.isSafeInteger(rule.keep) && Number(rule.keep) > 0 ? { keep: rule.keep! } : undefined;
 }
 
 /**
@@ -22,8 +22,9 @@ export function keptNpcSaleRule(state: NpcSaleKeepState, key: string): { keep: n
 export function npcSaleSpare(state: NpcSaleKeepState, key: string, keep: number,
   stock: ReturnType<typeof protectedMerchantStorageStock> = protectedMerchantStorageStock(state)): number {
   const pending = state.withdrawals?.[String(state.merchantCharacter)] || [];
-  const held = stock.filter(entry => entry.item && automaticCommerceRuleKey(entry.item) === key).reduce((sum, entry) => sum + entry.storageQuantity, 0);
-  const marked = (state.npcSaleMarks || []).filter(mark => mark.source === "merchant" && mark.autoRuleKey === key).reduce((sum, mark) => sum + (Number(mark.quantity) || 1), 0);
+  const held = stock.filter(entry => entry.item && automaticCommerceRuleKey(entry.item) === key).reduce((sum, entry) => sum + (Number(entry.item?.q) || 1), 0);
+  const marked = (state.npcSaleMarks || []).filter(mark => mark.source === "merchant" && mark.item &&
+    automaticCommerceRuleKey(mark.item) === key).reduce((sum, mark) => sum + (Number(mark.quantity) || 1), 0);
   const withdrawing = pending.filter(mark => mark.autoNpcRuleKey === key).reduce((sum, mark) => sum + (Number(mark.item?.q) || 1), 0);
   return held - keep - marked - withdrawing;
 }

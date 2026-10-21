@@ -1,4 +1,4 @@
-import type { Response } from '@playwright/test';
+import type { Response, Route } from '@playwright/test';
 import { test, expect } from './live-fixtures';
 import {nativeWallNow} from './network-clock';
 
@@ -18,6 +18,33 @@ test('accepted native catalogs stop retransmitting on every character heartbeat'
   const exchanges: Exchange[] = [];
   const errors: string[] = [];
   const pending = new Set<Promise<void>>();
+  const readiness: unknown[] = [];
+  try {
+    await expect.poll(async () => {
+      const clients = await Promise.all(names.map(async name => ({ name, catalog: await live.clients[name]!.run(
+        '(({generation,known,prepared,preparing})=>({generation,known,prepared,preparing}))(globalThis.__partyCatalogDiagnostic("goo","helmet"))') })));
+      if (readiness.length >= 64) readiness.shift();
+      readiness.push({ at: nativeWallNow(), clients });
+      return clients.every(value => value.catalog.prepared && value.catalog.known && !value.catalog.preparing);
+    }, { timeout: 90_000, message: 'Every native client must finish discovery and receive acceptance before checking retransmission' }).toBe(true);
+  } finally {
+    await info.attach('native-client-catalog-readiness', { body: JSON.stringify(readiness), contentType: 'application/json' });
+  }
+  // Bootstrap may already have accepted another character's catalog. Ask each
+  // real client to publish once, then observe its actual full-payload acceptance.
+  // An ordinary heartbeat acknowledging shared coordinator state is not that
+  // client's catalogue acknowledgement, especially during tracker discovery.
+  const requested = new Set<string>();
+  const requestCatalog = async (route: Route) => {
+    const body = route.request().postDataJSON();
+    if (!names.includes(body?.name) || body.combatOnly || body.combatWait || requested.has(body.name)) {
+      await route.continue(); return;
+    }
+    requested.add(body.name);
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...await response.json(), needsCatalog: true } });
+  };
+  await context.route('**/party-api/status', requestCatalog);
   const observe = (response: Response) => {
     if (!new URL(response.url()).pathname.endsWith('/status')) return;
     const request = response.request();
@@ -41,9 +68,11 @@ test('accepted native catalogs stop retransmitting on every character heartbeat'
       const catalog = (await live.state(true)).merchantCatalog;
       return catalog?.version === 'exchange-rewards-v4' && Array.isArray(catalog.allItems) && catalog.allItems.length > 0;
     }, { timeout: 120_000, message: 'Native discovery must publish a usable catalog before testing its acknowledgement' }).toBe(true);
-    await expect.poll(() => names.every(name => exchanges.some(exchange => exchange.name === name && !exchange.needsCatalog)),
+    const acceptedCatalog = (exchange: Exchange) => !exchange.needsCatalog && exchange.catalogFields.length === catalogFields.length && exchange.version === 'exchange-rewards-v4';
+    await expect.poll(() => names.every(name => exchanges.some(exchange => exchange.name === name && acceptedCatalog(exchange))),
       { timeout: 45_000, message: 'Every real character must receive catalog acceptance' }).toBe(true);
-    const accepted = Object.fromEntries(names.map(name => [name, exchanges.find(exchange => exchange.name === name && !exchange.needsCatalog)!.finished]));
+    expect([...requested].sort()).toEqual([...names].sort());
+    const accepted = Object.fromEntries(names.map(name => [name, exchanges.find(exchange => exchange.name === name && acceptedCatalog(exchange))!.finished]));
     await expect.poll(() => names.every(name => exchanges.filter(exchange => exchange.name === name && exchange.started > accepted[name]!).length >= 3),
       { timeout: 45_000, message: 'Observe three subsequent full status reports per native character' }).toBe(true);
     for (const name of names) {
@@ -54,8 +83,9 @@ test('accepted native catalogs stop retransmitting on every character heartbeat'
     expect(errors).toEqual([]);
   } finally {
     context.off('response', observe);
+    await context.unroute('**/party-api/status', requestCatalog);
     await Promise.all(pending);
-    await info.attach('native-catalog-handshake', { body: JSON.stringify({ exchanges, errors }, null, 2), contentType: 'application/json' });
+    await info.attach('native-catalog-handshake', { body: JSON.stringify({ requested: [...requested], exchanges, errors }, null, 2), contentType: 'application/json' });
   }
 });
 

@@ -1,3 +1,4 @@
+import './chronal-clock-reconnect.case';
 import { gooHunt, convoy } from './gameplay-scenarios';
 import { test, expect } from './live-fixtures';
 import type { LiveGame } from './live-fixtures';

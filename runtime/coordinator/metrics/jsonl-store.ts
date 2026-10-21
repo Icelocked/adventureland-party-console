@@ -3,6 +3,18 @@ import {spawnSync} from 'node:child_process';
 
 import {processLockActive, processLockIdentity} from '../persistence/process-lock.ts';
 
+/**
+ * Compaction thresholds, the rule of the coordinator journal
+ * (persistence/jsonl-store.ts): compact once superseded records exceed both
+ * `supersededBytes` and `growth` times the live records, or `maxBytes` alone.
+ * A compaction leaves only the live set, so a large live set does not
+ * trigger the next one.
+ */
+export interface MetricsCompactionLimits { supersededBytes: number; growth: number; maxBytes: number }
+export const METRICS_COMPACTION: MetricsCompactionLimits = {
+  supersededBytes: 32 * 1024 * 1024, growth: 3, maxBytes: 128 * 1024 * 1024,
+};
+
 /** Metrics journal: ordered asynchronous writes, yielding compaction and explicit durable acknowledgement. */
 export class MetricsJsonlStore {
   private pending: Promise<void> = Promise.resolve();
@@ -18,13 +30,17 @@ export class MetricsJsonlStore {
   private guard: number | undefined;
   private timer: ReturnType<typeof setInterval> | undefined;
   private bytes = 0;
+  /** Bytes of the newest record of each live key; what a compaction writes. */
+  private liveBytes = 0;
+  private sizes = new Map<string,number>();
+  private limits: MetricsCompactionLimits;
   private compactRetryAt = 0;
   private closed = false;
   private lockPath: string;
   private mainPath:string;
   private replacementPath:string;
-  constructor(mainPath='garage.jsonl',replacementPath='garage.new.jsonl',interval=30000) {
-    this.mainPath=mainPath;this.replacementPath=replacementPath;
+  constructor(mainPath='garage.jsonl',replacementPath='garage.new.jsonl',interval=30000,limits=METRICS_COMPACTION) {
+    this.mainPath=mainPath;this.replacementPath=replacementPath;this.limits=limits;
     if(mainPath===replacementPath)throw new Error('Storage main and replacement paths must differ');
     this.lockPath=mainPath+'.writer.lock';
     try {
@@ -32,9 +48,12 @@ export class MetricsJsonlStore {
       if(!fs.existsSync(mainPath) && fs.existsSync(replacementPath))fs.renameSync(replacementPath,mainPath);
       this.handle=fs.openSync(mainPath,'a+');
       this.replay();
+      this.bytes=fs.fstatSync(this.handle).size;
       // Startup replay is synchronous, runtime compaction is incremental.
-      this.refactor();
-      this.timer=setInterval(()=>this.refactor(),interval);
+      // Startup rewrites only a journal with superseded records.
+      if(this.bytes>this.liveBytes)this.refactor();
+      // Every write checks growth; the timer retries a deferred compaction.
+      this.timer=setInterval(()=>this.compactIfNeeded(),interval);
       this.timer.unref();
     } catch(error) {void this.close().catch(()=>{});throw error;}
   }
@@ -66,26 +85,70 @@ export class MetricsJsonlStore {
   }
   private replay():void {
     const chunk=Buffer.allocUnsafe(64*1024);
-    let fragments:Buffer[]=[];
+    let fragments:Buffer[]=[],offset=0,number=0,terminated=true;
+    let failed:{number:number;offset:number;error:unknown}|undefined;
+    const line=(bytes:Buffer)=>{
+      number++;
+      const text=bytes.toString('utf8');
+      if(failed) {
+        // Records after an unreadable line mean corruption, not a torn write.
+        if(text.split('\0').join('').trim())throw this.corruption(failed);
+      } else {
+        try {this.record(text,bytes.length+1);}
+        catch(error) {failed={number,offset,error};}
+      }
+      offset+=bytes.length+1;
+    };
     for(;;) {
       const count=fs.readSync(this.handle!,chunk,0,chunk.length,null);
       if(!count)break;
       let start=0;
       for(let i=0;i<count;i++)if(chunk[i]===10) {
         fragments.push(Buffer.from(chunk.subarray(start,i)));
-        this.record(Buffer.concat(fragments).toString('utf8'));
+        line(Buffer.concat(fragments));
         fragments=[];start=i+1;
       }
       if(start<count)fragments.push(Buffer.from(chunk.subarray(start,count)));
     }
-    if(fragments.length)this.record(Buffer.concat(fragments).toString('utf8'));
+    if(fragments.length){line(Buffer.concat(fragments));terminated=false;}
+    if(failed)this.dropTornTail(failed);
+    // The next append must start on its own line.
+    else if(!terminated)fs.writeFileSync(this.handle!,'\n');
   }
-  private record(line:string):void {
+  private corruption(failed:{number:number;offset:number;error:unknown}):Error {
+    return new Error('Metrics journal '+this.mainPath+' is corrupt at line '+failed.number+', byte offset '+failed.offset+
+      ' ('+(failed.error as Error).message+'). Records follow it, so this is not a torn last write. Stop the console, back up the'+
+      ' file, then delete or repair that line.');
+  }
+  /**
+   * The last line of a journal written by a process that crashed mid-append.
+   * Its bytes go to a copy next to the journal, and the journal ends at the
+   * last complete record, as in persistence/jsonl-store.ts.
+   */
+  private dropTornTail(failed:{number:number;offset:number}):void {
+    const size=fs.fstatSync(this.handle!).size,tail=Buffer.alloc(size-failed.offset);
+    fs.readSync(this.handle!,tail,0,tail.length,failed.offset);
+    const copy=this.mainPath+'.torn-'+Date.now();
+    fs.writeFileSync(copy,tail);
+    // Windows refuses ftruncate on an append handle; truncate by path and reopen.
+    fs.closeSync(this.handle!);this.handle=undefined;
+    fs.truncateSync(this.mainPath,failed.offset);
+    this.handle=fs.openSync(this.mainPath,'a+');fs.fsyncSync(this.handle);
+    console.warn('Metrics journal ended with a torn write at line '+failed.number+' ('+tail.length+
+      ' bytes); dropped it and kept a copy at '+copy);
+  }
+  private record(line:string,bytes:number):void {
     if(!line.trim())return;
     const entry=Object.entries(JSON.parse(line) as Record<string,unknown>)[0];
     if(!entry)throw new Error('Empty storage record');
     const [key,value]=entry;
+    this.track(key,value===null?0:bytes);
     if(value===null)this.values.delete(key);else this.values.set(key,value);
+  }
+  /** Records `bytes` as the live record size of `key`; 0 for a deleted key. */
+  private track(key:string,bytes:number):void {
+    this.liveBytes+=bytes-(this.sizes.get(key)||0);
+    if(bytes)this.sizes.set(key,bytes);else this.sizes.delete(key);
   }
   refactor():void {
     if(this.closed || this.compacting || Date.now()<this.compactRetryAt)return;
@@ -117,13 +180,14 @@ export class MetricsJsonlStore {
   }
   private append(key:string,value:unknown):void {
     if(this.closed)throw new Error('Storage is closed');
-    const record=JSON.stringify({[key]:value})+'\n';
-    this.bytes+=Buffer.byteLength(record);
+    const record=JSON.stringify({[key]:value})+'\n',bytes=Buffer.byteLength(record);
+    this.bytes+=bytes;this.track(key,value===null?0:bytes);
     this.enqueue(()=>new Promise<void>((resolve,reject)=>fs.writeFile(this.handle!,record,error=>error?reject(error):resolve())));
   }
   private compactIfNeeded():void {
-    // Bound append history even if a busy event loop delays the periodic timer.
-    if(this.bytes>=128*1024*1024)this.refactor();
+    const superseded=this.bytes-this.liveBytes;
+    if(superseded>=this.limits.maxBytes ||
+      (superseded>this.limits.supersededBytes && superseded>this.limits.growth*this.liveBytes))this.refactor();
   }
   get(key:string):unknown {return this.values.get(key);}
   set(key:string,value:unknown):this {

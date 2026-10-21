@@ -1,9 +1,11 @@
 import './character-sections.case';
+import './npc-sale-reserve.case';
 import './map-sprites.case';
 import './drop-rewards.case';
 import './release-ui.case';
 import './market-preferences.case';
 import { test, expect } from './fixtures';
+import { fetchFullState } from './state-route';
 import './gear-comparison.case';
 import './steam-audio.case';
 import './tracktrix-drilldown.case';
@@ -109,7 +111,7 @@ test('merchant logistics shows capacity blocked collection in red and clears whe
   await page.route('**/party-api/dashboard-stream',route=>route.abort());
   // Declared status read boundary: exercise dashboard presentation, not native transfers.
   await page.route('**/party-api/state*',async route=>{
-    const response=await route.fetch(),state=await response.json();
+    const response=await fetchFullState(route),state=await response.json();
     await route.fulfill({response,json:{...state,merchantCharacter:'M',merchantCurrent:null,
       characters:{...initial.characters,...state.characters,M:{...initial.characters.M,...state.characters?.M,items:Array.from({length:42},(_,slot)=>slot<occupied?{slot,item:{name:'helmet'}}:null)}},
       gatheringModes:['fishing','mining'],gatheringCooldowns:{fishing:cooldown,mining:cooldown},
@@ -313,7 +315,7 @@ test('Halloween events stay opt-in, show partial-feed timers, inherit and persis
   let inherited=false;
   const next=Date.now()+600000;
   await page.route('**/party-api/state*',async route=>{
-    const response=await route.fetch(),state=await response.json();
+    const response=await fetchFullState(route),state=await response.json();
     await route.fulfill({response,json:{...state,
       ...(legacy ? {eventsByCharacter:{...state.eventsByCharacter,W:true},eventSelectionsByCharacter:{...state.eventSelectionsByCharacter,W:undefined}} : {}),
       // The console fixture does not launch native workers, so observe a
@@ -480,6 +482,35 @@ test('Hunt blacklist picker adds unseen monsters manually and survives restart',
   await app.restartCoordinator();
   expect((await app.state()).farmingProfiles.W.huntBlacklist).toEqual(before.farmingProfiles.W.huntBlacklist);
   await info.attach('manual-blacklist-state',{body:JSON.stringify({before,after:await app.state()}),contentType:'application/json'});
+  // A restarting coordinator can publish desired slots before its first
+  // character reports. Keep the open dialog through these real core responses;
+  // no gameplay, persistence, other status request or timing is substituted.
+  let emptyCoreSnapshots=0,recoveredCore=false;
+  const observeReconnect=async(route:import('@playwright/test').Route)=>{
+    if(new URL(route.request().url()).searchParams.get('section')!=='core')return route.fallback();
+    const response=await route.fetch();
+    if(!response.ok())return route.fulfill({response});
+    const state=await response.json();
+    if(emptyCoreSnapshots<2){
+      await route.fulfill({response,json:{...state,characters:{}}});
+      emptyCoreSnapshots++;
+    }else{
+      await route.fulfill({response});
+      // Blacklist configuration is checked through full state above; core
+      // intentionally contains only live operational reports.
+      recoveredCore=!!state.characters?.W;
+    }
+  };
+  await page.route('**/party-api/state?**',observeReconnect);
+  try{
+    await expect.poll(()=>emptyCoreSnapshots===2&&recoveredCore,{timeout:15_000}).toBe(true);
+    await expect(settings.getByText('manually added',{exact:false})).toBeVisible();
+    await info.attach('blacklist-dialog-after-empty-reconnect-snapshots',{body:await page.screenshot(),contentType:'image/png'});
+  }finally{
+    // Finish intercepted core fetch/fulfill operations before removing their
+    // page handler; the context's network guard must not handle the same route.
+    await page.unrouteAll({behavior:'wait'});
+  }
   await settings.getByRole('button',{name:'Clear all',exact:true}).click();
   const confirmation=page.getByRole('dialog',{name:'Clear Hunt blacklist?',exact:true});
   await expect(confirmation).toContainText('for W');
@@ -870,7 +901,7 @@ test('active Bankboi uses its dedicated card instead of a pending character card
   // character heartbeat. Both slot-derived and explicit connection entries must
   // leave the dedicated activity card visible, without a misleading placeholder.
   await page.route('**/party-api/state*', async route => {
-    const response = await route.fetch();
+    const response = await fetchFullState(route);
     const state = await response.json();
     await route.fulfill({ response, json: { ...state,
       bankbois: [{ name: 'bankboi0', state: 'working', items: [] }],
@@ -902,7 +933,7 @@ test('Live WTB counts bank stock after empty slots without withdrawing it', asyn
   ].map(order => ({ ...order, source: 'aldata', slot: 'trade1', map: 'main', x: 0, y: 0,
     price: 1000, serverRegion: 'US', serverIdentifier: 'II', lastSeen: new Date().toISOString(), seenAt: Date.now() }));
   await page.route('**/party-api/state*', async route => {
-    const response = await route.fetch();
+    const response = await fetchFullState(route);
     const state = await response.json();
     const section = new URL(route.request().url()).searchParams.get('section');
     if (section === 'bank') return route.fulfill({ response, json: { ...state, bank } });
@@ -1195,7 +1226,7 @@ test('market affordability uses core bank gold and active WTB prices open the fu
   // Failure modes: opening only market omits bank gold; affordability hides every
   // listing; price opens a bare input; editing resets quantity or preferences.
   await page.route('**/party-api/state*', async route => {
-    const response = await route.fetch(), state = await response.json();
+    const response = await fetchFullState(route), state = await response.json();
     await route.fulfill({response,json:{...state,bank:undefined,bankGold:5000,
       standBids:{leather:{price:1200,quantity:7,minimumQuality:0,useStandSlot:false,acceptHigherLevels:false}},
       aldata:{...state.aldata,listings:[{key:'affordable-leather',seller:'AffordableSeller',item:{name:'leather'},price:4000,quantity:1,
@@ -1295,12 +1326,12 @@ test('expanded character and Cave maps capture real canvas pixels with map and c
         element.addEventListener('click',event=>{
           if(!(event.target instanceof Element)||!event.target.closest('button[aria-label="Capture map screenshot"]'))return;
           const c=element.querySelector('canvas')!;
-          (globalThis as typeof globalThis & {mapCaptureObserved?:unknown}).mapCaptureObserved={width:c.width,height:c.height,ratio:Math.max(1,c.width/c.clientWidth),pixels:Array.from(c.getContext('2d')!.getImageData(0,0,c.width,c.height).data)};
+          (globalThis as typeof globalThis & {mapCaptureObserved?:unknown}).mapCaptureObserved={width:c.width,height:c.height,ratio:Math.max(1,c.width/c.clientWidth),png:c.toDataURL('image/png')};
         },{capture:true,once:true});
       });
       const popupPromise=page.waitForEvent('popup');
       await dialog.getByRole('button',{name:'Capture map screenshot',exact:true}).click();
-      const original=await page.evaluate(()=>(globalThis as typeof globalThis & {mapCaptureObserved:{width:number;height:number;ratio:number;pixels:number[]}}).mapCaptureObserved);
+      const original=await page.evaluate(()=>(globalThis as typeof globalThis & {mapCaptureObserved:{width:number;height:number;ratio:number;png:string}}).mapCaptureObserved);
       const popup=await popupPromise;
       const center=mode==='full-floor'?'200.00, 100.00':'31.00, 47.00';
       await expect(popup.locator('img')).toHaveAttribute('alt',`Map: ${map}. Center: ${center}`);
@@ -1309,10 +1340,16 @@ test('expanded character and Cave maps capture real canvas pixels with map and c
         const image=element as HTMLImageElement;await image.decode();
         const c=document.createElement('canvas');c.width=image.naturalWidth;c.height=image.naturalHeight;
         const context=c.getContext('2d')!;context.drawImage(image,0,0);
+        // Keep exact whole-image equality while transporting a compact,
+        // lossless reference instead of millions of CDP numeric arguments.
+        const reference=new Image();reference.src=source.png;await reference.decode();
+        const referenceCanvas=document.createElement('canvas');referenceCanvas.width=source.width;referenceCanvas.height=source.height;
+        const referenceContext=referenceCanvas.getContext('2d')!;referenceContext.drawImage(reference,0,0);
+        const expectedPixels=referenceContext.getImageData(0,0,source.width,source.height).data;
         const pixels=context.getImageData(0,0,source.width,source.height).data;
         const footer=context.getImageData(0,source.height,c.width,c.height-source.height).data;
         let textPixels=0;for(let i=0;i<footer.length;i+=4)if(footer[i]===236&&footer[i+1]===253&&footer[i+2]===245)textPixels++;
-        return {width:c.width,height:c.height,identical:source.pixels.every((value,index)=>value===pixels[index]),textPixels,png:image.src};
+        return {width:c.width,height:c.height,identical:expectedPixels.every((value,index)=>value===pixels[index]),textPixels,png:image.src};
       },original);
       await info.attach(`map-capture-${mode}`,{body:Buffer.from(result.png.split(',')[1],'base64'),contentType:'image/png'});
       expect(result.width).toBe(original.width);expect(result.height).toBe(original.height+Math.ceil(64*original.ratio));
@@ -1556,18 +1593,23 @@ test('Steam bridge reserves a free native CODE slot without overwriting saved co
     expect(JSON.parse(result.original||'null')).toEqual({slot_owned_w:'1',code_owned_w:'User code'});
     await info.attach('steam-native-free-slot',{body:JSON.stringify({packets,result}),contentType:'application/json'});
     for(const inventory of ['full','unknown']) {
-      packets.length=0;
-      await page.evaluate(inventory=>{
+      // A request from the preceding bridge can already be on the wire when
+      // dispose aborts it. Attribute receipts to the new bridge's actual client
+      // identity instead of treating a cleared server array as a network fence.
+      const clientId=await page.evaluate(inventory=>{
         const host=window as unknown as {__partySteamBridge:{dispose():void};socket:{connected:boolean};X:{codes?:Record<string,unknown>};NativeBridge:{installSteamBridge(host:unknown):void}};
         host.__partySteamBridge.dispose();localStorage.clear();sessionStorage.clear();host.socket.connected=true;
         host.X.codes=inventory==='full'?Object.fromEntries(Array.from({length:100},(_,i)=>[String(i+1),['User code',1]])):undefined;
         host.NativeBridge.installSteamBridge(window);
+        return sessionStorage.getItem('party-steam-client');
       },inventory);
-      await expect.poll(()=>packets.find(packet=>packet.error)?.error).toContain(inventory==='full'?'No free Adventure Land CODE slot':'Cannot inspect saved CODE slots');
-      expect(packets.some(packet=>packet.released===true)).toBe(false);
+      expect(clientId).toBeTruthy();
+      const currentPackets=()=>packets.filter(packet=>packet.clientId===clientId);
+      await expect.poll(()=>currentPackets().find(packet=>packet.error)?.error).toContain(inventory==='full'?'No free Adventure Land CODE slot':'Cannot inspect saved CODE slots');
+      expect(currentPackets().some(packet=>packet.released===true)).toBe(false);
       expect(await page.evaluate(()=>((window as unknown as {saved:unknown[]}).saved).length)).toBe(1);
       expect(await page.evaluate(()=>((window as unknown as {socket:{connected:boolean}}).socket).connected)).toBe(true);
-      await info.attach('steam-native-slot-'+inventory,{body:JSON.stringify(packets),contentType:'application/json'});
+      await info.attach('steam-native-slot-'+inventory,{body:JSON.stringify({clientId,packets:currentPackets(),allPackets:packets}),contentType:'application/json'});
     }
 
   } finally {await page.close();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}

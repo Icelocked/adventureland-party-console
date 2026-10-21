@@ -270,7 +270,7 @@ function PartyInventoryPanelsConnected({ base }: { base: PartyConsoleModel }) {
     (entry: InventoryEntry) =>
       setAutoNpcSaleItem({
         ...entry,
-        character: state.merchantCharacter || undefined,
+        character: undefined,
       }),
     [setAutoNpcSaleItem, state.merchantCharacter],
   );
@@ -645,7 +645,7 @@ function PartyInventoryPanelsConnected({ base }: { base: PartyConsoleModel }) {
                 >
                   <SelectValue placeholder="Change realm…" />
                 </SelectTrigger>
-                <SelectContent className="border-violet-700 bg-[#07090d] text-violet-50">
+                <SelectContent alignItemWithTrigger={false} className="border-violet-700 bg-[#07090d] text-violet-50">
                   {(state.realmControl?.realms || []).map((realm) => (
                     <SelectItem
                       key={realm.key}

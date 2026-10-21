@@ -161,8 +161,15 @@ export function createSharedWalks(input: unknown, ports: WalkPorts) {
   function captureParents(waiting: WalkRequest[]): boolean {
     for (const other of waiting) {
       const command = state.commands[other.name];
-      if (command && command.id !== other.parentId) return false;
-      other.parent = command;
+      // The selected event supersedes an unfinished farm combat handoff. That
+      // continuation cannot finish while event attendance owns movement, and
+      // retaining it as a parent would send the fighter back to the old farm.
+      // Admission still requires fresh, matching runtime and navigation intent.
+      const farmHandoff = other.activity === "event" && other.parentId === 0 &&
+        command?.type === "event-resume-travel" && typeof command.convoyHandoff === "string" &&
+        command.navigationRevision === other.revision;
+      if (command && command.id !== other.parentId && !farmHandoff) return false;
+      other.parent = farmHandoff ? undefined : command;
     }
     return true;
   }

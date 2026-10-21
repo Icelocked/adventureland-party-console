@@ -23,6 +23,15 @@ import { createRealmHopBlacklistRoute, realmHopAllowed } from './navigation/real
 import { createAlninja } from './commerce/alninja.ts';
 import { createMetricsService } from './metrics/service.ts';
 import { accountGoldSnapshot } from './telemetry/account-gold.ts';
+/** A farm-area snapshot saved while record() was idle keeps expired hits. */
+function pruneSavedFarmAreas(
+  party: { farmAreaState?: object | null; farmingProfiles?: Record<string, { farmAreaState?: object | null } | null | undefined> },
+  control: Pick<import("./infrastructure/hunt-platform.ts").FarmAreaControlPlatform, "prune">,
+): void {
+  for (const scope of [party, ...Object.values(party.farmingProfiles || {})])
+    if (scope?.farmAreaState) control.prune(scope.farmAreaState, Date.now());
+}
+
 export function startCoordinatorApplication(
   platform: CoordinatorApplicationPlatform,
 ): Promise<void> {
@@ -207,6 +216,7 @@ export function startCoordinatorApplication(
       persistHistory,
     });
     const persistence = coordinatorPolicies.createCoordinatorPersistence(party, localStorage);
+    pruneSavedFarmAreas(party, farmAreaControl);
     if (initializeStandLocation(party, Object.keys(persistedSettings).length === 0, canStand)) persistence.settings();
     const storageService = coordinatorPolicies.createCoordinatorStorageService(
       party,
@@ -539,7 +549,7 @@ export function startCoordinatorApplication(
       rareEncounter: () => rareControl.encounter(),
       huntOwns: huntTurnInOwnsTravel,
       mapSubscriberCount,
-      stackHomes: (bank, bankbois) => bankStackRouting.homes(bank, bankbois),
+      stackHomes: (bank, bankbois) => bankStackRouting.homes(bank, bankbois, party.merchantCatalog),
       groupedCombat: groupedCombatSnapshot,
       selectedEvents: (state, name) => selectedEvents(state, name).filter(event => eventInstanceAllowed(party, name, event)),
       anniversary: publicAnniversaryState,
@@ -566,7 +576,7 @@ export function startCoordinatorApplication(
       bankPorts: bankObservationPorts,
     } = coordinatorPolicies.createCoordinatorStorageObservations(party, {
       now: () => Date.now(),
-      stackHomes: (bank, bankbois) => bankStackRouting.homes(bank, bankbois),
+      stackHomes: (bank, bankbois) => bankStackRouting.homes(bank, bankbois, party.merchantCatalog),
       persistBank: persistBankState,
       log: merchantLog,
       persist: persistSettings,
@@ -1042,6 +1052,7 @@ export function startCoordinatorApplication(
       now: Date.now, statuses: () => party.statuses,
       active: (name) => activeNames().includes(name) && Date.now() - Number(party.statuses[name]?.seenAt || 0) < 10000,
       every: (callback, ms) => setInterval(callback, ms), cancel: clearInterval,
+      catalog: () => party.merchantCatalog,
     });
     const statusIngestion = coordinatorPolicies.createCoordinatorStatusIngestion(
       party,
@@ -1181,6 +1192,7 @@ export function startCoordinatorApplication(
         owned: ownedCharacter,
         now: () => Date.now(),
         persistHistory,
+        persistHistoryNow: () => persistence.historyNow(),
         data: gameDataPorts,
         every: (callback, milliseconds) => setInterval(callback, milliseconds),
         cancel: (timer: ReturnType<typeof setInterval>) => clearInterval(timer),
@@ -1955,7 +1967,7 @@ export function startCoordinatorApplication(
       rareEncounter: () => rareControl.encounter(),
       huntOwns: huntTurnInOwnsTravel,
       mapSubscriberCount,
-      stackHomes: (bank, bankbois) => bankStackRouting.homes(bank, bankbois),
+      stackHomes: (bank, bankbois) => bankStackRouting.homes(bank, bankbois, party.merchantCatalog),
       groupedCombat: groupedCombatSnapshot,
       selectedEvents: (state, name) => selectedEvents(state, name).filter(event => eventInstanceAllowed(party, name, event)),
       anniversary: publicAnniversaryState,
@@ -2317,6 +2329,7 @@ export function startCoordinatorApplication(
             express_inst,
             {
               publicStateRoute,
+              readyRoute: (_request, response) => response.json({ ready: true }),
               dashboardImportRoutes,
               anniversaryVisitRoutes,
               anniversaryNavigationRoutes,
@@ -2390,7 +2403,13 @@ export function startCoordinatorApplication(
                 primStacks.install(router);
                 router.get('/party-api/console-maintenance', (_req, res) => res.json(consoleUpdate.status(party.statuses,
                   [...party.headlessSlots, ...party.steamMembers], !!party.steamSwitch && party.steamSwitch.phase !== 'complete')));
-                router.get('/party-api/console-deployment',(_req,res)=>res.json({serverNow:Date.now(),consoleMaintenance:consoleUpdate.current()}));
+                const codeActivation = () => {
+                  try { return String(JSON.parse(fs_regular.readFileSync(__dirname + '/../CODE/adventure_land/activation.json', 'utf8')).id || '') || null; }
+                  catch { return null; }
+                };
+                // activation tells loaders whether this CODE directory has an activation
+                // record, so they stop polling activation.json for a 404.
+                router.get('/party-api/console-deployment',(_req,res)=>res.json({serverNow:Date.now(),consoleMaintenance:consoleUpdate.current(),activation:codeActivation()}));
                 router.get('/party-api/console-runtime', (_req,res)=>res.json({characters:Object.fromEntries(Object.entries(party.statuses).map(([name,report])=>[name,{
                   name,seenAt:report.seenAt,connected:report.connected,ctype:report.ctype,type:report.type,codeHash:report.codeHash,rip:report.rip,
                   consoleMaintenance:report.consoleMaintenance,map:report.map,in:report.in,x:report.x,y:report.y,

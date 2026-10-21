@@ -69,7 +69,7 @@ test.describe('native Hunt lifecycle', () => {
       convoy.disableTown=true;convoy.returnTown=policy;convoy.nativeFallback=false;
       return {farmingProfiles:{...settings.farmingProfiles,[W]:owner},monsterHunt:hunt,activeConvoy:convoy};
     });
-    let original:any,held:any,resumed:any,blocking=false;
+    let original:any,held:any,resumed:any,blocking=false,interceptInstalled=false;
     const faults:any[]=[],context=live.clients[W].page.context();
     const walkingAdmission:any[]=[],issuedCommands:any[]=[],responseTasks=new Set<Promise<void>>();
     let lastAdmissionAt=0;
@@ -100,10 +100,9 @@ test.describe('native Hunt lifecycle', () => {
     const native=()=>Promise.all(fighters.map(name=>live.clients[name].frame.evaluate(()=>{
       const w=(document.getElementById('maincode') as HTMLIFrameElement).contentWindow as any;
       return {name:w.character.name,map:w.character.map,in:w.character.in,x:w.character.real_x,y:w.character.real_y,
-        moving:!!w.character.moving,navigation:w.convoyNavigationReport?.(),cache:w.__partySharedRouteRemainder,
+        moving:!!w.character.moving,navigation:w.sharedRoutine?.convoyNavigationReport?.(),cache:w.__partySharedRouteRemainder,
         townReady:w.can_use('use_town')&&!w.is_on_cooldown('use_town')};
     })));
-    await context.route('**/party-api/status',intercept);
     try{
       await expect.poll(async()=>{
         const s=await live.state(),c=s.activeConvoy;
@@ -118,7 +117,7 @@ test.describe('native Hunt lifecycle', () => {
         }
         return false;
       },{timeout:180_000,intervals:[100],message:'Declared walking return must install and actually move before the communication fault'}).toBe(true);
-      blocking=true;
+      blocking=true;await context.route('**/party-api/status',intercept);interceptInstalled=true;
       await expect.poll(async()=>{
         const s=await live.state(),positions=await native();
         if(s.activeConvoy?.phase==='communication-hold'&&positions.every(p=>!p.moving)){
@@ -126,7 +125,7 @@ test.describe('native Hunt lifecycle', () => {
         }
         return false;
       },{timeout:20_000,message:'Dropping both real report channels must hold and stop native travel'}).toBe(true);
-      blocking=false;
+      blocking=false;await context.unroute('**/party-api/status',intercept);interceptInstalled=false;
       await expect.poll(async()=>{
         const s=await live.state(),c=s.activeConvoy;
         if(c?.id!==original.convoy.id||c.phase!=='travel')return false;
@@ -142,7 +141,7 @@ test.describe('native Hunt lifecycle', () => {
       expect((await world(live))[W].map).toBe('main');
       await artifact(live,info,'native-walking-return-cache-reward',{before,destination,cycle,original,held,resumed,faults});
     }finally{
-      blocking=false;await context.unroute('**/party-api/status',intercept);
+      blocking=false;if(interceptInstalled)await context.unroute('**/party-api/status',intercept);
       context.off('response',responseObserved);await Promise.allSettled([...responseTasks]);
       await info.attach('native-walking-return-cache-fault-ledger',{body:JSON.stringify({cycle,original,held,resumed,faults,walkingAdmission,issuedCommands}),contentType:'application/json'});
     }

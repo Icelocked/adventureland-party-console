@@ -1,3 +1,4 @@
+const {gameHosts}=require('./addresses.cjs');
 const fs = require('node:fs');
 // Verified upstream gap at the pinned game revision: a departed farewell NPC
 // remains in the resolved vote after native removal clears its zone_actor.
@@ -24,7 +25,7 @@ Object.assign(keys, {
 fs.writeFileSync(root + 'keys.js', 'module.exports = ' + JSON.stringify(keys, null, 2));
 const options = require(root + 'options.js');
 const host=process.env.E2E_GAME_HOST||'127.0.0.1';
-if(!['127.0.0.1','127.0.0.2','127.0.0.3','127.0.0.4'].includes(host))throw Error('Unassigned disposable game host');
+if(!gameHosts.includes(host))throw Error('Unassigned disposable game host');
 Object.assign(options, { base_url: `http://${host}:8083`, ip_limit: 10, character_limit: 10, unsecure_admin: false });
 // The published template predates upstream's required parallel msgpack transport.
 Object.assign(options.servers.local, { address: `${host}:9003`, msgpack_path: '/socket.io-msgpack/' });

@@ -107,7 +107,7 @@ export const ConnectedInventory = memo(function ConnectedInventory({
     (entry: InventoryEntry) =>
       setNpcSaleItem({
         source: name === state.merchantCharacter ? 'merchant' : 'character',
-        character: name === state.merchantCharacter ? undefined : name,
+        character: state.merchantRules || name === state.merchantCharacter ? undefined : name,
         entry,
         quantity: String(entry.item.q || 1),
         acknowledged: false,
@@ -116,8 +116,8 @@ export const ConnectedInventory = memo(function ConnectedInventory({
   );
   const onAutoNpcSale = useCallback(
     (entry: InventoryEntry) => setAutoNpcSaleItem({ ...entry,
-      character: name === state.merchantCharacter ? undefined : name }),
-    [name, state.merchantCharacter, setAutoNpcSaleItem],
+      character: state.merchantRules || name === state.merchantCharacter ? undefined : name }),
+    [name, state.merchantCharacter, state.merchantRules, setAutoNpcSaleItem],
   );
   const onAutoStand = useCallback(
     (entry: InventoryEntry) => {
@@ -225,6 +225,10 @@ export const ConnectedInventory = memo(function ConnectedInventory({
       onAutoStand={onAutoStand}
       onClearAutomaticSales={onClearAutomaticSales}
       onRemoveAutomaticSale={onRemoveAutomaticSale}
+      onUpdateNpcReserve={(item, keep) => {
+        void post('/merchant/auto-npc-sale', { item, keep, action: 'set' })
+          .catch(error => model.setActionError(error instanceof Error ? error.message : 'Could not update NPC sale reserve'));
+      }}
       upgradeMarks={state.upgrades?.[char.name] || emptyArray()}
       statScrollMarks={state.statScrolls?.[char.name] || emptyArray()}
       statScrollInventory={statScrollInventory}

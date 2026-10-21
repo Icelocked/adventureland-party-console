@@ -31,3 +31,12 @@ The journey is `live-planner-corner.spec.ts`.
      characters still get rejected edges.
    - The worker cannot load the game's functions (missing or failing source)
      and stops planning; it must plan as before without the check.
+5. **A replaced planner worker loses collision sources.** Retain the installed
+   source pair alongside each prepared geometry so automatic worker recreation
+   uses the same native validation. Keep detour points in their source instance
+   and use the shared Geometry contract for the requested movement footprint.
+
+Integration validation also sends the other six reported corner pairs and two
+additional footprints through the real movement-plan HTTP endpoint, checking
+every returned walking edge with the native server's can_move. The party must
+then arrive within 35 units of the tunnel approach with no client repair log.

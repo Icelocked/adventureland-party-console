@@ -38,6 +38,8 @@ export interface SharedStatus extends RoutePoint {
   moving?: boolean; transporting?: boolean; speed?: number; convoyProtocol?: number; convoyNavigation?: SharedReport;
 }
 export interface SharedCommand {
+  /** Origin of an independent farming continuation after a convoy combat handoff. */
+  convoyHandoff?: string;
   /** Workflow parent retained by a shared event-return walking child. */
   cycleId?: string;
   jobId?: unknown;

@@ -13,19 +13,35 @@ on:
         description: 'Local E2E project (all includes browser, deployment, debug and gameplay)'
         type: choice
         options: [console, live, debug, all]
-        default: console
+        default: all
       local_grep:
         description: 'Optional local title filter; clear to run the complete selected project'
         type: string
-        default: 'character sections collapse independently'
+        default: ''
 permissions:
   contents: read
 concurrency:
   group: public-release-${{ github.ref }}-${{ inputs.self_hosted && 'local' || 'hosted' }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
+  checks:
+    # PR pushes get fast feedback; full E2Es run on main or explicit dispatch.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.0'
+          cache: npm
+      - run: npm ci
+      - run: npm --prefix dashboard ci
+      - run: node tools/caracal/setup.mts
+      - run: npm --prefix .caracal ci
+      - run: npm run typecheck
   validate:
-    if: ${{ !inputs.self_hosted }}
+    if: github.event_name != 'pull_request' && !inputs.self_hosted
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -65,7 +81,7 @@ jobs:
           include-hidden-files: true
           retention-days: 14
   gameplay:
-    if: ${{ !inputs.self_hosted }}
+    if: github.event_name != 'pull_request' && !inputs.self_hosted
     runs-on: ubuntu-latest
     env:
       E2E_MONGO_IMAGE: mirror.gcr.io/library/mongo@sha256:c630c59342c1493d50345136df2af14a76b9e827dd5316bfabee07a0880a5f3a
@@ -149,12 +165,30 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npx playwright install chromium
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Run selected E2Es with one worker
+      - name: Verify RTX 5090 rendering
+        run: |
+          @'
+          import {chromium} from '@playwright/test';
+          import {measureBrowserRendering} from './e2e/browser-rendering.ts';
+          import {mkdir,writeFile} from 'node:fs/promises';
+          const browser=await chromium.launch({args:['--enable-gpu']});
+          try {
+            const page=await browser.newPage();
+            await page.evaluate(()=>{const canvas=document.createElement('canvas');if(!canvas.getContext('webgl'))throw Error('WebGL unavailable');});
+            const finish=await measureBrowserRendering(browser,()=>Date.now());
+            const result=await finish();
+            await mkdir('.build/ci',{recursive:true});
+            await writeFile('.build/ci/runner-gpu.json',JSON.stringify(result,null,2));
+            console.log('Verified hardware renderer: '+result.renderer);
+          } finally {await browser.close();}
+          '@ | node --input-type=module
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Run selected E2Es with eight workers
         env:
           LOCAL_PROJECT: ${{ inputs.local_project }}
           LOCAL_GREP: ${{ inputs.local_grep }}
         run: |
-          $testArgs = @('run', 'test:e2e', '--', '--workers=1')
+          $testArgs = @('run', 'test:e2e', '--', '--workers=8')
           if ($env:LOCAL_PROJECT -ne 'all') { $testArgs += "--project=$env:LOCAL_PROJECT" }
           if ($env:LOCAL_GREP) { $testArgs += @('--grep', $env:LOCAL_GREP) }
           & npm @testArgs
@@ -168,6 +202,7 @@ jobs:
         with:
           name: self-hosted-e2e-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
+            .build/ci/runner-gpu.json
             .build/e2e-report/
             .build/e2e-results/
           if-no-files-found: error
@@ -175,7 +210,7 @@ jobs:
           retention-days: 14
   version:
     needs: [validate, gameplay]
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && !inputs.self_hosted
     runs-on: ubuntu-latest
     permissions:
       contents: write

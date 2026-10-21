@@ -1,3 +1,4 @@
+import {isLoopback} from './game/addresses.cjs';
 import type { BrowserContext, Page, Frame } from '@playwright/test';
 import {randomUUID} from 'node:crypto';
 import {installCompanionGraphicsDiagnostic} from './native-graphics-diagnostic.ts';
@@ -24,7 +25,7 @@ export interface LiveClient {
 /** Connect an unmodified upstream client and run the maintained production CODE loader. */
 export async function launchGameClient(context: BrowserContext, options: LiveClientOptions): Promise<LiveClient> {
   for (const address of [options.webUrl, options.coordinatorUrl]) {
-    if (!['127.0.0.1', '127.0.0.2', '127.0.0.3', '127.0.0.4', 'localhost'].includes(new URL(address).hostname)) throw new Error('Live E2E requires loopback services');
+    if (!isLoopback(new URL(address).hostname)) throw new Error('Live E2E requires loopback services');
   }
   const page = options.primary?.page || await context.newPage();
   if(!options.primary)await installCompanionGraphicsDiagnostic(context,options,process.env.E2E_COMPANION_NO_GRAPHICS==='1');
@@ -165,8 +166,12 @@ export async function launchGameClient(context: BrowserContext, options: LiveCli
           if(group?.independentApproach&&(observed[targetKey]||0)<3&&(Object.keys(observed).length<10||targetKey in observed)){
             observed[targetKey]=(observed[targetKey]||0)+1;
             game.__e2eIndependentObservedAttackCount=(game.__e2eIndependentObservedAttackCount||0)+1;
+            const codeAt=typeof runner?.Date?.now==='function'?runner.Date.now():undefined;
             independent={selection:group.selection,target:String(group.target?.id),committed:group.committed,confirmation:group.independentConfirmation,handoffTiming:group.handoffTiming,
-              serverAt:Date.now()+Number(runner?.sharedRoutine?.queueClockOffset?.()||0),
+              // The production readiness gate executes in CODE, not its game
+              // parent, which can occupy an adjacent acknowledged clock window.
+              gameAt:Date.now(),codeAt,
+              serverAt:codeAt===undefined?undefined:codeAt+Number(runner?.sharedRoutine?.queueClockOffset?.()||0),
               ready:group.independentReadiness&&Object.fromEntries(Object.entries(group.independentReadiness).map(([name,value]:[string,any])=>[name,
                 value&&{selection:value.selection,target:value.target,at:value.at,ready:value.ready,confirmation:value.confirmation}]))};
           }

@@ -514,7 +514,7 @@ function PartyManagementPanelsConnected({ base }: { base: PartyConsoleModel }) {
               server={state.merchantCharacter ? state.characters[state.merchantCharacter]?.server : null} settings={state.alninja?.npcWarning} />}
             {autoNpcSaleItem && !autoNpcSaleItem.character ? (
               <label htmlFor="auto-npc-sale-keep" className="grid gap-1 text-sm text-orange-100">
-                <span>Keep in storage</span>
+                <span>Number to keep reserved</span>
                 <input
                   id="auto-npc-sale-keep"
                   type="number"
@@ -528,7 +528,7 @@ function PartyManagementPanelsConnected({ base }: { base: PartyConsoleModel }) {
                 />
                 <span className="text-xs text-orange-100/55">
                   Copies to keep across the merchant&apos;s bag, bank and BankBois. Only the rest is sold;
-                  leave blank to sell every copy.
+                  Enter 0 to sell every copy.
                 </span>
               </label>
             ) : null}

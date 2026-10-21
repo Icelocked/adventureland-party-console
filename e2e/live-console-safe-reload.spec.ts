@@ -166,6 +166,12 @@ for(const mode of ['safe','now'] as const)test(`console reload resumes native fa
     samples.push({phase:'resumed',mode,focus:(await live.state()).monsterFocus,position:await live.clients[W].snapshot()});
   }finally{
     live.consoleDrainLease(null);
+    samples.push({phase:'before-target-cleanup',at:Date.now(),native:await live.clients[W].run(`(()=>{
+      const ids=${JSON.stringify(seeded)},clock=globalThis.__e2eChronalClock;
+      return {at:Date.now(),runtime:globalThis.__partyRuntimeGeneration,clock:clock&&{now:clock.now(),join:clock.join,state:clock.state},
+        combat:globalThis.partyCombatState,trace:sharedRoutine.combatTraceSnapshot?.(),
+        targets:ids.map(id=>{const target=get_entity(id);return {id,target:target&&{id:target.id,map:target.map,x:target.x,y:target.y,hp:target.hp,visible:target.visible,target:target.target},canAttack:!!target&&can_attack(target)};})};
+    })()`).catch(String)});
     await evidence(live,info,'reload-activity-resumption-'+mode,{destination,samples,seeded});
     await live.admin(`output=(()=>{for(const id of ${JSON.stringify(seeded)}){const m=instances.main.monsters[id];if(m)remove_monster(m,{method:'disappear',nospawn:true});}return true;})()`);
   }

@@ -10,9 +10,10 @@ const native = (live: { admin(code: string): Promise<any> }) => live.admin(`outp
   const bank=Object.entries(u).filter(([k,v])=>/^items\\d+$/.test(k)&&Array.isArray(v)).reduce((n,[,v])=>n+count(v),0);
   return {carried:count(p.items),bank,gold:p.gold+(Number(u.gold)||0)};})()`);
 
-test('an automatic NPC sale keeps the configured amount and sells the rest', async ({ live, page }, info) => {
+for (const stored of [0,200]) test(`an automatic NPC sale keeps the configured amount across bank and ${stored ? 'BankBoi' : 'merchant'} stock`, async ({ live, page }, info) => {
   test.setTimeout(660_000);
   const samples: any[] = [];
+  const reserve = 250 + stored;
   try {
     await expect.poll(async () => Date.now() - ((await live.state()).characters[merchant]?.seenAt || 0), { timeout: 90_000 }).toBeLessThan(3_000);
     const seeded = await live.admin(`output=(async()=>{const p=get_player('${merchant}');
@@ -22,6 +23,14 @@ test('an automatic NPC sale keeps the configured amount and sells the rest', asy
       if(p.user)seed(p.user);else{const u=await db.collection('user').findOne({_id:p.owner});seed(u.info);await db.collection('user').replaceOne({_id:u._id},u);}
       cache_player_items(p);resend(p,'reopen+cid');return true;})()`);
     expect(seeded).toBe(true);
+    if (stored) {
+      // A deliberately unavailable offline worker retains native stock without
+      // triggering the unrelated headless slot-borrow/unload journey.
+      await live.admin(`output=(async()=>{const c=await db.collection('character').findOne({'info.name':'E2EBankBoi'});
+        if(!c)throw Error('Owned BankBoi missing');c.info.items=[{name:'smoke',q:100},{name:'smoke',q:100}];
+        await db.collection('character').replaceOne({_id:c._id},c);return true;})()`);
+      await live.restoreHistoricalSettings(()=>({bankbois:{E2EBankBoi:{name:'E2EBankBoi',state:'error',error:'Declared offline storage; inventory retained',items:[0,1].map(slot=>({slot,item:{name:'smoke',q:100}}))}}}));
+    }
     const before = await native(live);
     expect(before).toMatchObject({ carried: 300, bank: 300 });
     await info.attach('declared-poofs', { body: JSON.stringify(before), contentType: 'application/json' });
@@ -47,17 +56,20 @@ test('an automatic NPC sale keeps the configured amount and sells the rest', asy
     };
     // 1: the dialog takes the amount to keep.
     await openRule(/^Auto sell to NPC/);
-    await dialog.getByLabel('Keep in storage').fill('250');
+    await expect(dialog.getByLabel('Number to keep reserved')).toHaveValue('0');
+    await dialog.getByLabel('Number to keep reserved').fill(String(reserve));
     await info.attach('npc-sale-keep-dialog', { body: await dialog.screenshot(), contentType: 'image/png' });
     await dialog.getByRole('button', { name: 'Enable auto sale', exact: true }).click();
     await expect(dialog).toBeHidden();
-    await expect.poll(async () => (Object.values((await live.state()).autoNpcSales || {}) as any[]).find(rule => rule.item?.name === 'smoke')?.keep).toBe(250);
+    await expect.poll(async () => (Object.values((await live.state()).autoNpcSales || {}) as any[]).find(rule => rule.item?.name === 'smoke')?.keep).toBe(reserve);
     // 5: the saved amount shows when the rule is reopened. The merchant still carries every copy:
     // its automations stay off until here, so nothing has been sold or banked yet.
     await openRule(/^Update auto sell to NPC/);
-    await expect(dialog.getByLabel('Keep in storage')).toHaveValue('250');
+    await expect(dialog.getByLabel('Number to keep reserved')).toHaveValue(String(reserve));
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
+    await live.restartCoordinator();
+    await expect.poll(async()=>(Object.values((await live.state()).autoNpcSales || {}) as any[]).find(rule=>rule.item?.name==='smoke')?.keep).toBe(reserve);
 
     // The fixture starts with merchant automations off; this journey needs its sale and withdrawal routines.
     await live.post('/merchant/routine-priorities', { priorities: {}, enabled: { 'auto npc sales': true, withdrawals: true } });
@@ -71,6 +83,12 @@ test('an automatic NPC sale keeps the configured amount and sells the rest', asy
     samples.push({ at: Date.now(), ...settled });
     expect(settled.carried + settled.bank).toBe(250);
     expect(settled.gold).toBeGreaterThan(before.gold);
+    if (stored) {
+      const offline = await live.admin(`output=(async()=>{const c=await db.collection('character').findOne({'info.name':'E2EBankBoi'});
+        return c.info.items.filter(i=>i&&i.name==='smoke').reduce((n,i)=>n+(i.q||1),0);})()`);
+      expect(offline).toBe(stored);
+      expect(settled.carried + settled.bank + offline).toBe(reserve);
+    }
     // 6: the kept copies go back to the bank rather than staying in the merchant's bag.
     await expect.poll(async () => { const n = await native(live); samples.push({ at: Date.now(), ...n }); return n; },
       { timeout: 240_000, intervals: [2000], message: 'Kept Pouches of Poof must be banked, not left carried' }).toMatchObject({ carried: 0, bank: 250 });

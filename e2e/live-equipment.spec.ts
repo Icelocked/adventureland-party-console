@@ -219,6 +219,30 @@ for(const mode of ['fishing','mining'] as const) capacityTest(`missing ${mode} t
   await live.post('/merchant/gather',{mode,enabled:true});
   await expect.poll(async()=>(await live.state()).gatheringNoTool?.[mode],{timeout:90_000}).toBe(true);
   expect(responses).toHaveLength(0);expect((await native()).gold).toBe(before.gold);
+  // An actual no-tool report can already be in flight when the user opts in.
+  // Delay only that request; status, movement and every other report stay live.
+  let heldNoTool:import('@playwright/test').Route|undefined;
+  const holdNoTool=async(route:import('@playwright/test').Route)=>{
+    const body=route.request().postDataJSON();
+    if(!heldNoTool&&body.noTool===true&&body.mode===mode){heldNoTool=route;return;}
+    await route.continue();
+  };
+  await live.clients[merchant].page.route('**/party-api/merchant/gather-status',holdNoTool);
+  try {
+    await live.post('/merchant/gather',{mode,enabled:true});
+    await expect.poll(()=>!!heldNoTool,{timeout:90_000,message:'Hold the current native no-tool report before opting in'}).toBe(true);
+    await live.post('/merchant/routine-priorities',{priorities:{},enabled:{['craft '+mode+' tools']:true}});
+    const request=heldNoTool!.request();
+    await heldNoTool!.continue();
+    await expect.poll(async()=>{const response=await request.response();return response&&await response.json();},{timeout:15_000}).toMatchObject({ok:true,noTool:false});
+    const state=await live.state();
+    expect(state.gatheringModes).toContain(mode);
+    expect(state.gatheringNoTool?.[mode]).not.toBe(true);
+    await info.attach('late-native-no-tool-report',{body:JSON.stringify({mode,request:request.postDataJSON(),state:{gatheringModes:state.gatheringModes,gatheringNoTool:state.gatheringNoTool}}),contentType:'application/json'});
+  } finally {
+    await live.clients[merchant].page.unroute('**/party-api/merchant/gather-status',holdNoTool);
+    if(heldNoTool)await heldNoTool.continue().catch(()=>{});
+  }
   await live.post('/merchant/routine-priorities',{priorities:{},enabled:{['craft '+mode+' tools']:true}});
   await live.post('/merchant/gather',{mode,enabled:true});
   await expect.poll(()=>responses.some(response=>response.status===409&&response.body.error==='crafting materials are no longer available'),{timeout:90_000}).toBe(true);

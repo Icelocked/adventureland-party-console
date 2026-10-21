@@ -15,28 +15,23 @@ test(`explicit ${entry} travel skips only the current native event occurrence`,a
   const world=()=>live.admin(`output=Object.fromEntries(${JSON.stringify(members)}.map(name=>{const p=get_player(name);return [name,{map:p.map,x:p.x,y:p.y,rip:!!p.rip,moving:!!p.moving}]}))`);
   const context=live.clients[P].page.context(),planningFaults:unknown[]=[],recoveryHolds:unknown[]=[],unmatchedPlans:unknown[]=[];
   const observer=observeNativePlanner(context);
+  const restoreObservation=await observer.install(live.clients[P]);
   let faultArmed=false;
   const interruptInitialPlan=async(route:import('@playwright/test').Route)=>{
     const request=route.request(),body=request.method()==='POST'?request.postDataJSON():null;
     if(faultArmed&&body?.character===P&&planningFaults.length===0){
       const started=Date.now();
-      // Initial assembly may not have emitted its first status packet yet.
-      // Read the current native CODE through its game DOM in ONE round trip;
-      // do not run the multi-step iframe reacquisition helper or wait for a tick.
-      const [sample,s]=await Promise.all([
-        live.clients[P].frame.evaluate(()=>{
-          const runner=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
-          return {movement:runner?.__partyMovement?.report?.(),trace:runner?.sharedRoutine?.combatTraceSnapshot?.(),
-            revision:runner?.__partyNavigationIntent?.revision,commandId:runner?.__partyLastCommand};
-        }),live.state()]);
+      // Ownership was observed synchronously at this real native ajax call.
+      // Never spend its two-second deadline reacquiring a CODE frame over CDP.
+      const [observed,s]=await Promise.all([observer.sample(body),live.state('fast')]);
+      const sample={movement:observed?.body.movement,navigation:observed?.body.convoyNavigation};
       const c=s.activeConvoy,expected=c?.expected?.[P],rally=c?.rally;
-      const owner={id:sample.trace?.convoy,epoch:sample.trace?.convoyEpoch,phase:sample.trace?.convoyPhase,
-        commandId:sample.commandId,navigationRevision:sample.revision,runtimeId:expected?.runtimeId};
+      const owner=sample.navigation;
       if(faultArmed&&planningFaults.length===0&&Date.now()-started<1500&&sample.movement?.id===body.id&&
         !sample.movement.done&&String(body.id).startsWith(P+':'+expected?.runtimeId+':')&&
         c?.phase==='assemble'&&c.purpose==='party-travel'&&!c.runtimes&&expected?.phase==='assemble'&&
         rally&&body.to?.map===rally.map&&body.to.x===rally.x&&body.to.y===rally.y&&
-        owner.phase==='assembling'&&owner.id===c.id&&owner.epoch===c.epoch&&
+        owner?.phase==='assembling'&&owner.id===c.id&&owner.epoch===c.epoch&&owner.runtimeId===expected.runtimeId&&
         owner.commandId===expected.commandId&&owner.navigationRevision===expected.revision){
         planningFaults.push({at:Date.now(),request:body,movement:sample.movement,owner,convoy:c,elapsedMs:Date.now()-started});
         await route.abort('connectionreset');return;
@@ -170,6 +165,7 @@ test(`explicit ${entry} travel skips only the current native event occurrence`,a
     faultArmed=false;
     if(entry==='travel')await context.unroute('**/party-api/movement-plan',interruptInitialPlan);
     observer.dispose();
+    await restoreObservation();
     await info.attach('native-manual-event-assembly-transport',{body:JSON.stringify({planningFaults,unmatchedPlans,requestFailures:observer.failures,recoveryHolds,samples}),contentType:'application/json'});
     try{await live.post('/formation',{character:W,eventSelections:[]});await live.post('/formation',{character:P,follow:false});await live.post('/formation',{character:P,eventSelections:[]});}
     finally{try{await retire();}finally{await live.admin(`output=(()=>{const owned=globalThis.__e2eManualEventCatalog;

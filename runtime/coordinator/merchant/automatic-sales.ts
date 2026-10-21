@@ -261,9 +261,33 @@ export function createAutomaticMerchantSales(state: SalesState, ports: SalesPort
     else if (keptCopiesCarried(items)) ports.queue([state.merchantCharacter], "manual bank exchange");
   }
   function reconcileMerchant(items: readonly (SaleEntry | null)[]): boolean {
+    // Shared party rules can deliver a whole stack with an existing sale mark.
+    // Clamp that intent too; new-mark allowances alone cannot protect the reserve.
+    let resized = false;
+    if (Object.keys(state.autoNpcSales).some(key => keptNpcSaleRule(state, key)) &&
+        !["npc sales", "auto npc sales"].includes(state.merchantCurrent?.reason || '')) {
+      const stock = protectedMerchantStorageStock(state), remaining = new Map<string, number>();
+      state.npcSaleMarks = state.npcSaleMarks.filter(mark => {
+        if (!mark.auto || mark.source !== 'merchant') return true;
+        const key = automaticCommerceRuleKey(mark.item), rule = keptNpcSaleRule(state, key);
+        if (!rule) return true;
+        if (!remaining.has(key)) {
+          const held = stock.filter(entry => entry.item && automaticCommerceRuleKey(entry.item) === key)
+            .reduce((sum, entry) => sum + (Number(entry.item?.q) || 1), 0);
+          const manual = state.npcSaleMarks.filter(other => !other.auto && other.source === 'merchant' &&
+            automaticCommerceRuleKey(other.item) === key).reduce((sum, other) => sum + other.quantity, 0);
+          remaining.set(key, Math.max(0, held - rule.keep - manual));
+        }
+        const quantity = Math.min(mark.quantity, remaining.get(key)!);
+        remaining.set(key, remaining.get(key)! - quantity);
+        resized ||= quantity !== mark.quantity;
+        mark.quantity = quantity;
+        return quantity > 0;
+      });
+    }
     // Banked sales also reserve capacity against opportunistic buys.
     const marks = markInventory(items), bankChanged = markBankStock();
-    const changed = reconcileSales(items) || marks.changed || bankChanged;
+    const changed = reconcileSales(items) || marks.changed || bankChanged || resized;
     queueBankTrip(items);
     if (bankChanged && bankStandPending())
       ports.queue([state.merchantCharacter], "manual bank exchange");

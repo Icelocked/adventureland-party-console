@@ -1,3 +1,4 @@
+import {isLoopback} from './game/addresses.cjs';
 import { test as base, expect } from '@playwright/test';
 import {cleanupWorkspace} from './workspace';
 import { fork, type ChildProcess } from 'node:child_process';
@@ -57,9 +58,13 @@ async function ready(process: ChildProcess, url: string, log: string) {
   }
   throw new Error(`E2E service failed readiness at ${url}\n${existsSync(log) ? readFileSync(log, 'utf8').slice(-12000) : 'No output'}`);
 }
-type App = { url: string; restartCoordinator(): Promise<void>; state(): Promise<any>; deliverStatus(report: unknown): Promise<unknown>; deliverMerchantCompletion(report: unknown): Promise<unknown> };
+type App = { url: string; journal: string; restartCoordinator(): Promise<void>; crashCoordinator(whileDown?: () => unknown): Promise<void>; state(): Promise<any>; deliverStatus(report: unknown): Promise<unknown>; deliverMerchantCompletion(report: unknown): Promise<unknown> };
 
-export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantConnected: boolean; merchantManaged: boolean; playerInventory: boolean; marketStand: boolean; bankboiOfferings: boolean; mapCapture: boolean; standBuyOrders: boolean; mailbox:boolean }, { dashboard: { port: number; log: string } }>({
+export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantConnected: boolean; merchantManaged: boolean; playerInventory: boolean; marketStand: boolean; bankboiOfferings: boolean; mapCapture: boolean; standBuyOrders: boolean; mailbox:boolean; savedRecords: Record<string, unknown>[]; stateFields: string }, { dashboard: { port: number; log: string } }>({
+  // Journal records a scenario saved before this start, appended after the other seeds.
+  savedRecords: [[], {option:true}],
+  // PARTY_STATE_FIELDS for the coordinator (docs/state-field-registry.md, Rollout).
+  stateFields: ['', {option:true}],
   mailbox: [false, {option:true}],
   standBuyOrders: [false, {option:true}],
   mapCapture: [false, {option:true}],
@@ -85,7 +90,7 @@ export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantCo
       used=true;
     } finally { await stop(process);if(used)cleanupWorkspace(root,directory); }
   }, { scope: 'worker', timeout: 120_000 }],
-  app: async ({ dashboard, merchantDialogs, merchantConnected, merchantManaged, playerInventory, marketStand, bankboiOfferings, mapCapture, standBuyOrders, mailbox }, use, testInfo) => {
+  app: async ({ dashboard, merchantDialogs, merchantConnected, merchantManaged, playerInventory, marketStand, bankboiOfferings, mapCapture, standBuyOrders, mailbox, savedRecords, stateFields }, use, testInfo) => {
     const directory = path.join(root, '.build/e2e', `scenario-${randomUUID()}`);
     mkdirSync(directory, { recursive: true });
     if(mailbox){
@@ -99,11 +104,13 @@ export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantCo
       appendFileSync(path.join(directory,'state.jsonl'),JSON.stringify({party_dashboard_bank_state_v1:{bankbois}})+'\n');
       await testInfo.attach('declared-bankboi-offering-stock',{body:JSON.stringify(bankbois),contentType:'application/json'});
     }
+    for (const record of savedRecords) appendFileSync(path.join(directory, 'state.jsonl'), JSON.stringify(record) + '\n');
+    if (savedRecords.length) await testInfo.attach('declared-saved-records', { body: JSON.stringify(savedRecords), contentType: 'application/json' });
     const port = await unusedPort(), log = path.join(directory, 'coordinator.log');
     let coordinator: ChildProcess | undefined;
     async function start() {
       coordinator = child(path.join(root, 'e2e/coordinator.cjs'), [], root,
-        environment({ E2E_MAILBOX:String(mailbox), E2E_STAND_BUY_ORDERS: String(standBuyOrders), E2E_MAP_CAPTURE: String(mapCapture), E2E_MARKET_STAND: String(marketStand), E2E_COORDINATOR_PORT: String(port), E2E_DATA_DIR: directory, E2E_MERCHANT_DIALOGS: String(merchantDialogs), E2E_MERCHANT_CONNECTED: String(merchantConnected), E2E_MANAGED_MERCHANT: String(merchantManaged), E2E_PLAYER_INVENTORY: String(playerInventory) }), log);
+        environment({ E2E_MAILBOX:String(mailbox), E2E_STAND_BUY_ORDERS: String(standBuyOrders), E2E_MAP_CAPTURE: String(mapCapture), E2E_MARKET_STAND: String(marketStand), E2E_COORDINATOR_PORT: String(port), E2E_DATA_DIR: directory, E2E_MERCHANT_DIALOGS: String(merchantDialogs), E2E_MERCHANT_CONNECTED: String(merchantConnected), E2E_MANAGED_MERCHANT: String(merchantManaged), E2E_PLAYER_INVENTORY: String(playerInventory), ...(stateFields ? { PARTY_STATE_FIELDS: stateFields } : {}) }), log);
       const started = coordinator;
       await new Promise<void>((resolve, reject) => {
         const output = () => existsSync(log) ? readFileSync(log, 'utf8') : 'No coordinator output';
@@ -132,7 +139,14 @@ export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantCo
       const url = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
       app = {
         url,
+        // The scenario's own journal, read only by assertions about saved state.
+        journal: path.join(directory, 'state.jsonl'),
         async restartCoordinator() { await stop(coordinator!, true); await start(); },
+        // SIGKILL runs no shutdown handler, so nothing pending reaches the journal.
+        async crashCoordinator(whileDown) {
+          const crashed = coordinator!, exited = new Promise<void>(resolve => crashed.once('exit', () => resolve()));
+          crashed.kill('SIGKILL'); await exited; await whileDown?.(); await start();
+        },
         // External game observations enter the coordinator's private status
         // boundary, just like the scenario's recurring fixture heartbeats.
         async deliverStatus(report: unknown) {
@@ -181,10 +195,18 @@ export const test = base.extend<{ app: App; merchantDialogs: boolean; merchantCo
     }
   },
   baseURL: async ({ app }, use) => { await use(app.url); },
-  context: async ({ context }, use) => {
+  context: async ({ context }, use, testInfo) => {
+    // Test-only read recording for the field registry (docs/state-field-registry.md).
+    // dashboard/features/party/field-read-audit.ts reports each first read per cache kind and field.
+    if (process.env.PARTY_FIELD_AUDIT === '1') {
+      const file = path.join(root, '.build/field-audit/reads.jsonl');
+      mkdirSync(path.dirname(file), { recursive: true });
+      await context.exposeBinding('__partyFieldAudit', (_source, record: object) =>
+        appendFileSync(file, JSON.stringify({ test: testInfo.titlePath.join(' > '), ...record }) + '\n'));
+    }
     await context.route('**/*', route => {
       const url = new URL(route.request().url());
-      return ['127.0.0.1', '127.0.0.2', '127.0.0.3', '127.0.0.4', 'localhost', '::1', '[::1]'].includes(url.hostname) || ['data:', 'blob:'].includes(url.protocol)
+      return isLoopback(url.hostname) || ['data:', 'blob:'].includes(url.protocol)
         ? route.continue() : route.abort('blockedbyclient');
     });
     await use(context);

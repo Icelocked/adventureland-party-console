@@ -27,7 +27,7 @@ import { titledName } from "./item-title";
 import { Item } from "./item";
 import type {ItemDropSource} from "./item-drop-source";
 import { ITEM_DETAIL_PROPERTY_RANK } from "./item-detail-property-rank";
-import { effectiveDropRate, formatDropRate as dropRate } from "./drop-rate";
+import { effectiveDropRate, formatDropRate as dropRate, isDirectDrop } from "./drop-rate";
 import { itemMaximumLevel } from "./item-maximum-level";
 import { ItemMeta } from "./item-meta";
 import { ItemSprite } from "./item-sprite";
@@ -774,7 +774,7 @@ export function ItemDetails({
         )}
         <ItemExchangeDetails id={selected?.entry.item.name || ""} level={previewLevel} box={def.type === "box" || /box/i.test(selected?.entry.item.name || "")} exchanges={exchanges} onInspect={onInspectItem} renderReward={renderExchangeReward} />
         {!!world?.drops?.length && ([true, false].map(home => {
-          const sources=world.drops!.filter(source => (source.sourceType === "home") === home);
+          const sources=world.drops!.filter(source => isDirectDrop(source) && (source.sourceType === "home") === home);
           if(!sources.length)return null;
           const groups=new Map<string,ItemDropSource[]>();
           for(const source of [...sources].sort((a,b)=>(dropSort === "percentage" ? effectiveDropRate(b)-effectiveDropRate(a) : 0)||a.monsterName.localeCompare(b.monsterName)))
@@ -800,23 +800,19 @@ export function ItemDetails({
                   type="button"
                   onClick={() => onInspectMonster(source.monsterId)}
                   key={`${source.monsterId}-${index}`}
-                  className="flex items-center justify-between gap-3 rounded border-t border-amber-950 p-2 text-left text-xs transition hover:bg-amber-400/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+                  className="grid min-w-0 grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1 rounded border-t border-amber-950 bg-[#07100f] p-2 text-left text-xs text-emerald-50 transition hover:bg-[#17241a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
                 >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span className="relative h-9 w-9 shrink-0">
+                    <span role={source.sprite ? "img" : undefined} aria-label={source.sprite ? `${source.monsterName} sprite` : undefined} className="relative row-span-2 h-9 w-9 self-center">
                       {source.sprite && <SpriteCrop sprite={source.sprite} size={36} />}
                     </span>
-                    <span className="min-w-0">
+                    <span className="min-w-0 break-words">
                       <span className="block truncate">{source.monsterName}</span>
                       <span className="font-mono text-[10px] text-emerald-100/35">
                         {source.monsterId}
                       </span>
                     </span>
-                  </span>
-                  <span className="shrink-0 font-mono text-amber-300">
-                    {rolls.map((roll,index)=><span key={index} className="block">{rolls.length>1 ? `Roll ${index+1}: ` : ""}{dropRate(roll)}
-                      {roll.sourceType==='zone' ? ` · ${roll.mapName||'Zone'}` : roll.sourceType==='world' ? ' · World' : (roll.acquisitionPath?.length||0)>1 ? ` · ${roll.acquisitionPath!.join(' → ')}` : ''}</span>)}
-                    {rolls.length>1&&<span className="block text-emerald-100/70">Independent rolls</span>}
+                  <span aria-label={`${source.monsterName} drop chances`} className="min-w-0 break-all font-mono text-amber-300">
+                    {rolls.map((roll,index)=><span key={index} className="block">{dropRate(roll)}</span>)}
                   </span>
                 </button>
               ); })}

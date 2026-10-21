@@ -21,14 +21,14 @@ test('a lost native Hunt preparation response recovers cold defense, loot and th
   let dropped = 0;
   const intercept = async (route: Route) => {
     const request = route.request();
-    if (request.method() !== 'POST' || request.postDataJSON()?.name !== W) return route.fallback();
+    if (deliveredDefense || request.method() !== 'POST' || request.postDataJSON()?.name !== W) return route.fallback();
     const nativeRequest = request.postDataJSON();
     if (Object.prototype.hasOwnProperty.call(nativeRequest, 'convoyNavigation')) lastFullRequest = nativeRequest;
     const response = await route.fetch();
     const body = await response.json();
     const command = body.command;
     if (command?.type === 'party-monster-travel' && command.purpose === 'monster-hunt' &&
-      ['assemble', 'shared-prepare'].includes(command.phase) && !deliveredDefense && (!convoyId || convoyId === command.convoyId)) {
+      command.phase !== 'defending' && !deliveredDefense && (!convoyId || convoyId === command.convoyId)) {
       convoyId = command.convoyId;
       dropped++;
       exchanges.push({ at: Date.now(), action: 'aborted-genuine-response', nativeRequest, command, convoySignal: body.convoySignal });
@@ -42,8 +42,11 @@ test('a lost native Hunt preparation response recovers cold defense, loot and th
       return;
     }
     if (convoyId && command?.convoyId === convoyId && command.phase === 'defending' && !deliveredDefense) {
-      deliveredDefense = { at: Date.now(), command, priorNativeRequest: nativeRequest, lastFullRequest, convoySignal: body.convoySignal, travelCombat: body.travelCombat };
-      exchanges.push({ action: 'forwarded-genuine-defense', ...deliveredDefense });
+      const delivered = { at: Date.now(), command, priorNativeRequest: nativeRequest, lastFullRequest, convoySignal: body.convoySignal, travelCombat: body.travelCombat };
+      await route.fulfill({ response });
+      deliveredDefense = delivered;
+      exchanges.push({ action: 'forwarded-genuine-defense', ...delivered });
+      return;
     }
     await route.fulfill({ response });
   };

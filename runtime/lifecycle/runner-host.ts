@@ -2,6 +2,7 @@ import vm from "node:vm";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { RunnerScope } from "./runner-scope.ts";
+import { installNativeAjax } from "./native-ajax.ts";
 import { installHostGameLogs } from "../characters/game-logs.ts";
 import { ReloadBusyError, ReloadQueue, type CodeRunner } from "./reload-queue.ts";
 
@@ -67,6 +68,7 @@ export function createRunnerHost(options: HostOptions) {
     const runner = options.createContext(scope.facade(options.upper));
     runner.__partyCodeHash = sourceHash;
     configureApiAddress(runner);
+    installNativeAjax(runner.$);
     scope.guardAjax(runner.$);
     if (typeof runner.fetch === "function") runner.fetch = scope.guardFetch(runner.fetch);
     try {

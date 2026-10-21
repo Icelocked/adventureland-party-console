@@ -30,6 +30,8 @@ import { RestockPolicy } from "./restock-policy";
 import { SelectedItem } from "./selected-item";
 import { StandListing } from "./stand-listing";
 import { STAT_SCROLLS } from "./stat-scrolls";
+import { auditedCharacters } from "./field-read-audit";
+import { joinItemMeta } from "./item-catalog-meta";
 
 export function usePartyConsole() {
   const npcSaleInFlight = useRef(false);
@@ -50,6 +52,9 @@ export function usePartyConsole() {
     [standOpen, setStandOpen] = useState(false),
     [marketOpen, setMarketOpen] = useState(false),
     [settingsOpen, setSettingsOpen] = useState(false),
+    // Character cards can briefly disappear before a restarted coordinator
+    // receives its first reports. Keep dialog ownership above those cards.
+    [farmingSettingsCharacter, setFarmingSettingsCharacter] = useState<string | null>(null),
     [realmDestination, setRealmDestinationState] = useState(""),
     [realmConfirmOpen, setRealmConfirmOpenState] = useState(false),
     [realmSetHome, setRealmSetHomeState] = useState(false),
@@ -154,9 +159,12 @@ export function usePartyConsole() {
   const coreQuery = useDomain("core");
   const configQuery = useDomain("config");
   const catalogQuery = useDomain("catalog");
-  const state = useMemo(() => ({ threshold: 100000, marked: {}, characters: {},
-    ...coreQuery.data, ...configQuery.data, ...catalogQuery.data }) as PartyState,
-    [coreQuery.data, configQuery.data, catalogQuery.data]);
+  const state = useMemo(() => {
+    const value = ({ threshold: 100000, marked: {}, characters: {},
+      ...coreQuery.data, ...configQuery.data, ...catalogQuery.data }) as PartyState;
+    value.characters = auditedCharacters('core', value.characters);
+    return value;
+  }, [coreQuery.data, configQuery.data, catalogQuery.data]);
   useEffect(() => {
     if (!thresholdDirty.current && configQuery.data?.threshold !== undefined) setThreshold(String(configQuery.data.threshold));
     if (!itemCollectionThresholdDirty.current && configQuery.data?.itemCollectionThreshold !== undefined)
@@ -667,7 +675,7 @@ export function usePartyConsole() {
   }
   const savedAutoNpcSaleKeep = autoNpcSaleItem && !autoNpcSaleItem.character
     ? state.autoNpcSales?.[automaticCommerceRuleKey(autoNpcSaleItem.item)]?.keep : undefined;
-  const autoNpcSaleKeep = autoNpcSaleKeepInput ?? (savedAutoNpcSaleKeep === undefined ? "" : String(savedAutoNpcSaleKeep));
+  const autoNpcSaleKeep = autoNpcSaleKeepInput ?? (savedAutoNpcSaleKeep === undefined ? "0" : String(savedAutoNpcSaleKeep));
   async function confirmAutoNpcSale() {
     setAutoNpcSaleError(null);
     if (!autoNpcSaleItem) return;
@@ -827,12 +835,8 @@ export function usePartyConsole() {
   const occupiedStandSlots = Object.entries(
     state.merchantCharacter ? state.characters[state.merchantCharacter]?.slots || {} : {},
   ).filter(([slot, entry]) => slot.startsWith("trade") && !!entry).length;
-  const detailMeta = useCallback((item: Item, live?: ItemMeta | null): ItemMeta | null | undefined => {
-    const known = state.merchantCatalog?.allItems?.find((entry) => entry.id === item.name)?.meta;
-    if (!known) return live;
-    if (!live) return known;
-    return { ...known, ...live, world: live.world || known.world };
-  }, [state.merchantCatalog]);
+  const detailMeta = useCallback((item: Item, live?: ItemMeta | null): ItemMeta | null | undefined =>
+    joinItemMeta(state.merchantCatalog, item.name, live), [state.merchantCatalog]);
   const statScrollInventory = useMemo(() => {
     const quantities: Record<string, number> = {};
     const add = (item?: Item | null) => {
@@ -899,6 +903,7 @@ export function usePartyConsole() {
     setMarketOpen,
     setBankOpen,
     setSettingsOpen,
+    setFarmingSettingsCharacter,
     setRealmDestination,
     aldataKey,
     aldataAction,
@@ -1009,6 +1014,7 @@ export function usePartyConsole() {
     buyPontyListing,
     sellALDataOrder,
     settingsOpen,
+    farmingSettingsCharacter,
     realmDestination,
     setRealmSetHome,
     setRealmConfirmOpen,

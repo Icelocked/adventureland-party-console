@@ -1,4 +1,5 @@
 import {measureBrowserRendering} from './browser-rendering';
+import {waitForBrowserClockStartup} from './chronal-browser-startup';
 import {waitForLiveRestartState, type RestartStateProbe} from './live-restart-readiness';
 import { test as base, unusedPort, child, environment, stop } from './fixtures';
 import {expect,installObservationClock} from './network-clock';
@@ -10,7 +11,7 @@ import { createRequire } from 'node:module';
 import type { Page,Frame,BrowserContext } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gateway } from '../tools/hosting/gateway';
 import { Access } from '../tools/hosting/access';
 import { selectionFields, stateKeys } from '../runtime/coordinator/persistence/snapshots';
@@ -25,12 +26,12 @@ const bootstrap = require('./game/bootstrap.cjs');
 export type LiveGame = {
   url: string;
   clients: Record<string, LiveClient>;
-  state(catalogs?: boolean): Promise<any>;
+  state(catalogs?: boolean | 'fast'): Promise<any>;
   savedTownCycle(): {id:string;pending:string[];revisions?:Record<string,number>} | null;
   post(route: string, body: unknown): Promise<any>;
   admin(code: string): Promise<any>;
   adminRealm(realm:'USI'|'USII', code:string):Promise<any>;
-  holdMerchantStatus(hold:boolean):void;
+  holdMerchantStatus(hold:boolean,options?:{inventoryOnly?:boolean}):void;
   consoleDrainLease(id: string | null, expires?: number, options?:{loadMode?:'now'|'safe'|'main';phase?:string}): void;
   restartCoordinator(): Promise<void>;
   restartCoordinatorIdentity(artifactId:string,hash:string):Promise<void>;
@@ -121,6 +122,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
       context.on('page',page=>page.on('framedetached',frame=>{const id=frames.get(frame);frames.delete(frame);if(id)void retire(id).catch(error=>exchanges.push({clockRetirementError:String(error)}));}));
       await context.addInitScript({content:
       `globalThis.__e2eClockConfiguration=${JSON.stringify({rate:observationClock.rate,wall:observationClock.wall,epoch:observationClock.epoch,broker:process.env.E2E_CLOCK_BROKER,token:process.env.E2E_CLOCK_TOKEN,scope:directory})};\n`+readFileSync(path.join(root,'.build/sim/browser-clock.js'),'utf8')});
+      await waitForBrowserClockStartup(context);
       }
       await clockContext(dashboardContext);await clockContext(context);
     }
@@ -144,7 +146,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           E2E_GAME_WEB_URL: manifest.webUrl, E2E_GAME_AUTH: manifest.auth, E2E_MERCHANT_DEFAULT: JSON.stringify(merchantDefault), E2E_ALLOW_HEADLESS: String(liveHeadless), PARTY_MOVEMENT_MODE: movementMode, E2E_STALE_WORKER_REALM: staleWorkerRealm || '',
           E2E_CLOCK_RATE:process.env.E2E_CLOCK_RATE||'1',E2E_CLOCK_WALL_EPOCH:process.env.E2E_CLOCK_WALL_EPOCH||'',E2E_CLOCK_VIRTUAL_EPOCH:process.env.E2E_CLOCK_VIRTUAL_EPOCH||'',
           E2E_CLOCK_BROKER:process.env.E2E_CLOCK_BROKER||'',E2E_CLOCK_TOKEN:process.env.E2E_CLOCK_TOKEN||'',E2E_CLOCK_SCOPE:directory,
-          E2E_CLOCK_PRELOAD:'1',NODE_OPTIONS:[process.env.NODE_OPTIONS,`--require=${JSON.stringify(path.join(root,'tools/sim/network-clock.cjs'))}`].filter(Boolean).join(' '),...identityEnvironment }), log);
+          E2E_CLOCK_PRELOAD:'1',NODE_OPTIONS:[process.env.NODE_OPTIONS,`--import=${JSON.stringify(pathToFileURL(path.join(root,'tools/sim/network-clock-preload.mjs')).href)}`].filter(Boolean).join(' '),...identityEnvironment }), log);
       const current = coordinator;
       await new Promise<void>((resolve, reject) => {
         const details = () => existsSync(log) ? readFileSync(log, 'utf8').slice(-16000) : 'No coordinator output';
@@ -176,8 +178,8 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
         async state(catalogs = false) {
           // Match the dashboard's existing catalog-free polling API. Catalog checks
           // explicitly request the full projection; never cache or synthesize state.
-          const response = await fetch(url + '/party-api/state' + (catalogs ? '' : '?catalog=0'), { signal: AbortSignal.timeout(15_000) });
-          if (!response.ok) throw Error('Live state failed: ' + response.status);
+          const response = await fetch(url + '/party-api/state' + (catalogs === 'fast' ? '?section=fast' : catalogs ? '' : '?catalog=0'), { signal: AbortSignal.timeout(15_000) });
+          if (!response.ok) throw Error('Live state failed: ' + response.status + ': ' + (await response.text()).slice(0,512));
           return response.json();
         },
         savedTownCycle() {
@@ -207,8 +209,8 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           exchanges.push({at:Date.now(),administrative:true,realm,code,result});
           return result;
         },
-        holdMerchantStatus(hold) {
-          const marker=path.join(directory,'hold-merchant-status');
+        holdMerchantStatus(hold, options={}) {
+          const marker=path.join(directory,options.inventoryOnly?'hold-merchant-inventory':'hold-merchant-status');
           if(hold) writeFileSync(marker,'Declared missing merchant arrival reports');
           else rmSync(marker,{force:true});
           exchanges.push({at:Date.now(),transportFault:'merchant-status',hold});
@@ -242,6 +244,8 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
           const selectionsPatch = Object.fromEntries(Object.entries(historical).filter(([field]) => selectionKeys.has(field)));
           const settingsPatch = Object.fromEntries(Object.entries(historical).filter(([field]) => !bankKeys.has(field) && !selectionKeys.has(field)));
           const restored: Record<string, unknown> = { [key]: { ...settings, ...settingsPatch } };
+          // Settings layout 2 loads production from its own key (docs/efficiency.md, Persistence).
+          if (Object.hasOwn(settingsPatch, 'production')) restored[stateKeys.production] = { production: settingsPatch.production };
           if (Object.keys(selectionsPatch).length)
             restored[stateKeys.selections] = { ...decoded(stateKeys.selections), ...selectionsPatch };
           if (Object.keys(bankPatch).length) {
@@ -366,10 +370,22 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
       }
       const bodyClockSnapshot=async()=>{
         const url=new URL('/diagnostics',process.env.E2E_CLOCK_BROKER);url.searchParams.set('token',process.env.E2E_CLOCK_TOKEN||'');
-        return {broker:await (await fetch(url)).json(),frames:await Promise.all(Object.entries(clients).map(async([name,client])=>({name,clocks:await client.frame.evaluate(()=>{
-          const w=window as any,r=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
-          return [w.__e2eChronalClock,r?.__e2eChronalClock].map(c=>c&&({timing:c.timing,taskStats:c.taskStats}));
-        })})))};
+        let ownership:any;
+        const ownershipReads:Array<{at:number;error?:string}>=[];
+        await expect.poll(async()=>{
+          try{ownership=await live!.state('fast');ownershipReads.push({at:Date.now()});return !!ownership.characters;}
+          catch(error){ownershipReads.push({at:Date.now(),error:String(error)});throw error;}
+        },{timeout:15000,message:'Clock diagnostics require a fresh runtime ownership snapshot'}).toBe(true);
+        return {host:{now:observationClock.now(),errors:observationClock.errors,observations:observationClock.observations},ownershipReads,broker:await (await fetch(url)).json(),frames:await Promise.all(Object.entries(clients).map(async([name,client])=>{
+          const runtime=ownership.characters[name]?.runtime;
+          // Managed headless migration/logout legitimately retires the browser frame.
+          // Its clock remains represented by the broker's actual participants.
+          if(runtime!=='native')return {name,runtime:runtime||'offline',clocks:[],source:'broker-participants'};
+          return {name,runtime,clocks:await client.frame.evaluate(()=>{
+            const w=window as any,r=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+            return [w.__e2eChronalClock,r?.__e2eChronalClock].map(c=>c&&({timing:c.timing,taskStats:c.taskStats}));
+          })};
+        }))};
       };
       const bodyClockBefore=observationClock.backend==='chronal-network'&&process.env.E2E_MEASURE_BROWSER_CPU==='1'?await bodyClockSnapshot():undefined;
       const rendering=process.env.E2E_MEASURE_BROWSER_CPU==='1'?await measureBrowserRendering(browser,()=>observationClock.now()):undefined;
@@ -382,6 +398,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
       }
     } finally {
       rmSync(path.join(directory,'hold-merchant-status'),{force:true});
+      rmSync(path.join(directory,'hold-merchant-inventory'),{force:true});
       const attach = async (name: string, body: unknown) => testInfo.attach(name, { body: JSON.stringify(body, null, 2), contentType: 'application/json' });
       const diagnostic = async (work: Promise<unknown>) => {
         let timer: ReturnType<typeof setTimeout>;
@@ -405,11 +422,25 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
         }
         for (const [name, client] of Object.entries(clients)) {
           if(observationClock.backend==='chronal-network'&&!client.page.isClosed()){
-            const clocks=await diagnostic((async()=>client.frame.evaluate(()=>{
-              const w=window as any,r=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
-              return [w.__e2eChronalClock,r?.__e2eChronalClock].map(c=>c&&({backend:c.backend,now:c.now(),errors:c.errors,epoch:c.epoch,rate:c.rate,state:c.state,timing:c.timing,taskStats:c.taskStats}));
-            }))());await attach(name+'-final-clock',clocks);
-            if(Array.isArray(clocks))for(const clock of clocks){expect(clock?.backend).toBe('chronal-network');expect(clock?.errors).toEqual([]);}
+            const ownership=live&&await live.state();
+            if(ownership?.characters[name]?.runtime==='native'){
+              let latest:unknown,observations:Array<{at:number;ready:boolean}>=[];
+              const clocks=await diagnostic((async()=>{
+                await expect.poll(async()=>{
+                  latest=await client.frame.evaluate(()=>{
+                    const w=window as any,r=(document.getElementById('maincode') as HTMLIFrameElement)?.contentWindow as any;
+                    return [w.__e2eChronalClock,r?.__e2eChronalClock].map(c=>c&&({backend:c.backend,now:c.now(),errors:c.errors,epoch:c.epoch,rate:c.rate,state:c.state,timing:c.timing,taskStats:c.taskStats,join:c.join}));
+                  });
+                  const ready=Array.isArray(latest)&&latest.length===2&&latest.every(c=>c?.backend==='chronal-network'&&c.state?.ticks>0);
+                  if(observations.length>=32)observations.shift();observations.push({at:Date.now(),ready});return ready;
+                },{timeout:15_000,message:'Current native game and CODE clocks must finish joining after realm/client replacement'}).toBe(true);
+                return latest;
+              })());
+              await attach(name+'-final-clock',clocks);
+              await attach(name+'-final-clock-readiness',{observations,latest});
+              expect(Array.isArray(clocks),'Browser-owned characters must retain both final clock observations').toBe(true);
+              if(Array.isArray(clocks))for(const clock of clocks){expect(clock?.backend).toBe('chronal-network');expect(clock?.errors).toEqual([]);}
+            }else await attach(name+'-final-clock',{runtime:ownership?.characters[name]?.runtime||'offline',source:'broker-participants'});
           }
           await attach(name + '-native-disconnects', client.disconnects());
           await attach(name + '-native-events', await diagnostic(client.events()));

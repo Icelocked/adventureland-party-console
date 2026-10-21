@@ -934,7 +934,9 @@
       // fight or repeatedly replace our owned route with defense/loot holds.
       // Direct and unknown-target hits retain the conservative safety path.
       var victim=aggressor && aggressor.target && get_entity(aggressor.target);
-      if(data.splash===true && victim && victim.type==='character' && !victim.npc &&
+      var collateral=data.splash===true || data.unintentional===true &&
+        Array.isArray(data.stacked) && data.stacked.indexOf(String(data.id))>=0;
+      if(collateral && victim && victim.type==='character' && !victim.npc &&
         currentPartyList().indexOf(String(aggressor.target))<0)return;
       var passingRule=aggressor && passiveHunting.rules[aggressor.mtype];
       if(aggressor && aggressor.type==='monster' && (!isPassingEncounter(aggressor) || returnDepartureDefense() && !(passingRule && passingRule.enabled && passingRule.keepMoving)) && !joinedEvent && !eventTargetTypes.length) {
@@ -1371,7 +1373,7 @@
 
   function lootTableOutcome(tableName, itemName, seen) {
     var cacheKey = tableName + ":" + itemName;
-    if (lootOutcomeCache[cacheKey]) return lootOutcomeCache[cacheKey];
+    if (Object.prototype.hasOwnProperty.call(lootOutcomeCache, cacheKey)) return lootOutcomeCache[cacheKey];
     seen = seen || {};
     if (seen[tableName] || !Array.isArray(nativeLootTable(tableName))) return null;
     var nextSeen = Object.assign({}, seen); nextSeen[tableName] = true;
@@ -1388,7 +1390,10 @@
       if (!paths || (result.paths || []).length < paths.length) paths = result.paths || [];
     });
     var outcome = probability > 0 ? { probability: Math.min(1, probability), paths: paths || [] } : null;
-    lootOutcomeCache[cacheKey] = outcome;
+    // A failed nested search may only have hit an ancestor cycle. Only a
+    // top-level miss proves this item is absent independently of that path.
+    // Reuse those misses across the many monster/map sources that open a table.
+    if (outcome || !Object.keys(seen).length) lootOutcomeCache[cacheKey] = outcome;
     return outcome;
   }
 
@@ -1647,13 +1652,20 @@
     return itemWorldCache[itemName];
   }
 
-  function itemDefinition(item) {
-    if (!item || !G.items[item.name]) return null;
-    var definition = G.items[item.name];
-    var skin = item.skin || definition.skin;
+  function itemSheetSprite(skin) {
     var position = G.positions[skin];
     var pack = position && G.imagesets[position[0] || "pack_20"];
-    var safeDefinition = safeItemDefinition(definition);
+    return pack && position ? {
+      url: "https://adventure.land" + pack.file,
+      tileSize: pack.size,
+      columns: pack.columns,
+      rows: pack.rows,
+      x: position[1],
+      y: position[2],
+    } : null;
+  }
+
+  function itemProperties(item) {
     var calculatedProperties = {};
     try {
       var calculated = item_properties(item) || {};
@@ -1668,12 +1680,32 @@
     } catch (_error) {
       // Base definitions still render if a legacy game build cannot calculate properties.
     }
+    return calculatedProperties;
+  }
+
+  function itemTitle(item) {
+    return item.p && G.titles && G.titles[item.p] ? safeFields(G.titles[item.p]) : null;
+  }
+
+  function itemDefinition(item) {
+    if (!item || !G.items[item.name]) return null;
+    var definition = G.items[item.name];
+    // merchantCatalog().allItems carries every per-type field below. Once a
+    // status response clears needsCatalog, the coordinator holds that catalog,
+    // so reports carry only what can differ between copies of one item.
+    if (catalogKnown) {
+      var perCopy = { properties: itemProperties(item) };
+      var title = itemTitle(item);
+      if (title) perCopy.title = title;
+      if (item.skin && item.skin !== definition.skin) perCopy.sprite = itemSheetSprite(item.skin);
+      return perCopy;
+    }
     return {
-      definition: safeDefinition,
+      definition: safeItemDefinition(definition),
       upgradeable: !!definition.upgrade,
       compoundable: !!definition.compound,
       buyable: !!itemSeller(item.name),
-      properties: calculatedProperties,
+      properties: itemProperties(item),
       scaling: safeFields(definition.upgrade || definition.compound || {}),
       maxLevel: maximumItemLevel(definition),
       usage: itemUsage(definition),
@@ -1682,15 +1714,8 @@
       // Until background preparation finishes, the dashboard uses its catalog.
       world: itemWorldCache[item.name],
       // The copy's title (docs/item-titles.md); the dashboard names it and adds its stats.
-      title: item.p && G.titles && G.titles[item.p] ? safeFields(G.titles[item.p]) : null,
-      sprite: pack && position ? {
-        url: "https://adventure.land" + pack.file,
-        tileSize: pack.size,
-        columns: pack.columns,
-        rows: pack.rows,
-        x: position[1],
-        y: position[2],
-      } : null,
+      title: itemTitle(item),
+      sprite: itemSheetSprite(item.skin || definition.skin),
     };
   }
 
@@ -1831,7 +1856,7 @@
       var item = G.items[name];
       if (item && item.type === "bank_key" && item.unlocks) floorKeys[item.unlocks] = {
         id: name, name: item.name || name,
-        sprite: itemDefinition({ name: name }) && itemDefinition({ name: name }).sprite,
+        sprite: itemSheetSprite(item.skin),
       };
     });
     return Object.keys(definitions).map(function (pack) {
@@ -2082,13 +2107,14 @@
       var items = Object.keys(G.items || {});
       var index = 0;
       while (index < items.length) {
-        await new Promise(function (resolve) { setTimeout(resolve, 0); });
+        await new Promise(function (resolve) { setTimeout(resolve, 4); });
         if (!runtimeCurrent() || generation !== catalogGeneration) return;
-        // Bound work by elapsed time, not one timer per item. Hidden/loaded
-        // clients can delay each timer substantially even for already cached data.
-        var sliceStarted = Date.now();
+        // Bound both elapsed time and item count: virtual time is fixed while
+        // synchronous work runs. A positive timer also spreads batches across
+        // clock windows instead of draining the whole catalog at one timestamp.
+        var sliceStarted = Date.now(), sliceIndex = index;
         do { itemWorldInfo(items[index++]); }
-        while (index < items.length && Date.now() - sliceStarted < 8);
+        while (index < items.length && index - sliceIndex < 4 && Date.now() - sliceStarted < 8);
       }
       catalogPrepared = true;
     } catch (error) {
@@ -3109,15 +3135,9 @@
       oneShotEpoch: scatterEpoch,
       threats: threats,
       conditions: activeConditions(),
-      items: character.items.map(inventoryOperationEntry),
-      slots: Object.keys(character.slots || {}).reduce(function (out, slot) {
-        var item = character.slots[slot];
-        if (item) out[slot] = { item: fingerprint(item), meta: itemDefinition(item) };
-        return out;
-      }, {}),
-      bank: bankSnapshot(),
       bankVaults: bankVaultCatalog(),
     };
+    attachStatusInventory(status);
     if (!catalogKnown && catalogPrepared) {
       status.merchantCatalogVersion = merchantCatalogVersion;
       status.travelPlaces = travelPlaces();
@@ -3225,6 +3245,49 @@
     convoySignal = Object.assign({}, signal, {localDeadline:received + Math.max(0, Number(signal.validUntil)-sentAt-network)});
   }
 
+  // Status reports omit items, slots and bank while they match the revision the
+  // coordinator acknowledged (docs/efficiency.md, Inventory deltas). The key is
+  // every input of the three builders, so a change rebuilds them once and the
+  // next report carries them.
+  var statusInventoryCache = null, statusInventoryAcknowledged = null, statusInventoryFullAt = 0, statusInventoryCount = 0;
+  var statusInventorySession = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  function statusInventory() {
+    var key = JSON.stringify([character.items, character.slots || null, character.bank || null,
+      activeUpgrade && [activeUpgrade.slot, activeUpgrade.item]]);
+    // Before the catalog acknowledgement itemDefinition reads the world cache, which fills in over time.
+    if (catalogKnown && statusInventoryCache && statusInventoryCache.key === key) return statusInventoryCache;
+    statusInventoryCache = { key: catalogKnown ? key : null, revision: statusInventorySession + "." + (++statusInventoryCount),
+      items: character.items.map(inventoryOperationEntry),
+      slots: Object.keys(character.slots || {}).reduce(function (out, slot) {
+        var item = character.slots[slot];
+        if (item) out[slot] = { item: fingerprint(item), meta: itemDefinition(item) };
+        return out;
+      }, {}),
+      bank: bankSnapshot() };
+    return statusInventoryCache;
+  }
+  function attachStatusInventory(status) {
+    var inventory = statusInventory();
+    status.inventoryRevision = inventory.revision;
+    // A full inventory goes out at least every 10 s, so a coordinator that lost it recovers without a
+    // refusal, and an observer of ordinary reports (live-catalog.spec.ts) sees three within 45 s.
+    if (inventory.revision === statusInventoryAcknowledged && Date.now() - statusInventoryFullAt < 10000) return status;
+    return withStatusInventory(status);
+  }
+  function withStatusInventory(status) {
+    var inventory = statusInventory();
+    status.inventoryRevision = inventory.revision;
+    status.items = inventory.items;
+    status.slots = inventory.slots;
+    status.bank = inventory.bank;
+    return status;
+  }
+  function acknowledgeStatusInventory(body, value) {
+    if (body.combatOnly || body.combatWait) return;
+    statusInventoryAcknowledged = value && typeof value.inventoryRevision === "string" ? value.inventoryRevision : null;
+    if (Array.isArray(body.items)) statusInventoryFullAt = Date.now();
+  }
+
   function request(path, options) {
     options = options || {};
     if (path === '/status' && options.body && options.body.groupedCombat) sampleTravelReport(options.body);
@@ -3248,6 +3311,7 @@
           (root.__partyTravelTransport || (root.__partyTravelTransport={})).barrier={at:Date.now(),durationMs:duration,processingMs:Math.max(0,(t.sentAt||0)-(t.receivedAt||0)),eventLoopMaxMs:t.eventLoopMaxMs,outcome:'success'};
         }
         if (path === '/status') {
+          if (options.body) acknowledgeStatusInventory(options.body, value);
           acceptTravelResponse(value, transportStart, !!(options.body && (options.body.combatOnly || options.body.combatWait)));
           // The ordinary status tick can still be awaiting this exit handler.
           // Fast heartbeat ownership must fence it at the transport boundary.
@@ -3259,6 +3323,13 @@
         resolve(value);
       }).fail(function (xhr, status, error) {
         var httpStatus = Number(xhr && xhr.status) || 0;
+        // A coordinator without this inventory revision (restart, another runtime) refuses the report unapplied.
+        if (path === '/status' && httpStatus === 409 && xhr.responseJSON && xhr.responseJSON.code === "inventory-required" &&
+            options.body && !Array.isArray(options.body.items)) {
+          statusInventoryAcknowledged = null;
+          resolve(request(path, Object.assign({}, options, { body: withStatusInventory(Object.assign({}, options.body)) })));
+          return;
+        }
         var kind = status === "timeout" ? "timeout" : status === "parsererror" ? "invalid-json" :
           status === "abort" ? "aborted" : httpStatus ? "http" : "network";
         rememberConvoyStatusRequest(convoyStatusStarted, kind);
@@ -3302,8 +3373,10 @@
       else history.failure = { at: now, kind: outcome, durationMs: Math.max(0, Math.round(now - started)) };
     } catch (_) {}
   }
-  function passingKey(target) {
-    return JSON.stringify([target.server || reunionRealm(), target.map || character.map,
+  // isPassingEncounter passes the realm it already read, so a key costs no
+  // second read of parent.server_region through the CODE facade.
+  function passingKey(target, realm) {
+    return JSON.stringify([target.server || (realm === undefined ? reunionRealm() : realm), target.map || character.map,
       String(target.in == null ? character.in || character.map : target.in), String(target.id)]);
   }
   function passingEncounterReport() {
@@ -3321,13 +3394,20 @@
     if (typeof passiveTravelInterruptible==='function' && passiveTravelInterruptible() && passiveStopRequired(target))return false;
     var rule=passiveHunting.rules[target.mtype];
     if (committedHuntEncounter(target) || typeof huntTravelDefense === "function" && huntTravelDefense() && !(rule && rule.enabled && rule.keepMoving)) return false;
-    var key = passingKey(target), now = Date.now() + coordinatorClockOffset;
+    var realm = reunionRealm(), key = passingKey(target, realm), now = Date.now() + coordinatorClockOffset;
     if (target.dead || target.hp === 0) return false;
     // Keep cache ownership inside this function: standalone runtime harnesses
     // install it without the surrounding script. Weak keys release replaced
     // coordinator lists; native deaths appended in place invalidate by length.
     var indexes = isPassingEncounter.indexes || (isPassingEncounter.indexes = new WeakMap());
-    var context = JSON.stringify([reunionRealm(), character.map, String(character.in || character.map)]);
+    // isPassingEncounter runs for every visible monster on each combat and
+    // travel check (docs/efficiency.md, CT8). It keeps the last context text
+    // and serializes again only when the realm, map or instance changes.
+    var place = isPassingEncounter.place, instance = String(character.in || character.map);
+    if (!place || place.realm !== realm || place.map !== character.map || place.instance !== instance)
+      place = isPassingEncounter.place = {realm:realm,map:character.map,instance:instance,
+        context:JSON.stringify([realm, character.map, instance])};
+    var context = place.context;
     function recent(list) {
       if (!list || !list.length) return false;
       var cached = indexes.get(list);
@@ -4738,7 +4818,7 @@
       entry.operation = { type: pending.scroll.indexOf("cscroll") === 0 ? "compound" : "upgrade",
         fromLevel: Number(pending.level) || 0, toLevel: (Number(pending.level) || 0) + 1,
         chance: typeof pending.chance === "number" ? pending.chance : null,
-        sprite: (itemDefinition({ name: "placeholder" }) || {}).sprite || null };
+        sprite: G.items.placeholder ? itemSheetSprite(G.items.placeholder.skin) : null };
     }
     return entry;
   }
@@ -10083,12 +10163,15 @@
       gatheringStatus('Crafting replacement ' + session.tool, 'info', {jobId:toolOrder.jobId});
       return false;
     }
-    await request("/merchant/gather-status", { method: "POST", body: {
+    var missingTool = await request("/merchant/gather-status", { method: "POST", body: {
       character: character.name, mode: session.mode, noTool: true,
       message: (session.mode === "fishing" ? "Fishing" : "Mining") + " off: no tool in inventory or bank",
       level: "info",
     }});
     if (current && !current()) return false;
+    // Settings may have enabled replacement crafting while this report was on
+    // the wire. Keep the current mode; the next fresh status supplies opt-in.
+    if (missingTool.noTool === false) return false;
     gatheringModes = gatheringModes.filter(function (mode) { return mode !== session.mode; });
     selectGatheringMode();
     return false;
@@ -10314,6 +10397,10 @@
     if (busy) return "status update";
     if (banking) return "banking";
     if (root.__merchantActiveJob) return "merchant job";
+    // A manual equip waits for the old gathering attempt to stop. Do not let
+    // its completion immediately start another tool swap before that ordinary
+    // inventory command has actually finished.
+    if (root.__partyInventoryCommands) return "inventory command";
     if (Date.now() < (Number(root.__merchantLogisticsHoldUntil) || 0)) return "logistics handoff";
     if (anniversaryBusy || merchantAnniversaryWorkReserved()) return "anniversary reservation";
     if (Date.now() < gatheringRetryAt) return "retry delay";
@@ -13031,6 +13118,17 @@
   }
 
   function eventMonsterTypes(eventName) {
+    // activeCombatEvent derives this for every event on each target check, many
+    // times per combat tick. The list depends only on the game data, and a game
+    // update loads a new G object, so eventMonsterTypes caches it per G and
+    // event name. Callers get a copy.
+    var cache = eventMonsterTypes.cache;
+    if (!cache || cache.game !== G) cache = eventMonsterTypes.cache = { game: G, types: new Map() };
+    if (!cache.types.has(eventName)) cache.types.set(eventName, deriveEventMonsterTypes(eventName));
+    return cache.types.get(eventName).slice();
+  }
+
+  function deriveEventMonsterTypes(eventName) {
     var definition = G.events && G.events[eventName];
     var candidates = [];
     if (definition && definition.sprite) candidates.push(definition.sprite);
@@ -15280,8 +15378,26 @@
     var defense=typeof huntTravelDefense==='function' && huntTravelDefense() && (convoyTraveling.defenseTargets||[]).some(function(t){return passingKey(t)===passingKey(target);});
     if(!defense && !isAttackingPartyMember(target))return false;
     var deaths = typeof groupedCombat !== 'undefined' && groupedCombat && groupedCombat.deaths || [];
-    if(deaths.some(function(d){return String(d.id)===String(target.id) && d.map===character.map &&
-      String(d.in==null?d.map:d.in)===String(character.in==null?character.map:character.in) && d.server===reunionRealm();}))return false;
+    // departureTargetEngaged runs for every visible monster that attacks the
+    // party on each travel and target check, and the list holds up to 512
+    // tombstones (runtime/combat/queue.ts), so it indexes the ids that apply
+    // here once per list. The coordinator replaces the list or appends to it.
+    // A new list, a new length or another realm, map or instance rebuilds the
+    // index. The cache lives on the function, as in isPassingEncounter, so
+    // extracted test harnesses install it too.
+    var instance = String(character.in==null?character.map:character.in), realm = reunionRealm();
+    var context = realm + '|' + character.map + '|' + instance;
+    var indexes = departureTargetEngaged.deathIds || (departureTargetEngaged.deathIds = new WeakMap());
+    var index = indexes.get(deaths);
+    if(!index || index.length !== deaths.length || index.context !== context){
+      var ids = new Set();
+      deaths.forEach(function(d){
+        if(d.map===character.map && String(d.in==null?d.map:d.in)===instance && d.server===realm)ids.add(String(d.id));
+      });
+      index = {length:deaths.length,context:context,ids:ids};
+      indexes.set(deaths,index);
+    }
+    if(index.ids.has(String(target.id)))return false;
     return true;
   }
   function departureCombatPending() {
@@ -17104,7 +17220,7 @@
       // before either fighter can commit; unrelated convoy targets stay fenced.
       var encounter=root.__partyFarmingEngagement;
       var farmingHandoff=!!(coordinated && encounter && !encounter.finished && encounter.target && String(encounter.target.id)===String(t.id));
-      var allowed=!!(!foreignOwned && (!partyConvoyActive || farmingHandoff) && !convoyTraveling && !root.sharedRoutine.isOccupied() && (coordinated || !groupedFarming()) && runtimeCurrent() && (!parent.socket || parent.socket.connected!==false) && !dungeonOwned() && !eventTraveling && character.ctype!=='merchant' &&
+      var allowed=!!(!foreignOwned && (!partyConvoyActive || farmingHandoff) && (!convoyTraveling || farmingHandoff && convoyTraveling.defensePaused) && !root.sharedRoutine.isOccupied() && (coordinated || !groupedFarming()) && runtimeCurrent() && (!parent.socket || parent.socket.connected!==false) && !dungeonOwned() && !eventTraveling && character.ctype!=='merchant' &&
         !navigationIntent.cancelled && !character.rip && !consoleMovementPaused() && !root.__partyMovementPaused &&
         !knownDead && (!observed || !observed.dead && !(Number(observed.hp)<=0)) && Number.isFinite(e.x) && Number.isFinite(e.y) &&
         (coordinated || e.visible && !e.dead && e.hp>0) && (!coordinated || t.map===character.map && t.in===character.in && t.server===reunionRealm()) &&
@@ -18305,6 +18421,7 @@
     queueCoverageCost: function(p){var a=groupedCombat && groupedCombat.anchor;return a && a.map===character.map && a.in===character.in ? Math.max(0,Math.hypot(p.x-a.x,p.y-a.y)-groupedCombat.range) : 0;},
     queueRecoveryReason: function(reason){root.partyCombatPosition={at:Date.now(),mode:"fight-recovery",movementOwner:"group",reason:reason};},
     queueMarkers: queueMarkers,
+    convoyNavigationReport: convoyNavigationReport,
     combatTraceSnapshot: function(){var p=root.partyCombatPosition||{};return {
       mode:farmingMode,epoch:root.__partyCombatResetAt||0,queueRevision:groupedCombat&&groupedCombat.queueRevision,
       owner:p.movementOwner||null,reason:p.reason||p.mode,cell:[Math.round(character.x/8),Math.round(character.y/8)],

@@ -1,6 +1,5 @@
 import { createContext, runInContext } from 'node:vm';
-import type { GameData, Point } from '../../navigation/contracts.ts';
-type Base = { h: number; v: number; vn: number };
+import type { GameData, Geometry, Point } from '../../navigation/contracts.ts';
 
 /** Match the game's initialization before hashing or preparing collision geometry. */
 export function loadPlannerGeometry(dataSource: string, commonSource: string): GameData {
@@ -24,7 +23,7 @@ export function loadCoordinatorGeometry(dataSource: string, commonSource: string
       return context.can_move({map:'main',x,y,going_x:x,going_y:y,base:{h:8,v:7,vn:2}}) === true;
     },
     /** The game's own straight-line collision for a walking edge (#147). */
-    canMove(from: Point, to: Point, base: Base): boolean {
+    canMove(from: Point, to: Point, base: Geometry): boolean {
       if (from.map !== to.map || !context.G.geometry[from.map]) return false;
       return context.can_move({map:from.map,x:from.x,y:from.y,going_x:to.x,going_y:to.y,base}) === true;
     },

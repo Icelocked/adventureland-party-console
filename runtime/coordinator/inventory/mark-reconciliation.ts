@@ -3,11 +3,12 @@ import { ruleOwner, itemRuleConflicts, processingPending, type ConflictState } f
 import { reconcileCollectionMarks } from "./collection-marks.ts";
 import { reconcileUpgradeMarks, clearResolvedUpgradeMarks } from "./upgrade-marks.ts";
 import type { InventoryEntry, ItemMark } from "../contracts/item.ts";
+import { entryMeta } from "./catalog-meta.ts";
 import type { UpgradeMark } from "./upgrade-marks.ts";
 import { swapHeld, type SwapReservationStatus } from "./swap-reservations.ts";
 import { keptNpcSaleCopies, type NpcSaleKeepState } from "../merchant/npc-sale-keep.ts";
 
-interface CollectionState extends ConflictState, Omit<NpcSaleKeepState, "autoNpcSales"> {
+interface CollectionState extends Omit<ConflictState, "autoNpcSales">, NpcSaleKeepState {
   marked: Record<string, ItemMark[] | undefined>;
   merchantMarked: Record<string, ItemMark[] | undefined>;
   autoItemMarks: Record<string, Parameters<typeof reconcileCollectionMarks>[2] | undefined>;
@@ -37,7 +38,7 @@ export function reconcileCoordinatorCollectionMarks(
     state.merchantMarked[name] || [],
     state.autoItemMarks[ruleOwner(state, name)] || {},
     inventory(status),
-    name === state.merchantCharacter ? keptNpcSaleCopies(state as NpcSaleKeepState) : undefined,
+    name === state.merchantCharacter ? keptNpcSaleCopies(state) : undefined,
   );
   if (state.merchantRules) {
     const allowed = (mark: ItemMark) => !mark.auto || !mark.item || !itemRuleConflicts(state, mark.item).length;
@@ -68,7 +69,8 @@ export function reconcileCoordinatorUpgradeMarks(
   const result = reconcileUpgradeMarks(
     state.upgrades[name] || [],
     state.autoUpgradeMarks[ruleOwner(state, name)] || {},
-    availableCraftStock(inventory(status).map(entry => entry && {...entry,craftLocation:"inventory:"+name}), craftProtection(state)).map(entry => entry?.item && itemRuleConflicts(state, entry.item).length ? null : entry),
+    availableCraftStock(inventory(status).map(entry => entry && {...entry,craftLocation:"inventory:"+name,
+      meta:entryMeta(state.merchantCatalog, entry)}), craftProtection(state)).map(entry => entry?.item && itemRuleConflicts(state, entry.item).length ? null : entry),
     status?.slots,
   );
   const marks = result.marks.filter(mark => !mark.auto || !swapHeld(status, mark.slot, mark.item));

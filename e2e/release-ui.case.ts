@@ -93,7 +93,7 @@ test("offline account inspection exposes saved inventory and comparison without 
     stdin: {
       resolveDir: path.resolve("dashboard"),
       loader: "tsx",
-      contents: `import React from'react';import{createRoot}from'react-dom/client';import{AccountSettings}from'./features/party/account-settings';createRoot(document.getElementById('root')).render(<AccountSettings state={window.fixture}/>);`,
+      contents: `import React from'react';import{createRoot}from'react-dom/client';import{QueryClient,QueryClientProvider}from'@tanstack/react-query';import{AccountSettings}from'./features/party/account-settings';createRoot(document.getElementById('root')).render(<QueryClientProvider client={new QueryClient()}><AccountSettings state={window.fixture}/></QueryClientProvider>);`,
     },
   });
   await page.goto(app.url);
@@ -359,11 +359,14 @@ test.describe("offline observation persistence", () => {
   }, info) => {
     const initial = await app.state();
     const item = { name: "coat", level: 2 };
+    const sprite={url:'/settings-character-sprite.png',tileSize:1,columns:1,rows:1,x:0,y:0};
+    await page.route('**/settings-character-sprite.png',route=>route.fulfill({contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII=','base64')}));
     const meta = {
       definition: { name: "Saved coat", type: "chest" },
       properties: { armor: 14 },
       upgradeable: true,
       maxLevel: 13,
+      sprite,
       world: { sentinel: "must-not-persist", catalog: "x".repeat(200000) },
     };
     await app.deliverStatus({
@@ -376,17 +379,34 @@ test.describe("offline observation persistence", () => {
       max_hp: 456,
       gold: 123,
       clientVersion: 17175,
+      characterDollHtml:'<img src="/settings-character-sprite.png" width="54" height="76">',
       items: [{ slot: 0, item, meta }],
       slots: {
         chest: {
           item: { name: "coat", level: 0 },
-          meta: { definition: { name: "Coat", type: "chest" }, properties: { armor: 5 } },
+          meta: { definition: { name: "Coat", type: "chest" }, properties: { armor: 5 }, sprite },
         },
       },
     });
     const before = (await app.state()).characterSnapshots.M;
     expect(before.items[0].item).toEqual(item);
     expect(before.attack).toBe(137);
+    await page.goto(app.url);
+    await page.getByRole('button',{name:'Interface settings',exact:true}).click();
+    await page.getByRole('button',{name:'Inspect M',exact:true}).click();
+    const portrait=page.getByRole('button',{name:'View M stats',exact:true});
+    await expect.poll(()=>portrait.locator('img').evaluateAll(images=>images.some(image=>(image as HTMLImageElement).complete&&(image as HTMLImageElement).naturalWidth>0))).toBe(true);
+    const equipped=page.getByRole('button',{name:'Inspect Coat +0',exact:true});
+    await expect(equipped.getByRole('img',{name:'Coat +0 sprite',exact:true})).toBeVisible();
+    await equipped.click();
+    const inspectedItem=page.getByRole('dialog',{name:'Coat +0',exact:true});
+    await expect(inspectedItem.getByRole('img',{name:'Inspected item sprite',exact:true})).toBeVisible();
+    await inspectedItem.getByRole('button',{name:'Compare',exact:true}).click();
+    await expect(page.getByRole('dialog',{name:'Equipment comparison',exact:true})).toBeVisible();
+    await info.attach('settings-equipped-item-comparison',{body:await page.screenshot({animations:'disabled'}),contentType:'image/png'});
+    await page.getByRole('dialog',{name:'Equipment comparison',exact:true}).getByRole('button',{name:'Close',exact:true}).click();
+    await expect(page.getByRole('dialog',{name:'Equipment comparison',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'Inspect Coat +0',exact:true})).toBeVisible();
     expect(JSON.stringify(before)).not.toContain("must-not-persist");
     expect(Buffer.byteLength(JSON.stringify(before))).toBeLessThan(50000);
     await app.restartCoordinator();
@@ -397,6 +417,8 @@ test.describe("offline observation persistence", () => {
     await page.getByRole("button", { name: "Interface settings", exact: true }).click();
     await page.getByRole("button", { name: "Inspect M", exact: true }).click();
     await expect(page.getByText("Offline · saved observation", { exact: false })).toBeVisible();
+    await expect.poll(()=>page.getByRole('button',{name:'View M stats',exact:true}).locator('img').evaluateAll(images=>images.some(image=>(image as HTMLImageElement).complete&&(image as HTMLImageElement).naturalWidth>0))).toBe(true);
+    await expect(page.getByRole('button',{name:'Inspect Coat +0',exact:true}).getByRole('img',{name:'Coat +0 sprite',exact:true})).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Inspect Saved coat +2", exact: true }),
     ).toBeVisible();

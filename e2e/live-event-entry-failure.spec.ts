@@ -17,30 +17,40 @@ test(`native event entry recovers ${fault}`,async({live},info)=>{
     E.mrpumpkin={live:true,id:String(m.id),map:m.map,x:m.x,y:m.y,hp:m.hp,max_hp:m.max_hp};broadcast_e();
     return {id:String(m.id),map:m.map,x:m.x,y:m.y};
   })()`);
-  const context=live.clients[W].page.context(), requests:any[]=[], samples:any[]=[], unmatched:any[]=[];
+  const context=live.clients[W].page.context(), requests:any[]=[], samples:any[]=[], unmatched:any[]=[], validationErrors:any[]=[];
   const observer=observeNativePlanner(context);
+  const restoreObservation=await observer.install(live.clients[W]);
+  // The native binding observes current ownership before ajax sends. Read the
+  // coordinator once in parallel; no CDP round trip or cached prior epoch.
   let refusals=0;
   const rejectEntry=async(route:Route)=>{
     const req=route.request(),body=req.method()==='POST'?req.postDataJSON():null;
     if(body?.character!==W||body.to?.map!==seed.map||body.to?.x!==seed.x||body.to?.y!==seed.y)return route.fallback();
-    const started=Date.now(),sample=await observer.sample(body);
-    if(!sample){unmatched.push({at:Date.now(),body,elapsedMs:Date.now()-started,reason:'No current native movement sample'});return route.fallback();}
-    const s=await live.state(),c=s.activeConvoy;
-    const owner=sample.body.convoyNavigation,expected=c?.expected?.[W];
-    if(c?.walkingActivity!=='event'||c.walkingEvent!=='mrpumpkin'||owner.id!==c.id||owner.epoch!==c.epoch||
-      owner.commandId!==expected?.commandId||owner.navigationRevision!==expected?.revision||owner.runtimeId!==expected?.runtimeId||
-      body.to?.map!==c.location?.map||body.to.x!==c.location.x||body.to.y!==c.location.y||Date.now()-started>=1500){
-      unmatched.push({at:Date.now(),body,owner,expected,elapsedMs:Date.now()-started});return route.fallback();
+    const started=Date.now(),state=live.state('fast');
+    // Start the fresh coordinator observation before refusing the request, but
+    // never hold its native two-second deadline waiting for a diagnostic GET.
+    const observed=await observer.sample(body);
+    const sample={movement:observed?.body.movement,navigation:observed?.body.convoyNavigation};
+    const owner=sample.navigation;
+    if(sample.movement?.id!==body.id||sample.movement.done||!owner||owner.communication||owner.phase==='communication-hold'||
+      !String(body.id).startsWith(W+':'+owner.runtimeId+':')||Date.now()-started>=1500){
+      await state;unmatched.push({at:Date.now(),body,owner,elapsedMs:Date.now()-started});return route.fallback();
     }
     const rejected=fault==='entry unavailable until exhausted'||refusals===0;
+    if(rejected){
+      refusals++;
+      await route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:
+        fault==='Town unavailable once'?'Town warp currently unavailable':'Declared entry service unavailable'})});
+    }else await route.fallback();
+    const s=await state;
+    const c=s.activeConvoy;
+    const expected=c?.expected?.[W];
+    if(c?.walkingActivity!=='event'||c.walkingEvent!=='mrpumpkin'||owner.id!==c.id||owner.epoch!==c.epoch||
+      owner.commandId!==expected?.commandId||owner.navigationRevision!==expected?.revision||owner.runtimeId!==expected?.runtimeId||
+      body.to?.map!==c.location?.map||body.to.x!==c.location.x||body.to.y!==c.location.y)
+      validationErrors.push({at:Date.now(),body,owner,expected,convoy:c?.id,epoch:c?.epoch});
     requests.push({at:Date.now(),body,convoy:c.id,revision:c.walkingParents?.[W]?.revision,
       recoveryAttempts:c.recoveryAttempts,disableTown:c.disableTown,rejected,owner,elapsedMs:Date.now()-started});
-    if(!rejected)return route.fallback();
-    refusals++;
-    // Declared failure at the planner HTTP boundary. All recovery movement,
-    // attendance, native arrival and attack receipts remain production behavior.
-    await route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:
-      fault==='Town unavailable once'?'Town warp currently unavailable':'Declared entry service unavailable'})});
   };
   await context.route('**/party-api/movement-plan',rejectEntry);
   try{
@@ -69,10 +79,15 @@ test(`native event entry recovers ${fault}`,async({live},info)=>{
       },{timeout:30_000}).toBe(true);
       expect(refusals).toBe(before);
     }
+    expect(validationErrors,'Every refusal must retain exact fresh coordinator ownership').toEqual([]);
+    const rejectedIds=new Set(requests.filter(request=>request.rejected).map(request=>request.body.id));
+    expect(observer.failures.filter(failure=>rejectedIds.has(failure.id)),
+      'Every declared refusal must arrive without aborting its exact native operation').toEqual([]);
   }finally{
     await context.unroute('**/party-api/movement-plan',rejectEntry);
     observer.dispose();
-    await info.attach('native-event-entry-recovery',{body:JSON.stringify({fault,seed,requests,unmatched,requestFailures:observer.failures,samples,final:await live.state(),events:await live.clients[W].events()}),contentType:'application/json'});
+    await restoreObservation();
+    await info.attach('native-event-entry-recovery',{body:JSON.stringify({fault,seed,requests,unmatched,validationErrors,requestFailures:observer.failures,samples,final:await live.state(),events:await live.clients[W].events()}),contentType:'application/json'});
     await live.post('/formation',{character:W,eventSelections:[]});
     await live.admin(`output=(()=>{const m=get_monster('mrpumpkin');if(String(m?.id)===${JSON.stringify(seed.id)})remove_monster(m,{silent:true});G.monsters.mrpumpkin=globalThis.__entryRecoveryOriginalPumpkin;delete globalThis.__entryRecoveryOriginalPumpkin;delete E.mrpumpkin;broadcast_e();return true;})()`);
   }
