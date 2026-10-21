@@ -267,6 +267,7 @@ export function startCoordinatorApplication(
           worker.stdout!.pipe(process.stdout);
           worker.stderr!.pipe(process.stderr);
         },
+        fullCaveFloors: name => party.leader === name,
         monitor: (name, block) =>
           bwi_instance.publisher
             ? monitoring_util.create_monitor_ui(
@@ -1146,6 +1147,7 @@ export function startCoordinatorApplication(
         persistHistory,
         persistHistoryNow: () => persistence.historyNow(),
         data: gameDataPorts,
+        activeMaps: () => Object.values(party.statuses).map((status) => status?.map),
         every: (callback, milliseconds) => setInterval(callback, milliseconds),
         cancel: (timer: ReturnType<typeof setInterval>) => clearInterval(timer),
       });
@@ -1207,7 +1209,11 @@ export function startCoordinatorApplication(
     // itinerary and should no longer appear as a separately prioritized job.
     delete party.merchantRoutinePriorities["merchant luck exchange"];
     function mapSubscriberCount(name: Parameters<typeof mapStreams.count>[0]) {
-      return mapStreams.count(name);
+      // A watched Cave floor also turns on the leader's telemetry while the
+      // coordinator lacks that floor; only the leader's worker receives full
+      // floors (runtime/lifecycle/cave-floor-handshake.ts).
+      const supplier = name === party.leader && mapStreams.floorWanted(party.statuses[name]?.map);
+      return mapStreams.count(name) + (supplier ? 1 : 0);
     }
 
     coordinatorPolicies.recoverMerchantQueue(party, () => Date.now(), stampMerchantJob);
