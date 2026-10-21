@@ -1128,6 +1128,16 @@
   var combatResponseListener = function (data) {
     if (!data || data.failed) return;
     partyMetrics.goldMovement(data);
+    if (data.success === true) {
+      var usedName = data.used && G.items[data.used] ? data.used :
+        data.response === 'elixir' && character.slots.elixir ? character.slots.elixir.name : null;
+      var usedDefinition = usedName && G.items[usedName];
+      if (usedDefinition && (usedDefinition.type === 'pot' || usedDefinition.type === 'elixir'))
+        partyMetrics.consumable(Number(usedDefinition.g) || 0);
+      if (data.response === 'buy_success' && G.items[data.name] &&
+          ['pot','elixir'].indexOf(G.items[data.name].type) >= 0)
+        partyMetrics.consumable(Number(data.cost) || 0, true);
+    }
     var skill = data.place === "skill" ? (data.skill || data.name) : data.place;
     if (skill && skill !== "attack" && G.skills && G.skills[skill]) {
       queueCombatEvent("skill", "Used " + (G.skills[skill].name || skill), { skill: skill }, "skill:" + skill);
@@ -1192,6 +1202,7 @@
     ["name", "level", "q", "p", "stat_type", "data", "price", "rid", "b", "m", "l", "v"].forEach(function (key) {
       if (item[key] != null) copy[key] = item[key];
     });
+    if (item.expires != null) copy.expires = typeof item.expires === 'number' ? item.expires : new Date(item.expires).getTime();
     return copy;
   }
 
@@ -1762,7 +1773,7 @@
   }
 
   function activeConditions() {
-    return Object.keys(character.s || {}).map(function (id) {
+    var conditions = Object.keys(character.s || {}).map(function (id) {
       var live = character.s[id] || {};
       var definition = G.conditions[id] || G.skills[id] || {};
       var skin = live.skin || definition.skin;
@@ -1778,7 +1789,15 @@
         live: safeFields(live),
         sprite: skin ? spriteDefinition(skin) : null,
       };
-    }).sort(function (a, b) { return a.name.localeCompare(b.name); });
+    });
+    var activeElixir = character.slots && character.slots.elixir;
+    if (activeElixir && G.items[activeElixir.name]) {
+      var elixirDefinition = G.items[activeElixir.name], expiry = new Date(activeElixir.expires).getTime();
+      conditions.push({id:'elixir:'+activeElixir.name,name:elixirDefinition.name || activeElixir.name,
+        explanation:elixirDefinition.explanation || '',remainingMs:isFinite(expiry)?Math.max(0,expiry-Date.now()):null,
+        stacks:null,source:character.name,definition:safeFields(elixirDefinition),live:{},sprite:spriteDefinition(elixirDefinition.skin)});
+    }
+    return conditions.sort(function (a, b) { return a.name.localeCompare(b.name); });
   }
 
   function monsterHuntStatus() {
@@ -7214,10 +7233,10 @@
         }
       }
       var deliveries = [];
-      var restockSupplies = [command.restock && command.restock.hp, command.restock && command.restock.mp]
-        .concat(command.restock && command.restock.elixirs || []).map(function (supply) {
-        if (!supply || !supply.max || !supply.item) return null;
-        return { supply: supply, have: statusQuantity(command.targetInventory, supply.item) };
+      var restockSupplies = ["hp", "mp", "elixir"].map(function (kind) {
+        var supply = command.restock && command.restock[kind];
+        if (!supply || !supply.max) return null;
+        return { kind: kind, supply: supply, have: statusQuantity(command.targetInventory, supply.item) };
       }).filter(Boolean);
       // Any low-water mark starts one complete restock. Once the merchant
       // commits to the visit, bring every configured supply up to its maximum.
@@ -7228,32 +7247,22 @@
           var restockEntry = restockSupplies[restockIndex];
           var supply = restockEntry.supply;
           var needed = Math.max(0, supply.max - restockEntry.have), seller = itemSeller(supply.item);
-          if (needed > 0 && seller) {
-            var buyQuantity = Math.max(0, needed - inventoryQuantity(supply.item));
-            var restockCost = G.items[supply.item].g * buyQuantity;
-            // Elixirs cost far more than potions; draw the shortfall from the bank first.
-            if (character.gold < restockCost && (Number(character.bank && character.bank.gold) || 0) > 0) {
-              await merchantVisitBank(command, activity);
-              await withdrawMerchantCash(Math.min(restockCost - character.gold, Number(character.bank && character.bank.gold) || 0), command);
+          if (needed > 0 && restockEntry.kind === 'elixir') {
+            var elixirEntries = await restockElixirEntries(command, supply.item, needed);
+            for (var ei=0; ei<elixirEntries.length && needed>0; ei++) {
+              var elixirDelivery = Math.min(needed,Number(elixirEntries[ei].item.q)||1);
+              deliveries.push({name:supply.item,quantity:elixirDelivery,slot:elixirEntries[ei].slot});
+              needed-=elixirDelivery;
             }
-            if (character.gold >= restockCost) {
+          } else if (needed > 0 && seller) {
+            var buyQuantity = Math.max(0, needed - inventoryQuantity(supply.item));
+            if (character.gold >= G.items[supply.item].g * buyQuantity) {
               if (buyQuantity) {
-                // By name: the movement destination approaches NPCs behind counters (the Winter
-                // Inn bartender sells Liquid Luck) from the customer side.
-                await smart_move(seller);
+                await smart_move(find_npc(seller));
                 await buyConfirmed(supply.item, buyQuantity);
               }
               deliveries.push({ name: supply.item, quantity: needed });
             } else activity.push({ level: "error", message: "Insufficient gold to restock " + command.target });
-          } else if (needed > 0) {
-            // Nobody sells it (stat and resistance elixirs): deliver from the bank's stock.
-            if (inventoryQuantity(supply.item) < needed && itemAvailability(supply.item).inBank > 0) {
-              await merchantVisitBank(command, activity);
-              await retrieveFromBankUntil(supply.item, needed);
-            }
-            var carriedSupply = inventoryQuantity(supply.item);
-            if (carriedSupply > 0) deliveries.push({ name: supply.item, quantity: Math.min(needed, carriedSupply) });
-            else activity.push({ level: "error", message: "No seller or bank stock for " + supply.item + " to restock " + command.target });
           }
       }
       var deliveredRestocks = {}, deliveredWithdrawalsByIndex = {};
@@ -7281,6 +7290,15 @@
         for (var d = 0; d < deliveries.length; d += 1) {
           if (deliveredRestocks[d]) continue;
           var deliverySlot = findInventoryItemByName(deliveries[d].name);
+          if (Number.isInteger(deliveries[d].slot)) {
+            // Travel/tidying can move a supplied copy. Refresh reservations before
+            // sending rather than trusting an old slot or taking another job's stock.
+            var supplyCheckpoint = await upgradeOfferingCheckpoint(command);
+            var supplied = availableOfferingEntries(supplyCheckpoint).find(function(entry) {
+              return !entry.pack && entry.item.name === deliveries[d].name && (Number(entry.item.q)||1) >= deliveries[d].quantity;
+            });
+            deliverySlot = supplied ? supplied.slot : -1;
+          }
           if (deliverySlot >= 0) await merchantSendItem(command.target, deliverySlot, deliveries[d].quantity);
           deliveredRestocks[d] = true;
         }
@@ -8762,7 +8780,8 @@
     await heartbeat();
     var heartbeatTimer = setInterval(heartbeat, 5000), suspendedGathering = null, actionStarted = false;
     try {
-      if (["merchant-npc-sale", "merchant-deconstruct", "merchant-commerce", "merchant-upgrade-preview", "merchant-prim-stack"].indexOf(command.type) >= 0) {
+      // Delivery owns movement too: retire an idle return or gathering path before starting it.
+      if (["merchant-service", "merchant-npc-sale", "merchant-deconstruct", "merchant-commerce", "merchant-upgrade-preview", "merchant-prim-stack"].indexOf(command.type) >= 0) {
         suspendedGathering = gatheringMode;
         gatheringGeneration += 1; root.__merchantGatheringGeneration = gatheringGeneration;
         if (gatheringTimer) clearInterval(gatheringTimer);
@@ -9421,9 +9440,32 @@
     }
   }
 
+  async function restockElixirEntries(command, name, required) {
+    var checkpoint = await upgradeOfferingCheckpoint(command);
+    function carried() { return availableOfferingEntries(checkpoint).filter(function(entry) { return !entry.pack && entry.item.name === name; }); }
+    function count() { return carried().reduce(function(total,entry) { return total + (Number(entry.item.q)||1); },0); }
+    if (count() < required) {
+      await merchantVisitBank(command, []);
+      checkpoint = await upgradeOfferingCheckpoint(command);
+      var bankEntries = availableOfferingEntries(checkpoint).filter(function(entry) {
+        var original = entry.pack && character.bank && character.bank[entry.pack] && character.bank[entry.pack][entry.slot];
+        return original && entry.item.name === name && (Number(original.q)||1) === (Number(entry.item.q)||1);
+      });
+      for (var index=0; index<bankEntries.length && count()<required; index++) {
+        await bankRetrieveConfirmed(bankEntries[index].pack, bankEntries[index].slot);
+        checkpoint = await upgradeOfferingCheckpoint(command);
+      }
+    }
+    return carried();
+  }
+
   async function merchantSelfRestock(command) {
     var activity = [];
     try {
+      var elixirSupply = command.restock && command.restock.elixir;
+      if (elixirSupply && elixirSupply.item && inventoryQuantity(elixirSupply.item) < elixirSupply.max) {
+        await restockElixirEntries(command, elixirSupply.item, elixirSupply.max);
+      }
       var supplies = [command.restock && command.restock.hp, command.restock && command.restock.mp]
         .filter(function (supply) { return supply && Number(supply.max) > 0; });
       var needs = supplies.map(function (supply) {
@@ -11817,6 +11859,17 @@
       void prepareCatalog();
       flushStatusDiagnostics();
       statusPhase = "dispatch command";
+      var elixirPolicy = state.restockPolicies && state.restockPolicies[character.name] && state.restockPolicies[character.name].elixir;
+      if (elixirPolicy && elixirPolicy.autoConsume !== false && elixirPolicy.item && !character.slots.elixir &&
+          (!state.command || state.command.type === "merchant-idle" && !merchantIdleActive) &&
+          !gatheringActive && !character.rip && !bankboiStorage && !banking && !stocking && !upgrading &&
+          !root.__merchantActiveJob && !root.__merchantInventoryTidy) {
+        var elixirSlot = character.items.findIndex(function (item) { return item && !item.l && !item.b &&
+          item.name === elixirPolicy.item && G.items[item.name] && G.items[item.name].type === 'elixir'; });
+        if (elixirSlot >= 0) {
+          try { await consume(elixirSlot); } catch (_elixirUseError) { /* Native failures retry on the next ordinary heartbeat. */ }
+        }
+      }
       handle(state.command).catch(function (error) {
         if (state.command && lastCommand === Number(state.command.id) &&
             (state.command.type === "town-party" || state.command.type === "event-return-town" ||
@@ -14270,42 +14323,6 @@
       forceTraveling || convoyTraveling || partyConvoyActive || followingLeader ||
       departurePending || partyTownActive || banking || stocking || upgrading ||
       gatheringActive || (character.moving && !engagedMonster());
-  }
-
-  // A fighter keeps an elixir active: its worn gear set's choice, else its restock default.
-  // Equipping one consumes it, so an active elixir is never replaced; the next is drunk when it expires.
-  var elixirBusy = false, elixirRetryAt = 0;
-  var GEAR_SET_WORN_SLOTS = ["mainhand", "offhand", "chest", "pants", "helmet", "gloves", "shoes", "cape", "belt", "orb",
-    "amulet", "ring1", "ring2", "earring1", "earring2"];
-  function gearSetWorn(set) {
-    var saved = set && set.slots || {}, worn = character.slots || {};
-    return GEAR_SET_WORN_SLOTS.every(function (slot) {
-      var want = saved[slot], have = worn[slot] && worn[slot].name ? worn[slot] : null;
-      if (!want || !have) return !want && !have;
-      return have.name === want.name && Number(have.level || 0) === Number(want.level || 0) &&
-        (have.p || null) === (want.p || null) && (have.stat_type || null) === (want.stat_type || null);
-    });
-  }
-  function wantedElixir(policy) {
-    var sets = root.partyGearSets && root.partyGearSets[character.name] || {};
-    for (var name in sets) if (sets[name] && sets[name].elixir !== undefined && gearSetWorn(sets[name])) return sets[name].elixir;
-    return policy && policy.keepElixir || null;
-  }
-  function maintainElixir() {
-    if (elixirBusy || Date.now() < elixirRetryAt || character.rip || character.ctype === "merchant") return;
-    var policy = root.partyRestockPolicies && root.partyRestockPolicies[character.name], wanted = wantedElixir(policy);
-    if (!wanted) return;
-    var active = character.slots && character.slots.elixir;
-    if (active && (!active.expires || new Date(active.expires).getTime() > Date.now())) return;
-    var index = (character.items || []).findIndex(function (item) { return item && item.name === wanted; });
-    if (index < 0) return;
-    elixirBusy = true;
-    Promise.resolve(equip(index, "elixir")).then(function () {
-      game_log("Drank " + (G.items[wanted] && G.items[wanted].name || wanted), "#51D2E1");
-    }).catch(function (error) {
-      elixirRetryAt = Date.now() + 30000;
-      game_log("Elixir failed: " + String(error && (error.reason || error.message) || error), "red");
-    }).finally(function () { elixirBusy = false; });
   }
 
   function passiveRegenerationTick() {
@@ -18160,7 +18177,7 @@
     start: function () {
       if (timer) return;
       tick();
-      timer = setInterval(function(){ if (gameLogCapture) void gameLogCapture.pulse(); observeFarmArea(); maintainElixir(); tick(); }, 1000);
+      timer = setInterval(function(){ if (gameLogCapture) void gameLogCapture.pulse(); observeFarmArea(); tick(); }, 1000);
       reconcileGameParty();
       root.__partyRosterTimer = setInterval(reconcileGameParty, 5000);
       pollEvents();

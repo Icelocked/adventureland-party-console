@@ -517,7 +517,17 @@ export function startCoordinatorApplication(
       giveaways: scheduleNearbyGiveaways,
       compounds: scheduleAutoCompound,
       exchanges: scheduleAutoExchange,
-      policy: schedulingPolicy,
+      policy: policyFor,
+      elixirReady: (name, rule, have) => {
+        const merchant=party.merchantCharacter;
+        if (!merchant || !party.statuses[merchant] || merchantOrderRoute.restockPending(rule.item)) return false;
+        const stock=coordinatorPolicies.protectedMerchantStorageStock(party).filter(entry=>entry.item?.name===rule.item && !entry.item.l && !entry.item.b &&
+          !entry.craftLocation.startsWith('bankboi:') && (name!==merchant || !entry.craftLocation.startsWith('inventory:')))
+          .reduce((sum,entry)=>sum+(Number(entry.item?.q)||1),0);
+        if (stock>0) return true;
+        if (rule.autoAcquire) merchantOrderRoute.restockSupply(rule.item,Math.max(1,rule.max-have));
+        return false;
+      },
       queue: queueMerchant,
       markedItem,
       sameItem: sameMarkedItem,
@@ -1346,20 +1356,6 @@ export function startCoordinatorApplication(
 
     function policyFor(name: Parameters<typeof coordinatorPolicies.coordinatorRestockPolicy>[1]) {
       return coordinatorPolicies.coordinatorRestockPolicy(party.restockPolicies, name);
-    }
-
-    /**
-     * The policy a fighter's heartbeat schedules from: an elixir no NPC sells and the bank has none
-     * of is left out, so the merchant is not sent to the bank for it on every heartbeat.
-     */
-    function schedulingPolicy(name: Parameters<typeof policyFor>[0]) {
-      const policy = policyFor(name);
-      const catalog = party.merchantCatalog as { buyable?: { id: string }[] } | null | undefined;
-      if (!catalog?.buyable || !Array.isArray(policy.elixirs)) return policy;
-      const packs = (party.bankSnapshot as { packs?: Record<string, { item?: { name?: string } }[]> } | null | undefined)?.packs || {};
-      const banked = (item: string) => Object.values(packs).some(pack => Array.isArray(pack) && pack.some(entry => entry?.item?.name === item));
-      return { ...policy, elixirs: policy.elixirs.filter((supply: { item: string }) =>
-        catalog.buyable!.some(entry => entry.id === supply.item) || banked(supply.item)) };
     }
 
     function restockSatisfied(

@@ -185,14 +185,9 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
     () => state.merchantCatalog?.allItems || emptyArray<MerchantCatalogItem>(),
     [state.merchantCatalog],
   );
-  const elixirOptions = useMemo(
-    () => merchantCatalogAllItems.filter(item => item.meta?.definition?.type === "elixir")
-      .map(item => ({ id: item.id, name: item.name })).sort((a, b) => a.name.localeCompare(b.name)),
-    [merchantCatalogAllItems],
-  );
   const restockControls = useMemo(
-    () => <RestockControls character={name} value={state.restockPolicies?.[name]} elixirOptions={elixirOptions} onSave={saveRestock}/>,
-    [name, state.restockPolicies?.[name], elixirOptions, saveRestock],
+    () => <RestockControls character={name} value={state.restockPolicies?.[name]} onSave={saveRestock}/>,
+    [name, state.restockPolicies?.[name], saveRestock],
   );
   const renderMonsterDetails = useCallback(
     (id: string, close: () => void): ReactNode => {
@@ -372,7 +367,7 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
             merchant={char.ctype === 'merchant'}
             onChange={onEventSelectionChange} onPriorityChange={onEventPriorityChange} onLimitsChange={onEventLimitsChange}
           />
-          {char.ctype !== 'merchant' && <GearSetControl name={char.name} model={inventoryModel} sets={state.gearSets?.[char.name]} elixirOptions={elixirOptions} />}
+          {char.ctype !== 'merchant' && <GearSetControl name={char.name} model={inventoryModel} sets={state.gearSets?.[char.name]} />}
         </div>
         <div className="mt-5 grid gap-3">
           <Meter

@@ -1,72 +1,91 @@
-import { test, expect, type LiveGame } from './live-fixtures';
-import type { Page } from '@playwright/test';
+import {test,expect} from './live-fixtures';
 
-// Failure inventory: e2e/elixir-restock-failures.md. The fighter's restock policy names Liquid
-// Luck (min 0, max 1); the merchant buys it from the Winter Inn bartender, delivers it, and the
-// fighter drinks it. Declared input: the fixture disables every merchant automation; this
-// journey enables restock only. Purchases, travel, delivery and the elixir are native.
-const W = 'E2EWarrior', merchant = 'E2EMerchant';
-const elixirs = (live: LiveGame) => live.admin(`output=(()=>{const p=get_player('${W}');
-  return {active:p.slots.elixir?p.slots.elixir.name:null,expires:p.slots.elixir?.expires??null,
-    carried:p.items.filter(i=>i&&i.name==='elixirluck').reduce((n,i)=>n+(i.q||1),0)};})()`);
+const merchant='E2EMerchant',target='E2EWarrior';
+const policy=(item:string,autoAcquire:boolean,autoConsume=true,max=2)=>({character:target,hp:{min:0,max:0},mp:{min:0,max:0},elixir:{item,min:max===1?0:1,max,autoConsume,autoAcquire}});
 
-test('the merchant buys and delivers a fighter\'s Liquid Luck, the fighter drinks it, and a spare follows', async ({ live }, info) => {
-  test.setTimeout(600_000);
-  const samples: any[] = [];
+for(const mode of ['stored','buy','craft'] as const) test(`elixir restock ${mode} uses native supply and consumption receipts`,async({live,page},info)=>{
+  test.setTimeout(360000);
+  const item=mode==='craft'?'elixirfires':'elixirluck',max=mode==='craft'?1:2;
   try {
-    expect(await elixirs(live)).toEqual({ active: null, expires: null, carried: 0 });
-    // 1: the policy saves an elixir supply.
-    const saved = await live.post('/restock', { character: W, hp: { min: 5, max: 20 }, mp: { min: 0, max: 0 }, elixirs: [{ item: 'elixirluck', min: 0, max: 1 }], keepElixir: 'elixirluck' });
-    expect({ elixirs: saved.policy?.elixirs, keepElixir: saved.policy?.keepElixir }).toEqual({ elixirs: [{ item: 'elixirluck', min: 0, max: 1 }], keepElixir: 'elixirluck' });
-    const automations = (await live.state()).merchantAutomations || {};
-    await live.post('/merchant/routine-priorities', { priorities: {}, enabled: { ...Object.fromEntries(Object.keys(automations).map(name => [name, false])), restock: true } });
-    // 2, 3, 4: the merchant buys one at the Winter Inn and delivers it; the fighter drinks it.
-    const coordinator = async () => { const state = await live.state(); return { policy: state.restockPolicies?.[W] ?? null,
-      queue: (state.merchantQueue || []).map((job: any) => [job?.reason, job?.target]), current: state.merchantCurrent && [state.merchantCurrent.reason, state.merchantCurrent.target],
-      automations: state.merchantAutomations ?? null }; };
-    await expect.poll(async () => { const now = await elixirs(live); samples.push({ at: Date.now(), phase: 'first', now, coordinator: await coordinator() }); return now.active; },
-      { timeout: 300_000, intervals: [2000], message: 'The fighter must be drinking a delivered Liquid Luck' }).toBe('elixirluck');
-    // 6: with the carried spare drunk, the merchant brings another, which stays in the bag (5).
-    await expect.poll(async () => { const now = await elixirs(live); samples.push({ at: Date.now(), phase: 'spare', now }); return now; },
-      { timeout: 300_000, intervals: [2000], message: 'The merchant must deliver a spare while one is active' }).toMatchObject({ active: 'elixirluck', carried: 1 });
-    const settled = await elixirs(live);
-    await new Promise(resolve => setTimeout(resolve, 10_000));
-    expect(await elixirs(live), 'The spare must not be drunk while one is active').toEqual(settled);
-    expect((await live.state()).merchantActivity.some((entry: any) => /insufficient gold/i.test(entry.message))).toBe(false);
+    await live.admin(`output=(async()=>{const m=get_player('${merchant}'),p=get_player('${target}');
+      if(p.slots.elixir||p.items.some(i=>i&&i.name==='${item}'))throw Error('Elixir fixture must start without selected stock');
+      m.gold=1000000;
+      if('${mode}'==='stored')await db.collection('user').updateOne({_id:m.owner},{$set:{'info.items0.20':{name:'${item}',q:2}}});
+      if('${mode}'==='craft'){if(m.items[20]||m.items[21])throw Error('Craft fixture cells must be empty');m.items[20]={name:'cshell',q:1};m.items[21]={name:'hpot0',q:2000};}
+      cache_player_items(m);resend(m,'reopen+cid');return true;})()`);
+    await live.clients[merchant].run(`(()=>{globalThis.__elixirReceipts=[];parent.socket.on('game_response',data=>{if(['buy_success','craft','crafted'].includes(data?.response)||data?.place==='craft')globalThis.__elixirReceipts.push({at:Date.now(),data})});return true})()`);
+    await live.clients[target].run(`(()=>{globalThis.__elixirUses=[];parent.socket.on('game_response',data=>{if(data?.response==='elixir')globalThis.__elixirUses.push({at:Date.now(),data})});return true})()`);
+    await live.post('/command',{character:merchant,type:'bank'});
+    await expect.poll(async()=>!!(await live.state()).bank?.packs,{timeout:90000}).toBe(true);
+    await expect.poll(async()=>(await live.state()).merchantCurrent,{timeout:90000}).toBeNull();
+    await live.post('/restock',policy(item,false,mode!=='buy',max));
+    await live.post('/merchant/routine-priorities',{priorities:{},enabled:{restock:true}});
+    if(mode!=='stored') {
+      const before=(await live.clients[target].snapshot()).statusAt;
+      await expect.poll(async()=>(await live.clients[target].snapshot()).statusAt,{timeout:30000}).toBeGreaterThan(before+10000);
+      expect(await live.clients[merchant].run('globalThis.__elixirReceipts')).toEqual([]);
+      await live.post('/restock',policy(item,true,mode!=='buy',max));
+    }
+    if(mode==='buy') {
+      await expect.poll(async()=>(await live.clients[target].snapshot()).items.filter((i:any)=>i?.name===item).reduce((n:number,i:any)=>n+(i.q||1),0),{timeout:180000}).toBe(2);
+      const unconsumed=await live.admin(`output=!!get_player('${target}').slots.elixir`);
+      expect(unconsumed).toBe(false);
+      await live.post('/restock',policy(item,false,true,max));
+    }
+    await expect.poll(async()=>await live.admin(`output=get_player('${target}').slots.elixir?.name||null`),{timeout:180000}).toBe(item);
+    await expect.poll(async()=>{const c=(await live.state()).characters[target];return {item:c?.slots?.elixir?.item?.name,status:c?.conditions?.some((s:any)=>s.id==='elixir:'+item)};},{timeout:30000}).toEqual({item,status:true});
+    const uses=await live.clients[target].run('globalThis.__elixirUses');
+    expect(uses).toHaveLength(1);
+    if(mode==='stored') expect(await live.clients[merchant].run('globalThis.__elixirReceipts')).toEqual([]);
+    if(mode==='buy') expect((await live.clients[merchant].run('globalThis.__elixirReceipts')).filter((r:any)=>r.data.response==='buy_success'&&r.data.name===item).reduce((n:number,r:any)=>n+r.data.q,0)).toBe(2);
+    if(mode==='craft') {
+      const ingredients=await live.admin(`output=get_player('${merchant}').items.filter(i=>i&&['cshell','hpot0'].includes(i.name))`);
+      expect(ingredients).toEqual([]);
+    }
+    await page.goto(live.url);
+    const card=page.locator('article').filter({has:page.getByRole('heading',{name:target,exact:true})});
+    await expect(card.getByText(mode==='craft'?'Elixir of Fire Resistance':'Liquid Luck',{exact:true}).first()).toBeVisible();
+    await card.getByRole('button',{name:/^Active status/}).click();
+    const activeStatuses=card.locator('section').filter({has:page.getByRole('heading',{name:'Active status',exact:true})});
+    await expect(activeStatuses.getByRole('button',{name:mode==='craft'?/^Elixir of Fire Resistance/:/^Liquid Luck/})).toBeVisible();
+    const equipped=card.getByLabel('Equipped elixir');
+    await expect(equipped).toHaveCount(1);
+    await expect(equipped).toContainText(/\d+[hms]/);
+    await info.attach('active-elixir-slot-and-status',{body:await card.screenshot(),contentType:'image/png'});
+    if(mode==='buy') {
+      await live.admin(`output=(()=>{const p=get_player('${target}');if(p.items[20])throw Error('Potion fixture requires empty slot 20');p.items[20]={name:'hpot0',q:1};p.hp=Math.max(1,p.max_hp-300);cache_player_items(p);resend(p,'reopen+cid');return true;})()`);
+      await expect.poll(async()=>(await live.clients[target].snapshot()).items[20]?.name).toBe('hpot0');
+      await expect.poll(async()=>{
+        const result=await live.clients[target].run(`(async()=>{if(!character.items[20])return {done:true};try{await consume(20);return {done:true};}catch(error){return {reason:error?.reason||error?.response||String(error)};}})()`);
+        if(result.reason && result.reason!=='not_ready') throw Error('Native potion use failed: '+JSON.stringify(result));
+        return result.done===true;
+      },{timeout:15000,intervals:[100,250]}).toBe(true);
+      await expect.poll(async()=>(await live.clients[target].snapshot()).items[20]).toBeNull();
+    }
+    await expect.poll(async()=>{const data=await (await page.request.get(live.url+'/party-api/metrics?from='+(Date.now()-120000)+'&to='+Date.now())).json();return data.points.flatMap((p:any)=>p.values).filter((r:any)=>r.character===target).some((r:any)=>r.last.consumableCost === (mode==='buy'?240020:240000));},{timeout:30000}).toBe(true);
+    await live.restartCoordinator();
+    await expect.poll(async()=>(await live.state()).restockPolicies[target].elixir.item).toBe(item);
+    expect(await live.clients[target].run('globalThis.__elixirUses')).toHaveLength(1);
   } finally {
-    await info.attach('elixir-restock', { body: JSON.stringify({ samples, merchant: (await live.state().catch(() => ({})) as any).merchantActivity?.slice(-30) }), contentType: 'application/json' });
+    await info.attach('elixir-native-evidence',{body:JSON.stringify({state:await live.state(),merchant:await live.clients[merchant].snapshot(),recipient:await live.clients[target].snapshot(),receipts:await live.clients[merchant].run('globalThis.__elixirReceipts||[]'),uses:await live.clients[target].run('globalThis.__elixirUses||[]')}),contentType:'application/json'});
   }
 });
 
-// Failure 9: the character card's restock form saves the elixir supply.
-async function restockSection(page: Page) {
-  const card = page.locator('article').filter({ has: page.getByRole('heading', { name: W, exact: true }) });
-  const save = card.getByRole('button', { name: 'Save restock' }), toggle = card.getByRole('button', { name: /^Merchant restock/ });
-  // The section remembers it was open; read the toggle rather than racing hydration.
-  await expect(toggle).toHaveAttribute('aria-expanded', /true|false/);
-  if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
-  await expect(save).toBeVisible();
-  return card;
-}
-test('the dashboard restock form saves a Liquid Luck supply\'s min and max', async ({ live, page }, info) => {
-  test.setTimeout(300_000);
-  await page.goto(live.url);
-  const card = await restockSection(page);
-  await live.post('/restock', { character: W, hp: { min: 5, max: 20 }, mp: { min: 0, max: 0 }, elixirs: [], keepElixir: null });
-  await page.reload();
-  await restockSection(page);
-  await card.getByRole('button', { name: 'Add elixir' }).click();
-  await card.getByLabel('Elixir 1', { exact: true }).selectOption({ label: 'Liquid Luck' });
-  await card.getByLabel('Elixir 1 min', { exact: true }).fill('1');
-  await card.getByLabel('Elixir 1 max', { exact: true }).fill('2');
-  await card.getByRole('button', { name: 'Save restock' }).click();
-  await expect.poll(async () => (await live.state()).restockPolicies?.[W]?.elixirs ?? null, { timeout: 30_000,
-    message: 'The coordinator must store the elixir supply saved from the form' }).toEqual([{ item: 'elixirluck', min: 1, max: 2 }]);
-  await expect.poll(async () => (await live.state()).restockPolicies?.[W]?.hp ?? null).toEqual({ item: 'hpot1', min: 5, max: 20 });
-  // The saved values survive a reload of the dashboard.
-  await page.reload();
-  const reloaded = await restockSection(page);
-  await expect(reloaded.getByLabel('Elixir 1 min', { exact: true })).toHaveValue('1');
-  await expect(reloaded.getByLabel('Elixir 1 max', { exact: true })).toHaveValue('2');
-  await info.attach('elixir-restock-form', { body: await page.screenshot(), contentType: 'image/png' });
+
+test('merchant restocks and consumes its own native elixir',async({live},info)=>{
+  test.setTimeout(180000);
+  try {
+    await live.admin(`output=(async()=>{const m=get_player('${merchant}');if(m.slots.elixir)throw Error('Expected no active elixir');await db.collection('user').updateOne({_id:m.owner},{$set:{'info.items0.20':{name:'elixirluck',q:2}}});return true;})()`);
+    await live.clients[merchant].run(`(()=>{globalThis.__elixirUses=[];parent.socket.on('game_response',data=>{if(data?.response==='elixir')globalThis.__elixirUses.push({at:Date.now(),data})});return true})()`);
+    await live.post('/command',{character:merchant,type:'bank'});
+    await expect.poll(async()=>!!(await live.state()).bank?.packs,{timeout:90000}).toBe(true);
+    await expect.poll(async()=>(await live.state()).merchantCurrent,{timeout:90000}).toBeNull();
+    await live.post('/restock',{...policy('elixirluck',false),character:merchant});
+    await live.post('/merchant/routine-priorities',{priorities:{},enabled:{restock:true}});
+    await expect.poll(async()=>await live.admin(`output=get_player('${merchant}').slots.elixir?.name||null`),{timeout:90000}).toBe('elixirluck');
+    await expect.poll(async()=>{const s=await live.state();return {job:s.merchantCurrent,item:s.characters[merchant]?.slots?.elixir?.item?.name,quantity:s.characters[merchant]?.items?.filter((entry:any)=>entry?.item?.name==='elixirluck').reduce((n:number,entry:any)=>n+(entry.item.q||1),0)};},{timeout:30000}).toEqual({job:null,item:'elixirluck',quantity:1});
+    expect(await live.clients[merchant].run('globalThis.__elixirUses')).toHaveLength(1);
+  } finally {
+    await info.attach('merchant-self-elixir-evidence',{body:JSON.stringify({state:await live.state(),native:await live.clients[merchant].snapshot(),uses:await live.clients[merchant].run('globalThis.__elixirUses||[]')}),contentType:'application/json'});
+  }
 });

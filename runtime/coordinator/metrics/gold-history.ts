@@ -2,7 +2,9 @@ import { METRIC_BUCKET_MS, type GoldHistoryResponse, type GoldSample, type Metri
 
 interface Bucket { at: number; width: number; values: MetricTotals[] }
 const sample = (value: MetricSample): GoldSample => ({ at: value.at, gold: value.gold,
-  ...(value.goldMovement === undefined ? {} : { goldMovement: value.goldMovement }) });
+  ...(value.goldMovement === undefined ? {} : { goldMovement: value.goldMovement }),
+  ...(value.consumableCost === undefined ? {} : {consumableCost:value.consumableCost}),
+  ...(value.consumablePurchases === undefined ? {} : {consumablePurchases:value.consumablePurchases}) });
 type Row = GoldHistoryResponse['points'][number]['values'][number];
 function mergeBalance(values: Map<string, Row>, incoming: MetricTotals) {
   const key = JSON.stringify([incoming.character, incoming.server]), row = values.get(key);

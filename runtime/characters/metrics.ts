@@ -16,7 +16,7 @@ interface Ports {
   storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 }
 type Frame = MetricFrame & { server: string };
-interface Journal { runtime: string; sequence: number; queue: Frame[]; lost: boolean; goldMovement: number }
+interface Journal { runtime: string; sequence: number; queue: Frame[]; lost: boolean; goldMovement: number; consumableCost:number; consumablePurchases:number }
 // Upstream hit declarations omit `dead` and `actor`, seen in native AoE packets.
 type Hit = Omit<ServerToClient_hit, 'source'> & { source?: string; dead?: boolean; actor?: string; skill?: string; mtype?: string };
 // Native cache_item preserves properties omitted by upstream chest item types.
@@ -53,7 +53,7 @@ export function installPartyMetrics(ports: Ports) {
       if (!retained.has(ring) && ports.storage.getItem(ring) != null) ports.storage.removeItem(ring);
     }
   }
-  const journal: Journal = { runtime: Date.now() + '-' + Math.random().toString(36).slice(2), sequence: 0, queue: [], lost: false, goldMovement: 0 };
+  const journal: Journal = { runtime: Date.now() + '-' + Math.random().toString(36).slice(2), sequence: 0, queue: [], lost: false, goldMovement: 0, consumableCost:0, consumablePurchases:0 };
   // Restored data crosses a storage boundary. Accept only our bounded versioned envelope;
   // the coordinator performs full frame validation before accepting measurements.
   try {
@@ -63,6 +63,8 @@ export function installPartyMetrics(ports: Ports) {
       journal.runtime = saved.runtime;
       journal.sequence = saved.sequence;
       if ('goldMovement' in saved && metricNumber(saved.goldMovement, -Number.MAX_SAFE_INTEGER)) journal.goldMovement = saved.goldMovement;
+      if ('consumableCost' in saved && metricNumber(saved.consumableCost)) journal.consumableCost=saved.consumableCost;
+      if ('consumablePurchases' in saved && metricNumber(saved.consumablePurchases)) journal.consumablePurchases=saved.consumablePurchases;
       for (const entry of saved.queue.slice(-720)) {
         const value: unknown = typeof entry === 'number'
           ? JSON.parse(ports.storage.getItem(frameKey(entry)) || 'null') : entry;
@@ -104,7 +106,7 @@ export function installPartyMetrics(ports: Ports) {
   function sample(at: number): MetricSample {
     const value = ports.sample();
     // Native login pings include connection establishment and are not steady-state latency.
-    return { ...value, ping: connectedSince === null || at - connectedSince < 10_000 ? null : value.ping, at, goldMovement: journal.goldMovement };
+    return { ...value, ping: connectedSince === null || at - connectedSince < 10_000 ? null : value.ping, at, goldMovement: journal.goldMovement, consumableCost:journal.consumableCost, consumablePurchases:journal.consumablePurchases };
   }
   function persist() {
     try {
@@ -280,7 +282,14 @@ export function installPartyMetrics(ports: Ports) {
     void flush();
   }
   const timer = setInterval(pulse, 1000);
-  return { hit, loot, credit, goldMovement };
+  function consumable(cost:number, purchase=false) {
+    if (!ports.current() || !metricNumber(cost)) return;
+    // Establish a pre-action cumulative baseline even if the action falls between pulses.
+    frame(ports.now());
+    journal[purchase?'consumablePurchases':'consumableCost']+=cost;
+    persist();
+  }
+  return { hit, loot, credit, goldMovement, consumable };
 }
 function itemProperties(item: Partial<Pick<ItemInfo, 'p' | 'stat_type'>>) {
   return { ...(item.p ? { p: item.p } : {}), ...(item.stat_type ? { stat_type: item.stat_type } : {}) };

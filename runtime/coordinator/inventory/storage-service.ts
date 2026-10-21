@@ -67,8 +67,6 @@ export function coordinatorRestockPolicy<Policy>(
     policies[String(name)] || {
       hp: { min: 5, max: 20, item: "hpot1" },
       mp: { min: 0, max: 0, item: "mpot1" },
-      elixirs: [],
-      keepElixir: null,
     }
   );
 }

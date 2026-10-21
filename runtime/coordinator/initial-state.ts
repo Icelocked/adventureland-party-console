@@ -1,4 +1,3 @@
-import { normalizeRestockPolicy } from './http/restock.ts';
 import {
   initialRecoveryState,
   initialPartySelection,
@@ -98,8 +97,7 @@ export function createInitialCoordinatorState<Merchant extends string | null = s
     ...initialFarmingState(persistedSettings, ports.now),
     characterLocations: persistedSettings.characterLocations || {},
     navigationIntents: persistedSettings.navigationIntents || {},
-    // Policies saved before per-character elixirs carry one `elixir` supply.
-    restockPolicies: Object.fromEntries(Object.entries(persistedSettings.restockPolicies || {}).map(([name, policy]) => [name, normalizeRestockPolicy(policy)])),
+    restockPolicies: persistedSettings.restockPolicies || {},
     alninja: initialAlninja(persistedSettings.alninja),
     alninjaReporting: false,
     ...initialMerchantRuntime<Merchant>(persistedSettings, ports.merchantDefault),

@@ -1,5 +1,4 @@
 "use client";
-import type { ElixirOption } from "./restock-controls";
 import { memo } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { usePartyAction } from "./query-actions";
@@ -32,27 +31,24 @@ function completeness(char: Char, slots: Record<string, GearSetItem>) {
   return { total: Object.keys(slots).length, worn, carried, missing };
 }
 
-export const GearSetControl = memo(function GearSetControl({ name, model, sets, elixirOptions }: { name: string; model: InventoryModel; sets: GearSets | undefined; elixirOptions: ElixirOption[] }) {
+export const GearSetControl = memo(function GearSetControl({ name, model, sets }: { name: string; model: InventoryModel; sets: GearSets | undefined }) {
   const saved = SETS.filter(([id]) => sets?.[id]).length;
   return <Popover>
     <PopoverTrigger className="cursor-pointer whitespace-nowrap rounded border border-slate-500 bg-[#101c1a] px-2 py-1 text-xs text-emerald-100 hover:bg-[#20332e]">Gear sets ({saved}) ▾</PopoverTrigger>
     <PopoverContent align="start" className="w-96 max-w-[calc(100vw-1rem)] space-y-3 rounded border border-slate-500 bg-[#101c1a] p-3 text-xs text-emerald-50 shadow-xl">
-      <GearSetDetails name={name} model={model} sets={sets} elixirOptions={elixirOptions} />
+      <GearSetDetails name={name} model={model} sets={sets} />
     </PopoverContent>
   </Popover>;
 });
 
 /** Mounted only while the popover is open; bag and equipment arrive through the inventory subscription, not the presence state. */
-function GearSetDetails({ name, model, sets, elixirOptions }: { name: string; model: InventoryModel; sets: GearSets | undefined; elixirOptions: ElixirOption[] }) {
+function GearSetDetails({ name, model, sets }: { name: string; model: InventoryModel; sets: GearSets | undefined }) {
   const action = usePartyAction();
   const update = (set: string, kind: "save" | "clear" | "equip") => action.mutate({ path: "/gear-sets", body: { character: name, set, action: kind } });
-  // "default" uses the character's restock default; null keeps no elixir while the set is worn.
-  const chooseElixir = (set: string, value: string) => action.mutate({ path: "/gear-sets",
-    body: { character: name, set, action: "elixir", elixir: value === "none" ? null : value } });
   const char: Char | undefined = usePanelModel(model, { inventory: true }).state.characters[name];
   const loaded = !!char && Array.isArray(char.items) && !!char.slots;
   return <>
-      <p className="text-slate-300">Sets are saved from the gear {name} is wearing, every slot included. Equip wears a saved set from the bag (never the elixir) and pauses the tank&apos;s automatic return to its tank set for 10 minutes, so you can adjust and save again. Set members are never taken by automatic compound, upgrade or cleanout rules.</p>
+      <p className="text-slate-300">Sets are saved from the gear {name} is wearing, every slot included. Equip wears a saved set from the bag and pauses the tank&apos;s automatic return to its tank set for 10 minutes, so you can adjust and save again. Set members are never taken by automatic compound, upgrade or cleanout rules.</p>
       {SETS.map(([id, label, purpose]) => {
         const set = sets?.[id], state = set && loaded && completeness(char, set.slots as Record<string, GearSetItem>);
         return <section key={id} aria-label={`${label} gear set`} className="space-y-1 rounded border border-slate-600 bg-[#0b1513] p-2">
@@ -70,17 +66,6 @@ function GearSetDetails({ name, model, sets, elixirOptions }: { name: string; mo
             {set && <button type="button" disabled={action.isPending} onClick={() => update(id, "clear")}
               className="rounded border border-rose-700 bg-slate-950 px-2 py-1 text-rose-200 hover:bg-rose-950 disabled:opacity-50">Clear</button>}
           </div>
-          {set && <label className="flex items-center gap-2 text-slate-300">Elixir
-            <select aria-label={`${label} elixir`} disabled={action.isPending}
-              value={set.elixir === undefined ? "default" : set.elixir === null ? "none" : set.elixir}
-              onChange={event => chooseElixir(id, event.target.value)}
-              className="rounded border border-slate-600 bg-slate-950 px-1 py-1 text-emerald-100">
-              <option value="default">Character default</option>
-              <option value="none">None</option>
-              {set.elixir && !elixirOptions.some(option => option.id === set.elixir) && <option value={set.elixir}>{set.elixir}</option>}
-              {elixirOptions.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
-            </select>
-          </label>}
         </section>;
       })}
       {action.error && <p role="alert" className="text-rose-300">{action.error.message}</p>}

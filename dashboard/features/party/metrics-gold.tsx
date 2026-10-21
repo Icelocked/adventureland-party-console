@@ -7,13 +7,13 @@ import { MetricsChart } from './metrics-chart';
 import { MetricsSelect } from './metrics-controls';
 import type { GraphPoint } from './metrics-series';
 
-const profitBalance = (sample: Pick<MetricSample, 'gold' | 'goldMovement'>) => sample.gold + (sample.goldMovement || 0);
+const profitBalance = (sample: Pick<MetricSample, 'gold' | 'goldMovement' | 'consumableCost' | 'consumablePurchases'>, accountConsumables:boolean) => sample.gold + (sample.goldMovement || 0) + (accountConsumables ? (sample.consumablePurchases || 0) - (sample.consumableCost || 0) : 0);
 
 /** Each character starts at its first observed balance, adjusted for internal movement. Joining the chart does
  * not count existing wealth as income. Missing/offline characters retain their
  * last known gain instead of invalidating every party point.
  */
-export function goldGainSeries(data: GoldHistoryResponse, characters: string[], server: string) {
+export function goldGainSeries(data: GoldHistoryResponse, characters: string[], server: string, accountConsumables = false) {
   const start = Math.max(data.from, data.startedAt, data.resets?.gold || 0);
   const balances = new Map<string, { baseline: number; balance: number; at: number }>();
   const points: GraphPoint[] = [];
@@ -24,8 +24,8 @@ export function goldGainSeries(data: GoldHistoryResponse, characters: string[], 
     for (const row of rows) {
       const previous = balances.get(row.character);
       const first = row.goldStart && row.goldStart.at >= start ? row.goldStart : row.first.at >= start ? row.first : row.last;
-      if (!previous) balances.set(row.character, { baseline: profitBalance(first), balance: profitBalance(row.last), at: row.last.at });
-      else if (row.last.at >= previous.at) { previous.balance = profitBalance(row.last); previous.at = row.last.at; }
+      if (!previous) balances.set(row.character, { baseline: profitBalance(first,accountConsumables), balance: profitBalance(row.last,accountConsumables), at: row.last.at });
+      else if (row.last.at >= previous.at) { previous.balance = profitBalance(row.last,accountConsumables); previous.at = row.last.at; }
     }
     points.push({ at: Math.max(point.at, start), gain: balances.size ? [...balances.values()].reduce((total, value) => total + value.balance - value.baseline, 0) : null });
   }
@@ -47,9 +47,10 @@ export function MetricsGold({ data: sharedData, active, clock, live, resetAt, ch
     return source ? { ...source, resets: { ...source.resets, gold: Math.max(resetAt, source.resets?.gold || 0) } } : undefined;
   }, [query.data, resetAt]);
   const [character, setCharacter] = useState('');
+  const [accountConsumables,setAccountConsumables]=useState(true);
   const available = (data || sharedData).characters.filter(name => !characters.length || characters.includes(name));
   const selected = available.includes(character) ? character : '';
-  const points = useMemo(() => data ? goldGainSeries(data, selected ? [selected] : characters, server) : [], [data, selected, characters, server]);
+  const points = useMemo(() => data ? goldGainSeries(data, selected ? [selected] : characters, server, accountConsumables) : [], [data, selected, characters, server,accountConsumables]);
   const legacy = data?.points.some(point => point.values.some(row => row.last.goldMovement === undefined &&
     (!selected || row.character === selected) && (!characters.length || characters.includes(row.character)) && (!server || row.server === server)));
   const latest = points[points.length - 1]?.gain ?? null;
@@ -57,6 +58,6 @@ export function MetricsGold({ data: sharedData, active, clock, live, resetAt, ch
     yLabel="Gold gained (net)" currentValue={{ amount: latest, unit: 'gold gained', label: 'Net gold gained since reset' }}
     empty={query.isError ? 'Metrics unavailable' : query.isPending ? 'Loading…' : 'No data since reset'}
     onReset={onReset} resetting={resetting} resetDisabled={resetDisabled} resetTitle={resetTitle}
-    optionDetails={<p className="text-sm text-[#aabfb6]">History since the last reset, up to 180 days. Internal transfers and bank movements are excluded.{legacy ? ' Older history predates transfer tracking.' : ''}</p>}
-    controls={<MetricsSelect label="Gold character" value={selected} onChange={setCharacter} options={[{ value: '', label: 'All characters' }, ...available.map(name => ({ value: name, label: name }))]} className="w-48 max-w-none" />} />;
+    optionDetails={<p className="text-sm text-[#aabfb6]">History since the last reset, up to 180 days. Internal transfers and bank movements are excluded. When enabled, confirmed potion and elixir use is charged at catalog replacement value; their purchases are added back to avoid charging purchase and consumption twice. Older samples without consumption tracking cannot be adjusted.{legacy ? ' Older history predates transfer tracking.' : ''}</p>}
+    controls={<div className="flex flex-wrap items-center gap-3"><label className="flex items-center gap-2 text-sm text-emerald-100"><input type="checkbox" checked={accountConsumables} onChange={event=>setAccountConsumables(event.target.checked)}/>Account for potion and elixir use</label><MetricsSelect label="Gold character" value={selected} onChange={setCharacter} options={[{ value: '', label: 'All characters' }, ...available.map(name => ({ value: name, label: name }))]} className="w-48 max-w-none" /></div>} />;
 }

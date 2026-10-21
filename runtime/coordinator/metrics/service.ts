@@ -93,8 +93,11 @@ function storedBucket(value: unknown): StoredBucket {
       const baseline = requestObject(value.goldStart);
       if (!metricNumber(baseline.at) || !metricNumber(baseline.gold)) throw Error('Invalid gold baseline');
       if (baseline.goldMovement !== undefined && !metricNumber(baseline.goldMovement, -Number.MAX_SAFE_INTEGER)) throw Error('Invalid gold movement baseline');
+      for (const field of ['consumableCost','consumablePurchases']) if (baseline[field] !== undefined && !metricNumber(baseline[field])) throw Error('Invalid consumable baseline');
       values[values.length - 1].goldStart = { at: baseline.at, gold: baseline.gold,
-        ...(baseline.goldMovement === undefined ? {} : { goldMovement: baseline.goldMovement }) };
+        ...(baseline.goldMovement === undefined ? {} : { goldMovement: baseline.goldMovement }),
+        ...(baseline.consumableCost === undefined ? {} : {consumableCost:Number(baseline.consumableCost)}),
+        ...(baseline.consumablePurchases === undefined ? {} : {consumablePurchases:Number(baseline.consumablePurchases)}) };
     }
   }
   const kills: MetricDeathTotal[] = [];
@@ -208,7 +211,9 @@ export function createMetricsService(path: string, ports: Ports) {
     else {
       const baseline = frame.first.at >= (resets.gold || 0) ? frame.first : frame.last;
       incoming.goldStart = { at: baseline.at, gold: baseline.gold,
-        ...(baseline.goldMovement === undefined ? {} : { goldMovement: baseline.goldMovement }) };
+        ...(baseline.goldMovement === undefined ? {} : { goldMovement: baseline.goldMovement }),
+        ...(baseline.consumableCost === undefined ? {} : {consumableCost:Number(baseline.consumableCost)}),
+        ...(baseline.consumablePurchases === undefined ? {} : {consumablePurchases:Number(baseline.consumablePurchases)}) };
     }
     if (frame.first.at < (resets.ping || 0)) incoming.first.ping = null;
     if (frame.last.at < (resets.ping || 0)) incoming.last.ping = null;
