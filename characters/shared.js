@@ -15171,7 +15171,9 @@
         navigationIntent.cancelled || convoy.navigationRevision!==navigationIntent.revision) return;
     if (parent.__partyGeometryReloaded===repair.id) return;
     parent.__partyGeometryReloaded=repair.id;
-    var url=(parent.__partyServer || 'http://127.0.0.1:924')+'/CODE/adventure_land/universal-loader.js?t=';
+    // A caracAL worker sets only its CODE window's __partyServer
+    // (runtime/lifecycle/runner-host.ts configureApiAddress), as api does.
+    var url=(typeof root !== 'undefined' && root.__partyServer || parent.__partyServer || 'http://127.0.0.1:924')+'/CODE/adventure_land/universal-loader.js?t=';
     var bootstrap="$.ajax({url:"+JSON.stringify(url)+"+Date.now(),dataType:'text',cache:false}).then(function(source){(0,eval)(source);});";
     game_log('Reloading runtime once to repair shared-route geometry', '#f0b429');
     parent.setTimeout(function(){
