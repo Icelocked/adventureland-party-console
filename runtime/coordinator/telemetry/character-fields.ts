@@ -105,6 +105,7 @@ export const characterFields = {
   conditions: lean("Active conditions with remaining time.", all, large("2.8 KB")),
   inventorySize: lean("Bag capacity.", all),
   upgradeInventoryBusy: lean("True while upgrade or tidy work holds the inventory; the live stream sends it and fast is the stream fallback.", []),
+  reservedInventory: lean("Bag slots held by a gear set or an in-flight swap; the inventory view labels them in place of automatic rules.", ["dashboard"]),
   standOpen: lean("True while the merchant stand is open.", all),
   target: lean("Current combat target summary, or null.", apps),
   mainTownSpawn: debug("Main town spawn point from game data."),
@@ -247,7 +248,7 @@ export type CharacterFieldName = keyof typeof characterFields;
  */
 export const streamFields = [
   "hp", "mp", "max_hp", "max_mp", "cc", "x", "y", "map", "in", "xp", "max_xp", "gold", "rip",
-  "target", "standOpen", "conditions", "inventorySize", "upgradeInventoryBusy",
+  "target", "standOpen", "conditions", "inventorySize", "upgradeInventoryBusy", "reservedInventory",
 ] as const satisfies readonly CharacterFieldName[];
 
 /** v1.4.0's fast omit list, kept for PARTY_STATE_FIELDS=shadow. */
@@ -266,7 +267,7 @@ export const sectionFields = {
     "name", "owner", "ctype", "level", "server", "ping", "seenAt",
     "skin", "characterSprite", "cosmetics",
     "hp", "max_hp", "mp", "max_mp", "cc", "xp", "max_xp", "gold", "map", "in", "x", "y", "rip", "lastDeath",
-    "conditions", "inventorySize", "upgradeInventoryBusy", "standOpen", "target",
+    "conditions", "inventorySize", "upgradeInventoryBusy", "reservedInventory", "standOpen", "target",
     "primaryStat", "attack", "frequency", "range", "speed", "unrestrictedSpeed", "armor", "resistance",
     "str", "int", "dex", "vit", "fortitude", "luck", "goldBonus", "xpBonus", "combatStats",
     "banking", "bankQueued", "stocking", "upgrading", "farmingMode", "monsterHunt", "donationXpPerGold", "donationLevelXp",

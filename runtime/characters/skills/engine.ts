@@ -121,7 +121,7 @@ export function createSkillEngine(ports: SkillPorts) {
     /** A fan-farming rogue's Mental Burst at any mob it kills, without waiting for a primary target. */
     burst() {
       const w = world();
-      return w.actor.ctype === 'rogue' && fanFarming(w) ? first(burstChoices(w)) : Promise.resolve(false);
+      return w.actor.ctype === 'rogue' && fanFarming(w) ? first(burstChoices(w), w) : Promise.resolve(false);
     },
     attack(target: Combatant): Promise<boolean> | null {
       const w = world();

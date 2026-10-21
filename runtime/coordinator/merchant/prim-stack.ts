@@ -6,7 +6,7 @@ import type { InventoryEntry, Item } from '../contracts/item.ts';
 import type { MerchantWork } from './work.ts';
 
 interface Definition { stat?: unknown; grades?: number[] }
-interface Entry extends InventoryEntry { meta?: InventoryEntry['meta'] & { definition?: Definition } }
+interface Entry extends InventoryEntry { meta?: (InventoryEntry['meta'] & { definition?: Definition }) | null }
 interface State {
   merchantCharacter?: string | null;
   statuses: Record<string, { items?: (Entry | null)[] } | undefined>;
