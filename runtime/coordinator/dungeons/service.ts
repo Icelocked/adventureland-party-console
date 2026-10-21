@@ -85,6 +85,8 @@ export function createDungeons(party: DungeonParty, ports: Ports) {
       stairContinuation: undefined,
       progress: {enabled:false, serial:0, message:'Choose a destination to begin travelling'},
       resuming: names.every((n) => !!observation(n)?.visit?.resume),
+      interruptedPhase: undefined,
+      interruptedCommands: undefined,
     });
     ports.cancel(names);
     issue(names, "gather", id, { target: { ...keeper, id: "dorr", label: "Dorr" } });
@@ -239,8 +241,7 @@ export function createDungeons(party: DungeonParty, ports: Ports) {
     if (!dungeonOwns(party, name)) return true;
     const d = state();
     if (canReleaseForEvent(d, event, eligible)) {
-      d.phase = "idle";
-      delete d.pendingEvent;
+      retire(d);
       ports.persist();
       return true;
     }
@@ -267,10 +268,16 @@ export function createDungeons(party: DungeonParty, ports: Ports) {
       !d.participants.every((n) => fresh(n) && observation(n)?.cave === null)
     )
       throw Error("Exit the dungeon before resuming ordinary travel");
+    retire(d);
+    ports.persist();
+  }
+  // An idle party keeps no state from the finished visit. settings() would
+  // otherwise restore an older interrupted phase and its commands.
+  function retire(d: DungeonState) {
     d.phase = "idle";
     d.commands = {};
-    delete d.pendingEvent;
-    ports.persist();
+    for (const field of ["pendingEvent", "interruptedPhase", "interruptedCommands", "travel", "stairContinuation", "progress"] as const)
+      delete d[field];
   }
   function action(body: Record<string, unknown>) {
     reconcile();
