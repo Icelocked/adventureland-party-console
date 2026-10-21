@@ -2,7 +2,7 @@ import { characterRuntime, distance, type RoutePoint, type SharedConvoy, type Sh
 import { readRoutePoint } from "./shared-route-store.ts";
 
 interface WalkRequest {
-  name: string; token: string; runtimeId: string; revision: number; at: number;
+  name: string; token: string; runtimeId: string; revision: number; at: number; since: number;
   activity: string; key: string; destination: RoutePoint; parentId: number;
   parent?: SharedState["commands"][string]; complete?: boolean; failed?: string; convoyId?: string;
 }
@@ -39,20 +39,26 @@ interface WalkState extends SharedState {
     returnRoutes?: Record<string, { commandId?: number; revision: number }> | null;
   } | null;
   deferredEventReturns?: Record<string, {cycleId: string; navigationRevision?: number}>;
+  eventAttendance?: Record<string, Record<string, {ended?: boolean; ignored?: string; rendezvousFailures?: number} | undefined> | undefined>;
 }
+// Members waiting for an event walk start without the rest after this long.
+// Every requester polls each 500 ms, so a full party coalesces within about a second.
+const EVENT_RENDEZVOUS_GRACE_MS = 20_000;
 function parse(body: Record<string, unknown>, now: number): WalkRequest | null {
   const p = readRoutePoint(body.destination);
   if (!p) return null;
   if (!["event", "anniversary-staging", "town-return", "event-return", "farm-recovery"].includes(String(body.activity))) return null;
   if (typeof body.token !== "string" || body.token.length > 300 || typeof body.key !== "string" || body.key.length > 200) return null;
   return { name: String(body.character), token: body.token, runtimeId: String(body.runtimeId),
-    revision: Number(body.navigationRevision), activity: String(body.activity), key: body.key, at: now,
+    revision: Number(body.navigationRevision), activity: String(body.activity), key: body.key, at: now, since: now,
     parentId: Number(body.parentCommandId) || 0, destination: p };
 }
 function sameWalk(a: WalkRequest, b: WalkRequest): boolean {
-  return a.activity === b.activity && a.key === b.key &&
-    String(a.destination.in ?? a.destination.map) === String(b.destination.in ?? b.destination.map) &&
-    distance(a.destination, b.destination) <= 1;
+  if (a.activity !== b.activity || a.key !== b.key ||
+    String(a.destination.in ?? a.destination.map) !== String(b.destination.in ?? b.destination.map)) return false;
+  // Each member freezes a moving event boss's position when it requests, so
+  // event walks to the same boss and map coalesce at the leader's point.
+  return a.activity === "event" || distance(a.destination, b.destination) <= 1;
 }
 /** Coalesces independently entered workflow walking legs without duplicating their continuations. */
 export function createSharedWalks(input: unknown, ports: WalkPorts) {
@@ -225,22 +231,38 @@ export function createSharedWalks(input: unknown, ports: WalkPorts) {
         !!ports.owned(name) && !atDestination(status,r.destination);
     });
   }
+  // A member already at the destination need not be pulled away from it.
+  function missingMember(r: WalkRequest, waiting: WalkRequest[], expected: string[]): boolean {
+    return expected.some(name => !waiting.some(other => other.name === name) && distance(state.statuses[name]!, r.destination) > 55);
+  }
+  // A member that never requests the walk, such as one whose death recovery
+  // already finished, cannot hold the requesting members past the grace period.
+  function startingLeader(r: WalkRequest, waiting: WalkRequest[], leaderName: string): string | undefined {
+    const late = graceOver(r, waiting);
+    if (late) return waiting.some(other => other.name === leaderName) ? leaderName : waiting[0].name;
+    if (!waiting.some(other => other.name === leaderName) || missingMember(r, waiting, eligible(r))) return undefined;
+    return leaderName;
+  }
+  function graceOver(r: WalkRequest, waiting: WalkRequest[]): boolean {
+    return r.activity === "event" && waiting.length > 0 &&
+      ports.now() - Math.min(...waiting.map(other => other.since)) >= EVENT_RENDEZVOUS_GRACE_MS;
+  }
   function tryStart(r: WalkRequest): void {
     if(recentPendingExitPeer(r))return;
-    const leaderName = leaderForRequest(r);
-    if (!canReplace(r) || !leaderName) return;
-    const waiting = pending(r), expected = eligible(r);
-    anchor(r, waiting, leaderName);
-    if (!waiting.some(other => other.name === leaderName)) return;
-    // A member already at the destination need not be pulled away from it.
-    if (expected.some(name => !waiting.some(other => other.name === name) && distance(state.statuses[name]!, r.destination) > 55)) return;
+    const requested = leaderForRequest(r);
+    if (!canReplace(r) || !requested) return;
+    const waiting = pending(r);
+    anchor(r, waiting, requested);
+    const leaderName = startingLeader(r, waiting, requested);
+    if (!leaderName) return;
     const names = [leaderName, ...waiting.map(other => other.name).filter(name => name !== leaderName)];
     const turnover = turnoverBudget(r);
     if (!restoreParents(waiting)) return;
     replaceActive();
     if (!captureParents(waiting)) return;
     const returning = ["town-return", "event-return"].includes(r.activity);
-    if (!ports.start(r.destination, r.activity + " walking leg", names, returning ? "shared-walk-return" : "shared-walk")) return;
+    const destination = waiting.find(other => other.name === leaderName)!.destination;
+    if (!ports.start(destination, r.activity + " walking leg", names, returning ? "shared-walk-return" : "shared-walk")) return;
     attach(waiting, returning);
     restoreTurnoverBudget(turnover);
   }
@@ -307,7 +329,21 @@ export function createSharedWalks(input: unknown, ports: WalkPorts) {
   function parentSuperseded(prior: WalkRequest): boolean {
     return !!prior.parent && state.commands[prior.name]?.id !== prior.parent.id;
   }
-  function cancel(r: WalkRequest): Record<string, unknown> {
+  // A client's 180 s rendezvous timed out before any walk started. The count
+  // lives on this occurrence's persisted attendance (events/failed-entry.ts
+  // releases it), so a new occurrence starts at zero.
+  function rendezvousFailed(r: WalkRequest, reason: unknown): void {
+    const entry = state.eventAttendance?.[r.name]?.[r.key];
+    if (reason !== "rendezvous-timeout" || !entry || entry.ended || entry.ignored || !unstartedEventWalk(r)) return;
+    entry.rendezvousFailures = (entry.rendezvousFailures || 0) + 1;
+    ports.persist();
+  }
+  function unstartedEventWalk(r: WalkRequest): boolean {
+    // A walk to this boss under way without this member is not a failed trip.
+    return r.activity === "event" && !requests.get(r.name)?.convoyId && state.activeConvoy?.walkingEvent !== r.key;
+  }
+  function cancel(r: WalkRequest, reason?: unknown): Record<string, unknown> {
+    rendezvousFailed(r, reason);
     const prior = requests.get(r.name), c = state.activeConvoy, session = c && sessions.get(c);
     if (prior?.token === r.token && session?.requests.includes(prior)) {
       if (returnRetryPending(c!) || c!.geometryRepair?.phase === 'waiting') return {ok:true,phase:"waiting"};
@@ -430,7 +466,7 @@ export function createSharedWalks(input: unknown, ports: WalkPorts) {
   function submit(body: Record<string, unknown>): Record<string, unknown> {
     const r = parse(body, ports.now());
     if (!r || !authorized(r)) return { error: "unauthorized walking leg" };
-    if (body.cancel === true) return cancel(r);
+    if (body.cancel === true) return cancel(r, body.reason);
     retirePreDeathWalk(r);
     retireSupersededEventEntry(r);
     const failure = retainedFailure(r);

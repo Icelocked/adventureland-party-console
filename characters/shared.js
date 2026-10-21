@@ -15053,7 +15053,7 @@
       destination:destination,activity:activity,key:String(key||activity),parentCommandId:parentCommand?parentCommand.id:0};
     root.__partyWalkSequence=(Number(root.__partyWalkSequence)||0)+1;
     body.token=convoyRuntimeId+":"+root.__partyWalkSequence;
-    var deadline=Date.now()+180000,completed=false,requestFailures=0;
+    var deadline=Date.now()+180000,completed=false,requestFailures=0,timedOut=false;
     root.__partySharedWalking=body;
     try {
       while(runtimeCurrent() && runtimeGeneration===generation && Number(navigationIntent.revision)===revision) {
@@ -15066,7 +15066,7 @@
           // for the rest of the party or a coordinator route.
           if(eventCombatReachable(nearestEventTarget()))return;
         }
-        if(Date.now()>deadline)throw new Error("Shared walking rendezvous timed out");
+        if(Date.now()>deadline){timedOut=true;throw new Error("Shared walking rendezvous timed out");}
         var result;
         try {result=await request("/shared-travel",{method:"POST",timeout:3000,body:body});requestFailures=0;}
         catch(error){if(++requestFailures>=3)throw error;await new Promise(function(resolve){setTimeout(resolve,500);});continue;}
@@ -15078,7 +15078,8 @@
       throw new Error("Shared walking superseded");
     } finally {
       if(root.__partySharedWalking===body)root.__partySharedWalking=null;
-      if(!completed)request("/shared-travel",{method:"POST",timeout:3000,body:Object.assign({},body,{cancel:true})}).catch(function(){});
+      // The coordinator counts event rendezvous timeouts toward releasing the trip.
+      if(!completed)request("/shared-travel",{method:"POST",timeout:3000,body:Object.assign({},body,{cancel:true},timedOut?{reason:"rendezvous-timeout"}:{})}).catch(function(){});
     }
   }
   function convoySignalExpired(signal) {

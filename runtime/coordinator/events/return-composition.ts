@@ -1,6 +1,6 @@
 import { createHuntResume } from "./hunt-resume.ts";
 import { createEventReturns } from "./returns.ts";
-import { recoverExhaustedEventEntry } from './failed-entry.ts';
+import { recoverExhaustedEventEntry, releaseFailedRendezvous } from './failed-entry.ts';
 import type { EventAttendance } from './attendance-limits.ts';
 import type { EventSession } from './observations.ts';
 import { createHuntReturnHandoff, type HuntReturnState } from "./hunt-return.ts";
@@ -127,6 +127,7 @@ export function createCoordinatorEventReturns(
   );
   return { ...returns, reconcile() {
     recoverExhaustedEventEntry(state,ports,returns.begin);
+    releaseFailedRendezvous(state,ports,returns.begin);
     returns.reconcile();
   }};
 }
