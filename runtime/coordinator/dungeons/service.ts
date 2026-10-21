@@ -314,7 +314,14 @@ export function createDungeons(party: DungeonParty, ports: Ports) {
       return fresh(name) && receipt?.id === command.id && receipt.status === "failed";
     });
     if (!failed.length) throw Error("No confirmed pre-dispatch failure to retry");
-    if (d.travel) { travel.start(d.travel.target); return; }
+    if (d.travel) {
+      // Retry is one more attempt. It keeps the spent automatic repairs, so
+      // repeated presses do not each add three more assembly cycles.
+      const repairs = d.travel.repairs;
+      travel.start(d.travel.target);
+      if (repairs) d.travel!.repairs = repairs;
+      return;
+    }
     for (const [name, command] of failed)
       issue([name], command.action, id, { ...command, id: undefined });
     d.error = undefined;

@@ -2728,8 +2728,10 @@
       },
       move: function (point, command) {
         travelTrack = command.cruiseSpeed && !command.independent ? {id:command.id,distance:0,x:character.real_x,y:character.real_y,leader:character.name===cavePartyNames()[0],prepared:false} : null;
+        // Gathers plan the cross-map walk to Dorr and regrouping on large
+        // generated floors; live runs timed out at the default 30 s.
         var journey = movement.move(point, undefined, { native: true, shared:!!travelTrack, arrivalTolerance:command.action==='gather'?1:20, town: false, retainOnDirectStop: true,
-        awaitSharedRoute:!!travelTrack && !travelTrack.leader, nativePlanningTimeoutMs:travelTrack ? 90000 : 30000,
+        awaitSharedRoute:!!travelTrack && !travelTrack.leader, nativePlanningTimeoutMs:travelTrack || command.action==='gather' ? 90000 : 30000,
         nativePlanningProgressMs:travelTrack ? 240000 : undefined,
         repairSharedDrift:!!travelTrack,
         barrier: async function () {
