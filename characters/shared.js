@@ -2696,6 +2696,7 @@
         if (action === 'revival') return respawn();
         if (action === 'vote') return requestDungeon(action, { choice: fields.choice, option: fields.option });
         if (action === 'buy') return requestDungeon(action, { room: fields.room });
+        if (action === 'talk') return requestDungeon(action, { room: fields.room });
         throw new Error('Unsupported cave action');
       },
       keeper: function () {
