@@ -270,3 +270,21 @@ entries marked **live**; others rely on the coordinator design and review.
     while suspended still stops the patrol for good, as it would at home.
 20. **New navigation.** Revision checks cancel search, converge and engage
     controls exactly as before.
+
+## Fixture state
+
+21. **Leftover Phoenixes.** Between tests in one container the world can hold
+    more than one live Phoenix: a seeded Phoenix's native respawn plus the
+    spawn table's own schedule, accelerated by the virtual clock. A fixture
+    that seeds a Phoenix clears every live Phoenix first (nospawn, silent) and
+    requires at least one for its definition; it never asserts exactly one.
+    Seen 10-20: the strict single-Phoenix precondition failed the converge,
+    busy-in-town and distant-fight fixtures when run after the earlier tests.
+21a. **Fixture references must be stable.** A sanity check on the fixture
+    geometry uses the seeded spawn point, not the sighting: the Phoenix
+    wanders natively while the search runs, so the sighting drifts (seen 10-20:
+    the far-fighter distance at sighting was 714, below the 1000 sanity bound).
+    The distant-fight hawk is declared before the search starts (as in the live
+    8f case, the warrior caught crossing Mainland) with attack:1 so the fight
+    persists for the sampling window without HP pressure disengaging the
+    warrior. **live**: the full file passes in order.

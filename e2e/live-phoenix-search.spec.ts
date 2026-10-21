@@ -263,11 +263,13 @@ test.describe('far fighter converging on a wandering Phoenix',()=>{
       const order=zones((await live.state(true)).monsterChoices,['phoenix']).map(a=>a.id!);
       // Declared fixture: the native Phoenix, pinned to the west strip where the
       // live stall happened. It keeps its native speed and wanders natively.
+      // Tolerate Phoenixes left by earlier tests in this container: clear them
+      // all, then seed the one this test owns, as the hawk fixture does.
       const seeded=await live.admin(`output=(()=>{
         const found=[];for(const instance of Object.values(instances))for(const m of Object.values(instance.monsters||{}))if(m.type==='phoenix'&&!m.dead)found.push(m);
-        if(found.length!==1)throw Error('Expected one native Phoenix, found '+found.length);
+        if(!found.length)throw Error('Expected a native Phoenix, found none');
         const native=found[0],definition=native.map_def,boundaries=definition.boundaries,original=G.monsters.phoenix;
-        remove_monster(native,{nospawn:true,silent:true});
+        for(const m of found)remove_monster(m,{nospawn:true,silent:true});
         try {
           definition.boundaries=boundaries.filter(b=>b[0]==='main'&&b[1]===-1358);
           G.monsters.phoenix={...original,hp:2000000,attack:1};
@@ -285,9 +287,11 @@ test.describe('far fighter converging on a wandering Phoenix',()=>{
         message:'The far fighter must converge on the wandering Phoenix'}).toBeGreaterThan(0);
       const state=await live.state();
       const encounter=state.rareHuntState?.encounter;
-      // Whoever the patrol sent away from the strip is the far fighter.
-      const sightedAt=timeline.find(s=>s.at>=spottedAt&&s.phoenix);
-      const away=(name:string)=>{const p=start.players[name],m=sightedAt?.phoenix;return !m||p.map!=='main'?Infinity:Math.hypot(p.x-m.x,p.y-m.y);};
+      // Whoever the patrol sent away from the strip is the far fighter. The
+      // distance is measured from the spawn point, not the sighting: the Phoenix
+      // wanders natively while the search runs, so the sighting is not a stable
+      // fixture reference.
+      const away=(name:string)=>{const p=start.players[name];return p.map!=='main'?Infinity:Math.hypot(p.x-seeded.x,p.y-seeded.y);};
       const far=away(W)>=away(P)?W:P;
       const restartsOf=(name:string)=>(state.combatLogs?.[name]?.events||state.combatLogs?.[name]||[]).filter((e:any)=>e.at>=spottedAt&&e.at<=encounter.gatheredAt&&
         /cancelRarePath/.test(e.details?.failureContext?.stopStack||''));
@@ -351,12 +355,13 @@ test.describe('converging fighter busy in town',()=>{
       await live.post('/formation',{character:P,follow:true});
       await expect.poll(async()=>(await live.state(true)).monsterChoices?.find((m:any)=>m.id==='phoenix')?.locations?.length,{timeout:120_000}).toBe(5);
       const order=zones((await live.state(true)).monsterChoices,['phoenix']).map(a=>a.id!);
-      // Declared fixture: as above, the native Phoenix pinned to the west strip.
+      // Declared fixture: as above, the native Phoenix pinned to the west strip,
+      // tolerating Phoenixes left by earlier tests (clear them all first).
       const seeded=await live.admin(`output=(()=>{
         const found=[];for(const instance of Object.values(instances))for(const m of Object.values(instance.monsters||{}))if(m.type==='phoenix'&&!m.dead)found.push(m);
-        if(found.length!==1)throw Error('Expected one native Phoenix, found '+found.length);
+        if(!found.length)throw Error('Expected a native Phoenix, found none');
         const native=found[0],definition=native.map_def,boundaries=definition.boundaries,original=G.monsters.phoenix;
-        remove_monster(native,{nospawn:true,silent:true});
+        for(const m of found)remove_monster(m,{nospawn:true,silent:true});
         try {
           definition.boundaries=boundaries.filter(b=>b[0]==='main'&&b[1]===-1358);
           G.monsters.phoenix={...original,hp:2000000,attack:1};
@@ -482,12 +487,13 @@ test.describe('distant fight while the spotter shadows',()=>{
     await live.post('/formation',{character:P,follow:true});
     await expect.poll(async()=>(await live.state(true)).monsterChoices?.find((m:any)=>m.id==='phoenix')?.locations?.length,{timeout:120_000}).toBe(5);
     const order=zones((await live.state(true)).monsterChoices,['phoenix']).map(a=>a.id!);
-    // Declared fixture: the native Phoenix pinned to Spooky Forest, next to the priest.
+    // Declared fixture: the native Phoenix pinned to Spooky Forest, next to the
+    // priest, tolerating Phoenixes left by earlier tests (clear them all first).
     const seeded=await live.admin(`output=(()=>{
       const found=[];for(const instance of Object.values(instances))for(const m of Object.values(instance.monsters||{}))if(m.type==='phoenix'&&!m.dead)found.push(m);
-      if(found.length!==1)throw Error('Expected one native Phoenix, found '+found.length);
+      if(!found.length)throw Error('Expected a native Phoenix, found none');
       const native=found[0],definition=native.map_def,boundaries=definition.boundaries,original=G.monsters.phoenix;
-      remove_monster(native,{nospawn:true,silent:true});
+      for(const m of found)remove_monster(m,{nospawn:true,silent:true});
       try {
         definition.boundaries=boundaries.filter(b=>b[0]==='halloween');
         G.monsters.phoenix={...original,hp:2000000,attack:1};
@@ -495,27 +501,35 @@ test.describe('distant fight while the spotter shadows',()=>{
         return {id:m.id,map:m.map,x:m.x,y:m.y};
       } finally {definition.boundaries=boundaries;G.monsters.phoenix=original;}
     })()`);
-    await live.post('/navigate-to-monster',{monsterId:'phoenix',phoenixRouteOrder:order});
-    await expect.poll(async()=>(await live.state()).rareHuntState?.encounter?.targetId,{timeout:300_000,intervals:[500],
-      message:'The priest must spot the seeded Phoenix'}).toBe(seeded.id);
-    const first=(await live.state()).rareHuntState.encounter;
     // Declared boundary: a hawk the warrior cannot outrun, with enough HP to keep it
     // fighting, spawned next to it from a modified definition (as the Phoenix is).
+    // It is declared before the search starts, as in the live case (8f), where the
+    // warrior was caught on Mainland while crossing, so the warrior is still on
+    // Mainland by construction and the fight is distant from the priest by map.
     const hawk=await live.admin(`output=(()=>{
       const p=Object.values(players).find(p=>p.name===${JSON.stringify(W)});
       if(!p||p.map!=='main')throw Error('The warrior must still be on Mainland: '+(p&&p.map));
+      // The character persists across tests in this container: restore full HP so
+      // the warrior defends the hawk instead of disengaging on low health.
+      p.hp=p.max_hp;resend(p,'u+cid');
       // A chasing monster moves at its definition's charge speed, recalculated
       // continuously, so this disposable server's hawks charge faster for the rest of the test.
       const fast=Math.max(200,p.speed*2),original=G.monsters.bigbird;
       original.charge=fast;
       try {
-        G.monsters.bigbird={...original,speed:fast,hp:2000000};
+        // attack:1, as the Phoenix fixture uses: the fight must persist for the
+        // whole sampling window without HP pressure disengaging the warrior.
+        G.monsters.bigbird={...original,speed:fast,hp:2000000,attack:1};
         const m=new_monster('main',{type:'bigbird',boundary:[p.x-40,p.y-40,p.x+40,p.y+40],count:1},{});
         target_player(m,p);
         return {id:String(m.id),speed:m.speed,warriorSpeed:p.speed,at:Date.now()};
       } finally {G.monsters.bigbird=original;}
     })()`);
     expect(hawk.speed,'The fixture needs an attacker faster than the warrior').toBeGreaterThan(hawk.warriorSpeed);
+    await live.post('/navigate-to-monster',{monsterId:'phoenix',phoenixRouteOrder:order});
+    await expect.poll(async()=>(await live.state()).rareHuntState?.encounter?.targetId,{timeout:300_000,intervals:[500],
+      message:'The priest must spot the seeded Phoenix'}).toBe(seeded.id);
+    const first=(await live.state()).rareHuntState.encounter;
     await expect.poll(async()=>{
       const [state,s,phoenix]=await Promise.all([live.state(),world(live),
         live.admin(`output=(()=>{const m=Object.values(instances.halloween.monsters).find(m=>m.id===${JSON.stringify(seeded.id)});return m?{x:m.x,y:m.y}:null})()`)]);
