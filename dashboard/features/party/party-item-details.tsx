@@ -1,7 +1,7 @@
 "use client";
 import { ExchangeItemSelection } from './exchange-item-selection';
 import {loadCharacterInspection} from "./load-character-inspection";
-import { lazy } from "react";
+import { createContext, lazy, useContext, useEffect, useState, type ReactNode } from "react";
 import { DeferredPanel } from "./deferred-panel";
 const ItemDetails = lazy(() =>
   import("./item-details").then((module) => ({ default: module.ItemDetails })),
@@ -14,6 +14,21 @@ import { usePanelModel } from "./use-panel-model";
 import { ExchangeRewardTile } from './exchange-reward-tile';
 import { inventoryWithCatalogMeta } from './item-catalog-meta';
 import { UpgradeOfferingProvider } from './upgrade-offering-controls';
+import type { SelectedItem } from './selected-item';
+
+// Only a mounted nested inspector subscribes to this model. Character cards do
+// not need the full model or a changing render callback to open catalog details.
+const InspectionModel = createContext<PartyConsoleModel | null>(null);
+export function ItemInspectionProvider({model,children}:{model:PartyConsoleModel;children:ReactNode}) {
+  return <InspectionModel.Provider value={model}>{children}</InspectionModel.Provider>;
+}
+export function NestedItemDetails({itemId,onClose}:{itemId:string;onClose:()=>void}) {
+  const model=useContext(InspectionModel);
+  const [selected,setSelected]=useState<SelectedItem|null>(()=>({character:"Witch's Cipher",entry:{slot:-1,item:{name:itemId},
+    meta:model?.state.merchantCatalog?.allItems?.find(item=>item.id===itemId)?.meta}}));
+  useEffect(()=>{if(!selected)onClose();},[selected,onClose]);
+  return model&&selected?<PartyItemDetails model={{...model,selected,setSelected}}/>:null;
+}
 export function PartyItemDetails({ model }: { model: PartyConsoleModel }) {
   return model.selected ? <PartyItemDetailsConnected base={model} /> : null;
 }

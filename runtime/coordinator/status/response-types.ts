@@ -31,6 +31,7 @@ export interface HeartbeatStatus {
   threats?: EntityReference[];
   target?: EntityReference | null;
   serverLiveEvents?: { name: string }[];
+  eventSchedules?: {id:string; cipher?:{board?:{id?:string}|null;runtime?:{stock?:Record<string,number>;day?:{mixes_left?:number};journal?:{gathering?:import('../../events/october.ts').CipherGatheringPlan}}}}[];
   slendermanSighting?: SlendermanSighting | null;
 }
 export interface EntityReference {
@@ -70,6 +71,8 @@ export const heartbeatStateFields = [
 ] as const;
 
 export interface HeartbeatState extends Record<(typeof heartbeatStateFields)[number], unknown> {
+  eventLimitsByCharacter?: import('../../../dashboard/lib/event-policy.ts').EventFormation['eventLimitsByCharacter'];
+  eventSelectionsByCharacter?: Record<string, string[]>;
   dailyDungeons?: import("../../dungeons/contracts.ts").DungeonState;
   passiveHunting: import('../navigation/passive-settings.ts').PassiveSettings;
   eventSessions?: import('../merchant/event-control.ts').MerchantEventState['eventSessions'];

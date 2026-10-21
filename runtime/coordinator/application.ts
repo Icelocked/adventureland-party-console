@@ -1679,7 +1679,7 @@ export function startCoordinatorApplication(
     function stagingEventLive(name: string, event?: string): boolean {
       const report = party.statuses[name];
       if (!report) return false;
-      return ['mrgreen', 'mrpumpkin'].includes(event || '') && report.eventFeedConnected === true &&
+      return ['mrgreen', 'mrpumpkin', 'horseman', 'graveyard'].includes(event || '') && report.eventFeedConnected === true &&
         report.eventClockStale !== true && Array.isArray(report.serverStagingEvents) &&
         report.serverStagingEvents.some((entry: unknown) => stagingEventEligible(entry, event));
     }
@@ -1687,7 +1687,7 @@ export function startCoordinatorApplication(
     function stagingEventEligible(entry: unknown, event?: string): boolean {
       return !!entry && typeof entry === 'object' && 'name' in entry && entry.name === event &&
         'spawnAt' in entry && typeof entry.spawnAt === 'number' && Number.isFinite(entry.spawnAt) &&
-        entry.spawnAt - Date.now() <= 60000 && Date.now() - entry.spawnAt <= 120000;
+        entry.spawnAt - Date.now() <= 120000 && Date.now() - entry.spawnAt <= 120000;
     }
 
     function realmOwnsMerchant() {

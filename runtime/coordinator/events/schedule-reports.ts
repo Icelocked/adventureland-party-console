@@ -7,6 +7,7 @@ interface Report {
   eventSchedules?: Schedule[];
   eventFeedAt?: unknown;
   eventClockStale?: unknown;
+  eventFeedConnected?: boolean;
 }
 
 /** Prefer the latest feed among fresh reports from the leader's realm. */
@@ -28,7 +29,19 @@ export function projectEventSchedules(
   return report
     ? report.eventSchedules.map((event) => ({
         ...event,
-        stale: now() - Number(report.eventFeedAt || 0) > 120000 || !!report.eventClockStale,
+        // server_info is change-only. A fresh connected heartbeat with a synced
+        // clock retains the confirmed calendar even when no event changed lately.
+        stale: report.eventFeedConnected === false || !!report.eventClockStale,
+        ...(event.id === 'witchcipher' ? {cipher: cipherView(event, statuses, report.server, now())} : {}),
       }))
     : [];
+}
+
+function cipherView(event: Schedule, statuses: Record<string,Report|null|undefined>, realm: string|undefined, now:number) {
+  const view = event.cipher as {merchant?:string;runtime?:unknown} | undefined;
+  if (!view) return view;
+  const merchant = view.merchant && statuses[view.merchant];
+  const observation = merchant && now-merchant.seenAt<15000 && merchant.server===realm
+    ? merchant.eventSchedules?.find(entry=>entry.id==='witchcipher')?.cipher as {runtime?:unknown}|undefined : undefined;
+  return {...view,runtime:observation?.runtime};
 }

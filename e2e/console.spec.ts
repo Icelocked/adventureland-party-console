@@ -353,11 +353,11 @@ test('Halloween events stay opt-in, show partial-feed timers, inherit and persis
   await page.mouse.down();
   await page.mouse.move(target!.x+20,target!.y+4,{steps:12});
   await expect(page.getByTestId('event-drag-preview')).toBeVisible();
-  await expect(row('Mr. Green').getByLabel('Mr. Green priority')).toHaveText('10');
+  await expect(row('Mr. Green').getByLabel('Mr. Green priority')).toHaveText('14');
   await info.attach('event-priority-dragging',{body:await page.screenshot(),contentType:'image/png'});
   await page.mouse.up();
-  await expect.poll(priorityOrder).toEqual(['mrgreen','anniversary','abtesting','goobrawl','crabxx','franky','icegolem','snowman','slenderman','mrpumpkin']);
-  await expect(row('Mr. Green').getByLabel('Mr. Green priority')).toHaveText('10');
+  await expect.poll(priorityOrder).toEqual(['mrgreen','anniversary','abtesting','goobrawl','crabxx','franky','icegolem','snowman','slenderman','mrpumpkin','horseman','graveyard','trickortreat','witchcipher']);
+  await expect(row('Mr. Green').getByLabel('Mr. Green priority')).toHaveText('14');
   // Limit settings must keep blank as unlimited, reject invalid values, and
   // persist independently of another character, without losing event opt-ins.
   await row('Mr. Green').getByRole('button',{name:'Mr. Green settings'}).click();
@@ -389,7 +389,7 @@ test('Halloween events stay opt-in, show partial-feed timers, inherit and persis
   for(const name of ['Slenderman','Mr. Green','Mr. Pumpkin']) {await expect(row(name).getByRole('checkbox')).toBeChecked();await expect(row(name).getByRole('checkbox')).toBeDisabled();}
   await page.keyboard.press('Escape');
   await open('M');
-  await expect(row('Anniversary').getByLabel('Anniversary priority')).toHaveText('10');
+  await expect(row('Anniversary').getByLabel('Anniversary priority')).toHaveText('14');
   await row('Mr. Green').getByRole('button',{name:'Mr. Green settings'}).click();
   await expect(page.getByLabel('Death limit',{exact:true})).toHaveValue('');
   await expect(page.getByLabel('Time limit (mins)',{exact:true})).toHaveValue('');
@@ -398,7 +398,7 @@ test('Halloween events stay opt-in, show partial-feed timers, inherit and persis
   await page.keyboard.press('Escape');
   await app.restartCoordinator();await page.reload();await open('W');
   for(const name of ['Slenderman','Mr. Green','Mr. Pumpkin']) await expect(row(name).getByRole('checkbox')).toBeChecked();
-  await expect(row('Mr. Green').getByLabel('Mr. Green priority')).toHaveText('10');
+  await expect(row('Mr. Green').getByLabel('Mr. Green priority')).toHaveText('14');
   await row('Mr. Green').getByRole('button',{name:'Mr. Green settings'}).click();
   await expect(page.getByLabel('Death limit',{exact:true})).toHaveValue('0');
   await expect(page.getByLabel('Time limit (mins)',{exact:true})).toHaveValue('2.5');

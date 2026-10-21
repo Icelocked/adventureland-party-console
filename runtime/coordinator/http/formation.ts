@@ -55,7 +55,7 @@ export function createFormationRoute(state: FormationState, ports: FormationPort
       return { code: 400, error: "invalid event limits" };
     if (ports.inherited(name)) return { code: 409, error: "using leader events" };
     const settings = state.eventLimitsByCharacter[name] ??= {};
-    settings[requestText(patch.event)] = { deathLimit: patch.limits.deathLimit, timeLimitMinutes: patch.limits.timeLimitMinutes };
+    settings[requestText(patch.event)] = structuredClone(patch.limits);
     return null;
   }
   function settings(name: string, body: Record<string, unknown>): FormationError | null {

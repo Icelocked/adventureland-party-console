@@ -1,3 +1,39 @@
+Scheduled Horseman, Graveyard, Mr. Green and Mr. Pumpkin attendance starts two
+minutes before the published occurrence or precise native spawn timer. Staging
+keeps event combat disabled until LIVE, preserves the original deadline across
+restart, and exits if the occurrence disappears or is cancelled. Calendar labels
+preserve absolute epochs; clock drift adjusts countdowns only. Realm UTC offsets
+are fixed (US UTC−5), so realm midnight is 01:00 EDT or 00:00 EST. Validate
+live-event-pretravel.spec.ts and console-event-clock.spec.ts, plus native Halloween
+staging regressions. Stage a completed artifact; activation remains explicit.
+
+October events use the published native seven-day lineup, including repeating
+Graveyard occurrences. Headless Horseman and Graveyard attendance walk through
+ordinary maps. Graveyard species default to all selected; exclusions also gate
+ordinary target acquisition. Current attackers remain eligible for defense.
+
+Trick or Treat follows the collision-verified seven-door route documented in
+tools/game/plan-trick-or-treat.mts. Native character door history and the account
+quota complement the persisted daily journal. Witch's Cipher snapshots fresh usable
+party and merchant inventory at the start of each round. With all four types it
+visits the witch immediately; otherwise it fixes the lowest-stock ingredient and
+configured monster until the native twenty-minute gathering cutoff (ties follow
+ingredient order). A recipe shortage selects its missing ingredient for the
+remaining gathering window. At the cutoff it visits the witch only with all four
+types, otherwise resumes farming. Plans persist across restart and source-setting
+changes. The merchant receives ingredients and uses consistent minimax guesses,
+preferring abundant stock among equally informative affordable recipes. Leader
+selection also reserves the merchant for the
+account-wide event. The fit bitset covers omitted public clues; incomplete boards
+without it cannot spend automatic attempts. Manual requests bind to round and
+recipe identities. Uncertain brews reconcile the native account counter without
+replaying the attempt. Settings show native monster sprites and base ingredient
+drop rates, clickable ingredient details, and an inline board sampled every five
+seconds while open. Catalog validation now includes the Conditions group.
+Validate October console/native journeys and the retained Halloween UI journey;
+see docs/testing-october-events.md. Build all components into a completed immutable
+candidate and activate only through an explicitly requested console load.
+
 Planner workers load native collision from the installed game sources and detour
 same-map edges rejected by can_move, preserving the request's movement footprint
 and instance. Valid edges and map transitions remain intact. Retain collision

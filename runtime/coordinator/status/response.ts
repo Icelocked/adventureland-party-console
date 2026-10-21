@@ -1,4 +1,6 @@
 import {collectPassing} from '../../combat/passing.ts';
+import {eventLimits} from '../../../dashboard/lib/event-policy.ts';
+import {cipherIngredients, type CipherGatheringContext} from '../../events/october.ts';
 import { bankStagingReserved } from '../inventory/reserved-cargo.ts';
 import {passingControl} from '../../combat/passing-admission.ts';
 import {requestObject} from '../http/contracts.ts';
@@ -58,6 +60,37 @@ const navigationCommands = new Set([
 
 /** Long-running commands remain deliverable until their completion endpoint acknowledges them. */
 export function createHeartbeatResponse(state: HeartbeatState, ports: HeartbeatResponsePorts) {
+  function cipherGathering(name:string):CipherGatheringContext {
+    const leader=state.leader;
+    const shared=!!leader&&ports.selectedEvents(leader).includes('witchcipher')&&
+      (name===leader||!!state.followers[name]||name===state.merchantCharacter);
+    const owner=shared?leader!:name, realm=state.statuses[owner]?.server;
+    const round=state.statuses[owner]?.eventSchedules?.find(entry=>entry.id==='witchcipher')?.cipher?.board?.id;
+    // Independent fighter scopes intentionally omit the merchant from their
+    // activeNames port; ingredient accounting still includes that merchant.
+    const participants=[...new Set([owner,...ports.activeNames().filter(member=>
+      shared&&!!state.followers[member]&&state.statuses[member]?.server===realm),
+      ...(state.merchantCharacter&&state.statuses[state.merchantCharacter]?.server===realm?[state.merchantCharacter]:[])])];
+    const stock=Object.fromEntries(cipherIngredients.map(id=>[id,0]));
+    let ready=true;
+    for(const member of participants){
+      const report=state.statuses[member];
+      const cipher=report?.eventSchedules?.find(entry=>entry.id==='witchcipher')?.cipher;
+      const runtime=cipher?.runtime;
+      // A recent heartbeat from before the new round still has old inventory.
+      // Require inventory and the current round in the same observation.
+      if(!round||cipher?.board?.id!==round||!report||!realm||report.server!==realm||ports.now()-Number(report.seenAt)>15000||!runtime?.stock){ready=false;continue;}
+      for(const id of cipherIngredients)stock[id]+=Math.max(0,Number(runtime.stock[id])||0);
+    }
+    const ownerPlan=state.statuses[owner]?.eventSchedules?.find(entry=>entry.id==='witchcipher')?.cipher?.runtime?.journal?.gathering;
+    const merchant=state.statuses[state.merchantCharacter??''];
+    const runtime=merchant&&merchant.server===realm&&ports.now()-Number(merchant.seenAt)<15000?
+      merchant.eventSchedules?.find(entry=>entry.id==='witchcipher')?.cipher?.runtime:undefined;
+    const shortage=runtime?.journal?.gathering;
+    const plan=shortage?.reason==='recipe shortage'&&shortage.owner===owner&&shortage.realm===realm&&
+      (!ownerPlan||shortage.round===ownerPlan.round&&shortage.selectedAt>ownerPlan.selectedAt)?shortage:ownerPlan;
+    return {owner,round,ready,stock,plan,mixesLeft:runtime?.day?.mixes_left};
+  }
   function retireTownMembership(name: string): boolean {
     const town = state.townCycle;
     if (!town?.pending.includes(name) || town.revisions?.[name] === ports.navigationRevision(name)) return false;
@@ -243,6 +276,9 @@ export function createHeartbeatResponse(state: HeartbeatState, ports: HeartbeatR
       followLeader: !!state.followers[name],
       eventsEnabled: !!ports.enabled(name),
       eventSelections: ports.selectedEvents(name),
+      eventSettings: eventLimits(state, name),
+      cipherMerchant: state.merchantCharacter,
+      cipherGathering: cipherGathering(name),
       partyEventHint: liveEvent(name, names),
       anniversary: ports.anniversary(),
       ...leaderResponse(leader),

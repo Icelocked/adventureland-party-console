@@ -474,6 +474,14 @@ test.describe('Absent Halloween spawn', () => {
   test.use({ initialPosition: { map: 'halloween', x: -335, y: 685 } });
   test('Halloween staging abandons an absent native spawn after its fixed deadline and returns without reopening', async ({ live }, info) => {
     test.setTimeout(420_000);
+    // October's native season now runs automatically in the pinned server.
+    // Declare this encounter's absent spawn before admission; otherwise the
+    // unrelated season timer creates a real boss halfway through the timeout.
+    const timerSeed=await live.admin(`output=(()=>{if(get_monster('mrpumpkin'))throw Error('Absent-spawn fixture requires no boss');
+      globalThis.__e2eAbsentPumpkinTimer=timers.mrpumpkin;timers.mrpumpkin=new Date(Date.now()+3600000);
+      return {at:Date.now(),original:globalThis.__e2eAbsentPumpkinTimer,delayedUntil:timers.mrpumpkin};})()`);
+    await info.attach('absent-native-spawn-timer-declaration',{body:JSON.stringify(timerSeed),contentType:'application/json'});
+    try {
     const announcement = await announceSpawn(live, 'mrpumpkin', 15000);
     const savedCheckpoint = await prepare(live, 'mrpumpkin');
     expect(savedCheckpoint.location.map).toBe('halloween');
@@ -495,5 +503,8 @@ test.describe('Absent Halloween spawn', () => {
     await waitForGameplay(11000);
     expect((await live.state()).characters[W]?.joinedEvent, 'Another native feed must not reopen the expired timer').toBeFalsy();
     await info.attach('absent-native-spawn-bounded-return', { body: JSON.stringify({ announcement, savedCheckpoint, native: await world(live, 'mrpumpkin'), coordinator: await live.state() }), contentType: 'application/json' });
+    } finally {
+      await live.admin("output=(()=>{timers.mrpumpkin=globalThis.__e2eAbsentPumpkinTimer;delete globalThis.__e2eAbsentPumpkinTimer;return true;})()");
+    }
   });
 });

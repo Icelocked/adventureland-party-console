@@ -14,4 +14,5 @@ import "./bank-stacks.ts";
 import "./movement.ts";
 import "./metrics.ts";
 import "./map-sprites.ts";
+import "./october-events.ts";
 import "../../characters/shared.js";
