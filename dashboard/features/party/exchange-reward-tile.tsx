@@ -180,7 +180,7 @@ export function ExchangeRewardTile({ reward, model }: { reward: ExchangeRewardTi
             {staged ? 'Pending' : ''}
           </span>
         )}
-        <span className="font-mono text-[10px] leading-tight text-amber-300">
+        <span className="whitespace-pre font-mono text-[10px] leading-tight text-amber-300">
           {reward.detail}
         </span>
         <span className="w-full whitespace-normal break-words text-xs leading-tight text-slate-200">

@@ -49,9 +49,9 @@ export function SkillsDialog({
         style={{ width: "calc(100vw - 2rem)", maxWidth: "1500px" }}
       >
         <DialogHeader>
-          <DialogTitle>Class skills</DialogTitle>
+          <DialogTitle>Class skills and conditions</DialogTitle>
           <DialogDescription className="text-emerald-100/55">
-            Browse every class-bound skill and the shared game actions. Click any skill for its
+            Browse every class-bound skill, shared game action and condition. Click an entry for its
             complete definition.
           </DialogDescription>
         </DialogHeader>

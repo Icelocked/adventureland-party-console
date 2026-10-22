@@ -16,4 +16,8 @@ export type BestiaryMonster = {
   drops: BestiaryDrop[];
   homeRewards?: BestiaryDrop[];
   spawnRecords?: SpawnRecord[];
+  // Present only for a monster without an ordinary spawn (characters/shared.js eventMonsterSources).
+  eventSources?: EventSource[];
 };
+
+export type EventSource = { id: string; name: string; role: "boss" | "add" | "wave"; at?: number[] };

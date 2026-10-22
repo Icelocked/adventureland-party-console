@@ -201,7 +201,11 @@ async function main() {
     // Browsers own the three actual clients. Fail if a scenario accidentally requests a headless worker.
     'node:child_process': { fork(_file, args, options) {
       if (process.env.E2E_ALLOW_HEADLESS !== 'true') throw Error('Live E2E uses real browser clients; headless launch requested');
-      return require('node:child_process').fork(path.join(root, '.caracal/src/CharacterThread.js'), args, {...options, cwd:directory});
+      // Exercise the same prepared native runner that the completed candidate deploys.
+      const artifact = process.env.E2E_NATIVE_ARTIFACT;
+      if (!artifact) throw Error('Verified native candidate required for headless E2E');
+      return require('node:child_process').fork(path.join(artifact, '.caracal/src/CharacterThread.js'), args,
+        {...options, cwd:directory, env:{...process.env,...options.env,AL_CONSOLE_ARTIFACT:artifact}});
     } },
     'bot-web-interface': function() { throw Error('Legacy monitor is disabled'); },
     '../monitoring_util': {},

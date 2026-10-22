@@ -23,9 +23,9 @@ export interface SharedReport {
   failure?: string; waypointCount?: number; departedAt?: number;
 }
 export interface SharedStatus extends RoutePoint {
-  // Local visible native boss, including during ranged add combat; not a global S hint.
+  // Local visible native boss or selected Cipher gathering target; not a global S hint.
   // Instance IDs are normalized because native payloads use either strings or numbers.
-  eventCombatSighting?: (RoutePoint & {id: string; mtype: string; observedAt: number; attackReachable?: boolean}) | null;
+  eventCombatSighting?: (RoutePoint & {id: string; mtype: string; event?: string; observedAt: number; attackReachable?: boolean}) | null;
   activeEvent?: string | null; joinedEvent?: string | null;
   lastDeath?: {at: number; eventTrip?: {event?: string; startedAt?: number}} | null;
   movementGeometry?: { version: number; fingerprint: string };

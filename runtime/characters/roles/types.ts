@@ -78,6 +78,7 @@ export interface SharedCombat {
   allowsTarget(target: Target): boolean;
   allowsPassingTarget(target: Target): boolean;
   emergencyWarriorStomp(): Promise<boolean>;
+  graveyardAreaAttackAllowed?(range: number): boolean;
   dashToward(target: Target): Promise<boolean>;
   isAttackingPartyMember(target: Target): boolean;
   rejoinActiveEventAfterRespawn(): Promise<import("./death-recovery.ts").EventRejoinOutcome>;
