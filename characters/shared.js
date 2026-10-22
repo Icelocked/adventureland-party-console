@@ -1992,10 +1992,38 @@
     }).sort(function (a, b) { return a.name.localeCompare(b.name); });
   }
 
+  // The G.events that raise a monster, for a monster without an ordinary spawn:
+  // the event's boss (its sprite), the boss's HP-threshold adds
+  // (G.monsters[boss].spawns) and Graveyard Rising's waves.
+  function eventMonsterSources(ordinary) {
+    var sources = {};
+    function add(type, source) {
+      if (!G.monsters[type] || ordinary[type]) return;
+      (sources[type] = sources[type] || []).push(source);
+    }
+    Object.keys(G.events || {}).forEach(function (id) {
+      var definition = G.events[id] || {}, name = definition.name || id, boss = definition.sprite;
+      if (!G.monsters[boss]) return;
+      add(boss, { id: id, name: name, role: "boss" });
+      var thresholds = {};
+      (G.monsters[boss].spawns || []).forEach(function (spawn) {
+        if (typeof spawn[0] !== "string" || spawn[0].indexOf("hp:") !== 0) return;
+        (thresholds[spawn[1]] = thresholds[spawn[1]] || []).push(Number(spawn[0].slice(3)));
+      });
+      Object.keys(thresholds).forEach(function (type) { add(type, { id: id, name: name, role: "add", at: thresholds[type] }); });
+      (Array.isArray(definition.waves) ? definition.waves : []).reduce(function (types, wave) {
+        Object.keys(wave && wave[1] || {}).forEach(function (type) { if (types.indexOf(type) < 0) types.push(type); });
+        return types;
+      }, []).forEach(function (type) { add(type, { id: id, name: name, role: "wave" }); });
+    });
+    return sources;
+  }
+
   function bestiaryCatalog() {
-    var spawns = {};
+    var spawns = {}, ordinary = {};
     var monsterTables = nativeMonsterDropTables(), homeTables = nativeHomeDropTables();
-    monsterChoices().forEach(function (choice) { spawns[choice.id] = choice.spawnRecords; });
+    monsterChoices().forEach(function (choice) { spawns[choice.id] = choice.spawnRecords; ordinary[choice.id] = choice.locations.length > 0; });
+    var eventSources = eventMonsterSources(ordinary);
     return Object.keys(G.monsters || {}).map(function (id) {
       var definition = G.monsters[id] || {};
       function rewards(table) { return (Array.isArray(table) ? table : []).map(function (drop) {
@@ -2011,7 +2039,8 @@
         attack: Number(definition.attack) || 0, xp: Number(definition.xp) || 0,
         range: Number(definition.range) || 0,
         threat: (Number(definition.attack) || 0) * (Number(definition.frequency) || 0),
-        definition: catalogValue(definition), drops: drops, homeRewards: homeRewards, spawnRecords: spawns[id] };
+        definition: catalogValue(definition), drops: drops, homeRewards: homeRewards, spawnRecords: spawns[id],
+        eventSources: eventSources[id] };
     });
   }
 

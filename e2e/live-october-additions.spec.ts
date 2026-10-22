@@ -45,3 +45,13 @@ test.describe('October boss avoidance', () => {
     }
   });
 });
+
+test('October additions: the Bestiary credits each event-only monster to its event', async ({ live }) => {
+  test.setTimeout(180_000);
+  await expect.poll(async () => {
+    const catalog = (await live.state(true)).bestiaryCatalog || [];
+    return Object.fromEntries(['horseman', 'jackowalker', 'zombie', 'ghoul', 'gargoyle', 'ghost'].map(id =>
+      [id, (catalog.find((monster: any) => monster.id === id)?.eventSources || []).map((source: any) => `${source.id}:${source.role}`)]));
+  }, { timeout: 90_000, message: 'A real client derives the event sources from G.events and G.monsters' }).toEqual({
+    horseman: ['horseman:boss'], jackowalker: ['horseman:add'], zombie: ['graveyard:wave'], ghoul: ['graveyard:wave'], gargoyle: ['graveyard:boss'], ghost: [] });
+});

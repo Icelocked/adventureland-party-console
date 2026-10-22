@@ -135,3 +135,12 @@ farming with the `all` focus, or one whose focus area the Horseman roams into,
 pulls either boss as an ordinary target without having joined its event; a boss
 that attacks a party member is no longer defended against. The Graveyard species
 filter (`eventSettings.graveyard.monsters`) covers only the event itself.
+
+## Event-only monsters in the Bestiary
+
+The Horseman, its Jack-o Walker adds (`G.monsters.horseman.spawns`, at 75% and
+25% HP), the Zombie and Ghoul waves and the Gargoyle (`G.events.graveyard`) have
+`respawn: -1` and no map spawn. Failure inventory, before the change: the
+Bestiary shows "No static spawn recorded" for them; an add or wave monster is
+credited to the wrong event; a monster with an ordinary spawn, such as Goo or
+Ghost, gains an event label; every catalog entry grows by a field.

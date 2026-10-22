@@ -17,6 +17,7 @@ import './skill-card.case';
 import './monster-card.case';
 import './stat-colors.case';
 import './catalog-comparison.case';
+import './bestiary-events.case';
 import './item-titles.case';
 import { createServer } from 'node:http';
 import { mkdirSync, readFileSync } from 'node:fs';
