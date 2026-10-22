@@ -11506,10 +11506,14 @@
     // local deadline. Crab and other timestamp-only feeds use this fallback.
     var status = nativeEventStatus();
     return supportedEventNames().filter(function (name) {
+      // Computing October activity can select a persisted gathering plan. Do
+      // that only after opt-in, with the selected party's inventory authority.
+      if (name === 'trickortreat' || name === 'witchcipher') return eventSelected(name) && !!octoberRuntime().activity(name);
       var state = status && status[name];
       return eventIsSupported(name) && state && (halloweenEvent(name)
         ? halloweenFeedCurrent() && state.live === true : state.live !== false);
     }).map(function (name) {
+      if (name === 'trickortreat') return {name:name,id:'doors:'+new Date(Date.now()+eventClockOffset).toISOString().slice(0,10)};
       var state = status[name] || {};
       // Native IDs, round identities and fixed end epochs distinguish successive
       // instances even when the next feed arrives without a long absent interval.
@@ -11526,15 +11530,11 @@
     if (event.id && entities[event.id]) return entities[event.id];
     return Object.keys(entities).map(function (id) { return entities[id]; }).find(function (entity) {
       return entity && entity.type === "character" && entity.name === event.target;
-      // Computing October activity can select a persisted gathering plan. Do
-      // that only after opt-in, with the selected party's inventory authority.
-      if (name === 'trickortreat' || name === 'witchcipher') return eventSelected(name) && !!octoberRuntime().activity(name);
     }) || null;
   }
 
   function anniversaryRoundId(event, ticket) {
     return String(event.round || ticket && (ticket.round || ticket.id) || event.next ||
-      if (name === 'trickortreat') return {name:name,id:'doors:'+new Date(Date.now()+eventClockOffset).toISOString().slice(0,10)};
       [event.target, event.map, event.expires].join(":"));
   }
 
@@ -12702,6 +12702,8 @@
     var candidates = [];
     if (definition && definition.sprite) candidates.push(definition.sprite);
     candidates.push(eventName);
+    if (eventName === 'graveyard') candidates = ['zombie','ghoul','gargoyle'];
+    if (eventName === 'horseman') candidates = ['horseman','jackowalker'];
     // Goo Brawl starts with ordinary Brawl Goos and later spawns the Rainbow
     // Goo. Keep both eligible; nearestEventTarget applies its two-phase rule.
     if (eventName === "goobrawl") candidates = ["rgoo", "bgoo", "goo"].concat(candidates);
@@ -12737,8 +12739,6 @@
   function freshPartyEventDestination(eventName) {
     var now = Date.now() + coordinatorClockOffset;
     return partyPositions.filter(function (member) {
-    if (eventName === 'graveyard') candidates = ['zombie','ghoul','gargoyle'];
-    if (eventName === 'horseman') candidates = ['horseman','jackowalker'];
       var sight = member.eventCombatSighting;
       return !member.rip && member.activeEvent === eventName && member.server === reunionRealm() &&
         Number.isFinite(member.seenAt) && member.seenAt >= now - 3000 && member.seenAt <= now + 1000 &&
@@ -12758,6 +12758,9 @@
     if (state && state.map && Number.isFinite(Number(state.x)) && Number.isFinite(Number(state.y))) {
       return { map: state.map, x: Number(state.x), y: Number(state.y) };
     }
+    if (eventName === 'trickortreat' || eventName === 'witchcipher') return octoberRuntime().destination(eventName);
+    if (eventName === 'graveyard') return {map:'spookytown',x:255,y:-1425};
+    if (eventName === 'horseman') return {map:'halloween',x:-405,y:-1640};
     var mapName = eventMapName(eventName), map = G.maps && G.maps[mapName] || null;
     if (map) {
       var spawn = Array.isArray(map.spawns) && map.spawns[0] || [0, 0];
@@ -12783,8 +12786,6 @@
       return true;
       });
     }
-    if (eventName === 'trickortreat' || eventName === 'witchcipher') return octoberRuntime().destination(eventName);
-    if (eventName === 'graveyard') return {map:'spookytown',x:255,y:-1425};
     findSpawn(true) || findSpawn(false);
     return location || { map: character.map, x: Number(character.x) || 0, y: Number(character.y) || 0 };
   }
@@ -12792,7 +12793,6 @@
   async function joinEventDestination(destination) {
     if (character.cave || root.__partyDungeonRuntime && root.__partyDungeonRuntime.owns()) return false;
     if (escapeOwns()) return;
-    if (eventName === 'horseman') return {map:'halloween',x:-405,y:-1640};
     if (!destination || character.map === destination.map) return false;
     var map = G.maps && G.maps[destination.map], eventName = map && map.event;
     if (!eventName || !eventSelected(eventName) || !G.events || !G.events[eventName] || !G.events[eventName].join) return false;
@@ -12833,6 +12833,8 @@
       }
     }
     return supportedEventNames().map(function (name) {
+      if (name === 'trickortreat' || name === 'witchcipher') return eventSelected(name) && halloweenFeedCurrent() &&
+        !(manuallySuppressedEvent && manuallySuppressedEvent.name === name) ? octoberRuntime().activity(name) : null;
       var state = status && status[name];
       var types = eventMonsterTypes(name);
       var corroborated = partyEventHint === name || name === "goobrawl" && hasGoobrawlCombat();
@@ -12877,8 +12879,6 @@
 
   function frankyTargetAllowed(target) {
     return !!target && target.type === "monster" && target.mtype === "franky" &&
-      if (name === 'trickortreat' || name === 'witchcipher') return eventSelected(name) && halloweenFeedCurrent() &&
-        !(manuallySuppressedEvent && manuallySuppressedEvent.name === name) ? octoberRuntime().activity(name) : null;
       target.visible !== false && !target.dead && target.hp !== 0 &&
       (!target.map || target.map === character.map) && (target.in == null || target.in === character.in);
   }
@@ -13361,12 +13361,13 @@
           game_log("Traveling to " + ((G.events && G.events[event.name] && G.events[event.name].name) || event.name), "#c084fc");
         }
         if (event.name === "slenderman") { await discoverSlenderman(event, currentEventTravel); return; }
+        if (event.kind === 'interaction') { await octoberRuntime().run(event.name, currentEventTravel); return; }
         if (event.kind !== "pvp" && !eventCombatReachable(nearestEventTarget()) && await eventTravelAllowed(event.name) && currentEventTravel())
           await sharedPartyWalk(destination,"event",event.name,null,currentEventTravel);
+        if (event.name === 'witchcipher') await octoberRuntime().transfer();
       } catch (error) {
         var reason = error && (error.reason || error.message || error);
         if (reason !== "interrupted" && reason !== "event_not_live")
-      if (event.name === 'witchcipher') await octoberRuntime().transfer();
           game_log("Event travel failed: " + reason, "red");
       } finally {
         eventTraveling = false; travellingEventName = null;
@@ -13405,7 +13406,6 @@
   function reunionBlocked() {
     if (dungeonOwned()) return true;
     if (eventExitOwnsMovement()) return true;
-        if (event.kind === 'interaction') { await octoberRuntime().run(event.name, currentEventTravel); return; }
     if (escapeOwns()) return true;
     // Pause the return, not defensive combat, when the travel party is attacked.
     // Otherwise isOccupied suppresses healing and attacks while mobs kill us.
@@ -14642,6 +14642,16 @@
     }
   }
 
+  function excludedGraveyardTarget(target) {
+    return target && ['zombie','ghoul','gargoyle'].indexOf(target.mtype) >= 0 && eventSelected('graveyard') &&
+      eventSettings.graveyard && Array.isArray(eventSettings.graveyard.monsters) && eventSettings.graveyard.monsters.indexOf(target.mtype) < 0 && !isAttackingPartyMember(target);
+  }
+  function graveyardAreaAttackAllowed(range) {
+    return !Object.values(parent.entities || {}).some(function(target) {
+      return target && target.type === 'monster' && !target.dead && target.visible !== false &&
+        excludedGraveyardTarget(target) && distance(character,target) <= range;
+    });
+  }
   function isAllowedTarget(target, huntTravelCommand, diagnostic) {
     if (!consoleDrainAllows(target)) { if (diagnostic) diagnostic.reason = 'waiting for safe console reload'; return false; }
     if (character.cave || typeof root !== "undefined" && root.__partyDungeonRuntime && root.__partyDungeonRuntime.owns()) return dungeonTargetAllowed(target);
@@ -14686,20 +14696,10 @@
         groupedCombat.target && groupedCombat.target.id === target.id &&
         groupedCombat.target.map === character.map && groupedCombat.target.in === character.in &&
         groupedCombat.target.server === reunionRealm()) return true;
-  function excludedGraveyardTarget(target) {
-    return target && ['zombie','ghoul','gargoyle'].indexOf(target.mtype) >= 0 && eventSelected('graveyard') &&
-      eventSettings.graveyard && Array.isArray(eventSettings.graveyard.monsters) && eventSettings.graveyard.monsters.indexOf(target.mtype) < 0 && !isAttackingPartyMember(target);
-  }
-  function graveyardAreaAttackAllowed(range) {
-    return !Object.values(parent.entities || {}).some(function(target) {
-      return target && target.type === 'monster' && !target.dead && target.visible !== false &&
-        excludedGraveyardTarget(target) && distance(character,target) <= range;
-    });
-  }
-    var nearbyHunt = typeof huntCombatTarget !== "undefined" && target.mtype === huntCombatTarget &&
     if (excludedGraveyardTarget(target)) {
       if (diagnostic) diagnostic.reason = 'excluded Graveyard monster'; return false;
     }
+    var nearbyHunt = typeof huntCombatTarget !== "undefined" && target.mtype === huntCombatTarget &&
       Math.hypot(target.x-character.x,target.y-character.y)<=monsterSearchRadius;
     if (!huntTravel && !nearbyHunt && character.map !== "goobrawl" && !activeCombatEvent() && !joinedEvent && !isPartyThreat(target) &&
         (!(inFarmArea(target, partyLocation, target.id === combatTargetId && target.id === lastAttackTarget && Date.now()-lastAttackAt<5000 ? 150 : 0) || inFarmRadius(target) || typeof queueRetentions==='function' && queueRetentions().some(function(t){return t.id===target.id && t.eligible;})) || farmApproach.failed[target.id]>Date.now())) return false;
@@ -15985,6 +15985,7 @@
       return Math.hypot(entity.x - character.x, entity.y - character.y) <= Number(skill.range || 400) &&
         (entity.target === character.name || roster.indexOf(entity.target) >= 0);
     })) return false;
+    if (!graveyardAreaAttackAllowed(Number(G.skills.stomp && G.skills.stomp.range) || 400)) return false;
     await use_skill("stomp");
     return true;
   }
@@ -16000,7 +16001,6 @@
   }
   function recoverFarmApproach(target) {
     if (anniversaryStaging || anniversaryBusy) {
-    if (!graveyardAreaAttackAllowed(Number(G.skills.stomp && G.skills.stomp.range) || 400)) return false;
       cancelFarmApproach("anniversary owns staging movement");
       return !target;
     }
@@ -17555,9 +17555,9 @@
     queueCoverageCost: function(p){var a=groupedCombat && groupedCombat.anchor;return a && a.map===character.map && a.in===character.in ? Math.max(0,Math.hypot(p.x-a.x,p.y-a.y)-groupedCombat.range) : 0;},
     queueRecoveryReason: function(reason){root.partyCombatPosition={at:Date.now(),mode:"fight-recovery",movementOwner:"group",reason:reason};},
     queueMarkers: queueMarkers,
+    graveyardAreaAttackAllowed: graveyardAreaAttackAllowed,
     convoyNavigationReport: convoyNavigationReport,
     combatTraceSnapshot: function(){var p=root.partyCombatPosition||{};return {
-    graveyardAreaAttackAllowed: graveyardAreaAttackAllowed,
       mode:farmingMode,epoch:root.__partyCombatResetAt||0,queueRevision:groupedCombat&&groupedCombat.queueRevision,
       owner:p.movementOwner||null,reason:p.reason||p.mode,cell:[Math.round(character.x/8),Math.round(character.y/8)],
       target:(activeCombatTarget()||{}).id,markers:queueMarkers().map(function(t){return {id:t.id,role:t.role,visible:t.visible};}),
