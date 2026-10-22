@@ -158,6 +158,25 @@ async function reset() {
     if(counts()!==before)throw Error('Native ambient restoration changed population accounting');
     journal.entries.clear();return {realm:region+server_name,restored,present,populationAccountingPreserved:true};
   })()`,{},realm)));
+  // Natural Halloween spawns stay out of unrelated journeys (README.md § Natural
+  // Halloween spawns). The season stays on; journeys start the events they need.
+  await Promise.all(realms.map(realm=>admin(`output=(()=>{
+    if(!globalThis.__e2eScheduleHold){
+      globalThis.__e2eScheduleHold=true;
+      // An occurrence that comes due is marked missed at once, as if the server had
+      // been down for its slot, so it never lingers as scheduled in the past.
+      event_schedule_tick=function(now){const schedule=event_schedule_state();schedule.tick(now,{can_start:false});
+        for(const o of schedule.state().occurrences)if(o.status==='scheduled'&&o.at<=now){o.status='missed';o.ended=now;}};
+    }
+    const ended=[];
+    if(graveyard){graveyard_finish('over');ended.push('graveyard');}
+    if(witch_cipher){witch_cipher_finish();ended.push('witchcipher');}
+    if(events.horseman){events.horseman=false;delete E.horseman;delete timers.horseman;ended.push('horseman');}
+    for(const instance of Object.values(instances))for(const monster of Object.values(instance.monsters||{}))
+      if(['horseman','jackowalker','mrpumpkin','mrgreen','slenderman'].includes(monster.type)){remove_monster(monster,{silent:true});ended.push(monster.type);}
+    for(const type of ['mrpumpkin','mrgreen','slenderman']){delete E[type];timers[type]=new Date(Date.now()+86400000);}
+    broadcast_e();return {realm:region+server_name,ended};
+  })()`,{},realm)));
   await admin(`output=(async()=>{
     // Disconnected Cave runs retain a resumable visit. Retire only this
     // disposable account's runs through native teardown before restoring it.

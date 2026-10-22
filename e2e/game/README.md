@@ -75,3 +75,19 @@ runs must select a different host offset and Compose prefix; never reset an acti
 run's account or stop its containers. Exercise eight real gameplay repetitions
 with eight distinct pool/parallelIndex receipts, retained native assertions and
 verified report hashes; confirm all owned containers/workspaces are removed.
+
+## Natural Halloween spawns
+
+The pinned game server runs Halloween until 2026-11-03 (design/event_flags.js).
+Its published lineup starts Graveyard Rising, the Headless Horseman and the
+Witch's Cipher by itself, and event_loop spawns Mr. Pumpkin, Mr. Green and
+Slenderman from their season timers. Failure inventory, before the change: a
+journey that declares its own Halloween boss finds a natural one already there
+("Existing event boss cannot be replaced" in
+`live-event-runtime-recovery.spec.ts`); a natural Graveyard round or Horseman
+puts aggressive monsters beside an unrelated journey; a round started for one
+journey is still running in the next. Reset therefore keeps the season on but
+lets the lineup extend without starting, ends a running round, removes natural
+Halloween bosses and holds their timers a day out. An occurrence that comes due
+is marked missed, so none lingers as scheduled in the past. A journey that needs one of
+these events starts it itself, as `live-october-events.spec.ts` does.
