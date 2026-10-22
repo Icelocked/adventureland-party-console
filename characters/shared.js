@@ -12900,15 +12900,18 @@
 
   function eventCombatSighting(target) {
     if (!joinedEvent || eventTraveling || character.rip || character.transporting) return null;
+    var cipher = joinedEvent === 'witchcipher' && octoberRuntime().activity('witchcipher');
+    var gatheringTarget = cipher && cipher.kind === 'monster' && target && cipher.types.indexOf(target.mtype) >= 0;
     // Boss location ownership must not follow the temporary selected add.
-    if (!target || target.mtype !== joinedEvent) target = Object.values(parent.entities || {}).find(function (entry) {
+    // Cipher has ordinary gathering monsters instead of a namesake boss.
+    if (!gatheringTarget && (!target || target.mtype !== joinedEvent)) target = Object.values(parent.entities || {}).find(function (entry) {
       return entry && entry.type === "monster" && entry.mtype === joinedEvent && entry.visible !== false &&
         !entry.dead && entry.hp > 0 && (!entry.map || entry.map === character.map) &&
         (entry.in == null || entry.in === character.in);
     });
     if (!target || target.visible === false || target.dead || target.hp <= 0 ||
         !Number.isFinite(target.x) || !Number.isFinite(target.y)) return null;
-    return {id:String(target.id),mtype:target.mtype,map:character.map,
+    return {id:String(target.id),mtype:target.mtype,event:joinedEvent,map:character.map,
       in:String(character.in || character.map),x:target.x,y:target.y,
       attackReachable:eventCombatReachable(target),observedAt:Date.now()+coordinatorClockOffset};
   }

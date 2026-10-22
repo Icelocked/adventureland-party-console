@@ -126,7 +126,8 @@ export function createSharedWalks(input: unknown, ports: WalkPorts) {
     const s = state.statuses[name];
     if (!s) return false;
     const boss = s.eventCombatSighting;
-    if (!boss || !boss.id || s.joinedEvent !== r.key || boss.mtype !== r.key) return false;
+    if (!boss || !boss.id || s.joinedEvent !== r.key) return false;
+    if (boss.mtype !== r.key && !(r.key === 'witchcipher' && boss.event === r.key && s.activeEvent === r.key)) return false;
     return freshAttendee(r, s) && freshBoss(boss) && bossAtDestination(r, s, boss);
   }
   function freshAttendee(r: WalkRequest, s: NonNullable<SharedState["statuses"][string]>): boolean {

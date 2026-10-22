@@ -1,5 +1,6 @@
 import {test,expect} from './live-fixtures';
 import {cipherIngredients,trickOrTreatRoute} from '../runtime/events/october';
+import {supportedEvents} from '../dashboard/lib/event-policy';
 
 test.use({initialPosition:{map:'halloween',x:0,y:0}});
 
@@ -333,4 +334,48 @@ test.describe('October Cipher complete stock at cutoff',()=>{
     expect(journal.gathering).toMatchObject({mode:'brewing',reason:'gathering ended'});
     await info.attach('october-native-cutoff-complete',{body:JSON.stringify({seed,before,receipts,journal,state:await live.state()}),contentType:'application/json'});
   });
+});
+
+test.describe('Cipher priority handoff',()=>{
+
+
+test.use({initialPosition:{map:'halloween',x:-550,y:-290}});
+
+// Failure inventory: an ongoing boss fight or walking leg keeps the event poll
+// busy; followers retain the old boss; the merchant adopts a different plan;
+// the selected Spider spawn is unreachable; arrival never becomes real damage.
+test('Cipher gathering interrupts lower priority Green and reaches the selected Spider spawn',async({live},info)=>{
+  test.setTimeout(600_000);
+  const fighters=['E2EWarrior','E2EPriest'];
+  await live.post('/formation',{leader:fighters[0]});
+  await live.post('/formation',{character:fighters[1],follow:true});
+  const seed=await live.admin(`output=(()=>{
+    G.monsters.mrgreen={...G.monsters.mrgreen,hp:100000000,attack:1,speed:0,charge:0,range:1,aggro:0,rage:0,peaceful:true,spawns:[]};
+    const m=new_monster('halloween',{type:'mrgreen',count:1,boundary:[-495,650,-495,650]},{temp:1});
+    E.mrgreen={live:true,id:String(m.id),map:m.map,x:m.x,y:m.y,hp:m.hp,max_hp:m.max_hp};
+    const p=get_player('E2EWarrior');if(p.items[20])throw Error('Seed slot occupied');p.items[20]={name:'frostscale',q:2};cache_player_items(p);resend(p,'reopen+cid');
+    global.e2eCipherSpawner=new_monster;
+    global.e2eCipherSpiders=new Set(Object.values(instances.main.monsters).filter(m=>m.type==='spider').map(m=>String(m.id)));
+    new_monster=function(...args){const m=e2eCipherSpawner.apply(this,args);if(m?.type==='spider'&&m.map==='main')e2eCipherSpiders.add(String(m.id));return m;};
+    broadcast_e();return {id:String(m.id),spiders:G.maps.main.monsters.filter(s=>s.type==='spider'),spiderIds:Object.values(instances.main.monsters).filter(m=>m.type==='spider').map(m=>String(m.id))};
+  })()`);
+  await live.post('/formation',{character:fighters[0],eventSelections:['mrgreen','witchcipher'],eventPriorities:['witchcipher','mrgreen',...supportedEvents.filter(id=>!['witchcipher','mrgreen'].includes(id))],
+    eventLimits:{event:'witchcipher',limits:{deathLimit:null,timeLimitMinutes:null,cipher:{minClues:0,automatic:true,gatherMonsters:['spider','wolfie','gscorpion','ghost']}}}});
+  const observations:any[]=[];
+  try{
+    await expect.poll(async()=>{const hits=await live.clients[fighters[0]].events();return fighters.every(name=>hits.some((e:any)=>e.event==='hit'&&e.data.hid===name&&String(e.data.id)===seed.id&&e.data.damage>0));},{timeout:150_000}).toBe(true);
+    const board=await live.admin("output=(()=>{witch_cipher_start({id:'e2e-cipher-green-handoff'});return witch_cipher_public();})()");
+    await expect.poll(async()=>{
+      const s=await live.state();observations.push({at:Date.now(),characters:Object.fromEntries(Object.entries(s.characters).map(([n,c]:[string,any])=>[n,{map:c.map,x:c.x,y:c.y,joinedEvent:c.joinedEvent,activeEvent:c.activeEvent,plan:c.eventSchedules?.find((e:any)=>e.id==='witchcipher')?.cipher?.runtime,convoy:c.convoyNavigation}])),convoy:s.activeConvoy});
+      return fighters.every(name=>s.characters[name]?.joinedEvent==='witchcipher');
+    },{timeout:90_000}).toBe(true);
+    await expect.poll(async()=>{const [hits,s,spiderIds]=await Promise.all([live.clients[fighters[0]].events(),live.state(),live.admin('output=[...e2eCipherSpiders]')]);observations.push({at:Date.now(),spiderIds,characters:Object.fromEntries(fighters.map(n=>[n,{map:s.characters[n]?.map,x:s.characters[n]?.x,y:s.characters[n]?.y,target:s.characters[n]?.target,sighting:s.characters[n]?.eventCombatSighting,movement:s.characters[n]?.movement?.reason}])),convoy:s.activeConvoy});return fighters.every(name=>s.characters[name]?.map==='main'&&hits.some((e:any)=>e.event==='hit'&&e.at>=board.start&&e.data.hid===name&&e.data.damage>0&&spiderIds.includes(String(e.data.id))));},{timeout:240_000}).toBe(true);
+    const plans=await Promise.all([...fighters,'E2EMerchant'].map(n=>live.clients[n].run(`get('party-october-${n}')?.gathering`)));
+    for(const plan of plans)expect(plan).toMatchObject({round:board.id,mode:'gathering',ingredient:'verdantspore',monster:'spider',owner:fighters[0]});
+  }finally{
+    await info.attach('cipher-green-handoff-observations',{body:JSON.stringify({seed,observations,state:await live.state(),events:await live.clients[fighters[0]].events(),journals:await Promise.all([...fighters,'E2EMerchant'].map(n=>live.clients[n].run(`get('party-october-${n}')`)))}),contentType:'application/json'});
+    await live.admin('new_monster=e2eCipherSpawner;output=true');
+  }
+});
+
 });
