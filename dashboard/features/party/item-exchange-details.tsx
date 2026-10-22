@@ -3,11 +3,9 @@ import { ItemSprite } from './item-sprite';
 import type { Sprite } from './sprite';
 import type { ReactNode } from 'react';
 import type { ExchangeRewardTileData } from './exchange-reward-tile';
+import { formatDropRate } from './drop-rate';
 
-const rewardPercentage = (chance: number) =>
-  chance > 0 && chance < 0.00000001
-    ? '<0.000001%'
-    : `${Number((chance * 100).toFixed(6))}%`;
+const rewardChance = (rate: number) => formatDropRate({ rate, quantity: 1 });
 
 export function ItemExchangeDetails({
   id,
@@ -72,7 +70,7 @@ export function ItemExchangeDetails({
         {quantity.toLocaleString()} × {name}
         {itemLevel ? ` +${itemLevel}` : ''}
       </span>
-      <span className="shrink-0 font-mono text-xs text-amber-300">
+      <span className="shrink-0 whitespace-pre font-mono text-xs text-amber-300">
         {detail}
       </span>
     </button>
@@ -119,7 +117,7 @@ export function ItemExchangeDetails({
                       entry.name,
                       entry.rewardQuantity || 1,
                       entry.sprite,
-                      '100%',
+                      rewardChance(1),
                       target(entry.reward).level,
                       true,
                       true,
@@ -131,7 +129,7 @@ export function ItemExchangeDetails({
                         result.name,
                         result.quantity,
                         result.sprite,
-                        rewardPercentage(result.chance),
+                        rewardChance(result.chance),
                         0,
                         !['empty', 'gold', 'shells', 'cx', 'cxbundle'].includes(
                           result.kind,
@@ -162,7 +160,7 @@ export function ItemExchangeDetails({
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {sources.map(({ entry, chance }) => row(
               entry.key, entry.id, entry.name, entry.required, entry.sprite,
-              rewardPercentage(chance), entry.level,
+              rewardChance(chance), entry.level,
             ))}
           </div>
         </section>

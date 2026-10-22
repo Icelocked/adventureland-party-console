@@ -55,7 +55,7 @@ export function BestiaryDrops({
             <span className="min-w-0 flex-1">
               <span className="block truncate text-xs">{drop.name}</span>
               <span className="font-mono text-[9px] text-amber-300">
-                {rolls.map((roll, index) => <span className="block break-all" key={index}>{formatDropRate(roll)}</span>)}
+                {rolls.map((roll, index) => <span className="block whitespace-pre" key={index}>{formatDropRate(roll)}</span>)}
               </span>
               {drop.condition && <span className="block text-[10px] text-violet-200">{drop.condition}</span>}
               {indirect ? (
