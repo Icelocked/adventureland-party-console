@@ -25,6 +25,13 @@ function realmTimeLabel(next:number, offset:number) {
   const time=new Intl.DateTimeFormat('en-GB',{timeZone:'UTC',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(ms+offset*3600000);
   return `Realm: ${time} (UTC${offset<0?'−':'+'}${Math.abs(offset)})`;
 }
+function dailyResetLabel(now:number, clockOffsetMs=0) {
+  const serverNow=now+clockOffsetMs;
+  const next=(Math.floor(serverNow/86400000)+1)*86400000;
+  const seconds=Math.floor((next-serverNow)/1000);
+  const local=new Intl.DateTimeFormat(undefined,{weekday:'short',hour:'numeric',minute:'2-digit',timeZoneName:'short'}).format(next);
+  return `${local} (${Math.floor(seconds/3600)}h ${Math.floor(seconds/60)%60}m ${seconds%60}s)`;
+}
 export const EventSelectionControl = memo(function EventSelectionControl({ state, name, onChange, onPriorityChange, onLimitsChange, onAnniversary }: {
   onLimitsChange: (event: string, limits: EventLimits) => Promise<unknown> | void; onPriorityChange: (events: string[]) => Promise<unknown> | void; state: EventSelectionState; name: string; merchant: boolean; onAnniversary: () => void; onChange: (events: string[]) => void;
 }) {
@@ -140,7 +147,12 @@ export const EventSelectionControl = memo(function EventSelectionControl({ state
           <span aria-label={`${event.name} priority`} className="w-8 shrink-0 text-center text-emerald-200">{supported ? order.length - order.indexOf(event.id) : 0}</span>
           <input type="checkbox" checked={allowed && selected.includes(event.id)} disabled={!allowed || policy.inherited}
             className="accent-emerald-500" onChange={e => onChange(e.target.checked ? [...selected, event.id] : selected.filter(id => id !== event.id))} />
-          <span>{event.name} — {!supported ? "Unsupported" : event.live ? "LIVE" : event.next ? eventTimeLabel(event.next, now, event.clockOffsetMs) : "Time not announced"}{!!event.next&&event.realmOffsetHours!==undefined&&<span className="block text-slate-300">{realmTimeLabel(event.next,event.realmOffsetHours)}</span>}{event.confirmed&&<span className="block text-cyan-200">Realm schedule confirmed</span>}{event.stale ? " · timing stale" : ""}{ignored && <span className="block text-amber-200">Skipped this instance: {ignored}</span>}{!!event.occurrences?.length&&<details className="mt-1 text-slate-300"><summary className="cursor-pointer">Next seven days</summary>{event.occurrences.slice().sort((a,b)=>a.at-b.at).map((entry,i)=><div key={i}>{new Date(entry.at).toLocaleString()}</div>)}</details>}</span>
+          <span>{event.name} — {!supported ? "Unsupported" : event.live ? "LIVE" : event.next ? eventTimeLabel(event.next, now, event.clockOffsetMs) : "Time not announced"}
+            {event.id==='trickortreat'&&<>
+              {now>0&&<span className="block text-cyan-200">Next daily reset: {dailyResetLabel(now,event.clockOffsetMs)}</span>}
+              <span className="block text-slate-300">Once daily at 00:00 UTC · Available during Halloween</span>
+            </>}
+            {!!event.next&&event.realmOffsetHours!==undefined&&<span className="block text-slate-300">{realmTimeLabel(event.next,event.realmOffsetHours)}</span>}{event.confirmed&&<span className="block text-cyan-200">Realm schedule confirmed</span>}{event.stale ? " · timing stale" : ""}{ignored && <span className="block text-amber-200">Skipped this instance: {ignored}</span>}{!!event.occurrences?.length&&<details className="mt-1 text-slate-300"><summary className="cursor-pointer">Next seven days</summary>{event.occurrences.slice().sort((a,b)=>a.at-b.at).map((entry,i)=><div key={i}>{new Date(entry.at).toLocaleString()}</div>)}</details>}</span>
           <button type="button" aria-label={`${event.name} settings`} disabled={!supported} onClick={() => setSettings(event.id)} className="ml-auto rounded border border-slate-500 bg-slate-950 p-2 text-pink-200 hover:bg-slate-800"><Settings className="size-4" /></button>
         </div>;
       })}

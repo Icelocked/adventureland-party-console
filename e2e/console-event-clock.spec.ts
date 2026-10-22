@@ -2,6 +2,33 @@ import {test,expect} from './fixtures';
 import {fetchFullState} from './state-route';
 
 test.use({timezoneId:'America/New_York'});
+// Reset failures: confusing a daily quota with a scheduled spawn; hiding the
+// countdown behind LIVE; using realm midnight or local DST instead of UTC;
+// freezing the countdown; retaining yesterday's deadline after midnight.
+for(const [date,local] of [['2026-10-22','8:00 PM EDT'],['2026-11-05','7:00 PM EST']]){
+  test(`Trick or Treat daily reset counts down and rolls over at ${local}`,async({page},info)=>{
+    await page.clock.setFixedTime(new Date(`${date}T23:59:30Z`));
+    await page.route('**/party-api/state*',async route=>{
+      const response=await fetchFullState(route),state=await response.json();
+      await route.fulfill({response,json:{...state,eventSchedules:[{id:'trickortreat',name:'Trick or Treat',live:true,clockOffsetMs:1000,realmOffsetHours:-5}]}});
+    });
+    await page.goto('/');
+    const card=page.locator('article').filter({has:page.getByRole('heading',{name:'W',exact:true})});
+    await card.getByRole('button',{name:/^Events \(/}).click();
+    const row=page.locator('[data-event="trickortreat"]');
+    await expect(row).toContainText('Trick or Treat — LIVE');
+    await expect(row).toContainText(`Next daily reset: Thu, ${local} (0h 0m 29s)`);
+    await expect(row).toContainText('Once daily at 00:00 UTC');
+    await page.clock.setFixedTime(new Date(`${date}T23:59:31Z`));
+    await expect(row).toContainText('(0h 0m 28s)');
+    await row.scrollIntoViewIfNeeded();
+    await info.attach('trick-or-treat-reset-countdown',{body:await page.screenshot(),contentType:'image/png'});
+    await page.clock.setFixedTime(new Date(Date.parse(`${date}T00:00:00Z`)+86400000));
+    await expect(row).toContainText(`Next daily reset: Fri, ${local} (23h 59m 59s)`);
+    await info.attach('trick-or-treat-reset-rollover',{body:await page.screenshot(),contentType:'image/png'});
+  });
+}
+
 for(const [date,local] of [['2026-10-22T05:00:00Z','1:00 AM EDT'],['2026-11-05T05:00:00Z','12:00 AM EST']]){
   test(`Event clock preserves realm midnight as ${local}`,async({page},info)=>{
     await page.route('**/party-api/state*',async route=>{
