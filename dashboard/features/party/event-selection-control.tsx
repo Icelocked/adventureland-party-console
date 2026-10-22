@@ -10,8 +10,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { eventDisplayNames, eventPolicy, selectedEvents, supportedEvents, eventPriorityOrder, eventLimits, type EventLimits } from "@/lib/event-policy";
 import { PartyState } from "./party-state";
 import type {CipherView} from './cipher-controls';
+import type {TrickOrTreatCounts} from '../../../runtime/coordinator/events/schedule-reports';
 
-export type EventSchedule = { id: string; name: string; live?: boolean; next?: number; expires?: number; stale?: boolean; slotAt?: number; slotKind?: string; clockOffsetMs?:number; realmOffsetHours?:number; confirmed?:boolean; occurrences?:{at:number;status:string}[]; cipher?:CipherView };
+export type EventSchedule = { id: string; name: string; live?: boolean; next?: number; expires?: number; stale?: boolean; slotAt?: number; slotKind?: string; clockOffsetMs?:number; realmOffsetHours?:number; confirmed?:boolean; occurrences?:{at:number;status:string}[]; cipher?:CipherView; trickOrTreat?:{characters:Record<string,TrickOrTreatCounts>} };
 export type EventSelectionState = Pick<PartyState, "leader" | "merchantCharacter" | "followers" |
   "eventAttendance" | "eventLimitsByCharacter" | "eventPrioritiesByCharacter" | "eventsByCharacter" | "eventSelectionsByCharacter" | "eventSchedules">;
 export function eventTimeLabel(next: number | undefined, now: number, clockOffsetMs = 0) {
@@ -126,6 +127,9 @@ export const EventSelectionControl = memo(function EventSelectionControl({ state
         onPointerCancel={cancelDrag}>
       {rows.map(event => {
         const supported = supportedEvents.includes(event.id), allowed = supported;
+        const reportedKnocks=event.trickOrTreat?.characters?.[name];
+        const knocks=reportedKnocks && !event.stale && now-reportedKnocks.observedAt<15000 &&
+          reportedKnocks.day===new Date(now+(event.clockOffsetMs||0)).toISOString().slice(0,10)?reportedKnocks:undefined;
         const ignored = [state.eventAttendance?.[name]?.[event.id], state.eventAttendance?.[policy.source]?.[event.id]]
           .find((entry,index) => entry?.ignored && !entry.ended && (index === 0 || entry.ignored !== 'manual travel'))?.ignored;
         return <div key={event.id} data-event={event.id} className={`flex items-center gap-2 rounded border bg-slate-950 px-2 py-2 text-emerald-50 ${dragged === event.id ? 'border-cyan-300 opacity-25' : 'border-emerald-900/70'}`}>
@@ -150,6 +154,9 @@ export const EventSelectionControl = memo(function EventSelectionControl({ state
           <span>{event.name} — {!supported ? "Unsupported" : event.live ? "LIVE" : event.next ? eventTimeLabel(event.next, now, event.clockOffsetMs) : "Time not announced"}
             {event.id==='trickortreat'&&<>
               {now>0&&<span className="block text-cyan-200">Next daily reset: {dailyResetLabel(now,event.clockOffsetMs)}</span>}
+              <span className="block text-emerald-200" title="Character: usable knocks remaining. Account: upper bound from observed door histories; the game does not expose a separate account counter. Other characters or realms may have spent more.">
+                Knocks left · Character: {knocks?.characterRemaining??'—'}/{reportedKnocks?.characterLimit??7} · Account: {knocks ? `${knocks.accountRemainingUpperBound>0?'up to ':''}${knocks.accountRemainingUpperBound}` : '—'}/{reportedKnocks?.accountLimit??14}
+              </span>
               <span className="block text-slate-300">Once daily at 00:00 UTC · Available during Halloween</span>
             </>}
             {!!event.next&&event.realmOffsetHours!==undefined&&<span className="block text-slate-300">{realmTimeLabel(event.next,event.realmOffsetHours)}</span>}{event.confirmed&&<span className="block text-cyan-200">Realm schedule confirmed</span>}{event.stale ? " · timing stale" : ""}{ignored && <span className="block text-amber-200">Skipped this instance: {ignored}</span>}{!!event.occurrences?.length&&<details className="mt-1 text-slate-300"><summary className="cursor-pointer">Next seven days</summary>{event.occurrences.slice().sort((a,b)=>a.at-b.at).map((entry,i)=><div key={i}>{new Date(entry.at).toLocaleString()}</div>)}</details>}</span>

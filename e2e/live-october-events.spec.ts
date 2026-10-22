@@ -152,6 +152,52 @@ test('October Horseman walks to the forest graveyard and engages the native boss
   await info.attach('october-native-horseman-combat',{body:JSON.stringify({seed,position,lineup,events:await live.clients[name].events(),state:await live.state()}),contentType:'application/json'});
 });
 
+test.describe('October Horseman add priority',()=>{
+  test.use({initialPosition:{map:'halloween',x:-245,y:-1640}});
+  // Failure inventory: a sticky boss selection ignores new adds; followers stay
+  // on the boss; one dead add returns the party before the wave is cleared;
+  // the second native wave fails to preempt; clearing adds never resumes boss.
+  test('October Horseman retargets each native Jack-o-Walker wave before resuming boss',async({live},info)=>{
+    test.setTimeout(600_000);
+    const names=['E2EWarrior','E2EPriest'];
+    await live.post('/formation',{leader:names[0]});
+    await live.post('/formation',{character:names[1],follow:true});
+    const seed=await live.admin(`output=(()=>{
+      const dps=${JSON.stringify(names)}.reduce((sum,name)=>{const p=get_player(name);return sum+p.attack*p.frequency;},0);
+      const original={horseman:G.monsters.horseman,jackowalker:G.monsters.jackowalker};
+      global.e2eHorsemanPriority={original,spawner:new_monster,adds:[]};
+      G.monsters.horseman={...original.horseman,hp:Math.ceil(dps*45),attack:1,speed:0,charge:0,range:1,armor:0,resistance:0,phresistance:0};
+      G.monsters.jackowalker={...original.jackowalker,hp:Math.ceil(dps*6),attack:1,speed:0,charge:0,range:1,armor:0,resistance:0};
+      new_monster=function(...args){const m=e2eHorsemanPriority.spawner.apply(this,args);if(m?.type==='jackowalker'&&m.master)e2eHorsemanPriority.adds.push({id:String(m.id),master:String(m.master),at:Date.now()});return m;};
+      const m=new_monster('halloween',{type:'horseman',count:1,boundary:[-405,-1640,-405,-1640]},{temp:1});
+      E.horseman={live:true,id:String(m.id),map:m.map,x:m.x,y:m.y,hp:m.hp,max_hp:m.max_hp};broadcast_e();
+      return {id:String(m.id),spawns:original.horseman.spawns,dps,bossHp:m.hp,addHp:G.monsters.jackowalker.hp};
+    })()`);
+    const observations:any[]=[];
+    const sample=()=>live.admin(`output=(()=>{const s=e2eHorsemanPriority,monsters=instances.halloween.monsters,boss=monsters[${JSON.stringify(seed.id)}];return {at:Date.now(),boss:boss?{hp:boss.hp,max_hp:boss.max_hp}:null,adds:s.adds.map(a=>({...a,alive:!!monsters[a.id]&&!monsters[a.id].dead&&monsters[a.id].hp>0}))};})()`);
+    try{
+      await live.post('/formation',{character:names[0],eventSelections:['horseman']});
+      await expect.poll(async()=>{const events=await live.clients[names[0]].events();return names.every(name=>events.some((e:any)=>e.event==='hit'&&e.data.hid===name&&String(e.data.id)===seed.id&&e.data.damage>0));},{timeout:90_000}).toBe(true);
+      let total=0;
+      for(const spawn of seed.spawns.filter((entry:any)=>entry[1]==='jackowalker')){
+        const start=total;total+=spawn[2];
+        await expect.poll(async()=>{const s=await sample();observations.push(s);return s.adds.filter((a:any)=>a.master===seed.id).length;},{timeout:180_000}).toBe(total);
+        const wave=(await sample()).adds.filter((a:any)=>a.master===seed.id).slice(start,total);
+        expect(wave).toHaveLength(4);
+        await expect.poll(async()=>{const s=await live.state();return names.every(name=>wave.some((a:any)=>a.id===String(s.characters[name]?.target?.id)));},{timeout:30_000,message:'Both fighters must leave Horseman for a live Jack-o-Walker'}).toBe(true);
+        await expect.poll(async()=>{const s=await sample();observations.push(s);expect(s.boss,'Boss must survive while the party clears its wave').not.toBeNull();return s.adds.filter((a:any)=>wave.some((w:any)=>w.id===a.id)&&a.alive).length;},{timeout:180_000}).toBe(0);
+        const cleared=await sample();
+        await expect.poll(async()=>{const events=await live.clients[names[0]].events();return names.every(name=>events.some((e:any)=>e.event==='hit'&&e.at>=cleared.at&&e.data.hid===name&&String(e.data.id)===seed.id&&e.data.damage>0));},{timeout:45_000,message:'Both fighters must resume actual boss damage after clearing the wave'}).toBe(true);
+        observations.push({wave,cleared,state:await live.state()});
+      }
+      expect(total).toBe(8);
+    }finally{
+      await info.attach('horseman-native-add-priority',{body:JSON.stringify({seed,observations,native:await sample(),events:await live.clients[names[0]].events(),state:await live.state()}),contentType:'application/json'});
+      await live.admin('output=(()=>{const s=e2eHorsemanPriority;new_monster=s.spawner;Object.assign(G.monsters,s.original);return true;})()');
+    }
+  });
+});
+
 test.describe('October Graveyard targeting',()=>{
   test.use({initialPosition:{map:'spookytown',x:255,y:-1350}});
   test('October Graveyard ignores an unchecked Gargoyle and fights it after enabling',async({live},info)=>{
