@@ -125,3 +125,13 @@ appending the October events in catalog order; a list that drops a pre-October
 event, repeats an id or names an unknown id is accepted. A saved older list
 needs no migration, because `eventPriorityOrder` appends missing supported
 events on every read.
+
+## Event bosses outside their event
+
+The Headless Horseman (30M HP, attack 1600) roams Spooky Forest after it spawns
+(`spawn_special_monster` gives it `roam: true`), and the Gargoyle (6M HP) wakes
+in Spooky Town's graveyard. Failure inventory, before the change: a character
+farming with the `all` focus, or one whose focus area the Horseman roams into,
+pulls either boss as an ordinary target without having joined its event; a boss
+that attacks a party member is no longer defended against. The Graveyard species
+filter (`eventSettings.graveyard.monsters`) covers only the event itself.

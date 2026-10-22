@@ -14652,6 +14652,8 @@
         excludedGraveyardTarget(target) && distance(character,target) <= range;
     });
   }
+  // Event bosses that spawn only with their event, keyed to that event.
+  var eventOnlyBosses = { horseman: "horseman", gargoyle: "graveyard" };
   function isAllowedTarget(target, huntTravelCommand, diagnostic) {
     if (!consoleDrainAllows(target)) { if (diagnostic) diagnostic.reason = 'waiting for safe console reload'; return false; }
     if (character.cave || typeof root !== "undefined" && root.__partyDungeonRuntime && root.__partyDungeonRuntime.owns()) return dungeonTargetAllowed(target);
@@ -14683,6 +14685,10 @@
     if (typeof rareTarget === "function" && rareTarget() && rareTarget().id === target.id) return true;
     if (target.type === "character") return validAbtestingOpponent(target);
     if (target.type !== "monster" || isExternallyClaimedMonster(target)) return reject("external claim or invalid entity");
+    // Farming never pulls an October event boss outside its own event
+    // (docs/testing-october-events.md). One attacking the party stays a defense target.
+    var bossEvent = typeof eventOnlyBosses !== "undefined" && eventOnlyBosses[target.mtype];
+    if (bossEvent && joinedEvent !== bossEvent && !isAttackingPartyMember(target)) return reject("event boss outside its event");
     if (huntTravel && farmApproach.failed[target.id]>Date.now()) return reject("failed approach cooldown");
     if (typeof passiveRareCandidate === "function" && passiveRareCandidate(target)) return true;
     if (isAttackingPartyMember(target)) return true;
