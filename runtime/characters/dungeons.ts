@@ -305,6 +305,13 @@ export function installDungeonRuntime(ports: Ports) {
         journal.save(c, "complete");
         return;
       }
+      if (c.action === "talk") {
+        // Talking only reopens a dialogue, so it is never saved as
+        // dispatched and its failure blocks no later action.
+        await ports.request(c.action, { room: c.room });
+        journal.save(c, "complete");
+        return;
+      }
       journal.save(c, "dispatched");
       dispatched = true;
       await ports.request(c.action, { choice: c.choice, option: c.option, room: c.room, to: c.target?.to });

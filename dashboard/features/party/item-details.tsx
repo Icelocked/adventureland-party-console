@@ -761,9 +761,12 @@ export function ItemDetails({
                     </p>
                     {!!material.drops?.length && (
                       <p className="mt-0.5 text-[10px] text-amber-300/70">
-                        {material.drops
-                          .map((source) => `${source.monsterName} ${dropRate(source)}`)
-                          .join(" · ")}
+                        {material.drops.map((source, index) => (
+                          <span key={index} className="block">
+                            {source.monsterName}
+                            <span className="block whitespace-pre font-mono">{dropRate(source)}</span>
+                          </span>
+                        ))}
                       </p>
                     )}
                   </div>
@@ -811,8 +814,8 @@ export function ItemDetails({
                         {source.monsterId}
                       </span>
                     </span>
-                  <span aria-label={`${source.monsterName} drop chances`} className="min-w-0 break-all font-mono text-amber-300">
-                    {rolls.map((roll,index)=><span key={index} className="block">{dropRate(roll)}</span>)}
+                  <span aria-label={`${source.monsterName} drop chances`} className="min-w-0 font-mono text-amber-300">
+                    {rolls.map((roll,index)=><span key={index} className="block whitespace-pre">{dropRate(roll)}</span>)}
                   </span>
                 </button>
               ); })}

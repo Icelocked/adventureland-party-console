@@ -24,10 +24,12 @@ export function formatDropRate(drop: DropRate): string {
   const rate = Math.min(1, Math.max(0, effectiveDropRate(drop)));
   const quantity = Math.max(1, drop.quantity || 1);
   const count = quantity > 1 ? ` ×${quantity.toLocaleString("en-US")}` : "";
-  if (!Number.isFinite(rate) || rate <= 0) return `0/1${count}`;
-  if (rate >= 1) return `1/1${count}`;
+  if (!Number.isFinite(rate) || rate <= 0) return `0/1\n(0%)${count}`;
+  if (rate >= 1) return `1/1\n(100%)${count}`;
   const [numerator, denominator] = probabilityRatio(rate);
-  return `${numerator.toLocaleString("en-US")}/${denominator.toLocaleString("en-US")}${count}`;
+  // Significant digits keep rare drops readable without rounding them to 0%.
+  const percent = (rate * 100).toLocaleString("en-US", { maximumSignificantDigits: 6 });
+  return `${numerator.toLocaleString("en-US")}/${denominator.toLocaleString("en-US")}\n(${percent}%)${count}`;
 }
 
 function probabilityRatio(rate: number): [bigint, bigint] {

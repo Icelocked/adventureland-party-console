@@ -458,6 +458,41 @@
   var lastFarmingMonsterType = root.__partyLastFarmingMonsterType || null;
   var eventsEnabled = false;
   var enabledEventSelections = null;
+  var eventSettings = {}, cipherMerchant = null, cipherGathering = null, octoberController = null;
+  function octoberRuntime() {
+    if (octoberController) return octoberController;
+    octoberController = root.partyOctoberEvents.createOctoberRuntime({
+      now: function () { return Date.now() + eventClockOffset; }, realm: reunionRealm,
+      name: function () { return character.name; }, merchant: function () { return character.name === cipherMerchant; },
+      settings: function () { return eventSettings; }, status: nativeEventStatus,
+      gathering: function () { return cipherGathering; },
+      definitions: function () { return G.events || {}; },
+      position: function () { return { map: character.map, x: character.real_x, y: character.real_y }; },
+      doorStatus: function () { return character.trickortreat || null; },
+      stock: function () { var stock = {}; (character.items || []).forEach(function (item) {
+        if (item && !item.l && !item.b && !item.giveaway) stock[item.name] = (stock[item.name] || 0) + (item.q || 1);
+      }); return stock; },
+      load: function () { return get('party-october-' + character.name); },
+      save: function (journal) { set('party-october-' + character.name, journal); },
+      walk: function (point, owns) { return sharedPartyWalk(point, 'event', travellingEventName || joinedEvent, null, owns); },
+      knock: function (door) { return knock(door); }, info: function () { return witch_cipher_info(); },
+      brew: function (mix) { return brew(mix); },
+      farmDestination: function (type) { return eventDestination(type, {}); },
+      witch: function () { var npc = ((G.maps.halloween || {}).npcs || []).find(function (entry) { return entry.id === 'witch'; });
+        return npc ? { map: 'halloween', x: npc.position[0], y: npc.position[1] + 30 } : null; },
+      transfer: async function () {
+        if (!eventSelected('witchcipher') || !cipherMerchant || character.name === cipherMerchant || root.__merchantActiveJob || banking || upgrading) return;
+        var merchant = get_player(cipherMerchant);
+        if (!merchant || merchant.rip || distance(character, merchant) > 350) return;
+        for (var slot = 0; slot < character.items.length; slot++) {
+          var item = character.items[slot];
+          if (item && !item.l && !item.b && root.partyOctoberEvents.cipherIngredients.indexOf(item.name) >= 0)
+            await send_item(cipherMerchant, slot, item.q || 1);
+        }
+      },
+    });
+    return octoberController;
+  }
   var pendingEventDisables = root.__partyPendingEventDisables || [];
   var travellingEventName = null, eventSelectionRevision = 0;
   var eventClockOffset = 0, eventClockSyncedAt = 0, eventClockRequest = null;
@@ -479,21 +514,38 @@
     parent.socket.emit("test", {});
   }
   function eventScheduleSnapshot() {
-    var status = eventStatus(), names = supportedEventNames();
+    // Calendar epochs are absolute server timestamps. Clock correction belongs
+    // to countdowns and local deadlines, never to the displayed calendar minute.
+    var status = nativeEventStatus(), names = supportedEventNames();
     return names.map(function(id) {
       var value = status[id] || {};
-      var schedule = status.schedule || {}, kind = ["crabxx", "goobrawl", "abtesting"].indexOf(id) >= 0 ? "daily" : ["icegolem", "franky"].indexOf(id) >= 0 ? "nightly" : null;
-      var hours = kind === "daily" ? schedule.dailies : kind === "nightly" ? schedule.nightlies : null;
-      var slotAt = null, now = Date.now() + eventClockOffset, offset = Number(schedule.time_offset);
-      if (Array.isArray(hours) && Number.isFinite(offset)) hours.forEach(function(hour) {
-        var date = new Date(now); date.setUTCHours((Number(hour) - offset + 24) % 24, 0, 0, 0);
-        var next = date.getTime(); if (next <= now) next += 86400000;
-        if (!slotAt || next < slotAt) slotAt = next;
-      });
-      return { slotAt: slotAt || undefined, slotKind: kind || undefined, id: id, name: id === "anniversary" ? "Anniversary" : id === "snowman" ? "Snowman" :
+      var schedule = nativeEventStatus().schedule || {}, now = Date.now() + eventClockOffset;
+      var occurrence = root.partyOctoberEvents.nextPublishedEvent(schedule, id, now);
+      return { id: id, confirmed: !!occurrence, occurrences: (schedule.events || []).concat(schedule.repeats || []).filter(function (entry) { return entry.event === id && entry.status === 'scheduled' && entry.at > now; }),
+        // Native doors_left is capped by the account quota; it is not the
+        // account's independent balance. Keep the door history for projection.
+        trickOrTreat: id === 'trickortreat' && character.trickortreat && now % 86400000 >= 5000 ? {
+          day: new Date(now).toISOString().slice(0,10), doors: character.trickortreat.doors,
+          doorsLeft: character.trickortreat.doors_left,
+          characterLimit: ((G.events.trickortreat || {}).doors || []).length,
+          accountLimit: (G.events.trickortreat || {}).knocks
+        } : undefined,
+        cipher: id === 'witchcipher' ? { board: nativeEventStatus().witchcipher || null, runtime: octoberRuntime().snapshot(),
+          ingredients: root.partyOctoberEvents.cipherIngredients.map(function (name) { return { id: name, name: (G.items[name] || {}).name || name, sprite: spriteDefinition((G.items[name] || {}).skin || name) }; }),
+          gathering: (G.events.witchcipher || {}).ingredients, merchant: cipherMerchant,
+          stock: cipherGathering && cipherGathering.stock, gatheringPlan: cipherGathering && cipherGathering.plan,
+          sources: ((G.events.witchcipher || {}).ingredients || []).flatMap(function (entry) { return entry[1].map(function (id) {
+            var monster = G.monsters[id] || {};
+            return { ingredient: entry[0], id: id, name: monster.name || id, sprite: monsterSpriteDefinition(monster.skin),
+              rate: Math.min(1, Number((G.events.witchcipher || {}).loot) * Number(monster.hp) / 1000) };
+          }); }) } : undefined,
+        name: id === "anniversary" ? "Anniversary" : id === "snowman" ? "Snowman" :
         id === "mrgreen" ? "Mr. Green" : id === "mrpumpkin" ? "Mr. Pumpkin" : id === "slenderman" ? "Slenderman" : (G.events[id] || {}).name || id,
-        live: !!status[id] && value.live !== false && value.active !== false,
-        next: anniversaryEpoch(value.next || value.spawn) || undefined, expires: anniversaryEpoch(value.expires || value.end) || undefined };
+        live: id === 'trickortreat' ? !!status.halloween : !!status[id] && value.live !== false && value.active !== false,
+        next: occurrence ? occurrence.at : anniversaryEpoch(value.next || value.spawn) || undefined,
+        clockOffsetMs: eventClockOffset - coordinatorClockOffset,
+        realmOffsetHours: Number.isFinite(schedule.time_offset) ? schedule.time_offset : undefined,
+        expires: anniversaryEpoch(value.expires || value.end) || undefined };
     });
   }
   // Server event times arrive as epoch seconds/ms or, for monster events (`spawn`, `end`), ISO strings.
@@ -1462,6 +1514,19 @@
     }
     addMonsterSources(monsterDrops, "monster");
     addMonsterSources(nativeHomeDropTables(), "home");
+    // These native drops exist only during the Cipher gathering window. Keep
+    // their acquisition condition visible even when Tracktrix was read outside it.
+    var cipherRules = G.events && G.events.witchcipher;
+    var ingredient = cipherRules && (cipherRules.ingredients || []).find(function(entry) { return entry[0] === itemName; });
+    if (ingredient) ingredient[1].forEach(function(monsterId) {
+      var definition = G.monsters[monsterId] || {};
+      var existing = drops.find(function(source) { return source.sourceType === 'monster' && source.monsterId === monsterId; });
+      if (existing) { existing.acquisitionPath = ['Witch\'s Cipher: gathering window only']; return; }
+      drops.push({monsterId:monsterId,monsterName:definition.name || monsterId,sprite:monsterSpriteDefinition(definition.skin),
+        sourceType:'monster',rate:Math.min(1,Number(cipherRules.loot) * Number(definition.hp) / 1000),
+        quantity:1,acquisitionPath:['Witch\'s Cipher: gathering window only'],
+        threat:(Number(definition.attack)||0)*(Number(definition.frequency)||0),goldPerKill:null});
+    });
     Object.keys(mapDropsById).forEach(function (mapId) {
       if (mapId === "global" || mapId === "global_static" || !G.maps[mapId]) return;
       var mapDefinition = G.maps[mapId] || {};
@@ -1945,10 +2010,38 @@
     }).sort(function (a, b) { return a.name.localeCompare(b.name); });
   }
 
+  // The G.events that raise a monster, for a monster without an ordinary spawn:
+  // the event's boss (its sprite), the boss's HP-threshold adds
+  // (G.monsters[boss].spawns) and Graveyard Rising's waves.
+  function eventMonsterSources(ordinary) {
+    var sources = {};
+    function add(type, source) {
+      if (!G.monsters[type] || ordinary[type]) return;
+      (sources[type] = sources[type] || []).push(source);
+    }
+    Object.keys(G.events || {}).forEach(function (id) {
+      var definition = G.events[id] || {}, name = definition.name || id, boss = definition.sprite;
+      if (!G.monsters[boss]) return;
+      add(boss, { id: id, name: name, role: "boss" });
+      var thresholds = {};
+      (G.monsters[boss].spawns || []).forEach(function (spawn) {
+        if (typeof spawn[0] !== "string" || spawn[0].indexOf("hp:") !== 0) return;
+        (thresholds[spawn[1]] = thresholds[spawn[1]] || []).push(Number(spawn[0].slice(3)));
+      });
+      Object.keys(thresholds).forEach(function (type) { add(type, { id: id, name: name, role: "add", at: thresholds[type] }); });
+      (Array.isArray(definition.waves) ? definition.waves : []).reduce(function (types, wave) {
+        Object.keys(wave && wave[1] || {}).forEach(function (type) { if (types.indexOf(type) < 0) types.push(type); });
+        return types;
+      }, []).forEach(function (type) { add(type, { id: id, name: name, role: "wave" }); });
+    });
+    return sources;
+  }
+
   function bestiaryCatalog() {
-    var spawns = {};
+    var spawns = {}, ordinary = {};
     var monsterTables = nativeMonsterDropTables(), homeTables = nativeHomeDropTables();
-    monsterChoices().forEach(function (choice) { spawns[choice.id] = choice.spawnRecords; });
+    monsterChoices().forEach(function (choice) { spawns[choice.id] = choice.spawnRecords; ordinary[choice.id] = choice.locations.length > 0; });
+    var eventSources = eventMonsterSources(ordinary);
     return Object.keys(G.monsters || {}).map(function (id) {
       var definition = G.monsters[id] || {};
       function rewards(table) { return (Array.isArray(table) ? table : []).map(function (drop) {
@@ -1964,7 +2057,8 @@
         attack: Number(definition.attack) || 0, xp: Number(definition.xp) || 0,
         range: Number(definition.range) || 0,
         threat: (Number(definition.attack) || 0) * (Number(definition.frequency) || 0),
-        definition: catalogValue(definition), drops: drops, homeRewards: homeRewards, spawnRecords: spawns[id] };
+        definition: catalogValue(definition), drops: drops, homeRewards: homeRewards, spawnRecords: spawns[id],
+        eventSources: eventSources[id] };
     });
   }
 
@@ -2090,6 +2184,10 @@
           sprite: spriteDefinition(definition.skin || skillId), definition: catalogValue(definition) };
       }).sort(function (a, b) { return a.name.localeCompare(b.name); });
     classes.push({ id: "shared", name: "Shared / system", skills: shared });
+    classes.push({id:'conditions',name:'Conditions',skills:Object.keys(G.conditions || {}).map(function(id) {
+      var definition=G.conditions[id] || {};
+      return {id:id,name:definition.name || id,sprite:spriteDefinition(definition.skin || id),definition:catalogValue(definition)};
+    }).sort(function(a,b){return a.name.localeCompare(b.name);})});
     return classes;
   }
 
@@ -2809,6 +2907,7 @@
         if (action === 'revival') return respawn();
         if (action === 'vote') return requestDungeon(action, { choice: fields.choice, option: fields.option });
         if (action === 'buy') return requestDungeon(action, { room: fields.room });
+        if (action === 'talk') return requestDungeon(action, { room: fields.room });
         throw new Error('Unsupported cave action');
       },
       keeper: function () {
@@ -2840,8 +2939,10 @@
       },
       move: function (point, command) {
         travelTrack = command.cruiseSpeed && !command.independent ? {id:command.id,distance:0,x:character.real_x,y:character.real_y,leader:character.name===cavePartyNames()[0],prepared:false} : null;
+        // Gathers plan the cross-map walk to Dorr and regrouping on large
+        // generated floors; live runs timed out at the default 30 s.
         var journey = movement.move(point, undefined, { native: true, shared:!!travelTrack, arrivalTolerance:command.action==='gather'?1:20, town: false, retainOnDirectStop: true,
-        awaitSharedRoute:!!travelTrack && !travelTrack.leader, nativePlanningTimeoutMs:travelTrack ? 90000 : 30000,
+        awaitSharedRoute:!!travelTrack && !travelTrack.leader, nativePlanningTimeoutMs:travelTrack || command.action==='gather' ? 90000 : 30000,
         nativePlanningProgressMs:travelTrack ? 240000 : undefined,
         repairSharedDrift:!!travelTrack,
         barrier: async function () {
@@ -3934,18 +4035,19 @@
     };
   }
 
-  var mapGeometrySent = {map: null, at: 0};
+  // The coordinator keeps a supplied floor for the run and answers
+  // {definition:"needed"} when it lacks one, so each floor is sent once.
+  var mapGeometrySent = {map: null, needed: false};
   function liveCaveMapDefinition() {
     if (!character.cave || !G.geometry || !G.geometry[character.map]) return undefined;
-    var now = Date.now();
-    if (mapGeometrySent.map === character.map && now - mapGeometrySent.at < 5000) return undefined;
+    if (mapGeometrySent.map === character.map && !mapGeometrySent.needed) return undefined;
     var geometry = G.geometry[character.map], tilesets = {};
     if (!geometry.tiles || !geometry.tiles.length || !(geometry.placements && geometry.placements.length || geometry.groups && geometry.groups.length)) return undefined;
     (geometry.tiles || []).forEach(function(tile) {
       var id = tile && tile[0], file = G.tilesets && G.tilesets[id] && G.tilesets[id].file;
       if (file) tilesets[id] = {file: /^https?:/.test(file) ? file : 'https://adventure.land' + file};
     });
-    mapGeometrySent = {map: character.map, at: now};
+    mapGeometrySent = {map: character.map, needed: false};
     return {name: character.map, min_x: geometry.min_x, min_y: geometry.min_y,
       max_x: geometry.max_x, max_y: geometry.max_y, default: geometry.default,
       tiles: geometry.tiles || [], placements: geometry.placements || [], groups: geometry.groups || [], tilesets: tilesets};
@@ -3961,14 +4063,17 @@
       return mapEntity(parent.entities[id], id);
     }).filter(Boolean);
     if (self && !entities.some(function (entry) { return entry.id === self.id; })) entities.push(self);
-    var events = mapTelemetryEvents.splice(0, mapTelemetryEvents.length);
+    var events = mapTelemetryEvents.splice(0, mapTelemetryEvents.length), frameMap = character.map;
     $.ajax({
       url: api + "/map-frame", method: "POST", contentType: "application/json",
-      data: JSON.stringify({ name: character.name, map: character.map, definition: liveCaveMapDefinition(), at: Date.now(),
+      data: JSON.stringify({ name: character.name, map: frameMap, definition: liveCaveMapDefinition(), at: Date.now(),
         x: Number(character.real_x !== undefined ? character.real_x : character.x) || 0,
         y: Number(character.real_y !== undefined ? character.real_y : character.y) || 0,
         projectilesAt: Date.now(), projectiles: Object.keys(mapTelemetryProjectiles).filter(function(id){var p=mapTelemetryProjectiles[id];if(p.expiresAt<=Date.now() || p.map!==character.map){delete mapTelemetryProjectiles[id];return false;}return true;}).slice(0,64).map(function(id){return mapTelemetryProjectiles[id];}), target: character.target || combatTargetId || null, eventCombat: eventTargetTypes.length>0, queue: queueMarkers(), queueRevision: groupedCombat && groupedCombat.queueRevision, grouped: groupedFarming(), entities: entities, visuals: root.capturePartyMapVisuals ? root.capturePartyMapVisuals(parent.map_animations || {},64) : [], events: events }),
-    }).always(function () { mapTelemetryBusy = false; });
+    }).always(function (reply, status) {
+      if (status === "success" && reply && reply.definition === "needed" && mapGeometrySent.map === frameMap) mapGeometrySent.needed = true;
+      mapTelemetryBusy = false;
+    });
   }
 
   async function stockUp() {
@@ -11704,6 +11809,7 @@
       var previousSelections = enabledEventSelections;
       statusPhase = "apply event selections";
       enabledEventSelections = Array.isArray(state.eventSelections) ? state.eventSelections : null;
+      eventSettings = state.eventSettings || {}; cipherMerchant = state.cipherMerchant || null; cipherGathering = state.cipherGathering || null;
       eventsEnabled = !!state.eventsEnabled;
       root.__merchantCoordinatorEventRecovery = !!state.merchantEventRecoveryReserved;
       if (previousSelections && enabledEventSelections && previousSelections.join(",") !== enabledEventSelections.join(",")) {
@@ -11924,13 +12030,14 @@
 
   function supportedEventNames() {
     var names = Object.keys(G.events || {});
-    ["snowman", "slenderman", "mrgreen", "mrpumpkin"].forEach(function (name) {
+    ["snowman", "slenderman", "mrgreen", "mrpumpkin", "horseman", "graveyard", "trickortreat", "witchcipher"].forEach(function (name) {
       if (names.indexOf(name) < 0) names.push(name);
     });
     return names;
   }
 
-  function halloweenEvent(name) { return ["slenderman", "mrgreen", "mrpumpkin"].indexOf(name) >= 0; }
+  function halloweenEvent(name) { return ["slenderman", "mrgreen", "mrpumpkin", "horseman"].indexOf(name) >= 0; }
+  function scheduledWalkEvent(name) { return ["mrgreen", "mrpumpkin", "horseman", "graveyard"].indexOf(name) >= 0; }
   function halloweenFeedCurrent() {
     // server_info is change-only, so age of the last announcement is not its
     // freshness. Admission uses this connection's snapshot and synced clock.
@@ -11960,23 +12067,29 @@
   }
   function halloweenAttendance(name, state) {
     if (!halloweenFeedCurrent()) return null;
-    if (!state) {
-      if (name === "slenderman") { slenderSearch.exhausted = false; slenderSearch.startedAt = 0; }
-      delete halloweenStages[name]; return null;
-    }
     if (name === "slenderman") {
-      if (state.live !== true) { slenderSearch.exhausted = false; slenderSearch.startedAt = 0; return null; }
+      if (!state || state.live !== true) { slenderSearch.exhausted = false; slenderSearch.startedAt = 0; return null; }
       if (freshSlendermanSighting()) { slenderSearch.exhausted = false; slenderSearch.startedAt = 0; }
       return slenderSearch.exhausted ? null : { staging: false };
     }
-    if (state.live === true) { delete halloweenStages[name]; return { staging: false }; }
-    var spawnAt = anniversaryEpoch(state.spawn), spawnId = state.nativeSpawnEpoch || spawnAt + eventClockOffset;
+    if (state && state.live === true) { delete halloweenStages[name]; return { staging: false }; }
+    var schedule = nativeEventStatus().schedule || {}, serverNow = Date.now() + eventClockOffset;
+    var occurrence = (schedule.events || []).concat(schedule.repeats || []).filter(function (entry) {
+      return entry.event === name && entry.status === 'scheduled' && Number.isFinite(entry.at) &&
+        entry.at >= serverNow - 120000 && entry.at <= serverNow + 120000;
+    }).sort(function (a, b) { return a.at - b.at; })[0];
+    // Old boss feeds have a precise native spawn Date. New October walk-to
+    // events publish their fixed location/time in the calendar before E exists.
+    var nativeSpawn = state && anniversaryEpoch(state.spawn);
+    var spawnAt = nativeSpawn || (occurrence ? occurrence.at - eventClockOffset : 0);
+    var spawnId = nativeSpawn ? state.nativeSpawnEpoch || spawnAt + eventClockOffset : occurrence && occurrence.at;
+    if (!spawnAt) { delete halloweenStages[name]; return null; }
     var now = Date.now(), prior = halloweenStages[name];
     if (prior && prior.spawnId !== spawnId && joinedEvent === name) {
       delete halloweenStages[name]; return null;
     }
     if (prior && prior.spawnId === spawnId) spawnAt = prior.spawnAt;
-    if (!spawnAt || now < spawnAt - 60000 || now > spawnAt + 120000) return null;
+    if (now < spawnAt - 120000 || now > spawnAt + 120000) return null;
     // The server timestamp is immutable for this announced round. Repeated
     // heartbeats never restart either the staging lead or the absent-spawn cap.
     halloweenStages[name] = { spawnAt: spawnAt, spawnId: spawnId };
@@ -11985,7 +12098,7 @@
 
   function rawServerStagingEvents() {
     var status = eventStatus();
-    return ["mrgreen", "mrpumpkin"].map(function (name) {
+    return ["mrgreen", "mrpumpkin", "horseman", "graveyard"].map(function (name) {
       if (!eventSelected(name)) return null;
       var attendance = halloweenAttendance(name, status[name]);
       return attendance && attendance.staging ? { name: name, spawnAt: attendance.spawnAt + coordinatorClockOffset, spawnId: attendance.spawnId } : null;
@@ -11997,14 +12110,18 @@
     // local deadline. Crab and other timestamp-only feeds use this fallback.
     var status = nativeEventStatus();
     return supportedEventNames().filter(function (name) {
+      // Computing October activity can select a persisted gathering plan. Do
+      // that only after opt-in, with the selected party's inventory authority.
+      if (name === 'trickortreat' || name === 'witchcipher') return eventSelected(name) && !!octoberRuntime().activity(name);
       var state = status && status[name];
       return eventIsSupported(name) && state && (halloweenEvent(name)
         ? halloweenFeedCurrent() && state.live === true : state.live !== false);
     }).map(function (name) {
       var state = status[name] || {};
+      if (name === 'trickortreat') return {name:name,id:'doors:'+new Date(Date.now()+eventClockOffset).toISOString().slice(0,10)};
       // Native IDs, round identities and fixed end epochs distinguish successive
       // instances even when the next feed arrives without a long absent interval.
-      var identity = state.id || state.event_id || state.round || state.end || state.expires;
+      var identity = state.id || state.event_id || state.round || state.start || state.end || state.expires;
       return { name: name, id: identity == null ? null : String(identity) };
     });
   }
@@ -13178,7 +13295,10 @@
     var cache = eventMonsterTypes.cache;
     if (!cache || cache.game !== G) cache = eventMonsterTypes.cache = { game: G, types: new Map() };
     if (!cache.types.has(eventName)) cache.types.set(eventName, deriveEventMonsterTypes(eventName));
-    return cache.types.get(eventName).slice();
+    var types = cache.types.get(eventName).slice();
+    if (eventName === 'graveyard' && eventSettings.graveyard && Array.isArray(eventSettings.graveyard.monsters))
+      types = types.filter(function (type) { return eventSettings.graveyard.monsters.indexOf(type) >= 0; });
+    return types;
   }
 
   function deriveEventMonsterTypes(eventName) {
@@ -13189,6 +13309,8 @@
     // Goo Brawl starts with ordinary Brawl Goos and later spawns the Rainbow
     // Goo. Keep both eligible; nearestEventTarget applies its two-phase rule.
     if (eventName === "goobrawl") candidates = ["rgoo", "bgoo", "goo"].concat(candidates);
+    if (eventName === 'graveyard') candidates = ['zombie','ghoul','gargoyle'];
+    if (eventName === 'horseman') candidates = ['jackowalker','horseman'];
     if (eventName === "mrgreen" || eventName === "mrpumpkin") {
       (((G.monsters || {})[eventName] || {}).spawns || []).forEach(function (spawn) {
         if (typeof spawn[0] === "string" && spawn[0].indexOf("hp:") === 0) candidates.push(spawn[1]);
@@ -13202,14 +13324,14 @@
   function eventRequiresJoin(eventName) {
     // These native monsters have no socket join handler. Attendance travels
     // through ordinary maps instead of issuing an unsupported join action.
-    if (halloweenEvent(eventName)) return false;
+    if (halloweenEvent(eventName) || ['horseman','graveyard','trickortreat','witchcipher'].indexOf(eventName) >= 0) return false;
     return !!(G.events && G.events[eventName] && G.events[eventName].join);
   }
 
   function eventIsSupported(eventName) {
     // Snowman is a live, open-world boss. It appears in server.status like
     // instanced events do, but has no join action; travel to it normally.
-    return eventRequiresJoin(eventName) || eventName === "snowman" || halloweenEvent(eventName);
+    return eventRequiresJoin(eventName) || eventName === "snowman" || halloweenEvent(eventName) || ['horseman','graveyard','trickortreat','witchcipher'].indexOf(eventName) >= 0;
   }
 
   function eventMapName(eventName) {
@@ -13233,6 +13355,8 @@
   }
 
   function eventDestination(eventName, state) {
+    if (eventName === 'trickortreat' || eventName === 'witchcipher') return octoberRuntime().destination(eventName);
+    if (eventName === 'graveyard') return {map:'spookytown',x:255,y:-1425};
     if (halloweenEvent(eventName) && state && state.live === true) {
       var actual = freshPartyEventDestination(eventName);
       if (actual) return actual;
@@ -13240,6 +13364,7 @@
     if (state && state.map && Number.isFinite(Number(state.x)) && Number.isFinite(Number(state.y))) {
       return { map: state.map, x: Number(state.x), y: Number(state.y) };
     }
+    if (eventName === 'horseman') return {map:'halloween',x:-405,y:-1640};
     var mapName = eventMapName(eventName), map = G.maps && G.maps[mapName] || null;
     if (map) {
       var spawn = Array.isArray(map.spawns) && map.spawns[0] || [0, 0];
@@ -13312,11 +13437,14 @@
       }
     }
     return supportedEventNames().map(function (name) {
+      if (name === 'trickortreat' || name === 'witchcipher') return eventSelected(name) && halloweenFeedCurrent() &&
+        !(manuallySuppressedEvent && manuallySuppressedEvent.name === name) ? octoberRuntime().activity(name) : null;
       var state = status && status[name];
       var types = eventMonsterTypes(name);
       var corroborated = partyEventHint === name || name === "goobrawl" && hasGoobrawlCombat();
       var kind = name === "abtesting" ? "pvp" : "monster";
-      var attendance = halloweenEvent(name) ? halloweenAttendance(name, state) : null;
+      var hasAttendance = halloweenEvent(name) || scheduledWalkEvent(name);
+      var attendance = hasAttendance ? halloweenAttendance(name, state) : null;
       if (manuallySuppressedEvent && manuallySuppressedEvent.name === name) return null;
       var anniversary = status && status.anniversary;
       var cycle = anniversaryPlan && anniversaryPlan.eventCycle;
@@ -13329,7 +13457,7 @@
       if (anniversaryPending && enabledEventSelections &&
           enabledEventSelections.indexOf("anniversary") < enabledEventSelections.indexOf(name)) return null;
       if (!eventSelected(name) || !eventIsSupported(name) || (kind === "monster" && !types.length) ||
-          (halloweenEvent(name) ? !attendance : !corroborated && (!state || state.live === false))) return null;
+          (hasAttendance ? !attendance : !corroborated && (!state || state.live === false))) return null;
       return { name: name, state: state || {}, types: types, kind: kind,
         staging: !!(attendance && attendance.staging), spawnAt: attendance && attendance.spawnAt };
     }).filter(Boolean).sort(function (a, b) {
@@ -13450,15 +13578,18 @@
 
   function eventCombatSighting(target) {
     if (!joinedEvent || eventTraveling || character.rip || character.transporting) return null;
+    var cipher = joinedEvent === 'witchcipher' && octoberRuntime().activity('witchcipher');
+    var gatheringTarget = cipher && cipher.kind === 'monster' && target && cipher.types.indexOf(target.mtype) >= 0;
     // Boss location ownership must not follow the temporary selected add.
-    if (!target || target.mtype !== joinedEvent) target = Object.values(parent.entities || {}).find(function (entry) {
+    // Cipher has ordinary gathering monsters instead of a namesake boss.
+    if (!gatheringTarget && (!target || target.mtype !== joinedEvent)) target = Object.values(parent.entities || {}).find(function (entry) {
       return entry && entry.type === "monster" && entry.mtype === joinedEvent && entry.visible !== false &&
         !entry.dead && entry.hp > 0 && (!entry.map || entry.map === character.map) &&
         (entry.in == null || entry.in === character.in);
     });
     if (!target || target.visible === false || target.dead || target.hp <= 0 ||
         !Number.isFinite(target.x) || !Number.isFinite(target.y)) return null;
-    return {id:String(target.id),mtype:target.mtype,map:character.map,
+    return {id:String(target.id),mtype:target.mtype,event:joinedEvent,map:character.map,
       in:String(character.in || character.map),x:target.x,y:target.y,
       attackReachable:eventCombatReachable(target),observedAt:Date.now()+coordinatorClockOffset};
   }
@@ -13478,7 +13609,7 @@
     // Special/cooperative event bosses are not always returned by the normal
     // path-checked monster selector even when their live entity is visible.
     // Inspect the entity table directly and preserve eventTargetTypes order so
-    // a declared boss (Franky, rgoo, etc.) outranks its spawned adds.
+    // each event's declared monster priority is retained.
     var targets = Object.keys(parent.entities || {}).map(function (id) {
       return parent.entities[id];
     }).filter(function (entity) {
@@ -13487,10 +13618,13 @@
         (character.map === "goobrawl" ? ["rgoo","bgoo","goo"] : eventTargetTypes).indexOf(entity.mtype) >= 0;
     });
     var currentMapEvent = G.maps && G.maps[character.map] && G.maps[character.map].event;
-    if (joinedEvent === "mrgreen" || joinedEvent === "mrpumpkin") {
+    if (joinedEvent === "mrgreen" || joinedEvent === "mrpumpkin" || joinedEvent === "horseman") {
       var boss = targets.find(function (entry) { return entry.mtype === joinedEvent; });
       var sight = boss || freshPartyEventDestination(joinedEvent);
       var adds = targets.filter(function (entry) {
+        // Horseman trash always takes priority, including a newly visible wave
+        // while the boss is already selected. No guessed HP threshold is needed.
+        if (joinedEvent === "horseman") return entry.mtype === "jackowalker";
         return entry.mtype !== joinedEvent && !isExternallyClaimedMonster(entry) &&
           (entry.master != null ? boss && String(entry.master) === String(boss.id) :
             sight && Math.hypot(entry.x - sight.x, entry.y - sight.y) <= 400);
@@ -13879,6 +14013,7 @@
       }
       eventMissingSince = 0;
       eventTargetTypes = event.staging ? [] : event.types;
+      if (event.name === 'witchcipher') await octoberRuntime().transfer();
       if (G.maps && G.maps[character.map] && G.maps[character.map].event === event.name &&
           joinedEvent !== event.name) {
         joinedEvent = event.name;
@@ -13900,7 +14035,8 @@
         return runtimeCurrent() && !character.rip && !escapeOwns() && !navigationIntent.cancelled &&
           !eventReturnPending && !eventExitOwnsMovement() &&
           travelNavigationRevision === navigationIntent.revision && eventSelected(event.name) &&
-          travelSelectionRevision === eventSelectionRevision && live && live.name === event.name;
+          travelSelectionRevision === eventSelectionRevision && live && live.name === event.name &&
+          (event.name !== 'witchcipher' || live.types.join(',') === event.types.join(','));
       }
       try {
         var destination = eventDestination(event.name, event.state);
@@ -13917,6 +14053,7 @@
           root.__partyEventRejoinRequired = null;
           game_log("Traveling to " + ((G.events && G.events[event.name] && G.events[event.name].name) || event.name), "#c084fc");
         }
+        if (event.kind === 'interaction') { await octoberRuntime().run(event.name, currentEventTravel); return; }
         if (event.name === "slenderman") { await discoverSlenderman(event, currentEventTravel); return; }
         if (event.kind !== "pvp" && !eventCombatReachable(nearestEventTarget()) && await eventTravelAllowed(event.name) && currentEventTravel())
           await sharedPartyWalk(destination,"event",event.name,null,currentEventTravel);
@@ -15211,7 +15348,20 @@
     }
   }
 
+  function excludedGraveyardTarget(target) {
+    return target && ['zombie','ghoul','gargoyle'].indexOf(target.mtype) >= 0 && eventSelected('graveyard') &&
+      eventSettings.graveyard && Array.isArray(eventSettings.graveyard.monsters) && eventSettings.graveyard.monsters.indexOf(target.mtype) < 0 && !isAttackingPartyMember(target);
+  }
+  function graveyardAreaAttackAllowed(range) {
+    return !Object.values(parent.entities || {}).some(function(target) {
+      return target && target.type === 'monster' && !target.dead && target.visible !== false &&
+        excludedGraveyardTarget(target) && distance(character,target) <= range;
+    });
+  }
   function isAllowedTarget(target, huntTravelCommand, diagnostic) {
+    if (excludedGraveyardTarget(target)) {
+      if (diagnostic) diagnostic.reason = 'excluded Graveyard monster'; return false;
+    }
     if (!consoleDrainAllows(target)) { if (diagnostic) diagnostic.reason = 'waiting for safe console reload'; return false; }
     if (character.cave || typeof root !== "undefined" && root.__partyDungeonRuntime && root.__partyDungeonRuntime.owns()) return dungeonTargetAllowed(target);
     if(typeof returnCombatActive==='function' && returnCombatActive())return returnAttacker(target);
@@ -15254,6 +15404,10 @@
     if (typeof rareTarget === "function" && rareTarget() && rareTarget().id === target.id) return true;
     if (target.type === "character") return validAbtestingOpponent(target);
     if (target.type !== "monster" || isExternallyClaimedMonster(target)) return reject("external claim or invalid entity");
+    // Farming never pulls an October event boss outside its own event
+    // (docs/testing-october-events.md). One attacking the party stays a defense target.
+    var bossEvent = target.mtype === "horseman" ? "horseman" : target.mtype === "gargoyle" ? "graveyard" : null;
+    if (bossEvent && joinedEvent !== bossEvent && !isAttackingPartyMember(target)) return reject("event boss outside its event");
     if (huntTravel && farmApproach.failed[target.id]>Date.now()) return reject("failed approach cooldown");
     if (typeof passiveRareCandidate === "function" && passiveRareCandidate(target)) return true;
     if (isAttackingPartyMember(target)) return true;
@@ -15592,13 +15746,13 @@
   }
   async function sharedPartyWalk(destination, activity, key, parentCommand, current) {
     if(character.name!==leader && !followLeader) {
-      if (activity !== "event" || key !== "slenderman" || !current) return smart_move(destination);
+      if (activity !== "event" || ['slenderman','trickortreat','witchcipher'].indexOf(key) < 0 || !current) return smart_move(destination);
       var independentRevision = navigationIntent.revision;
       var independent = { cancelled: false }, walking = smart_move(destination);
       try {
         await Promise.race([walking, (async function () {
           while (!independent.cancelled && runtimeCurrent() && current()) await sleep(100);
-          if (!independent.cancelled) throw new Error("Slenderman search destination superseded");
+          if (!independent.cancelled) throw new Error("Event destination superseded");
         })()]);
       } finally {
         independent.cancelled = true;
@@ -15739,7 +15893,9 @@
         navigationIntent.cancelled || convoy.navigationRevision!==navigationIntent.revision) return;
     if (parent.__partyGeometryReloaded===repair.id) return;
     parent.__partyGeometryReloaded=repair.id;
-    var url=(parent.__partyServer || 'http://127.0.0.1:924')+'/CODE/adventure_land/universal-loader.js?t=';
+    // A caracAL worker sets only its CODE window's __partyServer
+    // (runtime/lifecycle/runner-host.ts configureApiAddress), as api does.
+    var url=(typeof root !== 'undefined' && root.__partyServer || parent.__partyServer || 'http://127.0.0.1:924')+'/CODE/adventure_land/universal-loader.js?t=';
     var bootstrap="$.ajax({url:"+JSON.stringify(url)+"+Date.now(),dataType:'text',cache:false}).then(function(source){(0,eval)(source);});";
     game_log('Reloading runtime once to repair shared-route geometry', '#f0b429');
     parent.setTimeout(function(){
@@ -16530,6 +16686,7 @@
   }
 
   async function emergencyWarriorStomp() {
+    if (!graveyardAreaAttackAllowed(Number(G.skills.stomp && G.skills.stomp.range) || 400)) return false;
     if (typeof rareTarget === "function" && rareTarget() && rareTarget().mtype === "tinyp") return false;
     if (character.ctype !== "warrior" || farmingMode === "scatter") return false;
     var weapon = character.slots && character.slots.mainhand;
@@ -18396,6 +18553,7 @@
     dashToward: dashToward,
     isPartyHealthy: isPartyHealthy,
     emergencyWarriorStomp: emergencyWarriorStomp,
+    graveyardAreaAttackAllowed: graveyardAreaAttackAllowed,
     isCurrentPartyTarget: isCurrentPartyTarget,
     kiteIfNeeded: kiteIfNeeded,
     approachCombatTarget: approachCombatTarget,
@@ -18807,7 +18965,7 @@
     },
     getRareTarget: rareTarget,
     getPriorityEventTarget: function () {
-      return joinedEvent === "mrgreen" || joinedEvent === "mrpumpkin" ? nearestEventTarget() : null;
+      return joinedEvent === "mrgreen" || joinedEvent === "mrpumpkin" || joinedEvent === "horseman" ? nearestEventTarget() : null;
     },
     getPassingTarget: passingTarget,
     convoyHoldDefenseTarget: convoyHoldDefenseTarget,

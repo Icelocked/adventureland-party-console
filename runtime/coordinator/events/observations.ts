@@ -156,9 +156,9 @@ export function createEventObservations(
       body.server.length>0 && body.server===status.server;
   }
   function validStaging(body: EventReport, report: StagingReport): boolean {
-    return (body.joinedEvent === report.name || authorizedPrejoinStaging(body,report.name)) && ["mrgreen", "mrpumpkin"].includes(report.name) &&
+    return (body.joinedEvent === report.name || authorizedPrejoinStaging(body,report.name)) && ["mrgreen", "mrpumpkin", "horseman", "graveyard"].includes(report.name) &&
       ports.enabled(body.name, report.name) && Number.isFinite(report.spawnAt) &&
-      report.spawnAt >= ports.now() - 120000 && report.spawnAt <= ports.now() + 60000;
+      report.spawnAt >= ports.now() - 120000 && report.spawnAt <= ports.now() + 120000;
   }
   function sameStagingRound(previous: EventSession | undefined, report: StagingReport): boolean {
     if (!previous) return true;
@@ -391,17 +391,26 @@ export function createEventObservations(
         .filter((entry) => entry?.event === session.event)
         .map((entry) => Number(entry.lastLiveAt) || 0),
     );
-    // Persisted staging owns its immutable deadline across coordinator restarts
-    // and temporary report gaps. A stale report must not retire it early.
+    // Persisted staging owns its immutable deadline across restarts/report
+    // gaps. A fresh connected feed can explicitly withdraw that announcement.
     const staging = Object.entries(state.sessions).some(([member, entry]) =>
       entry.event === session.event && !entry.wasLive && ports.enabled(member, entry.event) &&
-      Number.isFinite(entry.stagingSpawnAt) && ports.now() <= Number(entry.stagingSpawnAt) + 120000);
+      Number.isFinite(entry.stagingSpawnAt) && ports.now() <= Number(entry.stagingSpawnAt) + 120000 &&
+      stagingStillAnnounced(member, entry));
     return (
       !staging &&
       !rawLive(session.event) &&
       !(session.event === "goobrawl" && ports.goobrawlStillFighting()) &&
       ports.now() - latest >= 10000
     );
+  }
+
+  function stagingStillAnnounced(member: string, session: EventSession): boolean {
+    const report = ports.statuses()[member];
+    if (!report || ports.now() - Number(report.seenAt) > 15000 || !liveFeedReady(report) ||
+        !Array.isArray(report.serverStagingEvents)) return true;
+    return report.serverStagingEvents.some(entry => entry.name === session.event &&
+      (entry.spawnId ?? entry.spawnAt) === session.stagingSpawnId);
   }
 
   function beginEndedReturn(): void {
