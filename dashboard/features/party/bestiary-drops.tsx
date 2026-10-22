@@ -4,7 +4,24 @@ import { BestiaryMonster } from "./bestiary-monster";
 import { indirectBestiaryDrops } from "./indirect-bestiary-drops";
 import { ItemSprite } from "./item-sprite";
 import { MerchantCatalogItem } from "./merchant-catalog-item";
-import { formatDropRate } from "./drop-rate";
+import { effectiveDropRate, formatDropRate } from "./drop-rate";
+
+type EventDrop = BestiaryDrop & { condition?: string };
+
+function eventDropsFor(monster: BestiaryMonster, catalog: MerchantCatalogItem[]): EventDrop[] {
+  const seen = new Set<string>();
+  return catalog.flatMap(item => {
+    if (seen.has(item.id)) return [];
+    seen.add(item.id);
+    return (item.meta?.world?.drops || []).filter(source =>
+      source.monsterId === monster.id && source.sourceType === "monster" &&
+      // The native catalog retains this condition even outside the event.
+      source.acquisitionPath?.includes("Witch's Cipher: gathering window only")
+    ).map(source => ({ id: item.id, name: item.name, sprite: item.sprite,
+      rate: effectiveDropRate(source), quantity: source.quantity || 1,
+      condition: source.acquisitionPath!.join(" · ") }));
+  }).sort((a, b) => b.rate - a.rate || a.name.localeCompare(b.name));
+}
 
 export function BestiaryDrops({
   monster,
@@ -16,8 +33,11 @@ export function BestiaryDrops({
   onInspectDrop: (itemId: string, monsterName: string) => void;
 }) {
   const otherDrops = indirectBestiaryDrops(monster, catalog);
-  const cards = (drops: BestiaryDrop[], indirect = false) => {
-    const groups = new Map<string, BestiaryDrop[]>();
+  const eventDrops = eventDropsFor(monster, catalog);
+  const eventItems = new Set(eventDrops.map(drop => drop.id));
+  const normalDrops = monster.drops.filter(drop => !eventItems.has(drop.id));
+  const cards = (drops: EventDrop[], indirect = false) => {
+    const groups = new Map<string, EventDrop[]>();
     for (const drop of drops) { const key = `${drop.id}:${drop.sourceType || "monster"}:${drop.mapName || ""}`;
       groups.set(key, [...groups.get(key) || [], drop]); }
     return drops.length ? (
@@ -37,6 +57,7 @@ export function BestiaryDrops({
               <span className="font-mono text-[9px] text-amber-300">
                 {rolls.map((roll, index) => <span className="block break-all" key={index}>{formatDropRate(roll)}</span>)}
               </span>
+              {drop.condition && <span className="block text-[10px] text-violet-200">{drop.condition}</span>}
               {indirect ? (
                 <span className="block truncate font-mono text-[9px] text-cyan-300/70">
                   {drop.sourceType === "world"
@@ -59,9 +80,14 @@ export function BestiaryDrops({
       {cards(monster.homeRewards || [])}
       <p className="mt-4 text-xs text-emerald-100/70">Base odds at full contribution and neutral luck, level and event modifiers. Your contribution, luck and monster level scale each chance.</p>
       <h4 className="mb-2 mt-5 font-mono text-xs uppercase text-amber-300">
-        Monster-specific drops ({monster.drops.length})
+        Monster-specific drops ({normalDrops.length})
       </h4>
-      {cards(monster.drops)}
+      {cards(normalDrops)}
+      {eventDrops.length > 0 && <>
+        <h4 className="mb-2 mt-5 font-mono text-xs uppercase text-violet-300">Event drops ({eventDrops.length})</h4>
+        <p className="mb-2 text-xs text-emerald-100/70">Available only during the event conditions shown below.</p>
+        {cards(eventDrops)}
+      </>}
       <h4 className="mb-2 mt-5 font-mono text-xs uppercase text-cyan-300">
         Zone &amp; world drops ({otherDrops.length})
       </h4>
