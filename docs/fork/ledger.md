@@ -6,10 +6,10 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 
 | | |
 |---|---|
-| Upstream base | `1.5-feature-branch` @ aaf175a, merged as b78d52c on 10-20 (branch `adopt/1.5`; previous merges 7d89bf8 of 1832350 on 10-18, 98f25b5 of 3ddec7d on 10-18 and 53a3cd6 of 849c38a on 10-16). Adds #116 (aaf175a), #147 (71181f4) and the PR #148 efficiency batch (b079afc: metrics journal, state field registry, dashboard stream, headless rendering); upstream's own single-elixir restock (2a1a72f) is superseded by the fork's multi-elixir policies |
-| Fork head | `adopt/1.5` @ the commit recording this (after b78d52c), not pushed (`origin/adopt/1.5` @ 4f26435, pushed 10-19); `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
-| Divergence | 0 behind; 247 files differ from upstream’s tip (aaf175a) |
-| Checked | 2026-10-20, upstream's 75 commits to aaf175a checked against the issues they fix or implement: #116 and #147 implemented upstream, the fork's implementations dropped in the merge; #13–#131, #136–#138, #142–#145 and #147 as on 10-19 |
+| Upstream base | `1.5-feature-branch` @ b9b5c91, merged as 92cc9a2 on 10-22 (branch `adopt/1.5`; previous merges 33981c8 of 2a1a72f, b78d52c of aaf175a on 10-20, 7d89bf8 of 1832350 and 98f25b5 of 3ddec7d on 10-18, 53a3cd6 of 849c38a on 10-16). Adds the October events and shared Witch Cipher automation (ff8cf0b), Icelocked's Cave fixes (9a874c0, merged as 77fa7e7), event-only monster labels and farming exclusions (9a8f43e, 457a9a8), Horseman and Trick or Treat fixes, and exchange/monster odds as ratios (b9b5c91) |
+| Fork head | `claude/project-thread-eho1g7` @ the commit recording this (after 92cc9a2), branched from `origin/adopt/1.5` @ dae2c98 and pushed for review; `adopt/1.5` not advanced yet; `main` @ c864c9c (v1.4.1 released from 2dd3b2b on 10-17), not advanced so no release |
+| Divergence | 0 behind; 226 files differ from upstream’s tip (b9b5c91) |
+| Checked | 2026-10-22, upstream's 24 commits to b9b5c91: none references an issue or supersedes a fork fix, so no rows moved; issue states as on 10-20 (not re-checked against the tracker) |
 
 | Status | Count |
 |---|---|
