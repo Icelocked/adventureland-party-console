@@ -18,3 +18,15 @@ confirm. Journey: `e2e/live-bank-sort-journal.spec.ts`.
 5. **Unconfirmed swap accepted.** If the swap did not happen (the item is still in the bank cell and
    the buffer slot does not hold it), the journal must not count it as confirmed. Unchanged code path,
    not exercised by the journey.
+
+Added 2026-10-22. The error still latched in other states: anything but the two exact expected states kept
+the entry pending, and every merchant job threw behind it until the journal was cleared by hand.
+
+6. **Freed cell emptied again.** A store into an empty cell whose item was withdrawn later (both sides
+   empty) is never settled.
+7. **Item moved elsewhere.** A retrieve whose item ended up in another inventory slot (buffer and cell
+   both empty) is never settled. The bank and inventory as they are now must be taken as the truth.
+8. **Journal from another floor.** Recovery on a different bank floor throws "floor changed" on every
+   job instead of moving to the journaled floor.
+9. **Swap that never lands mid-pass.** The pass fails and leaves the entry pending, so the next job
+   fails too. It must clear the entry and let the next pass plan from the current bank.
