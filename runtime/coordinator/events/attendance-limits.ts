@@ -15,6 +15,8 @@ export interface AttendanceInstance {
   ignored?: 'death limit' | 'time limit' | 'manual travel' | 'travel failure';
   /** Explicit navigation owns this occurrence's exit, independently of limits. */
   manualTravel?: boolean;
+  /** Client rendezvous timeouts before any walk started (navigation/shared-walk.ts). */
+  rendezvousFailures?: number;
 }
 export type EventAttendance = Record<string, Record<string, AttendanceInstance>>;
 interface AttendanceState extends EventFormation { eventAttendance: EventAttendance }

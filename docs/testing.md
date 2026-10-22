@@ -48,6 +48,35 @@ Random layouts and the explicitly unavailable entry shop remain covered by the
 separate assembly scenarios. An optional shop without placement cannot exercise
 the required item-inspection assertions.
 
+## Headless Cave floors, merchant talk and event rendezvous
+
+The game strips tiles, placements and groups from every generated floor it sends
+to a socket whose handshake says `no_graphics=1`, which every caracAL worker does.
+`live-cave-headless.spec.ts` runs the leader and its follower as real headless
+workers (`liveHeadless`). Only the leader's worker sends `no_graphics=0`
+(`runtime/lifecycle/cave-floor-handshake.ts`), so the test checks the server's
+socket flags, the follower card's textured floor, one definition per stream
+subscriber, closed map streams in a hidden tab, and a released visit with no floor
+or interrupted state left. It attaches `headless-cave-floor-bytes` with the floor,
+stripped floor, frame and tile image sizes. Run it with
+`npm test -- -- --project=live --grep "headless party sees the Cave floor"`.
+
+`live-cave-talk.spec.ts` uses the seeded entry shop, replaces the current vote as a
+later encounter does, and checks that selecting the merchant room talks to it
+(`cave_talk`) and that the reopened shop sells. A waypoint inside solid rock then
+exhausts the three automatic repairs, and Retry must keep them spent.
+
+`live-event-rendezvous.spec.ts` targets only one member's `/party-api/shared-travel`
+requests: a moved destination, a member that never requests, and responses that
+never start a walk (three rendezvous timeouts release the occurrence).
+`live-convoy-event-defense.spec.ts` keeps a follower fighting a live Mr. Pumpkin in
+halloween while the leader starts a convoy in main. `live-headless-geometry-reload.spec.ts`
+changes only the browser leader's map catalog so a headless follower takes the
+shared-route geometry repair reload, which runs the loader in a jsdom realm
+without `AbortSignal.any` or `crypto.subtle`. It is marked fixme: the reload
+signal waits for every member's matching report, and the browser leader
+restarts its runtime during the repair, so the signal came in one of six runs.
+
 ## Town channel healing
 
 Run the native cases matching `Town executes a real cast|Halloween mrgreen stages`.

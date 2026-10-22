@@ -47,6 +47,40 @@ function captureOwned(state:FailedEntryState,c:ReturnConvoy & {walkingEvent:stri
   return waypoints;
 }
 
+// Three 180 s rendezvous timeouts end the occurrence for that party. No
+// convoy ever started, so recoverExhaustedEventEntry never sees it.
+const RENDEZVOUS_FAILURE_LIMIT = 3;
+function failedOccurrence(state: FailedEntryState): [string, string] | undefined {
+  for (const [name, events] of Object.entries(state.eventAttendance || {}))
+    for (const [event, entry] of Object.entries(events))
+      if (!entry.ended && !entry.ignored && (entry.rendezvousFailures || 0) >= RENDEZVOUS_FAILURE_LIMIT) return [name, event];
+}
+// The owner's session partners leave with it, except members already fighting this boss.
+function releasedMembers(state: FailedEntryState, owner: string, event: string): string[] {
+  const session = state.eventSessions[owner];
+  const partners = session?.event === event ? session.participants || [] : [];
+  return [...new Set([owner, ...partners])].filter(name => name === owner ||
+    state.eventSessions[name]?.event === event && !state.eventAttendance?.[name]?.[event]?.attending);
+}
+/** Releases an event trip whose walking rendezvous never forms. */
+export function releaseFailedRendezvous(state: FailedEntryState, ports: { persist(): void },
+  begin: (event: string, session: {participants:string[];waypoints:Waypoints}, forced:boolean) => EventRecovery | null): void {
+  const failed = failedOccurrence(state);
+  if (!failed || state.eventReturn) return;
+  const [owner, event] = failed, names = releasedMembers(state, owner, event);
+  // The return walks the party back to its checkpoint, as a manual Town and
+  // farming reselect did on the live console (2026-10-21 13:14Z).
+  const waypoints: Waypoints = Object.assign({}, ...names.map(name => state.eventSessions[name]?.waypoints || {}));
+  begin(event, {participants: names, waypoints}, true);
+  for (const name of names) endOccurrence(state, name, event);
+  ports.persist();
+}
+function endOccurrence(state: FailedEntryState, name: string, event: string): void {
+  const entry = state.eventAttendance?.[name]?.[event];
+  if (entry && !entry.ended) entry.ignored ||= 'travel failure';
+  if (state.eventSessions[name]?.event === event) delete state.eventSessions[name];
+}
+
 /** Exhaustion ends this owned occurrence, rather than repeatedly readmitting it. */
 export function recoverExhaustedEventEntry(state: FailedEntryState, ports: {
   now(): number; activeNames(): string[]; persist(): void;

@@ -30,10 +30,15 @@ export function isPoint(p: unknown): p is Point {
   const v = p as Point;
   return typeof v.map === 'string' && /^[\w-]+$/.test(v.map) && Number.isFinite(v.x) && Number.isFinite(v.y);
 }
+// A generated Cave floor never changes for its zone_<run>_<floor> key, and no
+// route crosses floors. Clients hold different sets of them (the client prunes
+// on new_map), which made the leader's and a follower's identities differ by
+// one floor's collision lines (live Cave run 1feaf7322872ef6d694d0026).
+const generatedFloor = (name: string) => /^zone_[a-f0-9]+_\d+$/.test(name);
 /** Stable, synchronous browser/Node geometry identity; catches same-version data changes. */
 export function geometryFingerprint(g: GameData): string {
   const geometry = g.geometry as Record<string, { x_lines?: number[][]; y_lines?: number[][] }>;
-  const maps = Object.keys(g.maps).sort().map(name => {
+  const maps = Object.keys(g.maps).filter(name => !generatedFloor(name)).sort().map(name => {
     const m = g.maps[name], collision = geometry?.[name];
     const transporters = (m.npcs || []).filter(n => n.id === 'transporter').map(n => n.position);
     return [name, collision?.x_lines || [], collision?.y_lines || [], m.spawns, m.doors || [], transporters, !!m.instance, m.event || null];
@@ -59,7 +64,7 @@ function geometryInputs(g: GameData): unknown[] {
   const geometry = g.geometry as Record<string, CollisionLines> | undefined;
   const places = g.npcs.transporter?.places;
   const inputs: unknown[] = [g.geometry, g.maps, g.npcs, places, places && Object.keys(places).length];
-  for (const name in g.maps) inputs.push(...mapInputs(name, g.maps[name], geometry?.[name]));
+  for (const name in g.maps) if (!generatedFloor(name)) inputs.push(...mapInputs(name, g.maps[name], geometry?.[name]));
   return inputs;
 }
 const fingerprints = new WeakMap<object, { inputs: unknown[]; value: string }>();

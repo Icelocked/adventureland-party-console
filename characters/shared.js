@@ -2725,6 +2725,7 @@
         if (action === 'revival') return respawn();
         if (action === 'vote') return requestDungeon(action, { choice: fields.choice, option: fields.option });
         if (action === 'buy') return requestDungeon(action, { room: fields.room });
+        if (action === 'talk') return requestDungeon(action, { room: fields.room });
         throw new Error('Unsupported cave action');
       },
       keeper: function () {
@@ -2756,8 +2757,10 @@
       },
       move: function (point, command) {
         travelTrack = command.cruiseSpeed && !command.independent ? {id:command.id,distance:0,x:character.real_x,y:character.real_y,leader:character.name===cavePartyNames()[0],prepared:false} : null;
+        // Gathers plan the cross-map walk to Dorr and regrouping on large
+        // generated floors; live runs timed out at the default 30 s.
         var journey = movement.move(point, undefined, { native: true, shared:!!travelTrack, arrivalTolerance:command.action==='gather'?1:20, town: false, retainOnDirectStop: true,
-        awaitSharedRoute:!!travelTrack && !travelTrack.leader, nativePlanningTimeoutMs:travelTrack ? 90000 : 30000,
+        awaitSharedRoute:!!travelTrack && !travelTrack.leader, nativePlanningTimeoutMs:travelTrack || command.action==='gather' ? 90000 : 30000,
         nativePlanningProgressMs:travelTrack ? 240000 : undefined,
         repairSharedDrift:!!travelTrack,
         barrier: async function () {
@@ -3733,18 +3736,19 @@
     };
   }
 
-  var mapGeometrySent = {map: null, at: 0};
+  // The coordinator keeps a supplied floor for the run and answers
+  // {definition:"needed"} when it lacks one, so each floor is sent once.
+  var mapGeometrySent = {map: null, needed: false};
   function liveCaveMapDefinition() {
     if (!character.cave || !G.geometry || !G.geometry[character.map]) return undefined;
-    var now = Date.now();
-    if (mapGeometrySent.map === character.map && now - mapGeometrySent.at < 5000) return undefined;
+    if (mapGeometrySent.map === character.map && !mapGeometrySent.needed) return undefined;
     var geometry = G.geometry[character.map], tilesets = {};
     if (!geometry.tiles || !geometry.tiles.length || !(geometry.placements && geometry.placements.length || geometry.groups && geometry.groups.length)) return undefined;
     (geometry.tiles || []).forEach(function(tile) {
       var id = tile && tile[0], file = G.tilesets && G.tilesets[id] && G.tilesets[id].file;
       if (file) tilesets[id] = {file: /^https?:/.test(file) ? file : 'https://adventure.land' + file};
     });
-    mapGeometrySent = {map: character.map, at: now};
+    mapGeometrySent = {map: character.map, needed: false};
     return {name: character.map, min_x: geometry.min_x, min_y: geometry.min_y,
       max_x: geometry.max_x, max_y: geometry.max_y, default: geometry.default,
       tiles: geometry.tiles || [], placements: geometry.placements || [], groups: geometry.groups || [], tilesets: tilesets};
@@ -3760,14 +3764,17 @@
       return mapEntity(parent.entities[id], id);
     }).filter(Boolean);
     if (self && !entities.some(function (entry) { return entry.id === self.id; })) entities.push(self);
-    var events = mapTelemetryEvents.splice(0, mapTelemetryEvents.length);
+    var events = mapTelemetryEvents.splice(0, mapTelemetryEvents.length), frameMap = character.map;
     $.ajax({
       url: api + "/map-frame", method: "POST", contentType: "application/json",
-      data: JSON.stringify({ name: character.name, map: character.map, definition: liveCaveMapDefinition(), at: Date.now(),
+      data: JSON.stringify({ name: character.name, map: frameMap, definition: liveCaveMapDefinition(), at: Date.now(),
         x: Number(character.real_x !== undefined ? character.real_x : character.x) || 0,
         y: Number(character.real_y !== undefined ? character.real_y : character.y) || 0,
         projectilesAt: Date.now(), projectiles: Object.keys(mapTelemetryProjectiles).filter(function(id){var p=mapTelemetryProjectiles[id];if(p.expiresAt<=Date.now() || p.map!==character.map){delete mapTelemetryProjectiles[id];return false;}return true;}).slice(0,64).map(function(id){return mapTelemetryProjectiles[id];}), target: character.target || combatTargetId || null, eventCombat: eventTargetTypes.length>0, queue: queueMarkers(), queueRevision: groupedCombat && groupedCombat.queueRevision, grouped: groupedFarming(), entities: entities, visuals: root.capturePartyMapVisuals ? root.capturePartyMapVisuals(parent.map_animations || {},64) : [], events: events }),
-    }).always(function () { mapTelemetryBusy = false; });
+    }).always(function (reply, status) {
+      if (status === "success" && reply && reply.definition === "needed" && mapGeometrySent.map === frameMap) mapGeometrySent.needed = true;
+      mapTelemetryBusy = false;
+    });
   }
 
   async function stockUp() {
@@ -15081,7 +15088,7 @@
       destination:destination,activity:activity,key:String(key||activity),parentCommandId:parentCommand?parentCommand.id:0};
     root.__partyWalkSequence=(Number(root.__partyWalkSequence)||0)+1;
     body.token=convoyRuntimeId+":"+root.__partyWalkSequence;
-    var deadline=Date.now()+180000,completed=false,requestFailures=0;
+    var deadline=Date.now()+180000,completed=false,requestFailures=0,timedOut=false;
     root.__partySharedWalking=body;
     try {
       while(runtimeCurrent() && runtimeGeneration===generation && Number(navigationIntent.revision)===revision) {
@@ -15094,7 +15101,7 @@
           // for the rest of the party or a coordinator route.
           if(eventCombatReachable(nearestEventTarget()))return;
         }
-        if(Date.now()>deadline)throw new Error("Shared walking rendezvous timed out");
+        if(Date.now()>deadline){timedOut=true;throw new Error("Shared walking rendezvous timed out");}
         var result;
         try {result=await request("/shared-travel",{method:"POST",timeout:3000,body:body});requestFailures=0;}
         catch(error){if(++requestFailures>=3)throw error;await new Promise(function(resolve){setTimeout(resolve,500);});continue;}
@@ -15106,7 +15113,8 @@
       throw new Error("Shared walking superseded");
     } finally {
       if(root.__partySharedWalking===body)root.__partySharedWalking=null;
-      if(!completed)request("/shared-travel",{method:"POST",timeout:3000,body:Object.assign({},body,{cancel:true})}).catch(function(){});
+      // The coordinator counts event rendezvous timeouts toward releasing the trip.
+      if(!completed)request("/shared-travel",{method:"POST",timeout:3000,body:Object.assign({},body,{cancel:true},timedOut?{reason:"rendezvous-timeout"}:{})}).catch(function(){});
     }
   }
   function convoySignalExpired(signal) {
@@ -15206,7 +15214,9 @@
         navigationIntent.cancelled || convoy.navigationRevision!==navigationIntent.revision) return;
     if (parent.__partyGeometryReloaded===repair.id) return;
     parent.__partyGeometryReloaded=repair.id;
-    var url=(parent.__partyServer || 'http://127.0.0.1:924')+'/CODE/adventure_land/universal-loader.js?t=';
+    // A caracAL worker sets only its CODE window's __partyServer
+    // (runtime/lifecycle/runner-host.ts configureApiAddress), as api does.
+    var url=(typeof root !== 'undefined' && root.__partyServer || parent.__partyServer || 'http://127.0.0.1:924')+'/CODE/adventure_land/universal-loader.js?t=';
     var bootstrap="$.ajax({url:"+JSON.stringify(url)+"+Date.now(),dataType:'text',cache:false}).then(function(source){(0,eval)(source);});";
     game_log('Reloading runtime once to repair shared-route geometry', '#f0b429');
     parent.setTimeout(function(){
