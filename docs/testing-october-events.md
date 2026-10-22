@@ -112,3 +112,16 @@ The final sprite/board verification is retained separately in
 `.build/october-party-doors/`. Pass either directory to the same verifier. Native
 dashboard images are routed to the owned local game host in the visual journey;
 the fixture's ordinary external-network block remains intact.
+
+## Event priorities from an older client
+
+`priorities` in `runtime/coordinator/http/formation.ts` accepts only a list as
+long as `supportedEvents`. The October rows raised that to 14 ids, so a client
+that predates them (the PWA, a script, `e2e/live-event-runtime-recovery.spec.ts`
+at lines 284 and 380) posts the ten older ids and gets
+`400 invalid event priorities`. Failure inventory, before the change: an older
+list of every pre-October event is rejected instead of keeping its order and
+appending the October events in catalog order; a list that drops a pre-October
+event, repeats an id or names an unknown id is accepted. A saved older list
+needs no migration, because `eventPriorityOrder` appends missing supported
+events on every read.
