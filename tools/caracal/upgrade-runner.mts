@@ -60,6 +60,15 @@ if (!source.includes('installGameRendering(game_context)')) {
   source = source.replace(anchor,
     '  require("../../.build/runtime/lifecycle.cjs").installGameRendering(game_context);\n' + anchor);
 }
+// Before the first init_socket(), the party leader's worker asks for full Cave
+// floors (runtime/lifecycle/cave-floor-handshake.ts). An older lifecycle
+// bundle without the installer leaves the socket factory unchanged.
+if (!source.includes('installCaveFloorHandshake')) {
+  const anchor = '  vm.runInContext("the_game()", game_context);';
+  if (!source.includes(anchor)) throw new Error('Unrecognized native game startup');
+  source = source.replace(anchor,
+    '  require("../../.build/runtime/lifecycle.cjs").installCaveFloorHandshake?.(game_context, proc_args.full_cave_floors === true);\n' + anchor);
+}
 // Print party kills and finds from the named sibling's thread only
 // (runtime/characters/game-log-echo.ts). An older lifecycle bundle without the
 // installer keeps caracAL's own echo hook.

@@ -11,6 +11,7 @@ interface TelemetryPorts<Timer> {
   every: (callback: () => void, milliseconds: number) => Timer;
   cancel: (timer: Timer) => void;
   data: Parameters<typeof createCoordinatorGameData>[2];
+  activeMaps?: () => Iterable<unknown>;
 }
 
 /** Map streams and combat history share ownership checks; game data stays lazy and cached. */
@@ -26,6 +27,7 @@ export function createCoordinatorTelemetry<Timer>(
     definition: (name) => definitions.get(name),
     every: ports.every,
     cancel: ports.cancel,
+    activeMaps: ports.activeMaps,
   });
   const combat = createCombatLogRoutes(logs, {
     owned,

@@ -270,6 +270,7 @@ export function startCoordinatorApplication(
           worker.stdout!.pipe(process.stdout);
           worker.stderr!.pipe(process.stderr);
         },
+        fullCaveFloors: name => party.leader === name,
         monitor: (name, block) =>
           bwi_instance.publisher
             ? monitoring_util.create_monitor_ui(
@@ -1204,6 +1205,7 @@ export function startCoordinatorApplication(
         persistHistory,
         persistHistoryNow: () => persistence.historyNow(),
         data: gameDataPorts,
+        activeMaps: () => Object.values(party.statuses).map((status) => status?.map),
         every: (callback, milliseconds) => setInterval(callback, milliseconds),
         cancel: (timer: ReturnType<typeof setInterval>) => clearInterval(timer),
       });
@@ -1265,7 +1267,11 @@ export function startCoordinatorApplication(
     // itinerary and should no longer appear as a separately prioritized job.
     delete party.merchantRoutinePriorities["merchant luck exchange"];
     function mapSubscriberCount(name: Parameters<typeof mapStreams.count>[0]) {
-      return mapStreams.count(name);
+      // A watched Cave floor also turns on the leader's telemetry while the
+      // coordinator lacks that floor; only the leader's worker receives full
+      // floors (runtime/lifecycle/cave-floor-handshake.ts).
+      const supplier = name === party.leader && mapStreams.floorWanted(party.statuses[name]?.map);
+      return mapStreams.count(name) + (supplier ? 1 : 0);
     }
 
     coordinatorPolicies.recoverMerchantQueue(party, () => Date.now(), stampMerchantJob);
@@ -1737,7 +1743,7 @@ export function startCoordinatorApplication(
     function stagingEventLive(name: string, event?: string): boolean {
       const report = party.statuses[name];
       if (!report) return false;
-      return ['mrgreen', 'mrpumpkin'].includes(event || '') && report.eventFeedConnected === true &&
+      return ['mrgreen', 'mrpumpkin', 'horseman', 'graveyard'].includes(event || '') && report.eventFeedConnected === true &&
         report.eventClockStale !== true && Array.isArray(report.serverStagingEvents) &&
         report.serverStagingEvents.some((entry: unknown) => stagingEventEligible(entry, event));
     }
@@ -1745,7 +1751,7 @@ export function startCoordinatorApplication(
     function stagingEventEligible(entry: unknown, event?: string): boolean {
       return !!entry && typeof entry === 'object' && 'name' in entry && entry.name === event &&
         'spawnAt' in entry && typeof entry.spawnAt === 'number' && Number.isFinite(entry.spawnAt) &&
-        entry.spawnAt - Date.now() <= 60000 && Date.now() - entry.spawnAt <= 120000;
+        entry.spawnAt - Date.now() <= 120000 && Date.now() - entry.spawnAt <= 120000;
     }
 
     function realmOwnsMerchant() {
