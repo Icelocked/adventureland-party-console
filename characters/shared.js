@@ -2000,10 +2000,38 @@
     }).sort(function (a, b) { return a.name.localeCompare(b.name); });
   }
 
+  // The G.events that raise a monster, for a monster without an ordinary spawn:
+  // the event's boss (its sprite), the boss's HP-threshold adds
+  // (G.monsters[boss].spawns) and Graveyard Rising's waves.
+  function eventMonsterSources(ordinary) {
+    var sources = {};
+    function add(type, source) {
+      if (!G.monsters[type] || ordinary[type]) return;
+      (sources[type] = sources[type] || []).push(source);
+    }
+    Object.keys(G.events || {}).forEach(function (id) {
+      var definition = G.events[id] || {}, name = definition.name || id, boss = definition.sprite;
+      if (!G.monsters[boss]) return;
+      add(boss, { id: id, name: name, role: "boss" });
+      var thresholds = {};
+      (G.monsters[boss].spawns || []).forEach(function (spawn) {
+        if (typeof spawn[0] !== "string" || spawn[0].indexOf("hp:") !== 0) return;
+        (thresholds[spawn[1]] = thresholds[spawn[1]] || []).push(Number(spawn[0].slice(3)));
+      });
+      Object.keys(thresholds).forEach(function (type) { add(type, { id: id, name: name, role: "add", at: thresholds[type] }); });
+      (Array.isArray(definition.waves) ? definition.waves : []).reduce(function (types, wave) {
+        Object.keys(wave && wave[1] || {}).forEach(function (type) { if (types.indexOf(type) < 0) types.push(type); });
+        return types;
+      }, []).forEach(function (type) { add(type, { id: id, name: name, role: "wave" }); });
+    });
+    return sources;
+  }
+
   function bestiaryCatalog() {
-    var spawns = {};
+    var spawns = {}, ordinary = {};
     var monsterTables = nativeMonsterDropTables(), homeTables = nativeHomeDropTables();
-    monsterChoices().forEach(function (choice) { spawns[choice.id] = choice.spawnRecords; });
+    monsterChoices().forEach(function (choice) { spawns[choice.id] = choice.spawnRecords; ordinary[choice.id] = choice.locations.length > 0; });
+    var eventSources = eventMonsterSources(ordinary);
     return Object.keys(G.monsters || {}).map(function (id) {
       var definition = G.monsters[id] || {};
       function rewards(table) { return (Array.isArray(table) ? table : []).map(function (drop) {
@@ -2019,7 +2047,8 @@
         attack: Number(definition.attack) || 0, xp: Number(definition.xp) || 0,
         range: Number(definition.range) || 0,
         threat: (Number(definition.attack) || 0) * (Number(definition.frequency) || 0),
-        definition: catalogValue(definition), drops: drops, homeRewards: homeRewards, spawnRecords: spawns[id] };
+        definition: catalogValue(definition), drops: drops, homeRewards: homeRewards, spawnRecords: spawns[id],
+        eventSources: eventSources[id] };
     });
   }
 
@@ -2704,6 +2733,7 @@
         if (action === 'revival') return respawn();
         if (action === 'vote') return requestDungeon(action, { choice: fields.choice, option: fields.option });
         if (action === 'buy') return requestDungeon(action, { room: fields.room });
+        if (action === 'talk') return requestDungeon(action, { room: fields.room });
         throw new Error('Unsupported cave action');
       },
       keeper: function () {
@@ -2735,8 +2765,10 @@
       },
       move: function (point, command) {
         travelTrack = command.cruiseSpeed && !command.independent ? {id:command.id,distance:0,x:character.real_x,y:character.real_y,leader:character.name===cavePartyNames()[0],prepared:false} : null;
+        // Gathers plan the cross-map walk to Dorr and regrouping on large
+        // generated floors; live runs timed out at the default 30 s.
         var journey = movement.move(point, undefined, { native: true, shared:!!travelTrack, arrivalTolerance:command.action==='gather'?1:20, town: false, retainOnDirectStop: true,
-        awaitSharedRoute:!!travelTrack && !travelTrack.leader, nativePlanningTimeoutMs:travelTrack ? 90000 : 30000,
+        awaitSharedRoute:!!travelTrack && !travelTrack.leader, nativePlanningTimeoutMs:travelTrack || command.action==='gather' ? 90000 : 30000,
         nativePlanningProgressMs:travelTrack ? 240000 : undefined,
         repairSharedDrift:!!travelTrack,
         barrier: async function () {
@@ -3712,18 +3744,19 @@
     };
   }
 
-  var mapGeometrySent = {map: null, at: 0};
+  // The coordinator keeps a supplied floor for the run and answers
+  // {definition:"needed"} when it lacks one, so each floor is sent once.
+  var mapGeometrySent = {map: null, needed: false};
   function liveCaveMapDefinition() {
     if (!character.cave || !G.geometry || !G.geometry[character.map]) return undefined;
-    var now = Date.now();
-    if (mapGeometrySent.map === character.map && now - mapGeometrySent.at < 5000) return undefined;
+    if (mapGeometrySent.map === character.map && !mapGeometrySent.needed) return undefined;
     var geometry = G.geometry[character.map], tilesets = {};
     if (!geometry.tiles || !geometry.tiles.length || !(geometry.placements && geometry.placements.length || geometry.groups && geometry.groups.length)) return undefined;
     (geometry.tiles || []).forEach(function(tile) {
       var id = tile && tile[0], file = G.tilesets && G.tilesets[id] && G.tilesets[id].file;
       if (file) tilesets[id] = {file: /^https?:/.test(file) ? file : 'https://adventure.land' + file};
     });
-    mapGeometrySent = {map: character.map, at: now};
+    mapGeometrySent = {map: character.map, needed: false};
     return {name: character.map, min_x: geometry.min_x, min_y: geometry.min_y,
       max_x: geometry.max_x, max_y: geometry.max_y, default: geometry.default,
       tiles: geometry.tiles || [], placements: geometry.placements || [], groups: geometry.groups || [], tilesets: tilesets};
@@ -3739,14 +3772,17 @@
       return mapEntity(parent.entities[id], id);
     }).filter(Boolean);
     if (self && !entities.some(function (entry) { return entry.id === self.id; })) entities.push(self);
-    var events = mapTelemetryEvents.splice(0, mapTelemetryEvents.length);
+    var events = mapTelemetryEvents.splice(0, mapTelemetryEvents.length), frameMap = character.map;
     $.ajax({
       url: api + "/map-frame", method: "POST", contentType: "application/json",
-      data: JSON.stringify({ name: character.name, map: character.map, definition: liveCaveMapDefinition(), at: Date.now(),
+      data: JSON.stringify({ name: character.name, map: frameMap, definition: liveCaveMapDefinition(), at: Date.now(),
         x: Number(character.real_x !== undefined ? character.real_x : character.x) || 0,
         y: Number(character.real_y !== undefined ? character.real_y : character.y) || 0,
         projectilesAt: Date.now(), projectiles: Object.keys(mapTelemetryProjectiles).filter(function(id){var p=mapTelemetryProjectiles[id];if(p.expiresAt<=Date.now() || p.map!==character.map){delete mapTelemetryProjectiles[id];return false;}return true;}).slice(0,64).map(function(id){return mapTelemetryProjectiles[id];}), target: character.target || combatTargetId || null, eventCombat: eventTargetTypes.length>0, queue: queueMarkers(), queueRevision: groupedCombat && groupedCombat.queueRevision, grouped: groupedFarming(), entities: entities, visuals: root.capturePartyMapVisuals ? root.capturePartyMapVisuals(parent.map_animations || {},64) : [], events: events }),
-    }).always(function () { mapTelemetryBusy = false; });
+    }).always(function (reply, status) {
+      if (status === "success" && reply && reply.definition === "needed" && mapGeometrySent.map === frameMap) mapGeometrySent.needed = true;
+      mapTelemetryBusy = false;
+    });
   }
 
   async function stockUp() {
@@ -14700,6 +14736,10 @@
     if (typeof rareTarget === "function" && rareTarget() && rareTarget().id === target.id) return true;
     if (target.type === "character") return validAbtestingOpponent(target);
     if (target.type !== "monster" || isExternallyClaimedMonster(target)) return reject("external claim or invalid entity");
+    // Farming never pulls an October event boss outside its own event
+    // (docs/testing-october-events.md). One attacking the party stays a defense target.
+    var bossEvent = target.mtype === "horseman" ? "horseman" : target.mtype === "gargoyle" ? "graveyard" : null;
+    if (bossEvent && joinedEvent !== bossEvent && !isAttackingPartyMember(target)) return reject("event boss outside its event");
     if (huntTravel && farmApproach.failed[target.id]>Date.now()) return reject("failed approach cooldown");
     if (typeof passiveRareCandidate === "function" && passiveRareCandidate(target)) return true;
     if (isAttackingPartyMember(target)) return true;
@@ -15185,7 +15225,9 @@
         navigationIntent.cancelled || convoy.navigationRevision!==navigationIntent.revision) return;
     if (parent.__partyGeometryReloaded===repair.id) return;
     parent.__partyGeometryReloaded=repair.id;
-    var url=(parent.__partyServer || 'http://127.0.0.1:924')+'/CODE/adventure_land/universal-loader.js?t=';
+    // A caracAL worker sets only its CODE window's __partyServer
+    // (runtime/lifecycle/runner-host.ts configureApiAddress), as api does.
+    var url=(typeof root !== 'undefined' && root.__partyServer || parent.__partyServer || 'http://127.0.0.1:924')+'/CODE/adventure_land/universal-loader.js?t=';
     var bootstrap="$.ajax({url:"+JSON.stringify(url)+"+Date.now(),dataType:'text',cache:false}).then(function(source){(0,eval)(source);});";
     game_log('Reloading runtime once to repair shared-route geometry', '#f0b429');
     parent.setTimeout(function(){

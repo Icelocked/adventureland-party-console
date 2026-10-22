@@ -1,3 +1,4 @@
+import { anySignal } from "../lifecycle/abort-signals.ts";
 import { classArtifact, manifestClass, compileArtifact } from "./loader-artifact.ts";
 import type { GameManifest } from "../../tools/game/manifest.ts";
 import { initializeConnection, needsSteamBridge, steamBootstrap } from "../steam/connection.ts";
@@ -51,7 +52,7 @@ const MISSING_RECORD_RECHECK_MS = 10_000;
 async function source(file: string): Promise<string> {
   const response = await fetch(baseUrl + file + "?t=" + Date.now(), {
     cache: "no-store",
-    signal: AbortSignal.any([abort.signal, AbortSignal.timeout(6000)]),
+    signal: anySignal([abort.signal, AbortSignal.timeout(6000)]),
   });
   if (!response.ok) throw new Error(`CODE ${file}: HTTP ${response.status}`);
   return response.text();
@@ -142,7 +143,7 @@ function observeActivation(value:{activation?:string|null}):void{
 async function refreshControl(){
   if(controlLoading||!current())return;controlLoading=true;
   try{
-    const response=await fetch(server+'/party-api/console-deployment',{cache:'no-store',signal:AbortSignal.any([abort.signal,AbortSignal.timeout(3000)])});
+    const response=await fetch(server+'/party-api/console-deployment',{cache:'no-store',signal:anySignal([abort.signal,AbortSignal.timeout(3000)])});
     if(!response.ok)return;
     const value=await response.json() as {serverNow:number;consoleMaintenance:LoaderMaintenance|null;activation?:string|null};
     if(!current()||value.serverNow<(gameHost.__partyConsoleMaintenanceAt||0))return;

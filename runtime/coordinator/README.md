@@ -1,3 +1,16 @@
+PR #151 integration adds native event-only Bestiary sources, older-client priority
+completion, and guards against unjoined Horseman/Gargoyle pulls while retaining
+self-defense and Graveyard exclusions. Moving bosses coalesce same-map, same-instance
+walking requests after a bounded rendezvous; Cipher and door legs keep exact
+destination matching and the existing Cipher gathering-combat exemption.
+Cave merchants can be reopened, completed visits discard interrupted state,
+manual Retry preserves all automatic repair budgets, and revival receipts stay
+within their run. The headless leader receives floor art; each subscriber receives
+it once per floor, with hidden-tab streaming stopped and inactive floor caches
+pruned. Native CODE loader support covers mixed AbortSignal realms and WebCrypto.
+See docs/pr-151-integration.md for exclusions and focused validation. Build and
+stage a completed candidate; activation and host/worker restart remain explicit.
+
 Scheduled Horseman, Graveyard, Mr. Green and Mr. Pumpkin attendance starts two
 minutes before the published occurrence or precise native spawn timer. Staging
 keeps event combat disabled until LIVE, preserves the original deadline across

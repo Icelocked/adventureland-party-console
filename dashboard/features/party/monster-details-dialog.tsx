@@ -70,7 +70,7 @@ export function MonsterDetailsDialog({
               </div>
             </DialogHeader>
             <MonsterAchievementProgress monster={monster} achievement={achievement} />
-            <MonsterSpawns records={monster.spawnRecords} />
+            <MonsterSpawns records={monster.spawnRecords} eventSources={monster.eventSources} />
             <MonsterCards
               definition={monster.definition}
               skillName={(id) => skills.flatMap((entry) => entry.skills).find((skill) => skill.id === id)?.name}

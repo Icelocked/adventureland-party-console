@@ -143,7 +143,7 @@ export const test = base.extend<{ live: LiveGame; loadout: NativeLoadout; primar
     async function start() {
       coordinator = child(path.join(root, 'e2e/live-coordinator.cjs'), [], root,
         environment({ E2E_COORDINATOR_PORT: String(port), E2E_DATA_DIR: directory,
-          E2E_GAME_WEB_URL: manifest.webUrl, E2E_GAME_AUTH: manifest.auth, E2E_MERCHANT_DEFAULT: JSON.stringify(merchantDefault), E2E_ALLOW_HEADLESS: String(liveHeadless), PARTY_MOVEMENT_MODE: movementMode, E2E_STALE_WORKER_REALM: staleWorkerRealm || '',
+          E2E_GAME_WEB_URL: manifest.webUrl, E2E_GAME_AUTH: manifest.auth, E2E_NATIVE_ARTIFACT: JSON.parse(process.env.E2E_DASHBOARD_CANDIDATE || 'null')?.directory || '', E2E_MERCHANT_DEFAULT: JSON.stringify(merchantDefault), E2E_ALLOW_HEADLESS: String(liveHeadless), PARTY_MOVEMENT_MODE: movementMode, E2E_STALE_WORKER_REALM: staleWorkerRealm || '',
           E2E_CLOCK_RATE:process.env.E2E_CLOCK_RATE||'1',E2E_CLOCK_WALL_EPOCH:process.env.E2E_CLOCK_WALL_EPOCH||'',E2E_CLOCK_VIRTUAL_EPOCH:process.env.E2E_CLOCK_VIRTUAL_EPOCH||'',
           E2E_CLOCK_BROKER:process.env.E2E_CLOCK_BROKER||'',E2E_CLOCK_TOKEN:process.env.E2E_CLOCK_TOKEN||'',E2E_CLOCK_SCOPE:directory,
           E2E_CLOCK_PRELOAD:'1',NODE_OPTIONS:[process.env.NODE_OPTIONS,`--import=${JSON.stringify(pathToFileURL(path.join(root,'tools/sim/network-clock-preload.mjs')).href)}`].filter(Boolean).join(' '),...identityEnvironment }), log);

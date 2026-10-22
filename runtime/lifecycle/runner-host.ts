@@ -1,5 +1,5 @@
 import vm from "node:vm";
-import { createHash } from "node:crypto";
+import { createHash, webcrypto } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { RunnerScope } from "./runner-scope.ts";
 import { installNativeAjax } from "./native-ajax.ts";
@@ -41,6 +41,15 @@ function configureApiAddress(runner: Runner) {
   }
 }
 
+// The geometry repair reload runs universal-loader.js in this jsdom window
+// (characters/shared.js reloadConvoyGeometry). jsdom 24 has no crypto.subtle,
+// which loader-artifact.ts needs to verify each CODE bundle.
+function installLoaderPlatform(runner: Runner) {
+  const host = runner as Runner & { crypto?: { subtle?: unknown }; TextEncoder?: unknown };
+  if (!host.crypto?.subtle) Object.defineProperty(host, "crypto", { value: webcrypto, configurable: true, writable: true });
+  if (typeof host.TextEncoder !== "function") host.TextEncoder = TextEncoder;
+}
+
 /** Owns CODE contexts only. The game context and its socket outlive every generation. */
 export function createRunnerHost(options: HostOptions) {
   const queue = new ReloadQueue();
@@ -66,6 +75,7 @@ export function createRunnerHost(options: HostOptions) {
     const runner = options.createContext(scope.facade(options.upper));
     runner.__partyCodeHash = sourceHash;
     configureApiAddress(runner);
+    installLoaderPlatform(runner);
     installNativeAjax(runner.$);
     scope.guardAjax(runner.$);
     if (typeof runner.fetch === "function") runner.fetch = scope.guardFetch(runner.fetch);

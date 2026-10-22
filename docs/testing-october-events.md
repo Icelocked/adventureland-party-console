@@ -112,3 +112,35 @@ The final sprite/board verification is retained separately in
 `.build/october-party-doors/`. Pass either directory to the same verifier. Native
 dashboard images are routed to the owned local game host in the visual journey;
 the fixture's ordinary external-network block remains intact.
+
+## Event priorities from an older client
+
+`priorities` in `runtime/coordinator/http/formation.ts` accepts only a list as
+long as `supportedEvents`. The October rows raised that to 14 ids, so a client
+that predates them (the PWA, a script, `e2e/live-event-runtime-recovery.spec.ts`
+at lines 284 and 380) posts the ten older ids and gets
+`400 invalid event priorities`. Failure inventory, before the change: an older
+list of every pre-October event is rejected instead of keeping its order and
+appending the October events in catalog order; a list that drops a pre-October
+event, repeats an id or names an unknown id is accepted. A saved older list
+needs no migration, because `eventPriorityOrder` appends missing supported
+events on every read.
+
+## Event bosses outside their event
+
+The Headless Horseman (30M HP, attack 1600) roams Spooky Forest after it spawns
+(`spawn_special_monster` gives it `roam: true`), and the Gargoyle (6M HP) wakes
+in Spooky Town's graveyard. Failure inventory, before the change: a character
+farming with the `all` focus, or one whose focus area the Horseman roams into,
+pulls either boss as an ordinary target without having joined its event; a boss
+that attacks a party member is no longer defended against. The Graveyard species
+filter (`eventSettings.graveyard.monsters`) covers only the event itself.
+
+## Event-only monsters in the Bestiary
+
+The Horseman, its Jack-o Walker adds (`G.monsters.horseman.spawns`, at 75% and
+25% HP), the Zombie and Ghoul waves and the Gargoyle (`G.events.graveyard`) have
+`respawn: -1` and no map spawn. Failure inventory, before the change: the
+Bestiary shows "No static spawn recorded" for them; an add or wave monster is
+credited to the wrong event; a monster with an ordinary spawn, such as Goo or
+Ghost, gains an event label; every catalog entry grows by a field.

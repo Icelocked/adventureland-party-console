@@ -30,7 +30,9 @@ export interface EventFormation {
 // Persisted legacy all-events flags cover the catalog available when saved.
 // Newly supported fights require an explicit selection, rather than opt-in on upgrade.
 const legacyDefaultEvents = ["anniversary", "abtesting", "goobrawl", "crabxx", "franky", "icegolem", "snowman"];
-export const supportedEvents = [...legacyDefaultEvents, "slenderman", "mrgreen", "mrpumpkin", "horseman", "graveyard", "trickortreat", "witchcipher"];
+// A client built before the October events sends a priority list without them.
+export const octoberEvents = ["horseman", "graveyard", "trickortreat", "witchcipher"];
+export const supportedEvents = [...legacyDefaultEvents, "slenderman", "mrgreen", "mrpumpkin", ...octoberEvents];
 export const eventDisplayNames: Record<string, string> = {
   anniversary: "Anniversary", abtesting: "A/B Testing", goobrawl: "Goobrawl",
   crabxx: "Crabxx", franky: "Franky", icegolem: "Ice Golem", snowman: "Snowman",
