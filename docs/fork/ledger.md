@@ -159,12 +159,12 @@ Icelocked's [PR #131](https://github.com/Ryan-Haines/adventureland-party-console
 
 ### Bank sort swap journal recovers from any bank state
 
-[#145 · filed 10-18, commented 10-22](https://github.com/Ryan-Haines/adventureland-party-console/issues/145)
+[#145 · filed 10-18, commented 10-22](https://github.com/Ryan-Haines/adventureland-party-console/issues/145#issuecomment-6356554065)
 
 [8d79aff](https://github.com/Thefonze74065/adventureland-party-console/commit/8d79aff) and the commit recording this (10-22)
 
 - After #145 was filed: a swap that can't be confirmed within 5 s no longer blocks merchant work. The journal entry settles from the bank and inventory as they are (warning `Bank sort swap not confirmed; continuing from the current bank`), cleanup returns any journaled item in the buffer slot, and a sort pass that hit it stops and plans again on the next pass. Recovery moves to the journaled floor before confirming. Covers the case 8d79aff left open (a store into an empty cell whose item was withdrawn later). Inventory `e2e/bank-sort-journal-failures.md` items 6–9, unit tests in `scripts/tests/bank-sort-request.test.cjs`.
-- 10-22: the user commented on #145 with this change (draft `bank-sort-swap/issue-145-comment.md` in the project files). The user confirmed the fix live.
+- 10-22: the user [commented](https://github.com/Ryan-Haines/adventureland-party-console/issues/145#issuecomment-6356554065) on #145 with this change (draft `bank-sort-swap/issue-145-comment.md` in the project files). The user confirmed the fix live.
 
 ## Done upstream: reimplemented on bugfix-1.4, adopted in fdd89f0, 3e414a1, a311d12, 13e8b7c, 1566e02, 43ac030, 7eb464b, 9577eca, 53a3cd6, 7d89bf8 and b78d52c
 
