@@ -14,9 +14,9 @@ The dated log is in [history.md](history.md) and the maintenance procedure in [r
 | Status | Count |
 |---|---|
 | New issue | 1 |
-| Update / comment | 9 (2 to do) |
+| Update / comment | 10 (3 to do) |
 | Done upstream | 50 |
-| Matches | 15 (all done) |
+| Matches | 14 (all done) |
 | Open upstream | 18 |
 | Closed | 19 |
 | Fork-only | 7 |
@@ -157,6 +157,15 @@ Icelocked's [PR #131](https://github.com/Ryan-Haines/adventureland-party-console
 
 - To do: review sections 2–6 against the fork's event, movement and merchant work, and reply on which to take; the Achievement Hunt sections follow the same offer pattern as #89.
 
+### Bank sort swap journal recovers from any bank state
+
+[#145 · filed 10-18](https://github.com/Ryan-Haines/adventureland-party-console/issues/145)
+
+[8d79aff](https://github.com/Thefonze74065/adventureland-party-console/commit/8d79aff) and the commit recording this (10-22)
+
+- After #145 was filed: a swap that can't be confirmed within 5 s no longer blocks merchant work. The journal entry settles from the bank and inventory as they are (warning `Bank sort swap not confirmed; continuing from the current bank`), cleanup returns any journaled item in the buffer slot, and a sort pass that hit it stops and plans again on the next pass. Recovery moves to the journaled floor before confirming. Covers the case 8d79aff left open (a store into an empty cell whose item was withdrawn later). Inventory `e2e/bank-sort-journal-failures.md` items 6–9, unit tests in `scripts/tests/bank-sort-request.test.cjs`.
+- To do: comment on #145 with this change (needs the user's go-ahead).
+
 ## Done upstream: reimplemented on bugfix-1.4, adopted in fdd89f0, 3e414a1, a311d12, 13e8b7c, 1566e02, 43ac030, 7eb464b, 9577eca, 53a3cd6, 7d89bf8 and b78d52c
 
 The maintainer fixed these on bugfix-1.4 (PR #64, merged into `main` as b4443e4 on 10-15 and released as v1.4.0), often going further than the fork did. Where the fork had its own fix, the merge took upstreamâs version and removed the forkâs, including the extras in the last column. [#79](https://github.com/Ryan-Haines/adventureland-party-console/issues/79) (hot reload) and [#94](https://github.com/Ryan-Haines/adventureland-party-console/issues/94) (in-game mute) were also fixed in 1.4, with no fork code; the forkâs base already has both. On 10-15 the maintainer closed most of these with v1.4.0; still open: #23, #35, #57, #83 and #106. On 10-16 the maintainer implemented the ChronAL simulation harness (#58) on `1.5-feature-branch` (7f81f71) and accelerated seven gameplay E2Es through it (849c38a); the fork adopted the branch in 53a3cd6 and dropped its own harness for the maintainer’s.
@@ -220,7 +229,6 @@ A comment saying where it's implemented, with the commit link, is enough.
 
 | Issue | Feature | Fork commits | Note |
 |---|---|---|---|
-| [#145](https://github.com/Ryan-Haines/adventureland-party-console/issues/145) filed 10-18 | Bank sort swap journal blocks the merchant when the freed cell is refilled | [8d79aff](https://github.com/Thefonze74065/adventureland-party-console/commit/8d79aff) | The swap is confirmed once the incoming item is in the buffer slot and no longer in the cell. Inventory `e2e/bank-sort-journal-failures.md`, journey `live-bank-sort-journal.spec.ts` |
 | [#144](https://github.com/Ryan-Haines/adventureland-party-console/issues/144) filed 10-18 | Skills sharing the attack cooldown lose slots to basic attacks | [85402f9](https://github.com/Thefonze74065/adventureland-party-console/commit/85402f9) | The skill world's `cooldown()` gives skills sharing `attack` the controller's 2 ms swing edge. Inventory `e2e/rogue-fan-crab-failures.md`, journey `live-rogue-fan-crab.spec.ts`. [#137 comment](https://github.com/Ryan-Haines/adventureland-party-console/issues/137#issuecomment-6252090346) links it |
 | [#143](https://github.com/Ryan-Haines/adventureland-party-console/issues/143) filed 10-18 | Manual upgrades of identical items stop as "recovery ambiguous" after the inventory tidy moves them | the commit recording this | `findUpgradeMarkSlot` gets the command's marks: copies still in another request's slot stay with it, and identical remaining copies are interchangeable. Inventory `e2e/manual-upgrade-duplicates-failures.md` |
 | [#137](https://github.com/Ryan-Haines/adventureland-party-console/issues/137) filed 10-17 | Rogue: sustain Fan of Knives while scatter farming mobs it one-shots | [dbadfe7](https://github.com/Thefonze74065/adventureland-party-console/commit/dbadfe7) | Gated on `fanFarming` (Knife Belt rogue, scatter mode, a mob Fan of Knives kills outright): MP potions whenever a whole one fits (no `regen_mp` lockout), no sustained-budget throttle on Fan of Knives (20% reserve kept), Quick Stab/Punch dropped and Mental Burst only when its kill refund covers its cost, no Assassin's Smoke opener, and a stand within Fan of Knives range toward the nearby cluster. `live-rogue-fan-scatter.spec.ts` (native spawn and a declared sparse layout); depends on #136 |
