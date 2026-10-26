@@ -57,6 +57,7 @@ export function installSkillRuntime(root: CombatRoot) {
       incoming: t => projectiles.incoming(t.id, Date.now()),
       range: (t, id) => skillRange(actor, t, skills[id]),
       allowed: (t, id) => authorized(result, t, id),
+      monster: mtype => (G.monsters as Record<string, { aggro?: number; rage?: number } | undefined>)[mtype],
     };
     return result;
   }

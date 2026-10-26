@@ -689,12 +689,14 @@ a full restart also publishes the current character assets.
 ## Designated tank
 
 A per-party `POST /party-api/formation` field, `tank: string | null`, names one
-character (any class) to hold melee range and own aggro-pulling for normal grouped
-combat, addressing issue #39. `approachCombatTarget()` routes the designated tank
-through `tankMovementTick()` — a class-agnostic adaptation of Franky's off-tank
-"stack tight" clamp (`Math.min(desiredCombatRange(), 30)`) — instead of each class's
-own weapon-range `engageMovementTick()`; every other character's positioning is
-unchanged. `mayTaunt()` and the skill engine's `absorb`/`agitate` aggro-ownership
+character (any class) to hold its target and own aggro-pulling for normal grouped
+combat, addressing issue #39. The tank takes the ordinary approach of every fighter
+(the priest formation would hold a melee tank outside its target's range), so it stops
+at its own attack range. `tankHoldsTarget()`
+keeps it from kiting the monster it is fighting while its HP stays above half; the hold
+returns above 80%. Agitate pulls only monsters that come anyway (`aggro > 0.99` and
+`rage >= 1`, see `runtime/characters/skills/aggro-pull.ts`) or runs when a monster is
+on another party member. `mayTaunt()` and the skill engine's `absorb`/`agitate` aggro-ownership
 checks (`CombatContext.tank`) are gated on the designated tank when one exists,
 falling back to the existing leader-only rule when none is set — this also lets a
 non-leader priest tank via `absorb`, per the issue's own example. No hold-back is
