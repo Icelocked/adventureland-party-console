@@ -296,7 +296,7 @@ One line each; line numbers on b9b5c91e.
 - **S24.** Magical basic attacks are blocked only for slenderman, tiger and goblin (runtime/characters/roles/monster-attack-policy.ts:3), while game data lists reflection on eight monsters: was the list meant to cover all of them?
 - **S25.** A rejected event `join` is retried every 10 s (characters/shared.js:13191, 13418-13421, 17358): the game answers `cant_join` when the event's server flag is off (node/server.js:12641-12711), so should it skip at once on `cant_join` and `join_too_late`, and back off only on `cant_when_sick` or `cant_in_bank`?
 - **S26.** With two live events, sessions are keyed by character (events/observations.ts:138-144): attend only the top event, or may the party split?
-- **S27.** A higher-ranked combat event interrupts anniversary staging and featured holds but never an active kiss (characters/shared.js:13311-13331): should a featured hold be protected too?
+- **S27.** (Dropped: the event priority list already decides whether anniversary staging yields to another event.)
 - **S28.** When several parts hold Hunt, the first check in call order writes the message (runtime/coordinator/hunt/tick.ts:82-92): should the highest-priority holder's text win?
 - **S29.** Hunt event trips are stored root-wide, and the party's combat event handoff stays open while any character's trip is open (events/hunt-trip.ts:30-33, 44): should a solo character's trip ever hold the party?
 - **S30.** During A/B testing a follower stops following a leader on the other team (characters/shared.js:17709-17711): keep, or follow a same-team member?
