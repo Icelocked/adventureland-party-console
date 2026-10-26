@@ -38,8 +38,10 @@ done when that list is empty.
 ## Proof of function: the current tests
 
 The current suite is the main proof that the rebuild keeps every function:
-350 end-to-end tests in 105 spec files (plus 22 shared case files) and 3,024
-unit tests in 453 files.
+403 end-to-end tests in 105 spec files and 22 shared case files (400 in the default
+Playwright listing, plus 2 profiling runs and 1 opt-in Docker test) and 3,184 unit test
+declarations in 453 files, some of them inside loops, so a run executes more. Spec 15
+section 1 gives the commands.
 
 1. **Baseline.** Run the whole suite on the current console and record every result,
    including the tests that already fail or hang, and why.
@@ -61,8 +63,9 @@ unit tests in 453 files.
    retired. Every behaviour keeps at least one proof, preferably end-to-end.
    Each retirement is listed with the test that still covers its behaviour.
 
-End-to-end tests stay the main proof. Unit tests cover an owner's rule table
-directly and stop slicing single functions out of `characters/shared.js`.
+End-to-end tests stay the main proof, run on ChronAL virtual time. Isolated
+tests are the exception described under "Rules every change follows", and
+they stop slicing single functions out of `characters/shared.js`.
 
 ## Every test is defined, measurable and labelled
 
@@ -114,8 +117,10 @@ numbers kept next to the spec:
   are the starting set.
 - **Game cost:** calls per 4 s against the game's limit, by call type, and
   route plans per minute.
-- **Play results:** kills per hour, time lost to stalls and regroups, and
-  deaths with their causes, on the same farm and setup.
+- **Play results:** kills per hour, time lost to stalls and regroups,
+  deaths with their causes, and recovery steps taken per hour (route
+  failures, re-plans, regroups, restarts), on the same farm and setup. The
+  owners should make recovery rare; a rising count points at a new cause.
 
 The comparison mode used before an owner takes over runs both the old and
 new decision, so it costs extra while it runs; it is measured separately and
@@ -134,3 +139,55 @@ control when the list is empty, and the comparison code is removed after.
 The work that writes a spec or builds an owner does not sign it off. A
 separate check reruns `check-claims.mjs`, the test mapping, and the
 comparison logs, and reports their raw output.
+
+## Rules every change follows
+
+The plan and the code it produces follow the console's own `AGENTS.md`
+(on the current console, b9b5c91e) and the user's comment style. Where the
+plan said something different, these rules win.
+
+From `AGENTS.md`:
+
+- **End-to-end tests first.** E2E tests are the preferred and main proof.
+  A system is tested in isolation only when it must be, and then the ways it
+  could fail are written down first, before the code. Unit tests are never
+  written after the code. The owners' rule tables are proven through E2E
+  scenarios; an isolated rule-table test exists only where an E2E cannot
+  reach the case, with its failure list written first.
+- **Gameplay E2Es run on ChronAL virtual time,** keep browser, deployment,
+  persistence and telemetry coverage, and produce a verifiable, repeatable
+  artifact. Owned per-scenario workspaces are removed afterwards.
+- **No source-text, callback-order or CSS-class assertions** in place of
+  observable behaviour. Asynchronous state is checked with a bounded poll for
+  exact values from one fresh snapshot, never with sleeps, wider
+  expectations or longer timeouts.
+- **`npm run typecheck` after every implementation change,** and every code
+  or UI change ends with a completed console artifact, staged, never
+  activated without the user's instruction.
+- **Coordinator changes** start from `runtime/coordinator/README.md`; edit
+  the TypeScript sources, never the generated bundles.
+- **Game types** come from `typed-adventureland` where they describe the same
+  game object.
+- **Dashboard controls** keep dark, opaque backgrounds with explicit
+  high-contrast colours; context menus use white backgrounds with black text.
+
+From the comment style (`~/.claude/rules/comment-style.md`), for comments,
+commit messages and these documents: active voice with a named actor, one
+rule per sentence, no filler words, state the behaviour rather than the
+rejected alternative, no repeated rationale, no stacked hedges, plain
+compounds, concrete citations, and no em or en dashes.
+
+Every verification pass checks a document against these rules as well as
+against the code.
+
+## Game call cost, settled
+
+The game server charges each message `CC[method]` to the sending socket and
+a base charge of 1 through `add_call_cost(-1)` (node/server.js:4980), which
+runs before `current_socket` is set to the sender (:4981), so the base
+charge lands on whichever socket sent the previous message
+(server_functions.js:5421-5447). When nothing else reached the server in
+between, that is the same socket. A move therefore costs the sender 1.5 to
+2.5 and a Ponty read 16 to 17. Budgets in this plan use the upper value; the
+logged merchant disconnect (13 Ponty reads, 208) shows the lower one in
+practice.
