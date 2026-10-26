@@ -670,12 +670,18 @@ restore (fork HEAD characters/shared.js:10708-10715).
 - C. Keep the tool and re-equip only at the stand. Negatives: the merchant travels and stands in
   events with a rod and no offhand; it saves only a few call-cost points.
 
-**Recommendation:** A, with a cap: after 3 failed restores the command runs anyway and the merchant
-logs the failure. It beats B because one rule covers event and travel commands, where the hands matter
-most, and drops the `merchant-` prefix case. It beats C because the hands are right during the job.
-A restore costs 5 per equip and 8 per unequip of the 200 per 4 s (call table). Its own negatives:
-up to about 1 s more before each job that follows gathering, and the cap means a job can still run
-with the tool after 3 failures.
+**Recommendation:** A, with no retry count: a failed restore lets the command run and logs the
+failure, and the merchant retries the restore at its next idle pass on the backoff (5, 15, 30, then
+every 60 s) until the hands match. It beats B because one rule covers event and travel commands,
+where the hands matter most, and drops the `merchant-` prefix case. It beats C because the hands
+are right during the job. A restore costs 5 per equip and 8 per unequip of the 200 per 4 s (call
+table). Its own negatives: up to about 1 s more before each job that follows gathering, one failed
+restore sends that job off with the tool, and a restore that cannot succeed (the weapon was sold)
+costs one failed attempt a minute while the merchant idles.
+
+**Changed:** the earlier recommendation capped the deferral at 3 failed restores; the upstream
+priorities (00-overview) rule out hard-coded retry counts, so a failure no longer holds the command
+and the restore moves to the backoff (REVIEW-QUEUE A15).
 
 ### Q2. Should the merchant leave the party's realm for commerce?
 
@@ -724,10 +730,17 @@ failure inside `finish` comes after `activeRealm` already names the destination 
 - C. Keep today's state and let the user fix it. Negatives: the party stays split across realms
   until the user notices, and the merchant returns to the old realm alone.
 
-**Recommendation:** B with one retry per straggler, then A. It beats A because a straggler that
-only missed the deadline arrives without a full rollback. It beats C because the party always ends
-on one known realm. Its own negatives: the worst case is about 2 minutes before the party is whole
-again, and the rollback must also restore `activeRealm` for the setHome case.
+**Recommendation:** B with one retry per straggler, then A, and a rollback login that fails
+retries on the backoff (5, 15, 30, then every 60 s) until every character stands on one known
+realm; the status line names the stragglers. It beats A because a straggler that only missed the
+deadline arrives without a full rollback. It beats C because the party always ends on one known
+realm without the user. Its own negatives: the usual worst case is about 2 minutes before the party
+is whole again and longer while a login keeps failing, and the rollback must also restore
+`activeRealm` for the setHome case.
+
+**Changed:** the earlier recommendation gave a failed rollback login no next step, which leaves the
+party split until the user acts; the upstream priorities (00-overview) rule that out, so the
+rollback now retries on the backoff (REVIEW-QUEUE A59).
 
 ### Q4. When the call budget is tight, which calls wait?
 

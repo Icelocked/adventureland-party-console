@@ -176,7 +176,7 @@ Rules:
 - productionHeld returns true while pendingProduction lists attempts; with no current job and a live merchant it writes merchant-production-recover at most every 5000 ms and logs the hold once per pending set (runtime/coordinator/merchant/dispatcher.ts:254-274)
 - The character answers merchant-production-recover only with no active job, runs recoverProductionJournal and reports accepted or deferred (characters/shared.js:10446-10453)
 
-**MJB-013 Hold merchant work during a home-realm return.** While the coordinator sends the merchant back to its home realm, new work waits. After three failed returns, the dispatcher blocks work that needs home until a manual retry.
+**MJB-013 Hold merchant work during a home-realm return.** While the coordinator sends the merchant back to its home realm, new work waits. After three failed returns, the dispatcher blocks work that needs home until a manual retry, a state the upstream priorities (00-overview) rate high to critical (section 2 item 17).
 
 Rules:
 
@@ -806,6 +806,19 @@ Commits:
 
 - 580856b6 2026-10-19 Breene26 added the inventory command reason (git log -L10010,10030)
 
+### 17. The home return gives up after 3 attempts and waits for a manual retry
+
+Kind: bug. Origin: the current console. Confidence: confirmed in code.
+
+1. ensureHome sends the merchant home before work that needs home, and attemptReturn sends the first attempt at once and later ones 60 s apart (runtime/coordinator/merchant/home-recovery.ts:91-111, 112-125)
+2. At 3 attempts it marks the request exhausted, clears merchantHomeReturnAt and logs "Merchant realm return failed after 3 attempts; retry a queued job to resume" (home-recovery.ts:95-99)
+3. homeBlocked is then true until the merchant reports home (runtime/coordinator/merchant/dispatch-composition.ts:147-152), and the dispatcher holds every job that needs home with "Merchant realm return failed after 3 attempts; manual retry required" (runtime/coordinator/merchant/dispatcher.ts:115-121)
+4. Nothing retries on its own: the hold ends on the dashboard Retry of a queued job (runtime/coordinator/http/merchant-control.ts:36-48), on a home arrival from another cause, or on a party realm switch (runtime/coordinator/characters/worker-setup.ts:30-41)
+5. The five reasons that skip the home check still run (home-recovery.ts:28-36), so the merchant does Ponty, ALData, giveaway and stand maintenance work while every other job waits
+6. A party visit's realm switch has the same shape per job: 3 failed switches set realmRetryExhausted and "Merchant realm switch failed; manual retry required" (runtime/coordinator/merchant/party-realm.ts:27, 50-61)
+
+Section 5 Q6 asks what replaces the cap.
+
 ## 3. Fork differences
 
 What the fork (af92de45) adds or changes in this part. Fork code is not in the current catalog; its lines are fork HEAD.
@@ -1007,6 +1020,34 @@ It beats C because C needs A or B to have any effect. It beats D because the gol
 most common cause and D leaves them. Its own negatives: a default the user tunes, gold
 held on the merchant and not in the bank, and a bank trip for any purchase larger than the float.
 D can follow later if withdrawal trips are still frequent.
+
+### Q6. What should replace the 3-attempt cap on the merchant's home return?
+
+**Today:** after 3 failed home returns the request is exhausted and every job that needs home waits
+for a dashboard Retry (runtime/coordinator/merchant/home-recovery.ts:95-99;
+runtime/coordinator/merchant/dispatcher.ts:115-121; section 2 item 17). A party visit's realm
+switch stops the same way after 3 failures (runtime/coordinator/merchant/party-realm.ts:50-61). The
+fork does not change this.
+
+**Options:**
+- A. Keep. Negatives: every job that needs home waits until the user presses Retry, a state the
+  upstream priorities (00-overview) rate high to critical.
+- B. No cap: after the third failure the return keeps trying every 60 s, the backoff's top step,
+  and the log names the realm and the attempt count; the party visit switch does the same per job.
+  Negatives: a lasting login failure costs a restart or a native realm switch every 60 s, and the
+  jobs that need home wait through it.
+- C. After 3 failures, make the merchant's current realm its home until the party realm changes.
+  Negatives: the merchant works away from the party, so party visits need a realm hop each; the
+  stand sits on another realm; a second idea of "home" to keep.
+
+**Recommendation:** B, carried by spec 09's realm owner on the task ladder
+(`01-groups-and-tasks-design.md` 4.2), so the merchant group's `realm-hold` always has a due step.
+It beats A because the merchant gets home as soon as the cause passes, with nobody at the
+dashboard. It beats C because the merchant stays on the realm where its stand and the party are.
+Retry stays as a shortcut that ends the current wait. Its own negatives: one login attempt a minute
+while the failure lasts, and home jobs wait through it.
+
+**Changed:** new question; MJB-013 described this give-up without flagging it (REVIEW-QUEUE A90).
 
 ## 6. Gaps
 

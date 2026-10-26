@@ -16,7 +16,8 @@ Words used below:
 - **Group**: the set of characters doing one task. Today there are three
   kinds: the **party** (the leader plus the characters that follow it), a
   **solo character** (a combat character that does not follow; it is a group
-  of one), and the **merchant**, which is outside both (spec 08).
+  of one), and the **merchant**, which is outside both for farming (spec 08;
+  section 2.5 lists the event records it shares with the party).
 - **Task**: what a group is doing: farming in a mode, a Monster Hunt mission
   or turn-in, an event, an event return, death recovery, an escape, a rare
   hunt, a Cave visit.
@@ -131,10 +132,10 @@ table lists what each reader checks on the current console.
 |---|---|---|
 | Hunt tick (`hunt/tick.ts:74-94`) | leader present and no dungeon (application.ts:2138), comms hold, rare encounter, any member at an event, turn-in, death recovery, route and farm-walk recovery, event return / non-Hunt convoy / anniversary, farm-area hold, cancelled intent | escape, except through the loot gate (tick.ts:39-44) and an escape convoy counted by `eventOwnsTravel`; boss chase and AH (fork) |
 | Event admission (`http/hunt-control.ts:68-71`, `events/observations.ts:246`) | event return membership, Hunt turn-in, cancelled intent, selection and limits, dungeon, a registered anniversary kiss (observations.ts:225-228) | escape, death recovery, rare |
-| Event return (`events/returns.ts:226-241`) | Hunt handoff, anniversary hold, any convoy, Town cycle | rare, escape, death recovery (none is read in returns.ts, return-guards.ts, return-policy.ts or repair-return-walk.ts) |
+| Event return (`events/returns.ts:226-241`) | Hunt handoff, anniversary hold, any convoy, Town cycle | rare, escape, death recovery (none is read in returns.ts, return-guards.ts, return-policy.ts or repair-return-walk.ts); the dispatch waits for any convoy (231), so an escape-recovery or death-recovery convoy holds it, and the open cases are the escape stages and recovery phases that run without a convoy |
 | Rare hunt (`navigation/rare-hunting.ts:118-159`) | stale or dead leader, Town cycle, event return, anniversary, death recovery, Hunt loot, escape, turn-in, members that joined or travel to an event, are dead, below 35% HP or hold a protected command | farm-area relocation; a member's staging `activeEvent` (137 reads `joinedEvent`, `movement.event` and `eventTraveling` only) |
-| Farm areas (`navigation/farm-areas.ts:42-52, 184-198, 241-243, 254-266`) | rare, Hunt travel, members at an event, event return, escape, any convoy; turn-in and "event owns travel" only while Hunt is the policy (196-198, 265) | anniversary outside Hunt, deferred returns, death recovery (farm-areas.ts never reads `combatRecovery`) |
-| Dungeon gate (`application.ts:1741-1745, 2087, 2138`) | nothing; it suspends the party's other owners | the solo services: their farm areas and Hunt run without the check (2088, 2139-2143) |
+| Farm areas (`navigation/farm-areas.ts:42-52, 184-198, 241-243, 254-266`) | rare, Hunt travel, members at an event, event return, escape, any convoy; turn-in and "event owns travel" only while Hunt is the policy (196-198, 265) | anniversary outside Hunt, deferred returns, death recovery (farm-areas.ts never reads `combatRecovery`); the convoy check (186) and the unreleased-escape check (240-245) cover most recovery phases, and during the farm return's retry waits the failed convoy is still the active convoy (`scripts/combat-disengagement.cjs:110-117`); the open window is `finishing`, where death recovery cancels combat travel and no escape runs yet (`combat-disengagement.cjs:81`) |
+| Dungeon gate (`application.ts:1741-1745, 2087, 2138`) | nothing; it suspends the party's other owners | a Follow or leader change during the visit: the formation route saves it with no dungeon check (`http/formation.ts:79-100`), and a participant that becomes solo has its farm areas and Hunt run by the solo loops, which skip the check (2088, 2139-2143) |
 | Character reunion (`shared.js:13456-13472`) | dungeon, event exit, escape, attackers, turn-in, rare, 16 flags | none listed |
 
 - **GRP-009 Hunt turn-in precedence.** A Daisy return or turn-in owns travel
@@ -219,7 +220,11 @@ table lists what each reader checks on the current console.
   death recovery, rare, event return and anniversary
   (`application.ts:1741-1745`), and the party's farm areas and Hunt skip
   their tick (2087, 2138); the solo services' loops have no such check
-  (2088, 2139-2143). `eventAllowed` refuses events for a member of the visit
+  (2088, 2139-2143). A solo service holds a visit participant only after a
+  Follow or leader change during the visit: the participants are the leader
+  and its fresh followers at entry (`dungeons/service.ts:44-52`, 74-91), and
+  the formation route saves Follow and the leader with no dungeon check
+  (`http/formation.ts:79-100`). `eventAllowed` refuses events for a member of the visit
   unless protection is off (`dungeons/service.ts:241-253`). With protection
   off, an eligible event starts a Cave exit unless the visit is held
   (250-251). The service retires a held visit when its pending event comes
@@ -301,7 +306,11 @@ roster cancels any non-Hunt convoy (`hunt/participants.ts:89-92`).
 `eventReturn`, `eventSessions` and `activeConvoy` are per scope
 (`hunt/scopes.ts:6-10`); `deferredEventReturns`, `eventAttendance`,
 `huntEventTrips`, `combatEventHandoff`, `anniversary`, `escape` and
-`townCycle` are root-wide. `mode.exit` reads trips only for the scope's Hunt
+`townCycle` are root-wide. The merchant is its own scope owner
+(`hunt/scopes.ts:57`), yet the root event services read the party scope
+(52-55), so the merchant can be a participant of the party's `eventReturn`,
+hold a deferred return, and hold a session in the party's `eventSessions`
+(`merchant/event-control.ts:15-20`). `mode.exit` reads trips only for the scope's Hunt
 participants (`hunt/mode.ts:55-58`). The root-wide read is the handoff:
 `combatEventHandoff` ends only when no character has an open trip
 (`events/hunt-trip.ts:30-33, 44`), and the party's event target cleanup
@@ -321,7 +330,9 @@ the user releases the visit.
 
 Each owner check goes into the party wiring and again into
 `createSoloServices` (`application.ts:1784-2007`), and the two already differ
-(GRP-003, and the missing dungeon check in GRP-018).
+(GRP-003, and the missing dungeon check in GRP-018). The missing check matters
+through the formation route: a Follow or leader change during a visit makes a
+participant solo, and its solo loops then run without the gate (GRP-018).
 
 ### 2.8 Admission ignores escape and death recovery
 
@@ -375,7 +386,7 @@ reviewed" until method step 2.
 | scripts/tests/hunt-event-priority.test.cjs | GRP-009 | turn-in blocks events on the character | coordinator admission during escape (2.8) | not reviewed | partly |
 | scripts/tests/hunt-safety.test.cjs | GRP-009..011 | turn-in, event return wait, cancel handling | message precedence (2.1) | not reviewed | several guard patches |
 | e2e/live-game.spec.ts (Goobrawl interrupts Hunt) | GRP-011 | event pause and resume on a native server | staging pause, cancelled intent | not reviewed | no |
-| scripts/tests/daily-dungeons.test.cjs | GRP-018 | protection blocks events; recovery paused in Cave | `held` after exit (2.6); solo services under a visit | not reviewed | no |
+| scripts/tests/daily-dungeons.test.cjs | GRP-018 | protection blocks events; recovery paused in Cave | `held` after exit (2.6); a Follow change during a visit (GRP-018) | not reviewed | no |
 | scripts/tests/rare-hunting.test.cjs | GRP-017 | event combat prevents rare interruption | boss chase | not reviewed | no |
 | scripts/tests/farm-reunion.test.cjs | GRP-019 | reunion blocked by convoy, anniversary, event exit, attackers and cancelled navigation | the other 17 conditions one by one | not reviewed | no |
 | scripts/tests/hunt-farm-walk.test.cjs | GRP-015 | expired anniversary yields to Daisy | live anniversary | not reviewed | yes (reported Ghost stall) |
@@ -482,11 +493,23 @@ landing-to-Main leg end to end on the current console (the fork adds
    (c) Keep the travel block, but always run escape and death recovery.
    Negatives: farming still waits for the user; escape can move members
    the user wanted held.
-   **Recommendation:** (c). Escape and death recovery protect the
-   characters and never wait on a farming choice. The hold stays the user's
-   call. It beats (a) because death recovery reaches a death outside the
-   Cave, and beats (b) because it keeps an explicit hold. Negatives:
-   the party still sits idle until the user releases it.
+   (d) As (c), and the block ends on its own 5 minutes after every fresh
+   participant is outside; the party then resumes its waiting task, and
+   Release ends the block sooner. Negatives: a hold the user wanted longer
+   ends after 5 minutes unless the user pauses the console; 5 minutes is not
+   measured; an offline participant still keeps the visit unless spec 07
+   Cave Q2 drops it.
+   **Recommendation:** (d). Escape and death recovery protect the
+   characters and never wait on a farming choice, and the party farms again
+   without the user once the run result has been visible for 5 minutes. It
+   beats (a) and (c) because both leave the party idle until the user
+   releases it, which the upstream priorities (00-overview) rate high to
+   critical. It beats (b) because the result stays on the card before
+   farming starts. Negatives: a deliberate hold ends after 5 minutes unless
+   the user pauses the console, and a phase check goes into each gate.
+   **Changed:** the earlier recommendation was (c), which still needs the
+   user to press Release; the upstream priorities rule that out, so (d) is
+   new and now recommended (REVIEW-QUEUE A13).
 6. **Follow during A/B testing.**
    **Today:** a follower stops following a leader on the other team
    (`shared.js:17709-17711`) and acts alone. The game puts each character on

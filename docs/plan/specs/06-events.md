@@ -239,7 +239,11 @@ Bare `shared.js:N` and bare line numbers in a character-side item are
   or reuse a return (194-212; a same event within 60 s does not restart,
   78-84), Town commands to each participant (130-135), wait for every
   member, then dispatch the leader's checkpoint convoy (226-241) and complete
-  (214-221). Each tick reconciles orphan commands, Goobrawl, lost
+  (214-221). The dispatch waits while the anniversary holds, any convoy runs
+  or the Town cycle is busy (231), so an escape-recovery or death-recovery
+  convoy also holds it. The return reads neither escape nor death recovery,
+  so the escape stages and recovery phases that run without a convoy do not
+  hold it (spec 01 table 1.3). Each tick reconciles orphan commands, Goobrawl, lost
   anniversary handoffs, policy, Hunt handoff, walk repair, obsolete walks, a
   new anniversary round, deferred members, participants, the Franky exit,
   commands and progress, in that order (298-317). Consumed idle exits get a
