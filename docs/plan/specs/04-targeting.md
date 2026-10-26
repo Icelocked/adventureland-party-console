@@ -2,8 +2,8 @@
 
 Checked against Ryan's base `refs/review/ryan-1.5` (b9b5c91e). Line numbers are on
 that ref unless a line says "fork" (af92de45, `HEAD` in
-`F:/CodingProjects/pm-worktrees/review`) or "21b8362d" (the death fixes in
-`F:/CodingProjects/pm-worktrees/pta-pull`). Game data: AL MCP v18183.
+(local checkout)) or "21b8362d" (the death fixes in
+(local checkout)). Game data: AL MCP v18183.
 
 This part owns one question: what each character attacks or avoids. It covers the
 character's own selection (role runner and `sharedRoutine` target finders), the

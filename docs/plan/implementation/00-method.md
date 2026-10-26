@@ -8,10 +8,10 @@ and the rest of `docs/implementation/` describe how the work is checked.
 
 - Ryan's base: his `1.5-feature-branch` at `b9b5c91e` (2026-10-22), the ref
   `refs/review/ryan-1.5` in the review checkout
-  `F:/CodingProjects/pm-worktrees/review`.
+  (local checkout).
 - The user's fork: `af92de45` (topic15r/release-ui) plus the death fixes at
   `21b8362d`.
-- The first and full reviews: `F:/CodingProjects/backups/party-console/review/`
+- The first and full reviews: (local checkout)
   and `review/full/`.
 - Game rules: the game server source (kaansoral/adventureland_mongodb) and
   game data.

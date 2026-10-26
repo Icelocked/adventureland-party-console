@@ -1,7 +1,7 @@
 # 06 Events
 
 Checked against Ryan's base `refs/review/ryan-1.5` (b9b5c91e) in
-`F:/CodingProjects/pm-worktrees/review`. Every `file:line` below is on that
+(local checkout). Every `file:line` below is on that
 ref unless it says "fork" (af92de45, HEAD of the same checkout). Behaviour
 ids are `EVT-001` onward; `catalog/06-events.json` lists the functions and
 tests for each one. Evidence leads came from

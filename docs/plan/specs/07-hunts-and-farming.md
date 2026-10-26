@@ -1,7 +1,7 @@
 # 07 Hunts and farming
 
 Milestone M0 (the map). Prefix `HNT`. Checked against Ryan's base `refs/review/ryan-1.5`
-(b9b5c91e) in `F:/CodingProjects/pm-worktrees/review`; fork lines are marked "fork af92de45".
+(b9b5c91e) in (local checkout); fork lines are marked "fork af92de45".
 Every file:line is on the Ryan ref unless marked. "Inference:" marks a claim that the code alone
 does not prove.
 

@@ -1,6 +1,6 @@
 # 09. Merchant realm and gear
 
-Checked against Ryan's base `refs/review/ryan-1.5` (b9b5c91e) in `F:/CodingProjects/pm-worktrees/review`. Every file:line is on that ref unless it says "fork HEAD" (af92de45). The fork's live tip 21b8362d changes no file in this part (`git diff --stat af92de45 21b8362d` in pm-worktrees/pta-pull touches only characters/shared.js lines 71 and 18438-18926).
+Checked against Ryan's base `refs/review/ryan-1.5` (b9b5c91e) in (local checkout). Every file:line is on that ref unless it says "fork HEAD" (af92de45). The fork's live tip 21b8362d changes no file in this part (`git diff --stat af92de45 21b8362d` in pm-worktrees/pta-pull touches only characters/shared.js lines 71 and 18438-18926).
 
 This spec maps which realm the merchant is on and what it holds. It covers every writer of
 the merchant's realm (party realm switch, party-visit realm check, job-owned realm hops, home
@@ -15,7 +15,7 @@ Jobs and how gathering yields are in [08](08-merchant-jobs.md). Items, bank and 
 
 Counts: 25 behaviours and 347 functions in `catalog/09-merchant-realm-and-gear.json` (counted with `node -e` over that file); 2 handoffs in `catalog/handoffs-09.json`.
 
-How this map was made: four readers went through every function in this part on the Ryan ref (shared.js by its Ryan line ranges, every other file start to end) and checked the full review `F:/CodingProjects/backups/party-console/review/full/merchant.md` and the first pass `review/merchant.md` claim by claim. Section 7 lists each review claim with its verdict. Line numbers in the full review are mostly fork HEAD lines; this spec gives Ryan lines.
+How this map was made: four readers went through every function in this part on the Ryan ref (shared.js by its Ryan line ranges, every other file start to end) and checked the full review (local checkout) and the first pass `review/merchant.md` claim by claim. Section 7 lists each review claim with its verdict. Line numbers in the full review are mostly fork HEAD lines; this spec gives Ryan lines.
 
 ## 1. What it does today
 
@@ -369,7 +369,7 @@ Every writer, how it gets control and how it gives control back. The full review
 
 ### Game call budget: measured call costs
 
-The server adds each handled call's cost to a 4 s window and disconnects the socket (`limitdc`) when the sum passes 200. Sources: the pinned game server (kaansoral/adventureland_mongodb at 16881a27, read from `F:/CodingProjects/pm-worktrees/ah-oct/.build/sim/chronal/upstream/adventureland_mongodb/node`). Each row says whether its numbers come from code or are inference.
+The server adds each handled call's cost to a 4 s window and disconnects the socket (`limitdc`) when the sum passes 200. Sources: the pinned game server (kaansoral/adventureland_mongodb at 16881a27, read from (local checkout)). Each row says whether its numbers come from code or are inference.
 
 | Call | Cost | How the cost is derived | Where the merchant sends it | Frequency | Worst case per 4 s |
 |---|---|---|---|---|---|

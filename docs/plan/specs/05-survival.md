@@ -2,9 +2,9 @@
 
 Checked against Ryan's base `refs/review/ryan-1.5` (b9b5c91e). Line numbers are on
 that ref unless a line says "fork" (af92de45, `HEAD` in
-`F:/CodingProjects/pm-worktrees/review`) or "21b8362d" (the death fixes in
-`F:/CodingProjects/pm-worktrees/pta-pull`). Game rules: server source in
-`F:/CodingProjects/backups/party-console/cave-bugs/al-server` (43b2c8fc), client
+(local checkout)) or "21b8362d" (the death fixes in
+(local checkout)). Game rules: server source in
+(local checkout) (43b2c8fc), client
 `runner_functions.js` 17175, AL MCP v18183.
 
 This part owns heals, HP and MP potions and regeneration, survival thresholds per

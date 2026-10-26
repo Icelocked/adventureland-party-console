@@ -2,9 +2,9 @@
 
 Checked against Ryan's base `refs/review/ryan-1.5` (b9b5c91e). Line numbers are on
 that ref unless a line says "fork" (af92de45, `HEAD` in
-`F:/CodingProjects/pm-worktrees/review`) or "21b8362d" (the death fixes in
-`F:/CodingProjects/pm-worktrees/pta-pull`). Game rules come from the server source
-in `F:/CodingProjects/backups/party-console/cave-bugs/al-server` (adventureland_mongodb
+(local checkout)) or "21b8362d" (the death fixes in
+(local checkout)). Game rules come from the server source
+in (local checkout) (adventureland_mongodb
 43b2c8fc), the client file `runner_functions.js` of client 17175 under
 `adventureland-party-console/.build/ci-fixture-tests/run-8tAVKt/17175/`, and AL MCP game
 data version 18183.

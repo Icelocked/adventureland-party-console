@@ -1,9 +1,9 @@
 # 02 Movement: where each character moves, and who may stop it
 
 Milestone M0 (the map). Checked against Ryan's `1.5-feature-branch` at `b9b5c91e`
-(`refs/review/ryan-1.5` in `F:/CodingProjects/pm-worktrees/review`). Lines marked (fork) are on the
+(`refs/review/ryan-1.5` in (local checkout)). Lines marked (fork) are on the
 user's fork at `af92de45`; lines marked (df) or (21b8362d) are on the death fixes at `21b8362d`
-(`F:/CodingProjects/pm-worktrees/pta-pull`). `shared.js` means `characters/shared.js`. Paths that
+((local checkout)). `shared.js` means `characters/shared.js`. Paths that
 start `nav/` are in `runtime/coordinator/navigation/`.
 
 ## How to read this spec
@@ -28,7 +28,7 @@ full on the Ryan ref, in five slices:
 | 1.5 | Rare, Phoenix and farm travel, restart recovery, manual travel commands, coordinator travel wiring in `application.ts` | MOV-148 to MOV-165 |
 
 Counts in this spec come from the scripts in the spec scratch folder
-(`C:/Users/Tyler/AppData/Local/Temp/claude/F--CodingProjects-Adventureland-Team/7b19cba8-37fd-43f9-a54b-0cb084960e97/scratchpad/mov/`:
+((local working files):
 `writers.cjs` for the writer and stand-in scans, `assemble.cjs` and `claims.cjs` for the catalog) unless a
 command is given inline; the catalog counts come from `node tools/check-claims.mjs` (section 10).
 

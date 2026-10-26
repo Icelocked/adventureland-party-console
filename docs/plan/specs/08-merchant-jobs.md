@@ -1,6 +1,6 @@
 # 08. Merchant jobs
 
-Checked against Ryan's base `refs/review/ryan-1.5` (b9b5c91e) in `F:/CodingProjects/pm-worktrees/review`. Every file:line is on that ref unless it says "fork HEAD" (af92de45). The fork's live tip 21b8362d changes no file in this part (`git diff --stat af92de45 21b8362d` in pm-worktrees/pta-pull touches only characters/shared.js lines 71 and 18438-18926).
+Checked against Ryan's base `refs/review/ryan-1.5` (b9b5c91e) in (local checkout). Every file:line is on that ref unless it says "fork HEAD" (af92de45). The fork's live tip 21b8362d changes no file in this part (`git diff --stat af92de45 21b8362d` in pm-worktrees/pta-pull touches only characters/shared.js lines 71 and 18438-18926).
 
 This spec maps which job the merchant runs and what interrupts it: the job queue, routine
 priorities, the dispatcher and its gates, the command the coordinator writes for the merchant, the
@@ -15,7 +15,7 @@ Which realm the merchant is on and what it holds in its hands are in
 
 Counts: 48 behaviours and 618 functions in `catalog/08-merchant-jobs.json` (counted with `node -e` over that file); 13 handoffs in `catalog/handoffs-08.json`.
 
-How this map was made: four readers went through every function in this part on the Ryan ref (shared.js by its Ryan line ranges, every other file start to end) and checked the full review `F:/CodingProjects/backups/party-console/review/full/merchant.md` and the first pass `review/merchant.md` claim by claim. Section 7 lists each review claim with its verdict. Line numbers in the full review are mostly fork HEAD lines; this spec gives Ryan lines.
+How this map was made: four readers went through every function in this part on the Ryan ref (shared.js by its Ryan line ranges, every other file start to end) and checked the full review (local checkout) and the first pass `review/merchant.md` claim by claim. Section 7 lists each review claim with its verdict. Line numbers in the full review are mostly fork HEAD lines; this spec gives Ryan lines.
 
 ## 1. What it does today
 

@@ -1,7 +1,7 @@
 # 01 Groups and tasks
 
 Checked against Ryan's base `refs/review/ryan-1.5` (b9b5c91e) in
-`F:/CodingProjects/pm-worktrees/review`. Every `file:line` is on that ref
+(local checkout). Every `file:line` is on that ref
 unless it says "fork" (af92de45). Behaviour ids are `GRP-001` onward;
 `catalog/01-groups-and-tasks.json` lists functions and tests. The proposal
 gave this spec no functions by path, so it claims, from the 07, 02 and 06

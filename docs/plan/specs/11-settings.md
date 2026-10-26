@@ -4,12 +4,12 @@ Every saved value in the console: where it is declared, saved, loaded, migrated,
 exported or imported, and read. Spec prefix `SET`.
 
 Checked against Ryan's base `refs/review/ryan-1.5` (`b9b5c91e`) in
-`F:/CodingProjects/pm-worktrees/review`. Fork lines are labelled "fork" and cite `HEAD`
+(local checkout). Fork lines are labelled "fork" and cite `HEAD`
 (`af92de45`) in the same checkout. Line numbers are on those refs. "Inference" marks a
 claim the code supports but that no test, log or live run here proves.
 
-Commands used for counts (run from `F:/CodingProjects/party-console-plan`, with
-`R=F:/CodingProjects/pm-worktrees/review`):
+Commands used for counts (run from (local checkout), with
+`R=(local checkout)):
 
 - `node tools/settings-field-lists.cjs $R refs/review/ryan-1.5 v` lists, for each saved
   coordinator field, the hand-kept lists that name it. `node tools/settings-field-lists.cjs $R HEAD v`
@@ -348,7 +348,7 @@ Path A, a real write from the dashboard (mechanism confirmed, trigger is inferen
 2. Base UI 1.7.0 `Select` runs typeahead on a closed trigger: `onMatch` calls `setValue`
    with reason `none` when the list is closed
    (`@base-ui/react/select/root/SelectRoot.js:310-315`, checked in
-   `F:/CodingProjects/pm-worktrees/pta-pull/dashboard/node_modules`, version 1.7.0).
+   (local checkout), version 1.7.0).
 3. `onValueChange` ignores the reason and posts `{tank: null}` for "None"
    (party-roles-settings.tsx:42, :67). One "n" keypress on a focused trigger clears the tank.
 4. The route sets `designatedTank = null` and persists, with no log line (SET-W4).

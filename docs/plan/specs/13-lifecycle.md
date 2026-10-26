@@ -5,12 +5,12 @@ socket listener lifetime, HTTP route plumbing, and the test harness patterns tha
 how character code is loaded. Spec prefix `LIF`.
 
 Checked against Ryan's base `refs/review/ryan-1.5` (`b9b5c91e`) in
-`F:/CodingProjects/pm-worktrees/review`. Fork lines are labelled "fork" and cite `HEAD`
+(local checkout). Fork lines are labelled "fork" and cite `HEAD`
 (`af92de45`). Line numbers are on those refs. "Inference" marks a claim the code supports
 but that no test, log or live run here proves.
 
-Commands used for counts (run from `F:/CodingProjects/party-console-plan`, with
-`R=F:/CodingProjects/pm-worktrees/review`): `node tools/shared-guards.cjs $R <ref>`;
+Commands used for counts (run from (local checkout), with
+`R=(local checkout)): `node tools/shared-guards.cjs $R <ref>`;
 `node tools/check-claims.mjs`; test-file counts are `grep -l` runs over
 `scripts/tests/*.test.cjs` on the extracted ref, quoted where used.
 
@@ -374,7 +374,7 @@ and remove the guards. Patch applied: symptom only.
   defence through `consolePauseHolds` (LIF-W5). Play restores 23 captured settings (spec 11
   section 3). Other patchwork: a 25 ms busy-wait retry up to 20 times around the file
   rename (console-control.ts:61-67) and a hard-coded `stopDirectory =
-  'F:/CodingProjects/party-console-local'` (:47).
+  '(local checkout) (:47).
 - **Shutdown** (fork shutdown.ts): after a clean "prepared" shutdown the worker wait is
   bounded at 5 s because the host force-exits 15 s after SIGTERM.
 - **Deploy hold** (0875e047, bce3a9fb; fork tools/console-build/hold.ts:1-22): refuses a

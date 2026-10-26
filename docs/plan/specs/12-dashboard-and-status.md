@@ -1,7 +1,7 @@
 # 12 Dashboard and status: what the dashboard shows and where status text comes from
 
 Milestone M0 (the map). Checked against Ryan's `1.5-feature-branch` at `b9b5c91e`
-(`refs/review/ryan-1.5` in `F:/CodingProjects/pm-worktrees/review`). Lines marked (fork) or
+(`refs/review/ryan-1.5` in (local checkout)). Lines marked (fork) or
 `HEAD` are on the user's fork at `af92de45`. `shared.js` means `characters/shared.js`. A bare file
 name such as `public-state.ts` or `query-cache.tsx` is the one file of that name listed in the
 behaviour's cites; telemetry files are in `runtime/coordinator/telemetry/`, status files in
@@ -36,7 +36,7 @@ slices, each read in full on the Ryan ref by one pass and merged here:
 | E | Character side telemetry: the status report (`snapshot`), fast telemetry, catalogs, map frames, combat log queue, status diagnostics, metrics collector and store, game logs and rendering | DSH-033 to DSH-059, DSH-061 to DSH-067 (34) |
 
 Scratch work for every count in this spec is in
-`C:/Users/Tyler/AppData/Local/Temp/claude/F--CodingProjects-Adventureland-Team/7b19cba8-37fd-43f9-a54b-0cb084960e97/scratchpad/s12/`
+(local working files)
 (`build-A.cjs` and the per-slice builders, `check-all.cjs` for coverage and test names, `merge.cjs`
 for the catalog). The catalog counts come from `node tools/check-claims.mjs` (section 10). Other
 counts name their command inline.
@@ -1270,7 +1270,7 @@ M0 is not done for this spec until this list is empty.
 
 ### Claim check
 
-Command: `LIMIT=100000 node tools/check-claims.mjs` in `F:/CodingProjects/party-console-plan`,
+Command: `LIMIT=100000 node tools/check-claims.mjs` in (local checkout),
 filtered to 12 by `assemble.cjs` in the spec scratch folder. Catalogs present at the run:
 01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13. Tool totals at the run: functions: 9421, claimed: 7061.
 
