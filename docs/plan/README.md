@@ -6,8 +6,9 @@ mapping the current console (1.5-feature-branch, b9b5c91e) and my fork side by s
 - **Start here:** [specs/00-overview.md](specs/00-overview.md): what the
   review found and the principles of the plan.
 - **Questions for you:** [QUESTIONS.md](QUESTIONS.md): how
-  you meant things to work. A yes, no or "here's why" is plenty, here or on
-  Discord.
+  you meant things to work, one line each. A yes, no or "here's why" is
+  plenty, here or on Discord. The full context for each is in
+  [QUESTIONS-DETAILS.md](QUESTIONS-DETAILS.md).
 - **Details:** `specs/01` to `13` cover each part of the console (what it does
   today, what goes wrong, with file and line on b9b5c91e).
   `implementation/` explains how the plan is checked.
