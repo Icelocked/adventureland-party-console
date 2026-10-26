@@ -382,7 +382,6 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
           conditions={char.conditions || emptyArray()}
           onSelect={onSelectCondition}
         />
-        <ConnectedCombatLog character={char.name} />
         {char.ctype !== 'merchant' ? (
           <FarmingModeControl
             settingsOpen={farmingSettingsCharacter === name}
@@ -480,6 +479,8 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
         </div>
       )}
       <ConnectedInventory name={char.name} model={inventoryModel} restock={restockControls}/>
+      {/* The combat log sits below every other card section. */}
+      <div className="px-5 pb-1"><ConnectedCombatLog character={char.name} /></div>
     </article>
   );
 });
