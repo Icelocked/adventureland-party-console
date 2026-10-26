@@ -182,12 +182,10 @@ against the code.
 
 ## Game call cost, settled
 
-The game server charges each message `CC[method]` to the sending socket and
-a base charge of 1 through `add_call_cost(-1)` (node/server.js:4980), which
-runs before `current_socket` is set to the sender (:4981), so the base
-charge lands on whichever socket sent the previous message
-(server_functions.js:5421-5447). When nothing else reached the server in
-between, that is the same socket. A move therefore costs the sender 1.5 to
-2.5 and a Ponty read 16 to 17. Budgets in this plan use the upper value; the
-logged merchant disconnect (13 Ponty reads, 208) shows the lower one in
-practice.
+The game server charges each message `CC[method]` to the sending socket. The
+base charge of 1 from `add_call_cost(-1)` (node/server.js:4980) runs before
+`current_socket` is set to the sender (:4981), and every handler resets
+`current_socket` to `false_socket` when it finishes (:5054), so the base
+charge always lands on that placeholder and never on a player. A move costs
+1.5 and a Ponty read 16. The logged merchant disconnect (13 Ponty reads,
+208 = 13 x 16) matches.
