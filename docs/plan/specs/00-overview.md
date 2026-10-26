@@ -55,7 +55,7 @@ goes wrong, in the current code and in ours alike.
    A field missing from the save list is lost at the next restart.
 5. **Calls share one budget that nobody owns.** The game disconnects a socket
    whose calls pass 200 in 4 s; 13 per-listing Ponty reads inside 4 s cost
-   208, and nothing on the merchant checks the budget first (spec 09 ledger
+   208 to 221 (the logged disconnect read 208), and nothing on the merchant checks the budget first (spec 09 ledger
    12). The fork's Ponty pacer counts only its own calls. The dashboard has the same gap:
    in the default shadow mode the 250 ms fallback poll ships every stored
    field, including a combat trace of about 146 KB per character (spec 12

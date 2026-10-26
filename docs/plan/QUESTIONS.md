@@ -194,7 +194,7 @@ whitelisted fields.
 (characters/shared.js:5719-5720). Background reads run on timers wherever the merchant
 is: Ponty every 10 s at cost 16, players every 10 s at cost 12 (characters/shared.js:890,
 17388-17391). The Ponty job reads stock once per listing (characters/shared.js:8607-8622),
-and thirteen of those reads inside 4 s cost 208 against the 200 limit, which disconnects
+and thirteen of those reads inside 4 s cost 208 to 221 against the 200 limit (16 each, plus a base charge of 1 that the server books on whichever socket sent the previous message, node/server.js:4980-4981), which disconnects
 the socket. My fork added two limiters: a move cap that also backs off once `character.cc`
 reaches 150, and a Ponty pacer that spaces only its own reads 1.5 s apart.
 
