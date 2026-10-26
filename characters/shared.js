@@ -363,6 +363,7 @@
   var leader = null;
   var tank = null;
   var offTank = null;
+  var pullMode = false;
   var followLeader = false;
   var desiredPartyMembers = [];
   var partySyncBusy = false;
@@ -11787,6 +11788,7 @@
       leader = state.leader || null;
       tank = state.designatedTank || null;
       offTank = state.offTank || null;
+      pullMode = !!state.pullMode;
       root.partyGearSets = state.gearSets || {};
       root.partyRestockPolicies = state.restockPolicies || {};
       if (root.partyAlninjaReporter) root.partyAlninjaReporter.configure(state.alninjaReporting === true);
@@ -14940,6 +14942,8 @@
     if (character.cave) return character.cave.paused ? [] : Object.values(parent.entities || {}).filter(dungeonCombatThreat)
       .map(function(e) { return Object.assign(groupedEntityReport(e), {priority: monsterPriority(e)}); });
     var diagnostic=root.__partyNomination={focus:monsterFocus.slice(),area:typeof partyLocation!=='undefined'&&partyLocation&&partyLocation.id,revision:navigationIntent.revision,rejected:{},eligible:[]};
+    // Pull mode nominates nothing, the farm arrival's encounter included: the pull makes the fight.
+    if(typeof pullModeActive==='function' && pullModeActive()){diagnostic.blocked='pull mode';return [];}
     var encounter=root.__partyFarmingEngagement;
     if(encounter && !encounter.finished && !navigationIntent.cancelled) {
       var nominated=get_entity(encounter.target.id);
@@ -16056,6 +16060,11 @@
     // barrier on sight. This authorizes approach, never an immediate attack.
     if (command && command.purpose === "empty-spawn-recovery")
       return !!(target && target.visible && !target.dead && target.hp !== 0);
+    // Pull mode hands farm travel off on sight, so the party stages outside the pack
+    // instead of walking into attack range of its first monster (runtime/combat/pulling.ts).
+    if (command && typeof pullModeActive === "function" && pullModeActive() &&
+        ['', 'party-travel', 'farm-relocation', 'manual-monster-override'].indexOf(command.purpose || '') >= 0)
+      return !!(target && target.visible && !target.dead && target.hp !== 0);
     // Farming keeps smart-route ownership until the leader can attack now.
     // A walkable future approach does not establish group combat clearance.
     if (command && ['', 'party-travel', 'farm-relocation', 'manual-monster-override', 'empty-spawn-recovery'].indexOf(command.purpose || '') >= 0)
@@ -16751,6 +16760,10 @@
     if (typeof groupedDefensiveTarget === "function" && groupedDefensiveTarget()) {
       cancelFarmApproach("defending visible party attackers");
       return false;
+    }
+    if (!target && typeof pullModeActive === "function" && pullModeActive() && pullMovementTick()) {
+      cancelFarmApproach("pull mode holds the party at its waiting spot");
+      return true;
     }
     if (typeof eventExitOwnsMovement === "function" && eventExitOwnsMovement()) {
       cancelFarmApproach("event return owns movement");
@@ -17461,6 +17474,7 @@
   }
   function formationMove(target) {
     independentApproachReference=target?{target:target,at:Date.now()}:null;
+    if (typeof pullHoldsForArrival === "function" && pullHoldsForArrival(target)) return true;
     if(!character.cave && root.partyQueueClient && root.partyQueueClient.independent && root.partyQueueClient.independent.movement())return true;
     if ((typeof bossCombatActive === "function" ? bossCombatActive() : typeof frankyCombatActive === "function" && frankyCombatActive())) return false;
     if(!character.cave && root.partyQueueClient && root.partyQueueClient.formation && root.partyQueueClient.formation.movement())return true;
@@ -17871,6 +17885,8 @@
   function safeCombatPoint(point, target) {
     formationPerformance.collisionChecks++;
     if (typeof can_move_to !== "function" || !can_move_to(point.x, point.y)) return false;
+    // In pull mode no combat step enters an idle monster's aggro check (runtime/combat/pulling.ts).
+    if (typeof pullModeActive === "function" && pullModeActive() && !root.partyPulling.outsideReach(point, pullMonsters())) return false;
     // Do not gain distance from one attacker by stepping closer to another
     // attacker already inside its striking range.
     return (formationFrame ? formationFrame.attackers : Object.keys(parent.entities || {}).map(function (id) {
@@ -18278,6 +18294,103 @@
   // The hold releases below TANK_RELEASE_HP of max HP and returns above TANK_HOLD_HP; the
   // gap keeps a tank hovering near one threshold from flipping between hold and kite.
   var TANK_RELEASE_HP = 0.5, TANK_HOLD_HP = 0.8, tankHoldReleased = false;
+  // Pull mode (formation field pullMode, runtime/combat/pulling.ts): the leader nominates
+  // nothing, the party waits outside every idle monster's aggro check, and the
+  // longest-range member pulls one monster at a time. Every member runs the same choice
+  // from its own view, so the puller needs no extra coordinator state.
+  var pullState = { plan: null, at: 0, spot: null, known: {} };
+  function pullModeActive() {
+    return typeof pullMode !== "undefined" && !!pullMode && !character.cave && groupedFarming() && !joinedEvent && !eventTraveling &&
+      !!root.partyPulling && character.ctype !== "merchant";
+  }
+  // Visible monsters plus idle ones seen in the last minute, so a party that killed its
+  // pull out of sight of the pack walks back to it. A remembered monster is dropped once
+  // this character is within 250 units of it without seeing it.
+  function pullMonsters() {
+    var now = Date.now(), seen = {}, known = pullState.known;
+    var visible = Object.values(parent.entities || {}).filter(function (e) {
+      return e && e.type === "monster" && e.visible && !e.dead && (!e.map || e.map === character.map);
+    }).map(function (e) {
+      var m = { id: String(e.id), mtype: e.mtype, x: Number.isFinite(e.real_x) ? e.real_x : e.x,
+        y: Number.isFinite(e.real_y) ? e.real_y : e.y, target: e.target || null };
+      seen[m.id] = true;
+      if (!m.target) known[m.id] = { id: m.id, mtype: m.mtype, x: m.x, y: m.y, target: null, at: now, map: character.map };
+      else delete known[m.id];
+      return m;
+    });
+    Object.keys(known).forEach(function (id) {
+      var m = known[id];
+      if (seen[id]) return;
+      if (now - m.at > 60000 || m.map !== character.map || Math.hypot(character.real_x - m.x, character.real_y - m.y) < 250) delete known[id];
+      else visible.push({ id: m.id, mtype: m.mtype, x: m.x, y: m.y, target: null });
+    });
+    return visible;
+  }
+  function pullFocused(m) { return monsterFocus.indexOf("all") >= 0 || monsterFocus.indexOf(m.mtype) >= 0; }
+  function pullMembers() {
+    return currentPartyList().map(function (name) {
+      if (name === character.name) return { name: name, ctype: character.ctype, range: Number(character.range) || 0, rip: !!character.rip };
+      var p = (partyPositions || []).find(function (m) { return m && m.name === name; });
+      return p && p.map === character.map ? { name: name, ctype: p.ctype, range: Number(p.range) || 0, rip: !!p.rip || p.hp <= 0 } : null;
+    }).filter(Boolean).filter(function (m) { return m.ctype !== "merchant"; });
+  }
+  function pullSpot(monsters) {
+    var anchor = leader && leader !== character.name ? (get_player(leader) || (partyPositions || []).find(function (m) { return m && m.name === leader; })) : character;
+    if (!anchor || anchor.map !== character.map) anchor = character;
+    var origin = { x: Number.isFinite(anchor.real_x) ? anchor.real_x : anchor.x, y: Number.isFinite(anchor.real_y) ? anchor.real_y : anchor.y };
+    if (pullState.spot && Date.now() - pullState.at < 2000) return pullState.spot;
+    origin = root.partyPulling.stagingPoint(origin, monsters, pullFocused);
+    pullState.spot = root.partyPulling.waitingSpot(origin, monsters, function (p) { return can_move_to(p.x, p.y); });
+    pullState.at = Date.now();
+    return pullState.spot;
+  }
+  function pullWalk(point, reason) {
+    if (Math.hypot(character.real_x - point.x, character.real_y - point.y) <= 12) {
+      resetCombatMovement();
+      root.partyCombatPosition = { at: Date.now(), mode: "pull-waiting", movementOwner: "combat", reason: reason };
+      return true;
+    }
+    var heading = character.moving && Math.hypot((character.going_x || 0) - point.x, (character.going_y || 0) - point.y) <= 12;
+    // A straight line takes the native move, as combat movement does; otherwise the pathfinder.
+    if (!heading && can_move_to(point.x, point.y)) {
+      try { Promise.resolve(move(point.x, point.y)).catch(function () {}); } catch (_pullMove) {}
+    } else if (!heading) {
+      movement.move({ map: character.map, in: character.in, x: point.x, y: point.y }, undefined,
+        { rejectUnreachableGoal: true, town: false, arrivalTolerance: 8, owner: { recoveryStage: "pull" } }).catch(function () {});
+      movement.tick();
+    }
+    root.partyCombatPosition = { at: Date.now(), mode: "pull-moving", movementOwner: "combat", destination: point, reason: reason };
+    return true;
+  }
+  function pullMovementTick() {
+    var monsters = pullMonsters(), pulling = root.partyPulling, spot = pullSpot(monsters);
+    if (!spot) return false;
+    var party = currentPartyList(), puller = pulling.choosePuller(pullMembers());
+    var plan = pullState.plan && monsters.find(function (m) { return m.id === pullState.plan.target && !m.target; }) ? pullState.plan : null;
+    var focused = pullFocused;
+    // With nothing to pull in sight the farm's own search moves the party.
+    if (!plan && !monsters.some(function (m) { return !m.target && focused(m); })) return false;
+    if (puller === character.name && !plan && pulling.pullAllowed(monsters, party, unfinishedFight()) &&
+        Math.hypot(character.real_x - spot.x, character.real_y - spot.y) <= 40)
+      plan = pulling.choosePullTarget(monsters, spot, Number(character.range) || 0, function (p) { return can_move_to(p.x, p.y); }, focused);
+    pullState.plan = puller === character.name ? plan : null;
+    if (!pullState.plan) return pullWalk(spot, "Waiting outside the pack's aggro reach");
+    var target = get_entity(pullState.plan.target);
+    if (target && is_in_range(target) && pulling.outsideReach({ x: character.real_x, y: character.real_y }, monsters, String(target.id))) {
+      if (typeof can_attack !== "function" || can_attack(target)) Promise.resolve(attack(target)).catch(function () {});
+      root.partyCombatPosition = { at: Date.now(), mode: "pulling", movementOwner: "combat", target: target.id, reason: "Pulling one monster to the party" };
+      return true;
+    }
+    return pullWalk(pullState.plan.from, "Walking to the pull point");
+  }
+  // A pulled monster walks to the puller; the others wait at the spot until it is close.
+  function pullHoldsForArrival(target) {
+    if (!target || !pullModeActive()) return false;
+    var spot = pullState.spot;
+    if (!spot || !target.target || currentPartyList().indexOf(target.target) < 0) return false;
+    if (Math.hypot(target.x - spot.x, target.y - spot.y) <= Math.max(120, Number(character.range) || 0)) return false;
+    return pullWalk(spot, "Waiting for the pulled monster to arrive");
+  }
   function tankLineClear(target) {
     if (typeof can_move !== "function") return true;
     var x = Number.isFinite(target.real_x) ? target.real_x : target.x, y = Number.isFinite(target.real_y) ? target.real_y : target.y;
@@ -18604,6 +18717,7 @@
     independentPullActive: function(target){return !!(groupedCombat && groupedCombat.independentApproach && groupedCombat.target && groupedCombat.target.state==='planned' && groupedCombat.target.id===target.id);},
     queueEvidence: function(target,state,action){return root.partyQueueClient && root.partyQueueClient.evidence(target,state,action);},
     usesGroupedCombat: groupedFarming,
+    pullModeActive: function () { return pullModeActive(); },
     defensiveFormationMove: function () {
       // The tank takes hits instead of evading; groupedDefensiveTarget makes the attacker its target.
       if (!groupedFarming() || tankHoldsTarget()) return false;

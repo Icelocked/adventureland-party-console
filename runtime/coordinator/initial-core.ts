@@ -17,7 +17,7 @@ export function initialRecoveryState(saved: SavedRecoveryState) {
   };
 }
 function initialTankRoles(saved: SavedPartySelection) {
-  return { designatedTank: saved.designatedTank || null, offTank: saved.offTank || null };
+  return { designatedTank: saved.designatedTank || null, offTank: saved.offTank || null, pullMode: saved.pullMode === true };
 }
 export function initialPartySelection(saved: SavedPartySelection) {
   return {

@@ -46,21 +46,30 @@ export function PartyRolesSettings({
   characters,
   onSelectTank,
   onSelectOffTank,
+  pullMode,
+  onPullMode,
 }: {
   tank: string | null;
   offTank: string | null;
   characters: string[];
   onSelectTank: (name: string | null) => void;
   onSelectOffTank: (name: string | null) => void;
+  pullMode: boolean;
+  onPullMode: (enabled: boolean) => void;
 }) {
   return (
     <div className="flex flex-wrap items-end gap-2 rounded border border-emerald-900 bg-[#071315] p-3 text-sm text-emerald-100">
       <RolePicker label="Tank" value={tank} characters={characters} onSelect={onSelectTank} />
       <RolePicker label="Off tank" value={offTank} characters={characters} onSelect={onSelectOffTank} />
+      <label className="flex items-center gap-2 self-center text-xs uppercase tracking-wider text-emerald-400">
+        <input type="checkbox" checked={pullMode} onChange={(event) => onPullMode(event.target.checked)} />
+        Pull
+      </label>
       <p className="max-w-sm text-xs text-emerald-100/60">
         The tank holds its target at its own range, owns taunt and absorb, and swaps into its
         highest-luck gear right before a kill. The off tank takes the tank&apos;s attackers while
-        the tank is in danger and hands them back once it recovers.
+        the tank is in danger and hands them back once it recovers. With Pull on, the party waits
+        outside the pack and its longest-range member draws one monster at a time.
       </p>
     </div>
   );

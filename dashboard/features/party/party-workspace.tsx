@@ -49,6 +49,8 @@ export function PartyWorkspace({ model }: { model: PartyConsoleModel }) {
             characters={chars.map((char) => char.name)}
             onSelectTank={(tank) => formation({ tank })}
             onSelectOffTank={(offTank) => formation({ offTank })}
+            pullMode={!!state.pullMode}
+            onPullMode={(pullMode) => formation({ pullMode })}
           />
           <RadioGroup
             value={state.leader || ""}

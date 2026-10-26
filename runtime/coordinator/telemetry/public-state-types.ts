@@ -48,6 +48,7 @@ export const publicStateFields = [
   "leader",
   "designatedTank",
   "offTank",
+  "pullMode",
   "gearSets",
   "followers",
   "eventsByCharacter",

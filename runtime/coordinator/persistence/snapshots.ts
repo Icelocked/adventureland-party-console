@@ -98,6 +98,7 @@ export const settingsFields = [
   "leader",
   "designatedTank",
   "offTank",
+  "pullMode",
   "gearSets",
   "followers",
   "eventsByCharacter",

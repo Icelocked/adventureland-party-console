@@ -786,6 +786,16 @@ test('off tank: holds while the handoff names it and releases the main tank',asy
  assert.equal(m.c.tankHoldsTarget(),false,'a released main tank kites and recovers');
 });
 
+test('pull mode: the party waits at its spot while the pulled monster walks in',()=>{
+ const r=setup();r.c.pullMode=true;r.c.partyPulling=require('../../runtime/combat/pulling.ts');r.c.joinedEvent=null;r.c.eventTraveling=false;
+ r.c.movement={move:async()=>{},tick:()=>{}};r.c.resetCombatMovement=()=>{};Object.assign(r.warrior,{real_x:158,real_y:0});
+ r.c.pullState.spot={x:158,y:0};Object.assign(r.monster,{x:600,y:0,target:'P'});
+ assert.equal(r.c.formationMove(r.monster),true,'the far pulled goo leaves the warrior at the spot');
+ assert.equal(r.c.partyCombatPosition.mode,'pull-waiting');
+ r.monster.x=200;assert.equal(r.c.pullHoldsForArrival(r.monster),false,'once it is close the fight starts');
+ r.c.pullMode=false;r.monster.x=600;assert.equal(r.c.pullHoldsForArrival(r.monster),false,'pull mode off');
+});
+
 // 2026-10-25 00:18 UTC: a live priest tank fought while its warrior and mage stood still.
 // The damage dealers' gate is Ryan's grouped one: they attack the tank's target once the
 // party engages it, whichever class the tank is.

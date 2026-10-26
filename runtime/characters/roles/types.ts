@@ -153,6 +153,8 @@ export interface CombatRoot {
   /** Saved gear sets per character, from the coordinator status response. */
   partyGearSets?: Record<string, Partial<Record<"luck" | "tank" | "gold" | "fan", { slots: Record<string, unknown> }>> | undefined>;
   partyFanFarmGear?: ReturnType<typeof import("./fan-farm-gear.ts").createFanFarmGear>;
+  /** Pull-mode choices for characters/shared.js (runtime/combat/pulling.ts). */
+  partyPulling?: typeof import("../../combat/pulling.ts");
   sharedRoutine: SharedCombat;
   partyRoleRunner?: RoleRunner;
   partyCombatState: CombatState;

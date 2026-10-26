@@ -709,6 +709,14 @@ hands aggro to it when the tank is endangered (`damage.ts`), below half HP or go
 once the tank is at 80% with nothing on it. During the takeover the skill context's `tank`
 is the off tank, so taunt, absorb and agitate follow it and the released tank kites.
 
+`pullMode: true` on the same route turns on pulling, off by default. The leader then
+nominates nothing; every member waits at the nearest point outside the aggro check of
+every idle monster (`AGGRO_REACH` in `runtime/combat/pulling.ts`, from the server's 32-unit
+aggressive grid), and the longest-range member walks to a point outside the others' reach
+and hits one idle monster, preferring the one farthest from the rest. The pulled monster
+becomes an ordinary party fight once it targets the puller; the others wait at the spot
+until it is close. The next pull waits until the fight is over and nothing targets the party.
+
 The designated tank also gets a kill-time luck swap built on **gear sets**
 (`runtime/coordinator/characters/gear-sets.ts`, `POST /party-api/gear-sets` with
 `{character, set: "luck" | "tank" | "gold", action: "save" | "clear"}`). A set is

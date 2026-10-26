@@ -42,3 +42,8 @@ test('formation sets and clears the off tank beside the tank, rejecting unknown 
  assert.equal(t.send('formation',{offTank:'Nobody'}).code,400);assert.equal(t.state.offTank,'F');
  t.send('formation',{offTank:null});assert.equal(t.state.offTank,null);assert.equal(t.state.designatedTank,'L');
 });
+test('formation turns pull mode on and off and rejects a non-boolean',()=>{
+ const t=fixture();assert.equal(t.send('formation',{pullMode:true}).body.pullMode,true);assert.equal(t.state.pullMode,true);
+ assert.equal(t.send('formation',{pullMode:'yes'}).code,400);assert.equal(t.state.pullMode,true);
+ t.send('formation',{pullMode:false});assert.equal(t.state.pullMode,false);
+});

@@ -5,6 +5,7 @@ interface FormationState {
   leader: string | null;
   designatedTank: string | null;
   offTank: string | null;
+  pullMode: boolean;
   merchantCharacter: string | null;
   followers: Record<string, boolean>;
   eventsByCharacter: Record<string, boolean>;
@@ -94,6 +95,18 @@ export function createFormationRoute(state: FormationState, ports: FormationPort
     if (error) return error;
     return body.events !== undefined ? legacyEvents(name, body.events) : null;
   }
+  /** The tank, off tank and pull mode fields; the error text, or null once applied. */
+  function tankRoles(body: Record<string, unknown>): string | null {
+    const tank = body.tank !== undefined ? assignManaged(body.tank) : undefined;
+    if (tank === null) return "unknown tank";
+    const off = body.offTank !== undefined ? assignManaged(body.offTank) : undefined;
+    if (off === null) return "unknown off tank";
+    if (body.pullMode !== undefined && typeof body.pullMode !== "boolean") return "invalid pull mode";
+    if (tank) state.designatedTank = tank.name;
+    if (off) state.offTank = off.name;
+    if (typeof body.pullMode === "boolean") state.pullMode = body.pullMode;
+    return null;
+  }
   return function formation(req: HttpRequest, res: HttpResponse): unknown {
     const previous = { leader: state.leader, followers: { ...state.followers } };
     const body = requestObject(req.body);
@@ -102,16 +115,8 @@ export function createFormationRoute(state: FormationState, ports: FormationPort
       if (!next) return res.status(400).json({ error: "unknown leader" });
       state.leader = next.name;
     }
-    if (body.tank !== undefined) {
-      const next = assignManaged(body.tank);
-      if (!next) return res.status(400).json({ error: "unknown tank" });
-      state.designatedTank = next.name;
-    }
-    if (body.offTank !== undefined) {
-      const next = assignManaged(body.offTank);
-      if (!next) return res.status(400).json({ error: "unknown off tank" });
-      state.offTank = next.name;
-    }
+    const roleError = tankRoles(body);
+    if (roleError) return res.status(400).json({ error: roleError });
     const error = body.character !== undefined ? character(body) : null;
     if (error) return res.status(error.code).json({ error: error.error });
     ports.changed?.(previous);
@@ -121,6 +126,7 @@ export function createFormationRoute(state: FormationState, ports: FormationPort
       leader: state.leader,
       tank: state.designatedTank,
       offTank: state.offTank,
+      pullMode: state.pullMode,
       followers: state.followers,
       eventsByCharacter: state.eventsByCharacter,
       eventLimitsByCharacter: state.eventLimitsByCharacter,
