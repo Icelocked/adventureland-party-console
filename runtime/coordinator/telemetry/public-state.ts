@@ -169,7 +169,12 @@ function fullPayload(
     bankboiTransaction: state.bankboiTransaction,
     bankboiCreateSingleFlight: true,
     realmControl: ports.realmControl(),
+    consoleControl: consoleControl(ports),
   };
+}
+
+function consoleControl(ports: PublicStatePorts): unknown {
+  return ports.consoleControl ? ports.consoleControl() : null;
 }
 
 function bankboiSummaries(value: unknown) {
@@ -209,6 +214,7 @@ function fastPayload(state: Readonly<PublicState>, ports: PublicStatePorts) {
     activeConvoy: state.activeConvoy,
     partyLocation: state.location,
     realmControl: ports.realmControl(),
+    consoleControl: consoleControl(ports),
     pendingCommands: pendingCommands(state.commands),
   };
 }
