@@ -36,9 +36,9 @@ commits) function by function (`git rev-list --count`; the per-commit
 tables are in the review notes, not in this folder). The same six patterns explain most of what
 goes wrong, in the current code and in ours alike.
 
-1. **Many parts move the same character.** Movement has 249 call sites in 131
-   functions, 102 of them `stop()`, and almost any of those stops ends whatever
-   journey is live (spec 02, `node writers.cjs`). The fork's pull walk
+1. **Many parts move the same character.** Movement has 249 call sites in 130
+   functions (plus 2 top-level lines), 102 of them `stop()`, and a bare, `move` or `smart` stop ends whatever
+   journey is live, whoever started it (spec 02, movement.ts:411). The fork's pull walk
    re-sent its move every tick, and the priest stood still for 400 s
    (3365dd57).
 2. **One fact is worked out in many places.** "A member is at an event" is
