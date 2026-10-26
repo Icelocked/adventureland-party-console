@@ -2,7 +2,7 @@
 
 ## What this is
 
-A plan to rebuild the core of Ryan Haines's Adventure Land party console so
+A plan to rebuild the core of Ryan's Adventure Land party console so
 that every decision has one owner, the console behaves the same or better
 for every feature it has today, and optional features plug in as add-ons
 instead of living in forks that patch the core.
@@ -19,10 +19,11 @@ Ryan's base and the fork built on it found the
 same cause behind most of them: several parts of the code make the same
 decision for the same character, and nothing decides which one wins. Fixes
 then add a flag, a timer or a special case so one part stops overriding
-another. The history of Ryan's base shows 265 gameplay bug fixes (216 by
-Ryan, the rest from contributors' PRs), of which 166 added a guard of that
-kind instead of fixing a cause. The fork repeats the pattern: pull mode
-needed 8 fixes in two days, Achievement Hunt 21.
+another. Both histories show it: in the base, most of the 265 gameplay bug
+fixes (from every contributor, the fork's PRs included) add a guard, a
+special case, a retry budget or a recovery path, because there is no owner
+to fix. The fork shows it more sharply: pull mode needed 8 fixes in two
+days, Achievement Hunt 20.
 
 Patching symptoms one at a time keeps the console running, but every patch
 adds another rule that the next feature has to work around. The redesign
@@ -31,16 +32,17 @@ fixes the ownership gaps themselves.
 ## What the review found
 
 The review read Ryan's base (682 commits to b9b5c91e) and the fork (239
-commits) function by function (`review/full/inventory-ryan.md` section 1,
-`inventory-fork.md` section 3). The same six patterns explain most of what
+commits) function by function (`git rev-list --count`; the per-commit
+tables are in the review notes, not in this folder). The same six patterns explain most of what
 goes wrong, in Ryan's code and in ours alike.
 
 1. **Many parts move the same character.** Movement has 249 call sites in 131
-   functions, 102 of them `stop()`, and any stop ends any journey (spec 02,
-   `node writers.cjs`). The fork's pull walk re-sent its move every tick, and
-   the priest stood still for 400 s (inventory-fork.md chain 3, 3365dd57).
+   functions, 102 of them `stop()`, and almost any of those stops ends whatever
+   journey is live (spec 02, `node writers.cjs`). The fork's pull walk
+   re-sent its move every tick, and the priest stood still for 400 s
+   (3365dd57).
 2. **One fact is worked out in many places.** "A member is at an event" is
-   computed in 32 places (spec 01 GRP-013). Escape and death recovery each
+   computed in 33 places (spec 01 GRP-013). Escape and death recovery each
    define "safe", so after a death the party can wait at a Blink landing
    that recovery never accepts (spec 05 bug 5).
 3. **Shared resources have many writers.** The merchant's realm has 13
@@ -52,18 +54,17 @@ goes wrong, in Ryan's code and in ours alike.
    fields sits in 2 to 9 hand-kept lists, 73 of them in 5 to 8 (spec 11).
    A field missing from the save list is lost at the next restart.
 5. **Calls share one budget that nobody owns.** The game disconnects a socket
-   whose calls pass 200 in 4 s; 13 Ponty reads cost 221, and nothing on the
-   merchant checks the budget first (spec 09 ledger 12). The fork's two
-   limiters do not count each other's calls. The dashboard has the same gap:
+   whose calls pass 200 in 4 s; 13 per-listing Ponty reads inside 4 s cost
+   221, and nothing on the merchant checks the budget first (spec 09 ledger
+   12). The fork's Ponty pacer counts only its own calls. The dashboard has the same gap:
    in the default shadow mode the 250 ms fallback poll ships every stored
    field, including a combat trace of about 146 KB per character (spec 12
    section 2.2 item 2).
 6. **Fixes add guards, not owners.** In both histories most bug fixes add a
    flag, a timer or a special case so one part stops overriding another,
-   because there is no owner to fix (inventory-ryan.md section 2,
-   inventory-fork.md section 3). The fork is the clearest example: 64 fixes
-   of its own code, pull mode 8 in two days, Achievement Hunt 21, Pause 3
-   (section 6), plus 27 `typeof` guards added to the shared character code
+   because there is no owner to fix. The fork is the clearest example: 64
+   fix commits on its own code (11 of them lint refactors), pull mode 8 in
+   two days, Achievement Hunt 20, Pause 3, plus 27 `typeof` guards added to the shared character code
    (spec 13 LIF-W5).
 
 The fork's patchwork is part of the finding. Its features were built beside
@@ -73,20 +74,20 @@ owners to register with yet, and they needed more fixing than his code did.
 What this costs players:
 
 - **Stalls.** The warrior held 405 s for a pulled monster that stopped short
-  (inventory-fork.md D8). Hunt stays stuck after a death until someone acts
+  (c13ff2d1). Hunt stays stuck after a death until someone acts
   (spec 05 bug 5).
 - **Deaths.** 127 of 127 priest attacks while a member was under 90% HP went
   out instead of a heal (spec 03 bug 3a). An escaping mage drank MP at 531 of
-  1873 HP and died to the next hit (spec 05). A fork event walk left the
-  healer behind and the leader died alone at Mr. Pumpkin (spec 02, 653238e1).
+  1873 HP and died to the next hit (spec 05). A fork event walk left two
+  members behind and the leader died alone at Mr. Pumpkin (spec 02, 653238e1).
 - **Disconnects.** Merchant call bursts pass the 200-per-4-s limit (spec 09).
 - **Wasted event time.** Fighters stood at the Witch for a whole Cipher drop
   window (spec 06 section 2.4, e9e4bda3). Staging pauses Hunt 120 s before
   spawn (spec 06 section 2.3), and a rejected join is retried every 10 s
   while Hunt waits (section 2.2).
 
-Measured gains so far come from the death fixes on the fork (21b8362d): the
-priest heal fix (648b3be0) removes the cause of the 127 of 127 count above,
+The first fixes are the death fixes on the fork (21b8362d): the priest
+heal fix (648b3be0) targets the cause of the 127 of 127 count above,
 and the Cipher fix (e9e4bda3) sends fighters to gather instead of waiting.
 Their after-fix measurements are not yet recorded in a spec with the command
 that produced them, so this page gives no numbers for them until they are.
