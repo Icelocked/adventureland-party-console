@@ -2,7 +2,7 @@
 
 ## What this is
 
-A plan to rebuild the core of Ryan's Adventure Land party console so
+A plan to rebuild the core of the current Adventure Land party console so
 that every decision has one owner, the console behaves the same or better
 for every feature it has today, and optional features plug in as add-ons
 instead of living in forks that patch the core.
@@ -15,7 +15,7 @@ overview ties them together.
 ## Why this exists
 
 The console works, but its bugs keep coming back in new shapes. A review of
-Ryan's base and the fork built on it found the
+The current console and the fork built on it found the
 same cause behind most of them: several parts of the code make the same
 decision for the same character, and nothing decides which one wins. Fixes
 then add a flag, a timer or a special case so one part stops overriding
@@ -31,10 +31,10 @@ fixes the ownership gaps themselves.
 
 ## What the review found
 
-The review read Ryan's base (682 commits to b9b5c91e) and the fork (239
+The review read the current console (682 commits to b9b5c91e) and the fork (239
 commits) function by function (`git rev-list --count`; the per-commit
 tables are in the review notes, not in this folder). The same six patterns explain most of what
-goes wrong, in Ryan's code and in ours alike.
+goes wrong, in the current code and in ours alike.
 
 1. **Many parts move the same character.** Movement has 249 call sites in 131
    functions, 102 of them `stop()`, and almost any of those stops ends whatever
@@ -68,8 +68,8 @@ goes wrong, in Ryan's code and in ours alike.
    (spec 13 LIF-W5).
 
 The fork's patchwork is part of the finding. Its features were built beside
-Ryan's code instead of through shared owners, because the console has no
-owners to register with yet, and they needed more fixing than his code did.
+the current code instead of through shared owners, because the console has no
+owners to register with yet, and they needed more fixing than the code they sit on.
 
 What this costs players:
 
@@ -109,17 +109,16 @@ that produced them, so this page gives no numbers for them until they are.
   whatever group it is in.
 - **No lost functions.** Every behaviour the console has today is listed in
   a catalog, traced to the code that does it, and covered by a test. The
-  rebuilt console passes Ryan's tests, and every intentional change is
+  rebuilt console passes the current tests, and every intentional change is
   written down as a change, never left as a side effect.
-- **Owners are core design; add-ons are for third parties.** Ryan keeps
-  writing his console the way he does now: his features are ordinary core
-  code that uses the owners like any other part of the core. Nothing he adds
-  has to be built as an add-on. Add-on hooks exist so that other people (the
-  user, other contributors, anyone) can extend his existing code without breaking how it
-  works: a hook accepts a registration (a task, a move request, a target
+- **Owners are core design; add-ons are for third parties.** Core features
+  keep being written the way they are now: as ordinary core code that uses
+  the owners like any other part of the core. Nothing in the core has to be
+  built as an add-on. Add-on hooks exist so that anyone extending the console
+  can do it without breaking how the existing code works: a hook accepts a registration (a task, a move request, a target
   rule, a merchant job type, a setting, a dashboard panel, a status line)
-  and the owner applies it under its own rules. Ryan can merge any add-on
-  into the core if he wants it.
+  and the owner applies it under its own rules. Any add-on can be merged
+  into the core if it proves useful there.
 - **One owner at a time.** The core changes in steps, each one shippable and
   reversible. A new owner runs beside the old code and compares decisions on
   real play before it takes over.
@@ -127,7 +126,7 @@ that produced them, so this page gives no numbers for them until they are.
   system that makes shared decisions follows the same pattern, even where no
   bug has shown up yet, so future features land in the same structure.
 - **No efficiency regressions.** The efficiency work already in the console
-  (Ryan's base and #148: fewer requests, smaller dashboard payloads, cheaper
+  (the current console and #148: fewer requests, smaller dashboard payloads, cheaper
   persistence) is a floor, not a starting point. Every owner is measured
   before and after against the same benchmarks, and an owner that costs more
   than the code it replaces does not ship until it is fixed.
@@ -159,24 +158,23 @@ that produced them, so this page gives no numbers for them until they are.
   saved to disk only when something goes wrong (a death, a stall, a failed
   task) and those saved records are pruned by age and count. The comparison
   logs used during a switch-over are deleted with the comparison code. No
-  store grows without bound, as `production.attempts` did (Ryan's #59).
+  store grows without bound, as `production.attempts` did (the current #59).
 - **Clear the noise, then the numbers.** Once handling bugs stop masking
   them, wrong values, typos and game-rule mismatches become visible. Each one
   found during the review is fixed or listed in its spec, not deferred.
 - **Explain every change in plain terms.** Each change comes with a short
-  write-up that Ryan, or the agent he works with, can check on his own: what
-  goes wrong today with evidence, what the change does, which tests prove
-  nothing was lost, and what improves. A change he does not take still has
-  to stand on its own in this console.
+  write-up that anyone, or the agent they work with, can check on their own:
+  what goes wrong today with evidence, what the change does, which tests
+  prove nothing was lost, and what improves. A change that is not taken
+  upstream still has to stand on its own.
 
-## Working with Ryan
+## Working together
 
-Ryan started this project and the console is his design. This plan works
-alongside his code, not against it: it watches his updates for fixes and
-ideas, compares his approach with ours for efficiency, and offers changes
-that measurably improve the console. Preference changes (layout, wording)
-are offered as options, never argued. If he does not adopt a change, the
-console here keeps it and keeps taking his updates.
+This plan builds on the current console, not around it: it follows upstream
+updates for fixes and ideas, compares approaches for efficiency, and offers
+changes that measurably improve the console. Preference changes (layout,
+wording) are offered as options, never argued. A change that is not adopted
+upstream stays in the fork, and the fork keeps taking upstream updates.
 
 ## The parts
 
@@ -196,7 +194,7 @@ console here keeps it and keeps taking his updates.
 | [12](12-dashboard-and-status.md) | Dashboard and status | What the dashboard shows and where status text comes from |
 | [13](13-lifecycle.md) | Lifecycle | Start, stop, deploy, pause, code reload and the character loader |
 | [14](14-add-on-hooks.md) | Add-on hooks | The registration API each owner exposes |
-| [15](15-testing.md) | Testing | Proof of function: Ryan's tests, the catalog, and pruning |
+| [15](15-testing.md) | Testing | Proof of function: the current tests, the catalog, and pruning |
 
 These parts are not independent. A group's task drives movement requests,
 targeting feeds turns, survival can take movement away from any task, and
@@ -206,7 +204,7 @@ asks and the owners that ask it.
 ## How each spec is laid out
 
 1. **What it does today.** Every behaviour, numbered (for example `MOV-014`),
-   with the functions and files that implement it. Every function in Ryan's
+   with the functions and files that implement it. Every function in the current
    base belongs to exactly one spec's catalog; `catalog/` holds the proof.
 2. **What goes wrong.** Each known bug and patchwork pattern in this part,
    with its causal chain and the commits that patched it.
@@ -215,16 +213,16 @@ asks and the owners that ask it.
 4. **What changes for the player.** Every behaviour that changes on purpose,
    with the reason. Anything not listed here stays the same.
 5. **Proof.** The tests that show each behaviour still works and each fix
-   holds: Ryan's existing tests, plus new tests where a behaviour has none.
+   holds: the current existing tests, plus new tests where a behaviour has none.
 6. **Migration.** The steps to replace the old code with the owner, what can
    be deleted after, and how to roll back.
 7. **Gaps.** Must be empty before the spec is done.
 
 ## Ground rules while the plan runs
 
-- **Ryan's code keeps moving.** The catalog and the function index are
-  rebuilt on his latest branch at a regular interval, and every spec notes
-  the ref it was checked against. His changes are read for fixes and ideas,
+- **The current code keeps moving.** The catalog and the function index are
+  rebuilt on the latest upstream branch at a regular interval, and every spec notes
+  the ref it was checked against. Upstream changes are read for fixes and ideas,
   and the plan absorbs them rather than freezing on an old version.
 - **Feature freeze.** No new features or fork additions until the plan is
   done. Only urgent, game-breaking bugs are fixed meanwhile, and each such
@@ -232,7 +230,7 @@ asks and the owners that ask it.
 - **Game bugs go to the game.** When a problem is in the game itself, it is
   reported through the game's own channel with a clean reproduction that
   rules out console code: the smallest script or plain client steps that
-  show it, on Ryan's base or with no console at all.
+  show it, on the current console or with no console at all.
 - **New code will have bugs.** Each owner ships with its comparison log,
   its tests and a rollback. A bug in new code is traced to the rule or input
   that caused it, fixed at the owner, and gets a test, the same standard the
@@ -244,10 +242,10 @@ asks and the owners that ask it.
 ## Milestones
 
 - **M0: the map.** Every spec's "what it does today" section is complete and
-  every function in Ryan's base is claimed. Every test is mapped to the
+  every function in the current console is claimed. Every test is mapped to the
   behaviours it proves.
 - **M1: the designs.** Every owner's rule table and hooks are written and
-  reviewed with Ryan.
+  reviewed together upstream.
 - **M2 onward: one owner per milestone,** in the order set in
   `docs/implementation/04-migration-order.md`, smallest and most
   bug-removing first.

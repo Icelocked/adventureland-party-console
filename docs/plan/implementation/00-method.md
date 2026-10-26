@@ -6,7 +6,7 @@ and the rest of `docs/implementation/` describe how the work is checked.
 
 ## Sources
 
-- Ryan's base: his `1.5-feature-branch` at `b9b5c91e` (2026-10-22), the ref
+- The current console: his `1.5-feature-branch` at `b9b5c91e` (2026-10-22), the ref
   `refs/review/ryan-1.5` in the review checkout
   (local checkout).
 - The user's fork: `af92de45` (topic15r/release-ui) plus the death fixes at
@@ -18,7 +18,7 @@ and the rest of `docs/implementation/` describe how the work is checked.
 
 ## Completeness is checked by tools, not by reading
 
-1. `tools/function-index.mjs` lists every named function in Ryan's
+1. `tools/function-index.mjs` lists every named function in the current
    hand-written code: `catalog/functions-ryan-1.5.json` holds 7,857 functions
    in 987 files. Generated bundles are listed under the source they come
    from.
@@ -35,13 +35,13 @@ and the rest of `docs/implementation/` describe how the work is checked.
 A spec's "Gaps" section lists whatever the tool reports for it. A spec is
 done when that list is empty.
 
-## Proof of function: Ryan's tests
+## Proof of function: the current tests
 
-Ryan's suite is the main proof that the rebuild keeps every function:
+The current suite is the main proof that the rebuild keeps every function:
 350 end-to-end tests in 105 spec files (plus 22 shared case files) and 3,024
 unit tests in 453 files.
 
-1. **Baseline.** Run the whole suite on Ryan's base and record every result,
+1. **Baseline.** Run the whole suite on the current console and record every result,
    including the tests that already fail or hang, and why.
 2. **Review the tests for accuracy.** For each test: does it prove what its
    name says, does it pass for the right reason, and does it match how the
@@ -109,7 +109,7 @@ numbers kept next to the spec:
 
 - **Console cost:** CPU time per character tick and per coordinator tick,
   memory, persistence writes per minute, dashboard payload size and poll
-  cost. Ryan's benchmark tools (`tools/benchmark-persistence.mts`,
+  cost. The current benchmark tools (`tools/benchmark-persistence.mts`,
   `tools/benchmark-metrics-journal.mts`, `scripts/benchmark-dashboard-*.cjs`)
   are the starting set.
 - **Game cost:** calls per 4 s against the game's limit, by call type, and

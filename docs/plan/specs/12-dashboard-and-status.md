@@ -1,6 +1,6 @@
 # 12 Dashboard and status: what the dashboard shows and where status text comes from
 
-Milestone M0 (the map). Checked against Ryan's `1.5-feature-branch` at `b9b5c91e`
+Milestone M0 (the map). Checked against the current `1.5-feature-branch` at `b9b5c91e`
 (`refs/review/ryan-1.5` in (local checkout)). Lines marked (fork) or
 `HEAD` are on the user's fork at `af92de45`. `shared.js` means `characters/shared.js`. A bare file
 name such as `public-state.ts` or `query-cache.tsx` is the one file of that name listed in the
@@ -25,7 +25,7 @@ posts to a coordinator route. This spec maps three things:
    helper, with the routes it posts and the fields it reads.
 
 Section 2 explains what goes wrong and traces ledger bugs 11 and 13. This spec was written in five
-slices, each read in full on the Ryan ref by one pass and merged here:
+slices, each read in full on the current console by one pass and merged here:
 
 | Slice | Code | Behaviours |
 |---|---|---|
@@ -71,7 +71,7 @@ counts name their command inline.
 | Active farming zone notice | `farmAreaState.message` | rare-hunting.ts:809, :813, route-recovery.ts:177 | farming-mode-control.tsx:252, which hides any text matching "farming resumed" (DSH-120) |
 | Merchant job rows | job `reason`, `routine`, `operationStage` | `routineFor` (merchant/routines.ts:11-18), the merchant heartbeat (shared.js:6044, merchant-progress.ts:70-71), `plannedOperationStage` for queued jobs (public-composition.ts:34) | `merchantJobLabel`, a second hand-kept table of routine names (merchant-job-label.ts:4-25, DSH-164) |
 | Merchant activity log | `merchantActivity[]` | `merchantLog` (application.ts:1316-1322), which the party convoy service also writes into (application.ts:416, 1801) | log sidebar and merchant card (DSH-084, DSH-165) |
-| Convoy progress | `activeConvoy.phase`, `.label`, `.failure` | navigation/convoy.ts:217 and the convoy service | nothing in Ryan's dashboard: `git grep -niE convoy refs/review/ryan-1.5 -- dashboard/features dashboard/components` finds only a type and one tooltip. Convoy text reaches the player only as merchant log and combat log lines (convoy-engagement.ts:26). The fork's strip label reads it (HEAD activity-phases.ts:79-83) |
+| Convoy progress | `activeConvoy.phase`, `.label`, `.failure` | navigation/convoy.ts:217 and the convoy service | nothing in the current dashboard: `git grep -niE convoy refs/review/ryan-1.5 -- dashboard/features dashboard/components` finds only a type and one tooltip. Convoy text reaches the player only as merchant log and combat log lines (convoy-engagement.ts:26). The fork's strip label reads it (HEAD activity-phases.ts:79-83) |
 | Combat log lines | `combatLogs[name][]` | characters (DSH-038, DSH-039, DSH-037) and 17 coordinator writer lines (`git grep -n "combatLogs\[" refs/review/ryan-1.5 -- runtime \| wc -l`) | card combat log (DSH-104) |
 | Active statuses | `conditions[]` | shared.js:1830-1856 from `character.s` and game data (DSH-042) | DSH-102, counted down in the browser (status-duration.ts:14-31) |
 | Cave progress, Cipher, escape, anniversary, console update and build lines | `dailyDungeons.progress.message`, cipher runtime `phase` and `detail`, `escape.stage`, `anniversaryState.stage`, update `phase`, build journal `phase` | dungeons/progress.ts:88-110, october-runtime.ts:88-154, shared.js:147-208, shared.js:3013, tools/update/service.ts:44-58, tools/console-build/controller.ts:37-53 | DSH-137, DSH-131, DSH-095, DSH-130, DSH-244, DSH-091 |
@@ -409,6 +409,15 @@ counts name their command inline.
 - **DSH-268** Item sprite crop and the in-progress upgrade or compound overlay with its success chance. ItemSprite renders a SpriteCrop of the catalog sprite (item-sprite.tsx:5-7). ItemOperationOverlay shows the pulsing result sprite, the success chance colored from red to green, and the from and to levels while an upgrade or compound runs; it reads entry.operation from the inventory report (item-operation-overlay.tsx:6-41).
 - **DSH-269** usePanelModel: merges per-character live subscriptions and optional bank, market and logs domains into one panel state. It reads cached character subscriptions (inventory and presence, vitals, position, diagnostics) without fetching, since the live stream fills them (use-panel-model.ts:34-66). Bank, market and logs domains load through domainOptions only when the caller asks and the tab is visible (use-panel-model.ts:68-77). It joins catalog meta onto inventory and bank entries (use-panel-model.ts:47-54, 80). It derives stat scroll totals from the merchant bag and bank, stand price history for the open stand item, the fresh market count, monster achievements and occupied stand slots (use-panel-model.ts:84-131).
 
+### Added in triage
+
+catalog/triage-log.json lists each behaviour in this group.
+
+- **DSH-270** The coordinator status reply carries the character command (one-shot commands are consumed, long-running ones stay until acknowledged, navigation commands get the current revision, none while escape owns the character), saved state fields and the travel, merchant, party, event, farming and grouped combat parts; a combat poll gets only the combat fields. Code: `runtime/coordinator/application.ts`, `runtime/coordinator/status/response-composition.ts`, `runtime/coordinator/status/response-party.ts`, `runtime/coordinator/status/response.ts`.
+- **DSH-271** The character status heartbeat posts the status body, then applies the reply in a fixed order: maintenance, merchant visibility, escape, navigation, combat control, event selections, party targets, anniversary, merchant and party settings, then the command. Code: `characters/shared.js`.
+- **DSH-272** Socket listeners turn own skill actions, kill credits (XP from the XP text or the XP gain within 700 ms), loot and item use into combat log lines. Code: `characters/shared.js`.
+- **DSH-273** scan-readers: a type-checker scan lists which per-character state fields a TypeScript client reads and flags dynamic accesses for manual review, for the field registry. Code: `tools/state-fields/scan-readers.mts`.
+
 ## 2. What goes wrong
 
 ### 2.0 Root causes
@@ -419,10 +428,10 @@ query-cache.tsx 0 of 5, dashboard-live.tsx 0 of 4, dashboard-stream.ts 2 of 8, q
 11, public-state.ts 3 of 15), and each has its own unit tests (section 4). The problems sit around it:
 
 1. **No status text owner.** Owners write free text next to a state enum and nothing sets which of
-   two reasons wins (2.1, bug 13). Readers choose for themselves: Ryan's Hunt line prints both the
+   two reasons wins (2.1, bug 13). Readers choose for themselves: the current Hunt line prints both the
    stage and the message (farming-mode-control.tsx:256-260), the merchant job label keeps its own
    copy of the routine names (DSH-164), and the fork's strip label parses message prefixes
-   (HEAD character-activity.ts:82-85). Convoy progress has no reader on Ryan's dashboard at all.
+   (HEAD character-activity.ts:82-85). Convoy progress has no reader on the current dashboard at all.
 2. **Sections are split by how often a field changes, not by what it is.** The config section
    (15 s) carries `farmingProfiles`, which holds every profile's live controller state: the Hunt
    cycle, the convoy, the farm area, combat recovery and grouped combat (hunt/scopes.ts:6-10,
@@ -456,11 +465,11 @@ query-cache.tsx 0 of 5, dashboard-live.tsx 0 of 4, dashboard-stream.ts 2 of 8, q
 4. Left: two instances per character, `large` still per instance (HEAD character-map-section.tsx:41),
    the store hand-writes the session storage format (`party-ui:map-open:`), and the strip reports its
    visibility from an effect (HEAD map-dock-state.ts:25-31), so one render uses the old placement.
-   Ryan's base has the same pattern without the strip: the full Cave map opens one stream per
+   The current console has the same pattern without the strip: the full Cave map opens one stream per
    participant while each open card map opens its own (cave-map.tsx:53-56, character-map-section.tsx:41).
 Root cause: UI state that two elements share lives inside one element. Patch: partial.
 
-**Bug 13: "Paused for combat event" when the real state was "select Hunt again" (Ryan cause, fork
+**Bug 13: "Paused for combat event" when the real state was "select Hunt again" (the current cause, fork
 reader).**
 1. Each Hunt tick runs `travel.combatEvent` (hunt/tick.ts:92) before `advance`, and `advance`
    reaches `recovery.pause` only later (hunt/tick.ts:63).
@@ -474,7 +483,7 @@ reader).**
 4. `joinedEvent` is set on normal maps too (character-fields.ts:171), so a participant that joined an
    event earlier can keep step 2 firing after the event (inference: the report path was not traced
    from the event end).
-5. Readers: Ryan's Farming settings line prints the stage and the message
+5. Readers: the current Farming settings line prints the stage and the message
    (farming-mode-control.tsx:256-260). The fork's label checks the "Hunt movement is paused" prefix
    first (HEAD character-activity.ts:82) and the `paused-event` stage later (:102), so it shows
    "Waiting - Hunt paused for event" whenever step 2 wrote last.
@@ -554,7 +563,7 @@ helps once the message changes.
 9. **Metrics "today" has two day boundaries.** Loot days use America/Toronto time
    (metrics-days.ts:1, metrics-loot.tsx:19); kills and DPS use the browser's midnight
    (metrics-kills.tsx:25-27, metrics-measurements.tsx:24-26).
-10. **Duplicate map streams in Ryan's base**: see bug 11, step 4.
+10. **Duplicate map streams in the current console**: see bug 11, step 4.
 11. **Double update polling.** The header indicator and the settings section each run their own
     3 s poller of `/console-update` (console-updates.tsx:25, :38-39, :50-51).
 
@@ -634,7 +643,7 @@ The fork's console Pause controls do the same (HEAD console-controls.tsx:18-40, 
   their last gold (account-gold.ts:3-8).
 - **No connection notice with cards on screen.** `connectionNotice` is computed but never rendered (use-party-console.tsx:189-190, :878; `git grep connectionNotice`), and `DashboardHealth` is unused, so a stopped coordinator leaves the last numbers on the cards with no sign. Only the empty workspace shows "Reconnecting to Party Console..." (party-workspace.tsx:41).
 - **Dead code**: `DashboardHealth`, `DashboardModeControl`, `DefinitionGrid`, `components/ui/sheet.tsx`
-  and `PlayerStandMarketDialog` have no renderer or importer (git grep of each name on the Ryan ref).
+  and `PlayerStandMarketDialog` have no renderer or importer (git grep of each name on the current console).
   `standMarketCount` is the constant 0 (use-party-console.tsx:854).
 - **Mail marks itself seen**: opening the mail dialog with new mail posts `/mail/seen` from an effect
   (mailbox-controls.tsx:11).
@@ -662,7 +671,7 @@ The fork's console Pause controls do the same (HEAD console-controls.tsx:18-40, 
 | Docked map store (bug 11) | HEAD map-dock-state.ts:8-48, character-map-section.tsx:30-50; af92de45 | Works around per-component session state (2, bug 11) |
 | Activity label (bug 13): one sentence per character from about a dozen owners' phases | HEAD character-activity.ts:60-315, telemetry/activity-phases.ts:1-166, public-state.ts:303; 484006c5, 78314f9e | A second interpreter of every owner's state machine, with a copy of the profile owner rule (HEAD activity-phases.ts:110-120 against hunt/scopes.ts:56-57) and message prefix parsing. `activityPhases` is rebuilt on every core poll of every open tab |
 | Console Pause and Play in the pinned header; `consoleControl` in core and fast | HEAD party-header.tsx:20, :60-90, public-state.ts:174, :219; b33aee77, 7e6decdf | Own fetch with no session-loss handling (full review 2.6) |
-| Status icon row under the XP bar replaces the Active status list | HEAD status-icon-row.tsx:1-80, connected-character-card.tsx:360; 9336972a, f117b7a1 | Ryan's `ActiveStatuses` stays in the tree unused |
+| Status icon row under the XP bar replaces the Active status list | HEAD status-icon-row.tsx:1-80, connected-character-card.tsx:360; 9336972a, f117b7a1 | The current `ActiveStatuses` stays in the tree unused |
 | Card layout: combat log at the bottom, cosmetics panel, Franky routine dialog, Achievement Hunt settings, tank roles in Farming settings | HEAD connected-character-card.tsx:189-529, farming-mode-control.tsx:130-282, farming-context.ts:16-22; 9989199a, 739c13ea, d6f67a97, 5854cb05, 9e728ca5, fdcbbd81 | `farmingContext` grows the dashboard copy of the owner rule (2.3) |
 | Config section gains tank roles, Achievement Hunt fields (including the live `achievementMessage`), boss chase and realm hop blacklist | HEAD public-state.ts:87-93; 7bd14d7c, 3bae33fc, e990e787, d22cec71 | Achievement Hunt progress text lags 15 s like the Hunt line (2.2 item 1). Tank roles arrive with config. Correction to the full review (summary item 3): config is fetched on mount together with core (use-party-console.tsx:159-160, query-cache.tsx:335-350), so a fresh page shows the roles after one request, not up to 15 s later; until then the merged state has no roles |
 | Ten more action routes (`/encounter-mode`, `/achievement-hunt`, `/realm/boss-chase`, `/realm/hop-blacklist`, `/prim-stack`, five `/npc-shop/*`) | HEAD query-actions.ts:26-77 | none |
@@ -674,7 +683,7 @@ The fork's console Pause controls do the same (HEAD console-controls.tsx:18-40, 
 | Cave destinations beside the full map | HEAD cave-map.tsx:30-170, dungeon-panel.tsx:33-82; 34092356 | none |
 | Giveaway host by typed name | HEAD party-management-panels.tsx:55, :197; 0fbd0aec | `giveawayPlayers` lists only players the console has seen |
 | Status report gains `avoidSightings`, `cosmetics`, `soloKills`; Phoenix patrol text built inline | HEAD shared.js:3065-3292, phoenix-patrol.ts:208; cf7cba08, 40abe1b2, d798cac8, 3849a095 | none |
-| Gear comparison portrait with sprite fallback | HEAD gear-comparison-dialog.tsx:52-58, :442-444; 161fac38 | Fixes the Ryan blank portrait for headless characters |
+| Gear comparison portrait with sprite fallback | HEAD gear-comparison-dialog.tsx:52-58, :442-444; 161fac38 | Fixes the current blank portrait for headless characters |
 | Model hook: encounter mode actions, ALData `check` flag | HEAD use-party-console.tsx (+24 lines) | none |
 
 ## 4. Tests today
@@ -1035,13 +1044,13 @@ path line rather than the server value (2.5), so it is not accurate. Shared UI p
 ## 5. Needs your review
 
 Questions only you can answer: what the dashboard should show and how the party should behave.
-Each states **Today** (Ryan's base, and the fork where it differs), **Options** with trade-offs,
+Each states **Today** (the current console, and the fork where it differs), **Options** with trade-offs,
 and **Recommendation**. The coordinator copies these into `REVIEW-QUEUE.md`.
 
 ### Status text
 
 **Q1. Who writes the "what is this character doing" text?**
-- **Today:** Ryan's base has no such line on the card. Each owner writes free text next to its own
+- **Today:** The current console has no such line on the card. Each owner writes free text next to its own
   state (54 Hunt message writes, 2.1 item 1); the Farming settings Hunt line prints the stage and the
   message (farming-mode-control.tsx:256-260); the merchant job label keeps its own routine table
   (merchant-job-label.ts:4-25); convoy progress is not shown at all (short version). The fork's strip
@@ -1412,7 +1421,7 @@ Handoffs from 12 not yet claimed by the receiving spec, by receiver: 01-groups-a
   reduction, upgrade multipliers, NPC value, Ponty price, grade defaults, scroll prices, level caps,
   realm penalty text, run speed, Tracktrix bonuses) were not compared with
   kaansoral/adventureland_mongodb.
-- **`characters/shared.js`** (18,047 lines on the Ryan ref) was read in the ranges of the claimed
+- **`characters/shared.js`** (18,047 lines on the current console) was read in the ranges of the claimed
   functions and their callers, not in full. `runner.ts`, `phoenix-patrol.ts`,
   `merchant-observation.ts`, `departure-loot.ts` and `passing-admission.ts` were read around the
   claimed closures only.

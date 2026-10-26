@@ -1,6 +1,6 @@
 # 01 Groups and tasks
 
-Checked against Ryan's base `refs/review/ryan-1.5` (b9b5c91e) in
+Checked against the current console `refs/review/ryan-1.5` (b9b5c91e) in
 (local checkout). Every `file:line` is on that ref
 unless it says "fork" (af92de45). Behaviour ids are `GRP-001` onward;
 `catalog/01-groups-and-tasks.json` lists functions and tests. The proposal
@@ -8,7 +8,7 @@ gave this spec no functions by path, so it claims, from the 07, 02 and 06
 lists and triage, only the functions whose job is group membership or
 precedence; every move is in `catalog/handoffs-01.json`. Leads came from
 `backups/party-console/review/full/events.md` and `review/events.md`; each
-was re-read on the Ryan ref.
+was re-read on the current console.
 
 Words used below:
 
@@ -96,7 +96,7 @@ Words used below:
 ### 1.3 Which task wins
 
 There is no single decision. Each owner checks some of the others. The
-table lists what each reader checks on the Ryan ref.
+table lists what each reader checks on the current console.
 
 | Reader | Yields to | Does not check |
 |---|---|---|
@@ -161,7 +161,7 @@ table lists what each reader checks on the Ryan ref.
   fields so none of them fire inside the Cave. Command:
   `git grep -n joinedEvent refs/review/ryan-1.5 -- runtime/coordinator runtime/combat scripts ':!*.test.*'`,
   then reading each hit. The review counted 22 at the fork tip, including
-  the fork-only `lifecycle/console-control.ts:100`; on Ryan's ref it missed
+  the fork-only `lifecycle/console-control.ts:100`; on the current console it missed
   farming-return.ts and farm-areas.ts. None of the copies checks the
   occurrence, the realm or whether the admission is still current.
 - **GRP-015 Anniversary versus Hunt.** An open anniversary cycle holds Hunt
@@ -181,6 +181,12 @@ table lists what each reader checks on the Ryan ref.
   (`shared.js:13456-13472`); "event exit owns movement" merges three sources
   (13451-13455). Similar lists: `frankyCombatActive` (spec 06 EVT-048),
   `passiveRegenerationEligible` (spec 05).
+
+### Added in triage
+
+catalog/triage-log.json lists each behaviour in this group.
+
+- **GRP-020** Each heartbeat sends party data: desired in-game members, every member position with combat fields, and the threats and targets other members report. Code: `runtime/coordinator/status/response-party.ts`.
 
 ## 2. What goes wrong
 
@@ -274,7 +280,7 @@ Fork ref af92de45, read at the named lines.
   gate treats any session as a trip, so it waits whenever a selected event is
   live anywhere (inference). Its target switches skip live event
   occurrences (spec 06 section 3). `achievements` is missing from two mode
-  whitelists (Ryan `initial-focus.ts:22`, `saved-farming-mode.ts:12`, full review
+  whitelists (current `initial-focus.ts:22`, `saved-farming-mode.ts:12`, full review
   F-FA5).
 - **Boss chase** (e990e787, 3ed84536): a realm-hopping owner whose tick
   checks only a running realm switch (fork boss-chase.ts:371-387). No other

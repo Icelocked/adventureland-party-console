@@ -1,6 +1,6 @@
 # 10. Inventory, bank and commerce
 
-Checked against Ryan's base `refs/review/ryan-1.5` (b9b5c91e) in (local checkout). Every file:line is on that ref unless it says "fork HEAD" (af92de45). The fork's live tip 21b8362d changes no file in this part (`git diff --stat af92de45 21b8362d` in pm-worktrees/pta-pull touches only characters/shared.js lines 71 and 18438-18926).
+Checked against the current console `refs/review/ryan-1.5` (b9b5c91e) in (local checkout). Every file:line is on that ref unless it says "fork HEAD" (af92de45). The fork's live tip 21b8362d changes no file in this part (`git diff --stat af92de45 21b8362d` in pm-worktrees/pta-pull touches only characters/shared.js lines 71 and 18438-18926).
 
 This spec maps everything the console does with items: item identity and the item catalog,
 inventory marks and automatic marks, the bank and bank queues, BankBoi storage, stocking, upgrades,
@@ -14,7 +14,7 @@ the market jobs make, the merchant's hands and the game call budget are in
 
 Counts: 111 behaviours and 1445 functions in `catalog/10-inventory-bank-commerce.json` (counted with `node -e` over that file); 16 handoffs in `catalog/handoffs-10.json`.
 
-How this map was made: four readers went through every function in this part on the Ryan ref (shared.js by its Ryan line ranges, every other file start to end) and checked the full review (local checkout) and the first pass `review/merchant.md` claim by claim. Section 7 lists each review claim with its verdict. Line numbers in the full review are mostly fork HEAD lines; this spec gives Ryan lines.
+How this map was made: four readers went through every function in this part on the current console (shared.js by its current line ranges, every other file start to end) and checked the full review (local checkout) and the first pass `review/merchant.md` claim by claim. Section 7 lists each review claim with its verdict. Line numbers in the full review are mostly fork HEAD lines; this spec gives current lines.
 
 ## 1. What it does today
 
@@ -67,7 +67,7 @@ Rules:
 Rules:
 
 - history is keyed by item name only; level is kept beside each price (commerce/price-history.ts:24-35)
-- the current market low uses only ALData listings seen in the last 120 000 ms; an item with none loses marketLow (price-history.ts:46-53, 64-73)
+- The current market low uses only ALData listings seen in the last 120 000 ms; an item with none loses marketLow (price-history.ts:46-53, 64-73)
 - highestPublicWTB comes from ALData trades with wtb.price >= 1 (price-history.ts:82-113)
 - nearby stand reports also write lowest and recent price at report time, only when lowest or recent changes (commerce/local-market.ts:22-64)
 
@@ -1533,7 +1533,7 @@ Rules:
 
 ### Lucky slot precedence computed in three places
 
-Kind: duplicate rule. Origin: Ryan base. Confidence: confirmed in code.
+Kind: duplicate rule. Origin: the current console. Confidence: confirmed in code.
 
 1. status/response.ts:134-140 attaches luckyUpgradeSlot = lock ?? resume.slot ?? verified ?? null to every merchant command
 2. characters/shared.js:8471 and :10471 copy command.luckyUpgradeSlot into the runtime variable
@@ -1544,7 +1544,7 @@ Kind: duplicate rule. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Coordinator retry policy keys on lucky slot English text
 
-Kind: patchwork. Origin: Ryan base. Confidence: confirmed in code.
+Kind: patchwork. Origin: the current console. Confidence: confirmed in code.
 
 1. runtime/characters/lucky-upgrade.ts:65-68 builds every failure as "Couldn't use lucky slot: " + reason with code lucky_slot_unavailable
 2. the code is read only on the character: lucky-upgrade.ts:135 and characters/shared.js:3951
@@ -1556,13 +1556,13 @@ Kind: patchwork. Origin: Ryan base. Confidence: confirmed in code.
 
 ### homeRealm captured at queue time on commerce jobs
 
-Kind: bug. Origin: Ryan base. Confidence: confirmed in code.
+Kind: bug. Origin: the current console. Confidence: confirmed in code.
 
 Commerce jobs keep the `homeRealm` they had when queued (runtime/coordinator/commerce/bids.ts:113, manual-orders.ts:70 and 129). The causal chain and its effect on realm hops are in [09 What goes wrong](09-merchant-realm-and-gear.md#2-what-goes-wrong).
 
 ### 120 s listing freshness repeated in seven places
 
-Kind: duplicate rule. Origin: Ryan base. Confidence: confirmed in code.
+Kind: duplicate rule. Origin: the current console. Confidence: confirmed in code.
 
 1. commerce/bids.ts:101 (Ponty candidates) and :165 (ALData candidates)
 2. commerce/manual-orders.ts:111 (manual Ponty)
@@ -1574,7 +1574,7 @@ Kind: duplicate rule. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Item and listing identity has many encodings
 
-Kind: patchwork. Origin: Ryan base. Confidence: confirmed in code.
+Kind: patchwork. Origin: the current console. Confidence: confirmed in code.
 
 1. partial match ignoring q, price, rid, b, giveaway: inventory/item-identity.ts:3, 10-18 (one direction only); compound-marks.ts:8-10 and bank-upgrade-receipts.ts:12 call it both ways
 2. name@+level: item-identity.ts:20-24; shared-rules.ts:128 and offering-supply.ts:68 rebuild it inline
@@ -1589,7 +1589,7 @@ Kind: patchwork. Origin: Ryan base. Confidence: confirmed in code.
 
 ### A blocked native WTB offer with a native id is never released
 
-Kind: bug. Origin: Ryan base. Confidence: confirmed in code.
+Kind: bug. Origin: the current console. Confidence: confirmed in code.
 
 1. commerce/native-stand.ts:144 blocks a placed offer whose slot is empty while the stand is open: 'Offer disappeared without a confirmed fill/removal; reconciliation required'
 2. block() sets retryAt only when the offer has no rid (native-stand.ts:76-79)
@@ -1607,7 +1607,7 @@ Commits:
 
 ### Stat scroll count misses the game's top grade
 
-Kind: game-rule mismatch. Origin: Ryan base. Confidence: confirmed in code.
+Kind: game-rule mismatch. Origin: the current console. Confidence: confirmed in code.
 
 1. inventory/stat-scroll-commands.ts:66-72 requires 1000 scrolls at level >= grades[2] and never more
 2. the game's calculate_item_grade returns 4 at level >= grades[3] (default [9,10,11,12]) (adventureland_mongodb js/old_common_functions.js:798-806)
@@ -1616,7 +1616,7 @@ Kind: game-rule mismatch. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Price history emptyMarket flag has no effect
 
-Kind: dead code. Origin: Ryan base. Confidence: confirmed in code.
+Kind: dead code. Origin: the current console. Confidence: confirmed in code.
 
 1. commerce/market-feeds.ts:41 passes emptyMarket = no ALData listings yet
 2. price-history.ts:31, 39-44 write marketLow from that flag in recordListing
@@ -1624,14 +1624,14 @@ Kind: dead code. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Saved ALData requestTimes is never read
 
-Kind: dead code. Origin: Ryan base. Confidence: confirmed in code.
+Kind: dead code. Origin: the current console. Confidence: confirmed in code.
 
 1. commerce/initial-aldata.ts:32 creates aldata.requestTimes
 2. the rate limit uses the client's own closure array (commerce/aldata-client.ts:16-27); git grep finds no other reader
 
 ### Exchange and processing rules duplicated between mark removers
 
-Kind: duplicate rule. Origin: Ryan base. Confidence: confirmed in code.
+Kind: duplicate rule. Origin: the current console. Confidence: confirmed in code.
 
 1. inventory/automatic-action.ts:97-108 clearExchange and clear-item-marks.ts:109-124 clearQueuedExchanges filter queued exchange jobs with the same name@level logic
 2. automatic-action.ts:132-140 upgradePending and compoundPending repeat shared-rules.ts:122-130 activeUpgrade and the compound clause of processingPending
@@ -1639,7 +1639,7 @@ Kind: duplicate rule. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Two bank snapshot writers and two vault list sources
 
-Kind: patchwork. Origin: Ryan base. Confidence: confirmed in code.
+Kind: patchwork. Origin: the current console. Confidence: confirmed in code.
 
 1. status/bank.ts:41-45 replaces the snapshot only on content or observer change, then adopts cargo and persists
 2. http/bankboi-storage.ts:47-51 overwrites it on every BankBoi checkpoint or completion without that comparison
@@ -1647,7 +1647,7 @@ Kind: patchwork. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Mail automation pulls the whole inbox per message
 
-Kind: patchwork. Origin: Ryan base. Confidence: confirmed in code.
+Kind: patchwork. Origin: the current console. Confidence: confirmed in code.
 
 1. mailbox.ts:22-30 refreshes the inbox, then for each mail to collect calls inner.collect, which refreshes again (scripts/mail-inbox.cjs:50)
 2. each auto delete calls inner.remove, which refreshes before and after delete_mail (mail-inbox.cjs:65, 74)
@@ -1661,7 +1661,7 @@ Commits:
 
 ### BankBoi transaction recovered by age alone after 600 s
 
-Kind: wrong value. Origin: Ryan base. Confidence: inference.
+Kind: wrong value. Origin: the current console. Confidence: inference.
 
 1. inventory/bankboi-service.ts:141-147 abandons any transaction older than 600 000 ms without checking the worker
 2. start() then marks the worker interrupted with a 10 s retry and restores the merchant (bankboi-service.ts:148-155, bankboi-composition.ts:61-64)
@@ -1669,14 +1669,14 @@ Kind: wrong value. Origin: Ryan base. Confidence: inference.
 
 ### BankBoi completion dedupe lives in memory
 
-Kind: patchwork. Origin: Ryan base. Confidence: confirmed in code.
+Kind: patchwork. Origin: the current console. Confidence: confirmed in code.
 
 1. http/bankboi-storage.ts:45 keeps the last 32 completion receipts in a Set
 2. a restart loses it; ownsCompletion then guards by transaction and commandId only (bankboi-storage.ts:92-95, 99-102)
 
 ### Failure kinds travel as text
 
-Kind: patchwork. Origin: Ryan base. Confidence: confirmed in code.
+Kind: patchwork. Origin: the current console. Confidence: confirmed in code.
 
 1. production.ts:53-54, 82, 85, 249 throw texts returned as 409 String(error), so the client sees an 'Error: ' prefix (production.ts:154)
 2. merchant/dispatcher.ts:261 logs 'Production recovery pending' again
@@ -1686,7 +1686,7 @@ Kind: patchwork. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Upgrade intent has many writers and four identity fields
 
-Kind: patchwork. Origin: Ryan base. Confidence: confirmed in code.
+Kind: patchwork. Origin: the current console. Confidence: confirmed in code.
 
 1. upgrades[name] is written at upgrade-commands.ts:67-69, 88, 117, 154; mark-reconciliation.ts:71, 81; upgrade-continuation.ts:32-33, 46, 66; offering-waits.ts:34-35; offering-supply.ts:152; production.ts:242; transfer-commands.ts:159-164; bankboi-completion.ts:123; bank-upgrade-receipts.ts:13; clear-item-marks.ts:55, 83-85; automatic-action.ts:52; compound-commands.ts:151; reservations.ts:36
 2. marks carry slot, liveSlot, requestId and legacy passId plus storage (upgrade-marks.ts:4-18)
@@ -1694,7 +1694,7 @@ Kind: patchwork. Origin: Ryan base. Confidence: confirmed in code.
 
 Commits:
 
-- 4030efac 2026-09-21 Ryan Haines: upgradeInventoryBusy skip
+- 4030efac 2026-09-21 upstream: upgradeInventoryBusy skip
 - 9273ecb4 2026-10-14 Breene26: pending recovery bundle
 
 ### Gold reserve applies only to fork watch orders
@@ -1702,9 +1702,9 @@ Commits:
 Kind: patchwork. Origin: fork added. Confidence: confirmed in code.
 
 1. fork HEAD npc-shop.ts:131-142 spendableGold = merchant + bank gold - goldReserve - unfinished listings of jobs with npcOrderId only
-2. Ryan's bid jobs read no reserve: commerce/bids.ts:133-202, manual-orders.ts:62-141
+2. The current bid jobs read no reserve: commerce/bids.ts:133-202, manual-orders.ts:62-141
 3. native stand funding takes the highest allocated bid price up to merchant + bank gold (http/native-stand.ts:67-77, 113-116)
-4. so watch budget ignores pending Ryan bid purchases, and bid purchases can spend below the reserve
+4. so watch budget ignores pending the current bid purchases, and bid purchases can spend below the reserve
 5. bids.ts:93-103 Ponty candidates do not skip listing keys already held by a watch job, so both can target one listing (fork HEAD application.ts:1556-1560 runs matchPonty first)
 6. (inference) the character's own gold check at purchase time is the only limit; not traced in this slice
 
@@ -1714,7 +1714,7 @@ Commits:
 
 ### Local stand bid jobs skip the producer steps other bid jobs take
 
-Kind: patchwork. Origin: Ryan base. Confidence: inference.
+Kind: patchwork. Origin: the current console. Confidence: inference.
 
 1. commerce/local-market.ts:104-111 pushes a 'stand bid purchases' job without ports.stamp, persist or dispatch
 2. bids.ts:145-152, 198-199 stamp, persist and dispatch their jobs
@@ -1724,7 +1724,7 @@ Kind: patchwork. Origin: Ryan base. Confidence: inference.
 
 Kind: duplicate rule. Origin: fork added. Confidence: confirmed in code.
 
-1. Ryan's scripts/ponty-market.cjs:6-35 prices Ponty listings from calculate_item_value (adventureland_mongodb js/old_common_functions.js:808-847)
+1. The current scripts/ponty-market.cjs:6-35 prices Ponty listings from calculate_item_value (adventureland_mongodb js/old_common_functions.js:808-847)
 2. fork HEAD runtime/coordinator/commerce/npc-price.ts:23-74 reimplements the same formula for Ponty and Ron estimates
 3. the two differ in fallback scroll prices: ponty-market.cjs:15, 22 use fixed defaults; npc-price.ts:23 uses 0 for a missing definition
 
@@ -1735,7 +1735,7 @@ Commits:
 
 ### Stand capacity hard-coded at 16 slots
 
-Kind: game-rule mismatch. Origin: Ryan base. Confidence: confirmed in code.
+Kind: game-rule mismatch. Origin: the current console. Confidence: confirmed in code.
 
 1. the game gives a stand 16 trade slots, 24 for a merchant at level 70 or with a cstand, 30 at level 80 (game server_functions.js:4365-4376)
 2. automatic-sales.ts:88 (standReserved) and :184 (resumeDisplacedSales) cap listings plus slot-using bids at 16
@@ -1745,11 +1745,11 @@ Kind: game-rule mismatch. Origin: Ryan base. Confidence: confirmed in code.
 
 Commits:
 
-- 9fbeadab 2026-09-20 Ryan Haines: initial console (git log of the 16 literals not traced further)
+- 9fbeadab 2026-09-20 upstream: initial console (git log of the 16 literals not traced further)
 
 ### Max item levels disagree with the game
 
-Kind: game-rule mismatch. Origin: Ryan base. Confidence: confirmed in code.
+Kind: game-rule mismatch. Origin: the current console. Confidence: confirmed in code.
 
 1. maximumItemLevel returns 7 for compound items and 13 for upgrade items (shared.js:1397-1399)
 2. the game's tables stop at upgrade +12 and compound +10: design/upgrades.js upgrades keys 1-12, compounds keys 1-10; server.js:7143-7148 answers 'upgrade_cant' past the table and server.js:6882 does the same for compounds
@@ -1759,7 +1759,7 @@ Kind: game-rule mismatch. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Stat-scroll confirmation fails after the scroll is applied
 
-Kind: bug. Origin: Ryan base. Confidence: confirmed in code.
+Kind: bug. Origin: the current console. Confidence: confirmed in code.
 
 1. the game queues a stat scroll for 2000 x tmult x tmult ms (tmult 1, 1.5 or 2 by the item's base grade), halved by massproduction, and leaves level unchanged (game server.js:7153-7160, 7465-7512)
 2. merchant path: applyStatScrolls calls raw upgrade() without merchantMassBuff and waits only 2500 ms for stat_type before throwing 'Native stat-scroll outcome was not confirmed' (shared.js:6641-6645); a grade-1 base item needs 4500 ms and a grade-2 base item 8000 ms
@@ -1774,7 +1774,7 @@ Commits:
 
 ### Auto compound evaluation carries dead completion logic
 
-Kind: dead code. Origin: Ryan base. Confidence: confirmed in code.
+Kind: dead code. Origin: the current console. Confidence: confirmed in code.
 
 1. evaluateAutoCompounds never pushes to completed, and its filter returns true on every path, so remaining always equals rules (automatic-improvements.ts:40-54); this has been so since 9fbeadab
 2. evaluateCompound writes the same rules back and loops over the always-empty completed to log 'Auto compound quantity reached' (improvement-scheduler.ts:140-147)
@@ -1783,11 +1783,11 @@ Kind: dead code. Origin: Ryan base. Confidence: confirmed in code.
 
 Commits:
 
-- 9fbeadab 2026-09-20 Ryan Haines: initial console, already in this state
+- 9fbeadab 2026-09-20 upstream: initial console, already in this state
 
 ### bank_retrieve loops with no settle wait
 
-Kind: patchwork. Origin: Ryan base. Confidence: inference.
+Kind: patchwork. Origin: the current console. Confidence: inference.
 
 1. bankStoreFully's own comment says a bank promise can resolve before the inventory proxy updates (shared.js:4140-4141), and bankRetrieveConfirmed polls up to 5000 ms for that reason (shared.js:4600-4605)
 2. retrieveFromBankUntil (shared.js:1336-1345) and merchantALDataSell (shared.js:8983-8987) loop up to 100 bank_retrieve calls re-reading the lagging proxy; each bank call costs about 2 of the 200-per-4-s budget (game server.js:248-262; review 6.1)
@@ -1798,13 +1798,13 @@ Kind: patchwork. Origin: Ryan base. Confidence: inference.
 
 ### Stand reconcile unequips every listing in one burst
 
-Kind: bug. Origin: Ryan base. Confidence: inference.
+Kind: bug. Origin: the current console. Confidence: inference.
 
 The stand reconcile sends up to 16 unequips back to back (characters/shared.js:9537-9550). Its call cost and causal chain are in [09 What goes wrong](09-merchant-realm-and-gear.md#2-what-goes-wrong).
 
 ### Mail with attachment has no gold check
 
-Kind: bug. Origin: Ryan base. Confidence: confirmed in code.
+Kind: bug. Origin: the current console. Confidence: confirmed in code.
 
 1. the game charges 48000 gold for a mail and 360000 with an item, and fails 'gold_not_enough' (game logic/mail.js:143-144)
 2. merchantSendMail never compares gold or visits the bank before send_mail (shared.js:10326-10367), unlike merchantALDataAuth (shared.js:8681-8687)
@@ -1812,7 +1812,7 @@ Kind: bug. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Self improve can strand stat-scroll gear unequipped
 
-Kind: bug. Origin: Ryan base. Confidence: inference.
+Kind: bug. Origin: the current console. Confidence: inference.
 
 1. merchantSelfImprove unequips equipped stat-scroll marks before any supply step (shared.js:7318-7322)
 2. only applyStatScrolls records them for re-equip, and only when mark.equipped is set (shared.js:6650-6651)
@@ -1824,7 +1824,7 @@ Commits:
 
 ### bidPurchases is always empty
 
-Kind: dead code. Origin: Ryan base. Confidence: confirmed in code.
+Kind: dead code. Origin: the current console. Confidence: confirmed in code.
 
 1. merchantStandBuy and merchantPontyBuy declare completed = [] and never push to it (shared.js:8526, 8590)
 2. both send bidPurchases: completed on success and failure (shared.js:8555, 8560, 8663, 8669)
@@ -1832,7 +1832,7 @@ Kind: dead code. Origin: Ryan base. Confidence: confirmed in code.
 
 ### The 3-slot inventory reserve is restated with three formulas
 
-Kind: duplicate rule. Origin: Ryan base. Confidence: confirmed in code.
+Kind: duplicate rule. Origin: the current console. Confidence: confirmed in code.
 
 1. purchasePreservesLogisticsReserve needs free slots minus needed slots >= 3 using isize (shared.js:5405-5414)
 2. goBank and merchantBankErrands stop at freeInventorySlots() <= 3 (shared.js:4480, 5951)
@@ -1842,7 +1842,7 @@ Kind: duplicate rule. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Raw socket emits bypass the game wrappers
 
-Kind: patchwork. Origin: Ryan base. Confidence: confirmed in code.
+Kind: patchwork. Origin: the current console. Confidence: confirmed in code.
 
 1. merchantExchange emits exchange_buy through parent.push_deferred and parent.socket.emit to pick the verified stack (shared.js:8356-8361)
 2. merchantDonate emits parent.socket.emit('lostandfound','info') and sleeps 350 ms (shared.js:9296-9298)
@@ -1854,7 +1854,7 @@ Commits:
 
 ### Commerce v2 remap fix-on-fix chain
 
-Kind: patchwork. Origin: Ryan base. Confidence: confirmed in code.
+Kind: patchwork. Origin: the current console. Confidence: confirmed in code.
 
 1. other systems move merchant inventory while a paid batch runs (lucky slot swap shared.js:5120, bank sort buffer shared.js:4419-4439, Tracktrix pin shared.js:5640)
 2. remapCommerceOwnedItems remaps whole owned groups and throws on any count mismatch (shared.js:7416-7445)
@@ -1868,7 +1868,7 @@ Commits:
 
 ### Lucky restoration lowered to best effort
 
-Kind: patchwork. Origin: Ryan base. Confidence: confirmed in code.
+Kind: patchwork. Origin: the current console. Confidence: confirmed in code.
 
 1. merchantLuckyUpgrade's warn port logs 'Lucky slot restoration skipped; leaving items in their current positions' instead of failing (shared.js:5136-5142)
 2. every consumer then re-finds items after an upgrade (shared.js:5104-5107, 6254-6257, 7491-7501)
@@ -1879,7 +1879,7 @@ Commits:
 
 ### Legacy compound leveling path unreachable for validated orders
 
-Kind: dead code. Origin: Ryan base. Confidence: inference.
+Kind: dead code. Origin: the current console. Confidence: inference.
 
 1. normalizeLine rejects level > 0 for a choice that is not upgradeable (order-validation.ts:5-10)
 2. merchantCatalog marks compound items upgradeable false (shared.js:2255)
@@ -1887,7 +1887,7 @@ Kind: dead code. Origin: Ryan base. Confidence: inference.
 
 ### BankBoi provision bursts unequip and sell calls
 
-Kind: bug. Origin: Ryan base. Confidence: inference.
+Kind: bug. Origin: the current console. Confidence: inference.
 
 1. provision unequips every equipment slot then sells every inventory slot back to back with no delay (shared.js:4682-4688)
 2. the inventory sort fires swap() without await, 120 ms apart (shared.js:4763)
@@ -1899,7 +1899,7 @@ Commits:
 
 ### Donation rate boundary off by one
 
-Kind: wrong value. Origin: Ryan base. Confidence: confirmed in code.
+Kind: wrong value. Origin: the current console. Confidence: confirmed in code.
 
 1. donationRateListener uses 4 only while server gold < 1000000000 (shared.js:876)
 2. the game uses S.gold <= 1000000000 for 4 (game server.js donate handler)
@@ -1920,7 +1920,7 @@ Commits:
 
 ### Failure text is the contract with the coordinator
 
-Kind: patchwork. Origin: Ryan base. Confidence: confirmed in code.
+Kind: patchwork. Origin: the current console. Confidence: confirmed in code.
 
 1. 'bankboi_pending' is thrown at shared.js:4160, 6162, 8334 and compared at 6187, 7385, 8214, 8412; completion-retries.ts:41 matches it
 2. 'bank_full' and 'inventory_full' (shared.js:4131, 6418, 7364) are matched by completion-retries.ts:136
@@ -1930,21 +1930,21 @@ Kind: patchwork. Origin: Ryan base. Confidence: confirmed in code.
 
 ## 3. Fork differences
 
-What the fork (af92de45) adds or changes in this part. Fork code is not in Ryan's catalog; its lines are fork HEAD.
+What the fork (af92de45) adds or changes in this part. Fork code is not in the current catalog; its lines are fork HEAD.
 
 | What | Commits | What it patches | Where |
 |---|---|---|---|
-| Ponty and Ron watch and buy-now orders (npc-shop.ts) | 9476cd15 2026-10-22 Icelocked: feat: buy from Ponty and Ron with standing orders, 388b9248 2026-10-22 Icelocked: fix: let a queued Ron visit take the current donation consent, 6f4ed09a 2026-10-22 Icelocked: feat: watch list for Ponty and Ron, plus market filters and newest-first sort, 369d64be 2026-10-22 Icelocked: docs: say which item fields the listing identity leaves out, df1858c6 2026-10-25 Icelocked: Match Ponty watch orders against the home realm | Adds standing Ponty watches and Ron visits that Ryan's bid-only Ponty buying lacks; df1858c6 limits Ponty watches to the home realm to stop the US II and EU II hop loop (ledger 1); 388b9248 lets queued Ron jobs take a new donation consent; 6f4ed09a adds firstSeenAt stamping on Ponty and ALData feeds and a migrate() shim for the 9476cd15 order shape | fork HEAD runtime/coordinator/commerce/npc-shop.ts:101-122 (migrate), 131-142 (spendableGold), 357-430 (matchPonty, select, eligible, queuePonty), 438-459 (fulfilled), 466-546 (Ron); wiring fork HEAD application.ts:1539-1565 |
+| Ponty and Ron watch and buy-now orders (npc-shop.ts) | 9476cd15 2026-10-22 Icelocked: feat: buy from Ponty and Ron with standing orders, 388b9248 2026-10-22 Icelocked: fix: let a queued Ron visit take the current donation consent, 6f4ed09a 2026-10-22 Icelocked: feat: watch list for Ponty and Ron, plus market filters and newest-first sort, 369d64be 2026-10-22 Icelocked: docs: say which item fields the listing identity leaves out, df1858c6 2026-10-25 Icelocked: Match Ponty watch orders against the home realm | Adds standing Ponty watches and Ron visits that the current bid-only Ponty buying lacks; df1858c6 limits Ponty watches to the home realm to stop the US II and EU II hop loop (ledger 1); 388b9248 lets queued Ron jobs take a new donation consent; 6f4ed09a adds firstSeenAt stamping on Ponty and ALData feeds and a migrate() shim for the 9476cd15 order shape | fork HEAD runtime/coordinator/commerce/npc-shop.ts:101-122 (migrate), 131-142 (spendableGold), 357-430 (matchPonty, select, eligible, queuePonty), 438-459 (fulfilled), 466-546 (Ron); wiring fork HEAD application.ts:1539-1565 |
 | Ponty and Ron price helpers (npc-price.ts) | 9476cd15 2026-10-22 Icelocked, 6f4ed09a 2026-10-22 Icelocked | Gives the dashboard per-level unit prices and total estimates for watches; Ron = 4 x calculate_item_value; duplicates the formula in scripts/ponty-market.cjs:6-35 | fork HEAD runtime/coordinator/commerce/npc-price.ts:23-88 |
 | Stat scroll name from prim-stack | 2055dd82 2026-10-20 Icelocked: feat: prim stack an item's grace (#65) | Moves the local scrollName helper to statScrollName in runtime/prim-stack.ts so the prim stack feature shares it; the mapping is unchanged (mp_cost -> mpcostscroll) | fork HEAD runtime/coordinator/inventory/stat-scroll-commands.ts:2, 99, 117; runtime/prim-stack.ts:32-34 |
-| Manual ALData order 'check' flag | eb9acad0 2026-10-20 Icelocked: feat(market): sort owned WTB matches to top, hide stale, check stale listings | Lets the user send the merchant to verify a listing older than 120 s instead of being refused (#34); bypasses Ryan's freshness rule for that one order | fork HEAD runtime/coordinator/http/manual-market-orders.ts:50-53, 62-66, 79 |
-| Gapped bank sort layout | 3dc61c45 2026-10-20 Icelocked: feat(bank): optional gapped bank sort that moves few items per change, bb37238c 2026-10-20 Icelocked: Keep the bank sort checkpoint under the complexity limit | Ryan's packed sort shifts the whole bank on every new item; the gapped layout starts each category on its own 7-slot row with spare slots so a change moves few items. The checkpoint returns layout with mode; sortCurrentBankFloor includes the layout in its signature | fork HEAD characters/shared.js:4601, 4617-4623, 4800-4881, 4905, 4930-4935; runtime/coordinator/merchant/bank-sort.ts:17-18, 31, 39, 92, 99-101, 116-118 |
-| Deconstruction recoverSpace | 9f7e581e 2026-10-15 Icelocked: fix(deconstruction): retry a mark blocked by a full bag once there is room | Ryan's base leaves a mark blocked by 'Insufficient inventory space for deconstruction results' until the operator retries; the fork retries after 120000 ms once enough slots are free, matching the character's error text (see problem 'Fork recoverSpace undercounts compound space') | fork HEAD runtime/coordinator/merchant/deconstruction.ts:92, 187, 230-239 |
+| Manual ALData order 'check' flag | eb9acad0 2026-10-20 Icelocked: feat(market): sort owned WTB matches to top, hide stale, check stale listings | Lets the user send the merchant to verify a listing older than 120 s instead of being refused (#34); bypasses the current freshness rule for that one order | fork HEAD runtime/coordinator/http/manual-market-orders.ts:50-53, 62-66, 79 |
+| Gapped bank sort layout | 3dc61c45 2026-10-20 Icelocked: feat(bank): optional gapped bank sort that moves few items per change, bb37238c 2026-10-20 Icelocked: Keep the bank sort checkpoint under the complexity limit | The current packed sort shifts the whole bank on every new item; the gapped layout starts each category on its own 7-slot row with spare slots so a change moves few items. The checkpoint returns layout with mode; sortCurrentBankFloor includes the layout in its signature | fork HEAD characters/shared.js:4601, 4617-4623, 4800-4881, 4905, 4930-4935; runtime/coordinator/merchant/bank-sort.ts:17-18, 31, 39, 92, 99-101, 116-118 |
+| Deconstruction recoverSpace | 9f7e581e 2026-10-15 Icelocked: fix(deconstruction): retry a mark blocked by a full bag once there is room | The current console leaves a mark blocked by 'Insufficient inventory space for deconstruction results' until the operator retries; the fork retries after 120000 ms once enough slots are free, matching the character's error text (see problem 'Fork recoverSpace undercounts compound space') | fork HEAD runtime/coordinator/merchant/deconstruction.ts:92, 187, 230-239 |
 | Ponty secondhands pacer and per-realm reads | c3a8a57d 2026-10-24 Icelocked: Pace the merchant's Ponty secondhands calls under the game's rate limit | the game disconnected the merchant with limitdc ['secondhands',208] after 13 reads in 4 s (comment at fork HEAD shared.js:9216-9220); pontySecondhands spaces every read 1.5 s apart and merchantPontyBuy reads once per realm and again only after a purchase | fork HEAD characters/shared.js:1294, 9120-9129, 9159, 9184, 9215-9230 |
 | Ron (lostandfound) purchases | 9476cd15 2026-10-22 Icelocked: feat: buy from Ponty and Ron with standing orders | adds a Ron visit job that donates 1000000 gold when Ron answers donation_required (if allowed), reports stock priced at value x 4 (matches the game's mult 4, server.js sbuy handler), and buys the coordinator's chosen rids; it does not use guardedMarketPurchase or the 3-slot reserve | fork HEAD characters/shared.js:9899-9977; runtime/coordinator/commerce/npc-shop.ts |
 | Prim stack (grace stacking) | 2055dd82 2026-10-20 Icelocked: feat: prim stack an item's grace (#65), 276febc7 2026-10-20 Icelocked: Join catalog meta before a prim stack reads an item's definition | adds a 'prim stack' job that raises an item's grace with offeringp (0.5 per stack, 1 with the item's stat scroll); the operation calls upgrade() directly with a 30000 ms poll, outside trackedProduction, the production journal and the lucky slot; the coordinator route validates target 0.5-15 and supply | fork HEAD characters/shared.js:2698-2777; runtime/coordinator/merchant/prim-stack.ts:22-76 |
 | merchantHandoff pickup authorization (cite only) | 947fa15e 2026-10-20 Icelocked: fix(merchant): send auto-merchant copies that also feed a compound rule | patches the fighter's handoff send loop so automatic merchant copies that also feed a compound rule are sent; merchantHandoff belongs to spec 08 | fork HEAD characters/shared.js:6352-6366 (review Appendix C 0) |
-| Gear sets added then removed (net zero) | f4df566c 2026-10-20 Icelocked: feat(gear): saved luck and tank gear sets with a kill-time luck swap, fdb0147a 2026-10-25 Icelocked: Remove gear sets and the kill-time luck swap | f4df566c added swapHeld checks to deconstruction automatic marking and player NPC sale protection (deconstruction.ts:156, player-npc-sales.ts:183) plus handoff hooks; fdb0147a removed them. player-npc-sales.ts equals Ryan at HEAD; deconstruction.ts differs only by recoverSpace | git show f4df566c and fdb0147a on runtime/coordinator/merchant/deconstruction.ts, player-npc-sales.ts |
+| Gear sets added then removed (net zero) | f4df566c 2026-10-20 Icelocked: feat(gear): saved luck and tank gear sets with a kill-time luck swap, fdb0147a 2026-10-25 Icelocked: Remove gear sets and the kill-time luck swap | f4df566c added swapHeld checks to deconstruction automatic marking and player NPC sale protection (deconstruction.ts:156, player-npc-sales.ts:183) plus handoff hooks; fdb0147a removed them. player-npc-sales.ts equals the current console at HEAD; deconstruction.ts differs only by recoverSpace | git show f4df566c and fdb0147a on runtime/coordinator/merchant/deconstruction.ts, player-npc-sales.ts |
 
 ## 4. Tests today
 
@@ -2108,17 +2108,17 @@ seven copies of the number.
 
 ### Q2. Should the gold reserve bind every purchase?
 
-**Today:** Ryan's bid jobs (stand bids, ALData bids, Ponty bids) spend merchant and bank gold with
+**Today:** The current bid jobs (stand bids, ALData bids, Ponty bids) spend merchant and bank gold with
 no reserve (runtime/coordinator/commerce/bids.ts:93-103, 133-156, 185-202). The fork adds a gold
 reserve that only its own watch and buy-now orders respect (fork HEAD
-runtime/coordinator/commerce/npc-shop.ts:131-142), so a Ryan bid can spend below the reserve.
+runtime/coordinator/commerce/npc-shop.ts:131-142), so the current bid can spend below the reserve.
 
 **Options:**
-- A. One reserve for every automatic purchase, read by Ryan's bids and the fork's orders. The
+- A. One reserve for every automatic purchase, read by the current bids and the fork's orders. The
   reserve means what it says; a bid can wait for gold.
-- B. Reserve for the fork's orders only (today). Ryan's bids behave exactly as in his base.
+- B. Reserve for the fork's orders only (today). The current bids behave exactly as in the current console.
 
-**Recommendation:** A, offered to Ryan as a setting with a default of 0, so his base behaves the
+**Recommendation:** A, offered upstream as a setting with a default of 0, so the current console behaves the
 same until a user sets it.
 
 ### Q3. What should happen to a native WTB offer whose slot empties without a receipt?
@@ -2177,42 +2177,42 @@ Not yet verified:
 | Appendix A s2: pruneProductionReceipts (2048 cap) added in cb8881f6 2026-10-07 | CONFIRMED | git log -L65,72:runtime/coordinator/inventory/production.ts -> cb8881f6 2026-10-07 Breene26; production.ts:65-72 |
 | Appendix A s2: mailbox growth cap one day after the feature | CONFIRMED | 9454392e 2026-10-18, 198562f8 2026-10-19; mailbox.ts:6, 39 |
 | Appendix A s3: stand bid jobs written at local-market.ts:104 only when merchantCurrent is null (:93) | CONFIRMED | local-market.ts:93-94, 104-111 |
-| Appendix A s3: ALData bid jobs every 10 s via market-feeds.ts:74 -> aldata-service.ts:75 -> application.ts:1566 | PARTLY | market-feeds.ts:74 and aldata-service.ts:75 confirmed; the application hook is queueALDataMatches at application.ts:1427 on the Ryan ref (1566 is a HEAD line) |
+| Appendix A s3: ALData bid jobs every 10 s via market-feeds.ts:74 -> aldata-service.ts:75 -> application.ts:1566 | PARTLY | market-feeds.ts:74 and aldata-service.ts:75 confirmed; the application hook is queueALDataMatches at application.ts:1427 on the current console (1566 is a HEAD line) |
 | Appendix A s3: bid Ponty jobs have no realm and are replanned with the merchant's current server | PARTLY | bids.ts:105-116 sets no realm; purchase-composition.ts:27-33 passes the merchant's status server at queue time; dispatch-time replanning is in merchant/dispatcher.ts (part B) |
 | Appendix A s3: homeRealm table (bids.ts:113, 147; manual-orders.ts:70, 118, 129; npc-shop.ts:416, 418) | CONFIRMED | bids.ts:113; manual-orders.ts:70, 118, 129; fork HEAD npc-shop.ts:416, 418 |
-| Appendix A s3: marked/merchantMarked, withdrawals, compounds and bankboiQueue writer lists | PARTLY | all sites confirmed except automatic-action.ts lines, which sit one lower on the Ryan ref: 45 (not 46), 111 (not 112), 113 (not 114) |
+| Appendix A s3: marked/merchantMarked, withdrawals, compounds and bankboiQueue writer lists | PARTLY | all sites confirmed except automatic-action.ts lines, which sit one lower on the current console: 45 (not 46), 111 (not 112), 113 (not 114) |
 | Appendix A s3: upgrades written at 19 sites in 13 files | PARTLY | sites confirmed; automatic-action.ts:52 (review says 53); offering-waits.ts:34-35 |
-| Appendix A s3: merchantWeapon writers merchant-item-commands.ts:74, transfer-commands.ts:63, :80, clear-item-marks.ts:125 | CONFIRMED | same lines on the Ryan ref |
+| Appendix A s3: merchantWeapon writers merchant-item-commands.ts:74, transfer-commands.ts:63, :80, clear-item-marks.ts:125 | CONFIRMED | same lines on the current console |
 | Appendix A s3: bankboiTransaction single owner with four latches; ready within 10 s; recovery 600 s or 120 s plus stale or not banking | CONFIRMED | bankboi-service.ts:44-47, 49-58, 87, 102, 122, 141-147, 173 |
 | Appendix A s3: production.attempts single owner; one unfinished attempt blocks all; 2048 cap | CONFIRMED | production.ts:65-72, 82, 91, 124, 187-202, 271 |
 | Appendix A s4: npc-shop filters to activeRealm but stores listing realm and homeRealm at queue time | CONFIRMED | fork HEAD npc-shop.ts:357-360, 402, 416, 418 |
 | Appendix A s4: watch select has no per-job cap | CONFIRMED | fork HEAD npc-shop.ts:383-395 |
-| Appendix A s4: spendableGold subtracts only npcOrderId jobs; Ryan's bid jobs can spend below goldReserve | CONFIRMED | fork HEAD npc-shop.ts:131-142; bids.ts reads no reserve (inference only for the character-side check) |
+| Appendix A s4: spendableGold subtracts only npcOrderId jobs; the current bid jobs can spend below goldReserve | CONFIRMED | fork HEAD npc-shop.ts:131-142; bids.ts reads no reserve (inference only for the character-side check) |
 | Appendix A s4: ponty.ts observe and refresh both call queueMatches, which runs queuePonty, matchPonty and scheduleRon | PARTLY | ponty.ts:51, 71 confirmed; the hook is fork HEAD application.ts:1556-1560 (review cites 1560-1564) |
-| Appendix A s4: production prune present in Ryan's base; upstream #59 addressed at source | CONFIRMED | production.ts:65-72 called at :74, :132, :198; completed commerce journals stay inside the cap (:116-128) |
-| Appendix A s4: string-matched errors (production.ts texts, 'interrupted', deconstruction text, one typed code) | PARTLY | production.ts:53-54, 82, 85, 249, 154 and bankboi-composition.ts:63, completion-retries.ts:72, merchant-idle.ts:50, withdrawal-bank-guard.ts:22 confirmed; the dispatcher log is at merchant/dispatcher.ts:261 on the Ryan ref (review says 265); http/marketplace-progress.ts:12-17 also has typed failure codes |
+| Appendix A s4: production prune present in the current console; upstream #59 addressed at source | CONFIRMED | production.ts:65-72 called at :74, :132, :198; completed commerce journals stay inside the cap (:116-128) |
+| Appendix A s4: string-matched errors (production.ts texts, 'interrupted', deconstruction text, one typed code) | PARTLY | production.ts:53-54, 82, 85, 249, 154 and bankboi-composition.ts:63, completion-retries.ts:72, merchant-idle.ts:50, withdrawal-bank-guard.ts:22 confirmed; the dispatcher log is at merchant/dispatcher.ts:261 on the current console (review says 265); http/marketplace-progress.ts:12-17 also has typed failure codes |
 | Appendix A s4: 120 s window in six places; Ponty local freshness 30 s | PARTLY | bids.ts:101, 165; manual-orders.ts:111; price-history.ts:48; ponty.ts:56; fork npc-shop.ts:97 confirmed; also http/manual-market-orders.ts:52 and the unused helper runtime/market-preferences.ts:8-10; 30 s at ponty.ts:30, 34 and bids.ts:137 |
 | Appendix A s4: magic timeouts list (native-stand 10 s, BankBoi 10/600/120/30 s, mailbox 30 s, delivery 10 s and 400 px, 3 slots, staging 35-41) | CONFIRMED | native-stand.ts:77; bankboi-composition.ts:63; bankboi-service.ts:54, 143, 144, 146; mailbox.ts:28; transfer-commands.ts:223-224; offering-waits.ts:132; reserved-cargo.ts:80 |
 | Appendix A s4: direct Date.now() in native-stand.ts:77, merchant-item-commands.ts:101, production.ts:124, :187, transfer-commands.ts:223 | CONFIRMED | same lines; also native-stand.ts:127, mail-startup.ts:73, http/native-stand.ts:75, http/inventory-receipts.ts:83 |
 | Appendix A s5: merchantQueue written from 19 sites in 10 files | PARTLY | sites confirmed; automatic-action.ts:101 (review says 102) |
 | Appendix A s5: merchantCurrent flags set from outside (itemMarksCleared, offeringSupply, pauseReason) | PARTLY | automatic-action.ts:129, clear-item-marks.ts:74, offering-supply.ts:30 confirmed; pauseReason is at offering-waits.ts:64 and :133 (review says 67) |
 | Appendix A s5: identity has no single definition; each legacy form keeps a branch | CONFIRMED | see problem 'Item and listing identity has many encodings'; more encodings exist than the review lists (stack identity, Ponty groupKey, name\|level, craft name@level) |
-| Appendix A s6: live tip 21b8362d changes no file in commerce/ or inventory/ | CONFIRMED | not re-run; accepted from the review command git -C pta-pull diff af92de45 21b8362d --stat (no file in this slice differs between Ryan ref and HEAD except the three fork files) |
+| Appendix A s6: live tip 21b8362d changes no file in commerce/ or inventory/ | CONFIRMED | not re-run; accepted from the review command git -C pta-pull diff af92de45 21b8362d --stat (no file in this slice differs between the current console and HEAD except the three fork files) |
 | Appendix B s4: luckySlotLocks set by merchant-settings.ts:52, removed by unlock and identity change | CONFIRMED | http/merchant-settings.ts:34, 52; status/lucky-slot-tracking.ts:21 |
 | Appendix B s4: luckySlotResume set on unlock and released after a newer roll | CONFIRMED | http/merchant-settings.ts:42; status/lucky-slot-tracking.ts:44-51 |
-| Appendix B s4: luckyUpgradeSlots has no runtime writer | CONFIRMED | git grep luckyUpgradeSlots on the Ryan ref: reads only, deletes at status/lucky-slot-tracking.ts:20, 27, and merchant/initial-runtime.ts:37-40 |
+| Appendix B s4: luckyUpgradeSlots has no runtime writer | CONFIRMED | git grep luckyUpgradeSlots on the current console: reads only, deletes at status/lucky-slot-tracking.ts:20, 27, and merchant/initial-runtime.ts:37-40 |
 | Appendix B s4: lock, resume, verified precedence computed twice | PARTLY | three places: status/response.ts:134-140, characters/shared.js:11331-11333 (review cites HEAD 12054-12056), dashboard/features/party/connected-inventory.tsx:186; copies at shared.js:8471, 10471; fallback select at shared.js:5097-5098 |
 | Appendix B s4: restoreBestEffort abandons the journal on lucky_slot_unavailable | CONFIRMED | runtime/characters/lucky-upgrade.ts:129-138 |
 | Appendix B s4: completion-retries matches the exact 'item or scroll unavailable' sentence and treats other lucky texts as capacity | CONFIRMED | merchant/completion-retries.ts:67-73, 136; lucky-upgrade.ts:182 |
 | Appendix B s4: the character already sends a typed code; the coordinator ignores it and parses English text | PARTLY | the code exists on the character's Error (lucky-upgrade.ts:67) and is used there (lucky-upgrade.ts:135, shared.js:3951); no errorCode field reaches the coordinator in the merchant completion path found by git grep, so the coordinator cannot read it (inference on the report shape) |
 | Appendix B http rows: bankboi-storage second snapshot writer; in-memory dedupe of 32 receipts; 10 s error retry | CONFIRMED | http/bankboi-storage.ts:45, 47-51, 108, 117-120 |
-| Appendix B http rows: manual-market-orders freshness and check flag (eb9acad0) | CONFIRMED | Ryan http/manual-market-orders.ts:50-57; fork HEAD adds allowStale through body.check === true (git diff) |
+| Appendix B http rows: manual-market-orders freshness and check flag (eb9acad0) | CONFIRMED | the current http/manual-market-orders.ts:50-57; fork HEAD adds allowStale through body.check === true (git diff) |
 | Appendix B http rows: marketplace-location 25 px move threshold and one retry per seller | CONFIRMED | http/marketplace-location.ts:74-76, 116-119 |
 | Appendix B http rows: restock compatibility comment, policy includes elixir | CONFIRMED | http/restock.ts:13, 29-42 |
 | Brief: production.ts prune is part of ledger 15 (upstream #59) | CONFIRMED | production.ts:65-72 caps completed receipts at 2048 since cb8881f6; unfinished attempts are never pruned (:66) |
 | evaluateAutoCompounds never fills completed and its filter is always true; callers still loop over completed (review 1.1 automatic-improvements.ts, improvement-scheduler.ts:142) | CONFIRMED | merchant/automatic-improvements.ts:40-54; improvement-scheduler.ts:140-147 |
 | 16-slot stand capacity duplicated at automatic-sales.ts:88, :184 and stand-marks.ts:44 (review 1.1) | PARTLY | the literal is at automatic-sales.ts:88, :184 and stand-marks.ts:107, :152 (not :44; occupied() at :43-45 has no literal); also shared.js:9382, 9537, 9559; the game allows 24 or 30 (server_functions.js:4365-4376) |
-| recoverSpace matches exact error text thrown at shared.js:9817 HEAD; magic SPACE_RETRY_MS 120000 (review 1.1 deconstruction.ts) | CONFIRMED | fork HEAD deconstruction.ts:92, 230-239; Ryan shared.js:9206 |
+| recoverSpace matches exact error text thrown at shared.js:9817 HEAD; magic SPACE_RETRY_MS 120000 (review 1.1 deconstruction.ts) | CONFIRMED | fork HEAD deconstruction.ts:92, 230-239; current shared.js:9206 |
 | retainBlocked matches exact error text, magic 300000 (review 1.1 npc-sales.ts) | CONFIRMED | merchant/npc-sales.ts:40, 45-50 |
 | completedUpgrades has no caller (review 1.1 banked-improvements.ts) | CONFIRMED | banked-improvements.ts:56-58; not referenced in improvement-scheduler.ts or automatic-sales.ts read here |
 | marketplace batching covers only ALData; Ponty jobs are never grouped (review 1.1 marketplace-batch.ts) | CONFIRMED | merchant/marketplace-batch.ts:17 |
@@ -2241,7 +2241,7 @@ Not yet verified:
 | Typed failureKind only for hunt_movement_owned, commerce_movement and commerce_recovery (Appendix C 4) | CONFIRMED | shared.js:8218 (merchantCommerce); merchantService line not in this list |
 | Fix-on-fix: merchantBuyUpgradeLine remap fixes fde2186d, 2be25ed8, 6f532e38; lucky best effort 17400329 (Appendix C 3) | CONFIRMED | git log -1 of each sha (dates 2026-10-09, 2026-10-09, 2026-10-18, 2026-10-10) |
 | Identity encodings: fingerprint/sameItem, sameItemState, bankStackIdentity (9 fields), bankSortItemState, '@+' rule keys, JSON fingerprint comparisons (Appendix C 4) | CONFIRMED | shared.js:1241-1263, 4019-4023, 4261-4263; also stand-marks.ts:27-35 identity and Ponty exactProperties shared.js:8599-8604 |
-| 6.2: stand reconcile up to 16 unequips with no delay, 144 for a full reprice | PARTLY | shared.js:9537-9550 confirms 16 back-to-back unequips (Ryan line, review cites HEAD 10231-10245); 144 is the review's estimate from CC unequip 6 (server.js:248-262), not measured |
+| 6.2: stand reconcile up to 16 unequips with no delay, 144 for a full reprice | PARTLY | shared.js:9537-9550 confirms 16 back-to-back unequips (current line, review cites HEAD 10231-10245); 144 is the review's estimate from CC unequip 6 (server.js:248-262), not measured |
 | 6.2: retrieveFromBankUntil loop up to 100 with no settle wait; ALData sell loop with no wait | CONFIRMED | shared.js:1336-1345, 8983-8987 |
 | 1.2: merchantDeconstruct throws the exact text the coordinator matches (vs deconstruction.ts:233) | CONFIRMED | shared.js:9206; deconstruction.ts:233 exists only at fork HEAD |
 | 1.2: merchantDonate raw parent.socket.emit('lostandfound') | CONFIRMED | shared.js:9297 |

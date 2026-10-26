@@ -1,6 +1,6 @@
 # 02 Movement: where each character moves, and who may stop it
 
-Milestone M0 (the map). Checked against Ryan's `1.5-feature-branch` at `b9b5c91e`
+Milestone M0 (the map). Checked against the current `1.5-feature-branch` at `b9b5c91e`
 (`refs/review/ryan-1.5` in (local checkout)). Lines marked (fork) are on the
 user's fork at `af92de45`; lines marked (df) or (21b8362d) are on the death fixes at `21b8362d`
 ((local checkout)). `shared.js` means `characters/shared.js`. Paths that
@@ -17,7 +17,7 @@ grouped by where the code lives. Section 2 explains what goes wrong and why, and
 
 This spec was written as the deep second pass the full review asked for
 (`review/full/movement.md` section 8). Every function claimed in `catalog/02-movement.json` was read in
-full on the Ryan ref, in five slices:
+full on the current console, in five slices:
 
 | Slice | Code | Behaviours |
 |---|---|---|
@@ -51,10 +51,10 @@ command is given inline; the catalog counts come from `node tools/check-claims.m
   A convoy is one coordinator slot (nav/convoy.ts:202-203).
 - **Ownership is proven by stand-ins:** `smart.on_done` identity, the `owner.recoveryStage` label,
   `movement.gate.owner`, navigation revisions, about 25 flags read by `isOccupied()`, and convoy id
-  tuples compared in twelve places. The full scan finds 272 stand-in lines on the Ryan ref
+  tuples compared in twelve places. The full scan finds 272 stand-in lines on the current console
   (`standins-index.json`, section 1.7).
 
-Writers, from a regex scan of `shared.js`, `runtime/**/*.ts` and `scripts/*.cjs` on the Ryan ref
+Writers, from a regex scan of `shared.js`, `runtime/**/*.ts` and `scripts/*.cjs` on the current console
 (`node writers.cjs`, 25 false positives removed): 249 call sites in 131 functions. `stop(` 102
 (64 `stop('smart')`, 19 `stop('move')`, 19 bare `stop()`), `smart_move(` 85, `gate.owner=` 12, native
 `move(` 10, `movement.cancel(` 9, `host.move` or `native.move` 8, `movement.move(` 7, `xmove(` 5,
@@ -63,7 +63,7 @@ Writers, from a regex scan of `shared.js`, `runtime/**/*.ts` and `scripts/*.cjs`
 ### 1.1 Movement service, planning and the mover chain
 
 Ref: `refs/review/ryan-1.5` (b9b5c91e) unless a line says "(fork)" (af92de45) or "(21b8362d)".
-`shared.js` means `characters/shared.js` on the Ryan ref. Every file in this slice was read in full:
+`shared.js` means `characters/shared.js` on the current console. Every file in this slice was read in full:
 `runtime/characters/movement.ts` (445 lines), `movement-executor.ts` (263), `movement-host.ts` (82),
 `movement-correction.ts`, `movement-destination.ts`, `movement-diagnostics.ts`, `movement-error.ts`,
 `movement-relocation.ts`, `native-planner.ts`, `return-planner.ts`, `planning-schedule-metrics.ts`,
@@ -186,7 +186,7 @@ geometry-repair,movement-barrier,planner-geometry,planner-service,planner-worker
   (368); otherwise it enters recovery. An owned terminal transition settles with a receipt when the
   same owner, server, unpaused context and a position within 1 match (338-359). Settings: none.
 - **MOV-014** Route import. Rules: `movement.install` (importRoute) validates a coordinator plot against
-  the live journey and refuses a geometry mismatch (movement.ts:420-432). Callers on the Ryan ref:
+  the live journey and refuses a geometry mismatch (movement.ts:420-432). Callers on the current console:
   shared.js:2763 (Cave convoy), 15448 (shared convoy) and 16744 (direct combat approach), found by
   `writers-index.json` (3 total). Settings: none.
 
@@ -863,7 +863,7 @@ passive-travel.ts, passing.ts, passing-admission.ts, pursuit.ts, locked-pair.ts.
 Game rule comparison: the fork's code states the server files aggressive monsters in a
 32-unit grid and checks the 3x3 cells around each player, about 90.5 units
 (shared.js:3774-3780 (fork); pulling.ts:6-11 (fork); `AGGRO_REACH = 96`, pulling.ts:11 (fork);
-`BOSS_AGGRO_REACH = 64 x sqrt(2)`, shared.js:3781 (fork)). Ryan's base has no aggro-grid model
+`BOSS_AGGRO_REACH = 64 x sqrt(2)`, shared.js:3781 (fork)). The current console has no aggro-grid model
 (`git grep -n -i -E "ghash|aggro.?reach" refs/review/ryan-1.5` returns nothing). Unverified
 against the server source in this pass.
 
@@ -873,7 +873,7 @@ Scope: `runtime/coordinator/navigation/*` (except the planner, adapter and barri
 
 All lines are on `refs/review/ryan-1.5` (b9b5c91e) unless marked (fork). Paths without a folder are in `runtime/coordinator/navigation/`.
 
-Counts: 445 functions in slice 1.4, 414 claimed in 42 behaviours, 31 handed off, 0 left over (`node scratchpad/mov/w4/build.cjs`). 182 test references, all present on the Ryan ref (node check against `git show refs/review/ryan-1.5:<file>`).
+Counts: 445 functions in slice 1.4, 414 claimed in 42 behaviours, 31 handed off, 0 left over (`node scratchpad/mov/w4/build.cjs`). 182 test references, all present on the current console (node check against `git show refs/review/ryan-1.5:<file>`).
 
 The coordinator moves the party by writing commands into `party.commands[name]`; each character picks its command up from the status response and acts on it in `characters/shared.js`. The coordinator never moves a character directly. Every movement decision on this side is therefore "which command does each member hold now", and every hand-back is a command being deleted or replaced.
 
@@ -1164,7 +1164,7 @@ The full index of 249 call sites is `writers-index.json` in the spec scratch fol
 
 #### Slice 1.1
 
-The full index is `writers-index.json` (249 call sites in 131 enclosing functions on the Ryan ref,
+The full index is `writers-index.json` (249 call sites in 131 enclosing functions on the current console,
 after removing 25 false positives such as type declarations and timer `stop()` methods). Command:
 `node writers.cjs <scratch>` (a regex scan of every `characters/shared.js`, `runtime/**/*.ts` and
 `scripts/*.cjs` file on the ref, excluding tests; `scratchpad/mov/writers.cjs`). Counts by call:
@@ -1331,7 +1331,7 @@ combat `stop("move")` above also ends a travel journey that happens to be live.
 
 ### 1.7 Ownership stand-ins
 
-Every flag, label, identity check and revision used today in place of a movement owner. The regex scan in `standins-index.json` finds 272 lines on the Ryan ref: navigation revision 190, `movementOwner` 26, `smart.on_done` identity checks 14, `isOccupied()` 13, gate owner reads 10, `recoveryStage` 9, `smart.on_done` captures 7, `smart.plot` identity 3. It misses checks written through ports, such as the formation recovery client's (runtime/combat/formation-recovery-client.ts:37).
+Every flag, label, identity check and revision used today in place of a movement owner. The regex scan in `standins-index.json` finds 272 lines on the current console: navigation revision 190, `movementOwner` 26, `smart.on_done` identity checks 14, `isOccupied()` 13, gate owner reads 10, `recoveryStage` 9, `smart.on_done` captures 7, `smart.plot` identity 3. It misses checks written through ports, such as the formation recovery client's (runtime/combat/formation-recovery-client.ts:37).
 
 #### Slice 1.1
 
@@ -1361,7 +1361,7 @@ checks written through ports, such as the formation recovery client's (formation
 | `escapeState` / `escapeOwns()` | 34, 138-158 | escape owns all movement for fighters | status `state.escape` (11204) | handleOwnedCommand (10397), reunionBlocked (13459), isOccupied (17516), many guards |
 | `navigationIntent.revision` and `.cancelled` | 10278-10299, shared.js:20 | journeys and tokens from an older selection | status (11207) | movement context (movement.ts:68), reunion, follow, rare, convoy, event checks |
 | `farmingTravelToken` | 10409-10413 | a farming travel command is running | handleOwnedCommand | afterCombat (14840, 14848), applyNavigationIntent, localTravelCommand (14169) |
-| `convoyTraveling` / `partyConvoyActive` | 383, 11198, 11238, 11248-11255 | a convoy owns movement | createLocalConvoy and status | 153 lines in shared.js (`grep -c convoyTraveling` on the Ryan file) |
+| `convoyTraveling` / `partyConvoyActive` | 383, 11198, 11238, 11248-11255 | a convoy owns movement | createLocalConvoy and status | 153 lines in shared.js (`grep -c convoyTraveling` on the current file) |
 | `convoyTraveling.defensePaused` | 14112 | convoy paused for defense | interruptConvoyForDefense | groupedMovement (14567), isOccupied (17505, 17523) |
 | convoy purpose lists | 3393, 14087, 14094, 14979 | which convoys may stop or hand off | constants | interruption and hand-off rules |
 | `followingLeader` | 17765, 17783 | a follow route runs | followLeaderIfFar | isOccupied (17525), status tick (11299) |
@@ -1381,7 +1381,7 @@ checks written through ports, such as the formation recovery client's (formation
 ###### What isOccupied reads (17494-17528, slice 1.3 owns the function)
 
 Counted by reading 17494-17528: 25 conditions. Setters found with
-`grep -n -E "(^|[^.A-Za-z_])<name> *= *[^=]"` on the Ryan file.
+`grep -n -E "(^|[^.A-Za-z_])<name> *= *[^=]"` on the current file.
 
 | condition | line | set at | what it suppresses (the role runner tick and grouped movers) |
 |---|---|---|---|
@@ -1471,46 +1471,52 @@ Counted by reading 17494-17528: 25 conditions. Setters found with
 | `controlAt` age 3 s, `movementReady` | runtime/characters/dungeons.ts:349-351 | Cave movement only on fresh coordinator control | dungeon `receive` (331-336) | movement context paused (shared.js:21) |
 | `restartRevisions` | nav/initial-commands.ts:19-24, 77 | restored convoy belongs to the pre-restart intents | restoredConvoy | restart recovery (slice 1.4) |
 
+### Added in triage
+
+catalog/triage-log.json lists each behaviour in this group.
+
+- **MOV-166** Party Town cycle upkeep: the heartbeat drops a pending member whose navigation revision moved on, deletes orphaned town-party commands, and restores a missing command for a member still pending. Code: `runtime/coordinator/status/response.ts`.
+
 ## 2. What goes wrong
 
 ### 2.0 Root causes
 
 Most findings in 2.1 to 2.5 come back to eight causes. Each line names the findings it explains.
 
-1. **No movement owner (Ryan).** The service keeps one journey (movement.ts:61). `move()` ends it
+1. **No movement owner (current).** The service keeps one journey (movement.ts:61). `move()` ends it
    before it reads the new request (384) and stops a moving character (392). `stop()` ends it for
    any caller (411), so 102 stop calls can each end a journey they did not start. Ownership is then
    proven after the fact by `smart.on_done` identity, labels, gate owners, revisions and flags (1.7).
    Explains 2.1 items 1 to 4, 2.2 W2-1 and W2-2, 2.3 W2 and W5, and ledger bugs 7 and 8.
-2. **A repeat request is a restart (Ryan).** Asking again for the place the character already walks
+2. **A repeat request is a restart (current).** Asking again for the place the character already walks
    to costs a stop packet, a 5 s settle wait and a new plan (movement.ts:237-251, 384, 392). Every
    caller that re-asks on a tick needs its own guard. Explains 2.3 W3 (independent approach re-aims up
    to 4 times a second), ledger bug 3a (pull walk stall) and bug 8, and the fork's move budget and log
    folding (7af248cf, 7ea350fb).
-3. **Movers sit in a fixed chain with no owner check (Ryan).** The role runner asks movers in a fixed
+3. **Movers sit in a fixed chain with no owner check (current).** The role runner asks movers in a fixed
    order every 100 ms and takes the first that claims the tick (runner.ts:212-256). The chain has no
    `isOccupied()` check (only the support tick has one, runner.ts:291). Follow and the queue client
    run from two more tick sources (runner.ts:152-157; client.ts:149-154). Modes add movers by
    inserting branches (fork: boss retreat first at runner.ts:239 (fork), pull mode in
    `recoverFarmApproach` and `formationMove`, tank hold in three movers). Explains ledger bug 7 step 6
    and the fork chains in section 3.
-4. **One safety check per mode (Ryan, extended by the fork).** `safeCombatPoint` looks only at
+4. **One safety check per mode (current, extended by the fork).** `safeCombatPoint` looks only at
    monsters already targeting the character (shared.js:17167-17169). Only the formation solver looks
-   at every visible monster, at attack range plus 8 (16247). Ryan's base has no model of the game's
+   at every visible monster, at attack range plus 8 (16247). The current console has no model of the game's
    aggro reach (`git grep -n -i -E "ghash|aggro.?reach" refs/review/ryan-1.5` returns nothing). The
    fork adds a boss zone and a pull-mode idle check as special cases (shared.js:18046, 18048 (fork)).
    Explains 2.3 W1 and W11, 2.2 W2-10, ledger bugs 3d and 4.
-5. **One convoy slot with no replacement rule (Ryan).** Each convoy start cancels the active one
+5. **One convoy slot with no replacement rule (current).** Each convoy start cancels the active one
    (nav/convoy.ts:202-203); only shared walks write a rule, and it lets any event walk replace any
    ordinary convoy (nav/shared-walk.ts:191). On the character, any new command cancels the running
    convoy journey as "Command takeover" (shared.js:10500-10514). Explains 2.4 G1 and G2 and the fork's
    event walk chain (section 3).
-6. **Goals copied across state machines (Ryan).** "Safe at Main" is decided by six copies of "within
+6. **Goals copied across state machines (current).** "Safe at Main" is decided by six copies of "within
    65 of Main" (shared.js:197, 218, 238; scripts/combat-disengagement.cjs:87;
    scripts/party-escape.cjs:74, 86) and by other radii in other loops: 90 for Town and event return
    (shared.js:10720, 10801, 10829, 11037, 11017), 100 for anniversary staging (11837). Escape and death
    recovery each hold their own goal. Explains ledger bug 5 and 2.2 W2-5.
-7. **Text and name lists used as interfaces (Ryan).** Regexes on reason text pick the log phase, the
+7. **Text and name lists used as interfaces (current).** Regexes on reason text pick the log phase, the
    native fallback and Town disabling (movement.ts:98, 229, 274; nav/shared-navigation.ts:46), retry
    classes (nav/farm-area-recovery.ts:71-73; nav/shared-departure.ts:38-42, 57-59) and recovery
    migrations (nav/communication-failure.ts:2-16). Purpose lists disagree (shared.js:3393 vs 14087 and
@@ -1518,7 +1524,7 @@ Most findings in 2.1 to 2.5 come back to eight causes. Each line names the findi
    Boss lists disagree (nav/shared-walk.ts:60 names 8, nav/event-pursuit.ts:24 and
    nav/halloween-return-arrival.ts:5 name 3, shared.js:15081 names a different 3). Explains 2.1 item 5,
    2.2 W2-6, 2.3 W7, 2.4 G3 to G5, 2.5 items 1 and 2.
-8. **Budgets chosen per symptom (Ryan).** The coordinator side has about 25 separate timers and retry
+8. **Budgets chosen per symptom (current).** The coordinator side has about 25 separate timers and retry
    lists (2.4 G6) and the client side as many windows (2.3 W8). The list [5000, 15000, 30000, 60000]
    is copied between scripts/farming-navigation.cjs:268 and scripts/combat-disengagement.cjs:113.
    Nothing caps the total time a party may stand still; each recovery restarts its own budget.
@@ -1527,8 +1533,8 @@ Most findings in 2.1 to 2.5 come back to eight causes. Each line names the findi
 
 | Bug | First wrong decision | Patched? | Chain |
 |---|---|---|---|
-| 3 Targetron deaths (movement parts) | 3a: `pullWalk` re-issues `movement.move` when its `going_x/y` test fails after the first segment (shared.js:18490-18497 (fork)), and `move()` restarts the journey (movement.ts:384, 392). 3b/3c: `choosePuller` picks the longest range, the priest, then the mage (runtime/combat/pulling.ts:21-24 (fork)). 3d: the tank hold releases below 0.5 HP (shared.js:18545 (fork)) and the kite arc is checked against attackers only (Ryan 17167-17169, 17223, 17228). | 3a, 3b, 3c partly by 21b8362d (pull only); 3d none | 2.3, "Bug 3" |
-| 4 Fonze tank walk-in | `tankStep` stepped the tank to `min(desiredCombatRange(), 30)` with only `safeCombatPoint` (7bd14d7c, removed in 4075d3f2) | Removed by 4075d3f2; the same terrain-only pattern remains in Ryan's `frankyMovementTick` (17237-17262) and the fork's Franky movers | 2.3, "Bug 4" |
+| 3 Targetron deaths (movement parts) | 3a: `pullWalk` re-issues `movement.move` when its `going_x/y` test fails after the first segment (shared.js:18490-18497 (fork)), and `move()` restarts the journey (movement.ts:384, 392). 3b/3c: `choosePuller` picks the longest range, the priest, then the mage (runtime/combat/pulling.ts:21-24 (fork)). 3d: the tank hold releases below 0.5 HP (shared.js:18545 (fork)) and the kite arc is checked against attackers only (current 17167-17169, 17223, 17228). | 3a, 3b, 3c partly by 21b8362d (pull only); 3d none | 2.3, "Bug 3" |
+| 4 Fonze tank walk-in | `tankStep` stepped the tank to `min(desiredCombatRange(), 30)` with only `safeCombatPoint` (7bd14d7c, removed in 4075d3f2) | Removed by 4075d3f2; the same terrain-only pattern remains in the current `frankyMovementTick` (17237-17262) and the fork's Franky movers | 2.3, "Bug 4" |
 | 5 Hunt stuck after death | The escape stage becomes `complete` at the Blink landing (scripts/party-escape.cjs:91-96) while death recovery waits for Main within 65 (scripts/combat-disengagement.cjs:83-92) | Symptom fixed by ce6e7c1a (fork); adds a seventh copy of the goal (party-escape.cjs:105 (fork)) | 2.4, "Ledger bug 5" |
 | 7 Icelocked parked at Mr. Pumpkin | An unattributed `stop` ended the event walk (movement.ts:403-411; caller unknown without `stopStack`); the mage escort then runs the formation solver in a joined event (shared.js:16781), holds "no safe local detour" (16921-16926) with terrain recovery off in events (16448), and the runner stops at `formationMove` before the event detour (runner.ts:244) | None in any ref | 2.3, "Bug 7" |
 | 8 "Movement replaced" every ~100 ms toward winterland | A writer re-issues a non-convoy journey faster than one plan cycle (movement.ts:384; the fold key proves no `convoyId`, movement-diagnostics.ts:10, 13). Four candidates, A to D; the code cannot pick one because `move()` records no replacing caller | 21b8362d removes candidate C for pull walks only | 2.1, "Ledger bug 8" |
@@ -1538,7 +1544,7 @@ to 05-survival (shared.js:70-72); both are handoffs, not chained here.
 
 ### 2.1 Movement service, planning and the mover chain
 
-1. **A re-issue is a restart (Ryan).** `move()` ends the active journey at movement.ts:384 and stops a
+1. **A re-issue is a restart (current).** `move()` ends the active journey at movement.ts:384 and stops a
    moving character at 392 before it knows whether the request is the same. Planning then waits for
    the character to settle (237-251) and for an async ALClient reply (196-232). A caller that
    re-issues the same destination faster than one plan cycle keeps the character standing. No
@@ -1546,35 +1552,35 @@ to 05-survival (shared.js:70-72); both are handoffs, not chained here.
    such as shared.js:14640, 16106, 16193). History of `move` (`git log -L 382,396:runtime/characters/movement.ts
    refs/review/ryan-1.5`): 9fbeadab 09-20, d5279eab 09-25 (reason text and code), 3133e684 09-28,
    a3986593 10-08; none adds a same-destination case.
-2. **Any stop ends any journey (Ryan).** movement.ts:411 ends the active journey for every `stop()`;
+2. **Any stop ends any journey (current).** movement.ts:411 ends the active journey for every `stop()`;
    102 such calls exist (`writers-index.json`). 27d7dbeb (10-01, `git log -L 403,413`) added the Cave
    exemption `retainOnDirectStop` and the `stopStack` diagnostic, which treats the symptom: callers
    that stop "their" walk end other owners' journeys.
-3. **Ownerless journeys look free (Ryan).** `independentApproachPorts.context` treats a journey as
+3. **Ownerless journeys look free (current).** `independentApproachPorts.context` treats a journey as
    foreign only when `movement.report().owner` exists (shared.js:16708). `smart_move` callers that pass
    no options (follow shared.js:17776, farm approach 16191, regroup 14670, rare path 3693, legacy
    convoy `navigate` 15835 when not a continuous return) start journeys with no owner, so the
    independent approach may replace them. Inference: the replaced caller then sees its
    `smart.on_done` capture fail and restarts after its own delay.
-4. **Two writers inside the executor (Ryan).** `retryStoppedWalk` re-sends the travel segment 250 ms
+4. **Two writers inside the executor (current).** `retryStoppedWalk` re-sends the travel segment 250 ms
    after the character stops (movement-executor.ts:122-129, e421d54e 09-22). Combat steps
    (`sendCombatMove`) are native moves outside the journey, so a combat stop and the executor's re-send
    can race. `pause()` exists for that hand-off (28-36), but combat movers do not call it; it runs only
    on a paused context or a server correction (movement.ts:76, 377).
-5. **Text as an interface (Ryan).** The log phase (movement.ts:98), the native fallback decision (229)
+5. **Text as an interface (current).** The log phase (movement.ts:98), the native fallback decision (229)
    and Town disabling (274) use regex on error text; executor Town rejection uses another regex
    (movement-executor.ts:177). A new error wording changes behaviour.
-6. **Replacement logs the wrong destination (Ryan).** The "Movement replaced" line prints `state`
+6. **Replacement logs the wrong destination (current).** The "Movement replaced" line prints `state`
    before `move()` overwrites it (movement.ts:384 runs before 391), so it shows the replaced journey's
    destination; the new one is only in `failureContext.replacement`.
-7. **Mover chain with no owner check (Ryan).** `movementTick` (runner.ts:212-256) has no
+7. **Mover chain with no owner check (current).** `movementTick` (runner.ts:212-256) has no
    `isOccupied()` gate, `followLeaderIfFar` runs from target selection outside the chain
    (runner.ts:152-157), and the queue client ticks two more state machines from a timer and socket
    events (client.ts:149-154). Three tick sources drive movers for one character.
-8. **Wrong value check: Cave-only budget pair (Ryan).** `nativePlanningProgress` throws unless the
+8. **Wrong value check: Cave-only budget pair (current).** `nativePlanningProgress` throws unless the
    values are exactly 240000 and 90000 for a shared journey (movement.ts:35); the option is a
    Cave special case encoded as a magic pair, not a rule.
-9. **Repair chain history (Ryan).** movement.ts repair and rejoin code took 5 commits on 2026-10-08
+9. **Repair chain history (current).** movement.ts repair and rejoin code took 5 commits on 2026-10-08
    (a3986593, 60f5f367, 79a1d9f5, 8638cd78, 0dc887ec in the executor), then 7f73aca3 10-12,
    5dc12b4b 10-13, 3839c760 10-14 (`git log --format='%h %ad %s' --date=short refs/review/ryan-1.5 --
    runtime/characters/movement.ts runtime/characters/movement-executor.ts`). Comments at
@@ -1587,7 +1593,7 @@ about every 100 ms for two fighters, destination winterland, plus "ALClient foun
 Monster Hunt routing. No log was available to this review; the chain below is what the code proves
 and what it allows.
 
-What the code proves (Ryan ref; the fork does not change these lines, `git diff refs/review/ryan-1.5
+What the code proves (the current console; the fork does not change these lines, `git diff refs/review/ryan-1.5
 HEAD -- runtime/characters/movement.ts` touches only lines 15, 50-54, 437, 443 (fork)):
 1. The text comes only from `move()` (movement.ts:384). The phase "Movement cancelled" comes from the
    regex `/replaced/` (98). Every line therefore marks one call of `smart_move` or `movement.move`.
@@ -1604,16 +1610,16 @@ HEAD -- runtime/characters/movement.ts` touches only lines 15, 50-54, 437, 443 (
    returns it as `failure: 'unreachable'` (planner-worker.ts:21, http/movement.ts:10). With
    `rejectUnreachableGoal` the journey fails with that text (movement.ts:193); without it the journey
    falls back to native search and logs "Trying native pathfinding" with that reason (103, 194).
-   On the Ryan ref only the independent approach sets `rejectUnreachableGoal` (shared.js:16743); the
+   On the current console only the independent approach sets `rejectUnreachableGoal` (shared.js:16743); the
    fork adds `pullWalk` (shared.js:18496 (fork)).
 
 What follows: one writer, or two alternating writers, issued non-convoy journeys toward winterland at
 the tick rate, and no journey lived long enough to plan.
 
 Candidates, each with what it needs to fit:
-- **A. Two plain writers alternating (Ryan).** Writer X replaces writer Y's journey; Y's
+- **A. Two plain writers alternating (current).** Writer X replaces writer Y's journey; Y's
   `smart.on_done` capture fails, Y restarts and replaces X. A 100 ms rhythm needs both to restart
-  without a delay. The role-tick writers on the Ryan ref all delay: regroup 5/15/30 s
+  without a delay. The role-tick writers on the current console all delay: regroup 5/15/30 s
   (shared.js:14640, 14674), farm approach 1 s (16106, 16193), rare path only when `rarePath` is null
   (3689), follow serialized by `selecting` (runner.ts:159, 182, 193). Follow re-runs on every
   `wake()`, and `wake()` fires on each coordinator combat response (client.ts:99); responses arrive
@@ -1621,7 +1627,7 @@ Candidates, each with what it needs to fit:
   signature). Inference: follow (leader in winterland) restarting on each wake after its await
   rejects, against any second writer, fits the cadence. Check: `failureContext.replacement` equals
   the leader position; journeys have no `owner`.
-- **B. Independent approach against an ownerless journey (Ryan).** The approach re-aims at most every
+- **B. Independent approach against an ownerless journey (current).** The approach re-aims at most every
   250 ms (independent-approach-client.ts:22) and cancels its own journey first (21), which logs
   "Individual combat approach cancelled", not "replaced". It replaces another journey only when that
   journey has no owner (shared.js:16708). It needs a same-map target, so the character must already
@@ -1634,7 +1640,7 @@ Candidates, each with what it needs to fit:
   route already heading to the point and adds a stall release (shared.js:18513-18524 (21b8362d)).
   Check: `recoveryStage: "pull"` in the replaced journey's `failureContext`; replacement on the
   character's own map.
-- **D. Coordinator command churn (Ryan).** Each new convoy command cancels the running journey as
+- **D. Coordinator command churn (current).** Each new convoy command cancels the running journey as
   "Command takeover" (shared.js:10500-10514) with code `command-takeover` or `convoy-phase-change`,
   not "replaced". Hunt route recovery reissues commands on a seconds scale (runtime/coordinator/hunt/
   route-recovery.ts:169, 238, 249, 262; owned by 07). Convoy journeys fold by `convoyId` (point 3).
@@ -1648,7 +1654,7 @@ the journey id sequence (`<name>:<runtime>:N`), the code (`destination-replaced`
 replaced before planning). The service does not record the replacing caller, unlike stops
 (`stopStack`, movement.ts:411); that missing field is why this bug cannot be closed from code alone.
 
-Patch status: none on the Ryan ref. 21b8362d fixes candidate C for pull walks only. No caller
+Patch status: none on the current console. 21b8362d fixes candidate C for pull walks only. No caller
 attribution on replacement exists in any ref.
 
 ### 2.2 Character movers in shared.js
@@ -1728,7 +1734,7 @@ attempts; holding new pulls". Only a new `groupedCombat.key` or revision resets 
 When a rare `smart_move` fails, `rareNavigation.failed` stays set for that control id and
 `pollRareHunting` returns true on every poll (3688), which keeps rare movement owning the
 character without moving it. History: the fork rewrites this branch with a 5 s retry
-(fork, shared.js:4124-4136 at HEAD, comment "a walk stopped mid-fight would ..."). Ryan
+(fork, shared.js:4124-4136 at HEAD, comment "a walk stopped mid-fight would ..."). Current console
 base has no retry.
 
 ##### W2-9 Command dispatch can overlap (inference)
@@ -1765,7 +1771,7 @@ context).
 
 ### 2.3 Convoy client, farm approach, formation and combat steps
 
-##### W1. Step safety ignores monsters that are not attacking yet (Ryan)
+##### W1. Step safety ignores monsters that are not attacking yet (current)
 1. `safeCombatPoint` skips every monster whose `target` is not this character
    (shared.js:17167-17169) and limits the rest to their attack range (17172).
 2. Kiting (17223, 17228), event corner steps (17196), approach (17325), event detours (17278,
@@ -1780,7 +1786,7 @@ context).
    monsters' attack range plus 8 is below about 90.
 History: `safeCombatPoint` is unchanged since 9fbeadab (2026-09-20) (`git log -L 17157,17174:characters/shared.js refs/review/ryan-1.5`).
 
-##### W2. A combat "stop move" ends whatever journey is live (Ryan)
+##### W2. A combat "stop move" ends whatever journey is live (current)
 1. Combat sends native moves while a journey stays installed (`sendCombatMove` 17152, no journey
    check other than the independent label at 17142).
 2. `holdFormation` (16668-16669), `resetCombatMovement` (17129-17131) and the warrior branches
@@ -1791,7 +1797,7 @@ History: `safeCombatPoint` is unchanged since 9fbeadab (2026-09-20) (`git log -L
    `going_x` guard protects only against stopping a journey that replaced the combat step
    (test "holding preserves a destination owned by newer navigation").
 
-##### W3. Independent approach restarts its journey to re-aim (Ryan)
+##### W3. Independent approach restarts its journey to re-aim (current)
 1. The client re-issues when the predicted point moves more than 12 units and 250 ms passed
    (independent-approach-client.ts:22-27).
 2. `issue` cancels the old journey (21), and `start` calls `movement.move` again (shared.js:16743).
@@ -1802,34 +1808,34 @@ Patched nine times in seven days: 218f57a8, 873b3129, 7b12777f, 1e8f90de, ca6f9a
 (10-13), d009eb22 (10-14), ebd90011 (10-18), adaa5ce3 (10-19)
 (`git log -L 16700,16753:characters/shared.js refs/review/ryan-1.5`).
 
-##### W4. The convoy leader must not move 1 unit while combat runs (Ryan)
+##### W4. The convoy leader must not move 1 unit while combat runs (current)
 `sharedConvoyRendezvous` fails the leader on any drift over 1 unit (15328), and the route
 install rejects a rally over 1 unit from the route origin (15440). Combat steps during
 rendezvous move the leader (W2). The fork's a85b9509 adds a 10 s `xmove` back within 55 units
 (shared.js:16192-16197 (fork)). e2e/live-hunt-town-recovery.spec.ts checks that recovery does
 not repeat "Leader moved from planning origin".
 
-##### W5. Preparation fails when anything else touches the journey (Ryan)
+##### W5. Preparation fails when anything else touches the journey (current)
 The shared and legacy preparation ticks fail with "Shared route ownership lost" or "Prepared
 route ownership was lost" when `smart.on_done` or `smart.plot` changed (15527, 15637). Any other
 `smart_move` (follow, rare, regroup) during the up to 60 s preparation fails the convoy instead
 of being refused. 13 commits on `prepareSharedConvoyRoute` and 11 on
-`coordinatedMonsterTravel` (`git log -L` on each, Ryan ref).
+`coordinatedMonsterTravel` (`git log -L` on each, the current console).
 
-##### W6. The mage escort holds forever in a blocked event (Ryan, bug 7 core)
+##### W6. The mage escort holds forever in a blocked event (current, bug 7 core)
 See ledger bug 7. The solver runs for the mage in a joined event (16781 excludes only
 `eventTraveling`), terrain recovery is disallowed in events (16448), and the blocked hold
 (16921-16926) returns before the event-only detour in `approachCombatTarget` (17321, 17327) can
 run, because the role runner stops at `formationMove` (runtime/characters/roles/runner.ts:244).
 
-##### W7. Purpose lists and text as interfaces (Ryan)
+##### W7. Purpose lists and text as interfaces (current)
 - Two lists of interruptible travel: hunt-travel.ts:19-21 and rare-hunting.ts:841, with
   different members.
 - Farm handoff purposes (shared.js:15379), the `shared-walk` regex (15788), the event-walk key
   list (15081), and `franky-exit` special cases in two places (15493-15495, 15579-15586).
 - `/stale convoy completion/` regex on an error text (15172).
 
-##### W8. Fixed windows chosen per symptom (Ryan)
+##### W8. Fixed windows chosen per symptom (current)
 Shared walk 180 s (15103); rendezvous 120 s (15316, 15326, 15331); first-lease grace 3 s (15520);
 route install 60 s (15531); departure tolerance 1500 ms (15545, 15681; comment 15542-15544 says it
 covers coalesced browser timers); movement lock 10 s (15829); Town 5 s and 12 s (15906, 15916);
@@ -1838,7 +1844,7 @@ ack backoff 1/2/5/10 s (15178); barrier 10 s (15281); farm approach 1.5 s, 3 s, 
 (formation-recovery-client.ts:90); recovery retries 5 s then 15 s, 3 attempts
 (formation-recovery.ts:53-55); sight recovery 8 s and 6 steps (sight-recovery.ts:25).
 
-##### W9. isOccupied is a query with side effects (Ryan)
+##### W9. isOccupied is a query with side effects (current)
 `isOccupied` cancels a return Town (17500) and interrupts convoys for defense (17504, 17514) each
 time any caller asks. Its comment records a past fault: releasing the role loop during a convoy
 "caused QwenTina's one-step search/restart loop" (17519-17522). 13 commits added flags
@@ -1846,18 +1852,18 @@ time any caller asks. Its comment records a past fault: releasing the role loop 
 
 ##### W10. Duplicated constants and defaults
 - The healing coverage formula `range - min(20, max(8, range * 0.1))` appears 8 times
-  (`grep -c "Math.min(20, *Math.max(8" shared.js` on the Ryan file: 16318, 16412, 16517, 16541,
+  (`grep -c "Math.min(20, *Math.max(8" shared.js` on the current file: 16318, 16412, 16517, 16541,
   16556, 16637, 16645, 16796).
 - A missing monster range defaults to 20 in clearance (16241) and the defensive trigger (17646)
   but to 30 in step safety (17172) and event legs (17307).
 
-##### W11. Movers with no safety check (Ryan)
+##### W11. Movers with no safety check (current)
 Franky approach checks terrain only by design (17253-17255). `separateFromParty` sends a raw
 `move` with no terrain or monster check (17555).
 
 #### Ledger causal chains: bugs 3, 4 and 7
 
-##### Bug 3: party deaths in Targetron farm (fork pull mode and tank hold on Ryan's movers)
+##### Bug 3: party deaths in Targetron farm (fork pull mode and tank hold on the current movers)
 
 3a. Pull walk stalls on competing moves.
 1. Each 100 ms movement tick reaches `recoverFarmApproach` (runner.ts:237), which runs
@@ -1898,7 +1904,7 @@ Patch: 21b8362d `pullSupported` with `pullRequiredMembers` (18447-18454, 18540 (
    (fork)).
 2. With the hold released, `formationMove` no longer bypasses the solver (17644 (fork)) and
    `kiteIfNeeded` kites the tank's target (18099-18100 (fork)).
-3. The kite arc and outward step are checked by `safeCombatPoint` (Ryan 17223, 17228), which looks
+3. The kite arc and outward step are checked by `safeCombatPoint` (current 17223, 17228), which looks
    only at attackers (17167-17169). The idle-reach check applies only in pull mode (18048 (fork)).
 4. The arc can enter an idle neighbour's aggro reach (W1, inference from geometry). More attackers
    keep HP under 0.8, so the hold stays released (18546 (fork)).
@@ -1916,11 +1922,11 @@ Handoffs inside bug 3: the priest's basic attacks starving heals belongs to 03-t
 3. `approachCombatTarget` called `tankMovementTick`, which stepped toward `min(desiredCombatRange(),
    30)` from the target, a near-melee "stack range" even for a ranged tank (removed `tankStep`).
 4. Each step passed only `safeCombatPoint` (removed line `if (safeCombatPoint(point, target))`),
-   which ignores idle monsters (Ryan 17167-17169).
+   which ignores idle monsters (current 17167-17169).
 5. The tank walked into the pack and pulled it onto the party.
 Patch: 4075d3f2 (2026-10-24) replaced it with `tankHoldsTarget`, so the tank approaches to its own
 range; 0f600a8f the same day keeps the formation bypass only while the line is clear. The same
-pattern remains in Ryan's `frankyMovementTick` (17237-17262) and the fork's
+pattern remains in the current `frankyMovementTick` (17237-17262) and the fork's
 `frankyTankMovementTick` (18222-18244 (fork)): terrain-only steps.
 
 ##### Bug 7: Icelocked parked out of range at Mr. Pumpkin
@@ -1941,9 +1947,9 @@ escort). The logged `stopStack` was not available.
    `approachCombatTarget` (runner.ts:244-251), where the event-only detour lives (17265-17298,
    17321, 17327).
 7. Nothing else moves the mage while the adds stay, so it stays out of range.
-Patch: none in Ryan, the fork or 21b8362d.
+Patch: none in the current console, the fork or 21b8362d.
 
-`stop()` callers in Ryan's shared.js that can run during a joined event walk
+`stop()` callers in the current shared.js that can run during a joined event walk
 (`grep -n -E "(^|[^a-zA-Z_.])stop\("` mapped to enclosing functions with the function index: 99 matches, 3 of them comments, so 96 call lines, one of them `stop("invis")`):
 
 | caller | line | fires for a joined mage at Mr. Pumpkin? |
@@ -1970,7 +1976,7 @@ Which one fired needs the `stopStack` field of that log entry (movement.ts:411).
 ### 2.4 Coordinator convoys, shared walks and escape stages
 
 ##### G1. One convoy slot, replaced without a rule
-Every convoy start cancels the active one (convoy.ts:202-203). `start` checks only the escape (241-242). The callers decide on their own: navigation changes restart convoys (farming-navigation.cjs:114-118), event returns start one when the slot is free (179) but retries only when it is free (231), restart rebuild starts one (restart-recovery.ts:89), death recovery cancels travel and starts its own (combat-disengagement.cjs:117-118). Shared walks are the only caller with a written rule, and that rule lets any event walk replace any ordinary convoy, including a Hunt convoy (shared-walk.ts:191). On the character side any new command cancels the running convoy journey (shared.js:10500-10514). Patched by: none at source; each caller adds a "slot is free" or "is mine" check. History: shared-walk.ts has 17 Ryan commits (`git log --oneline refs/review/ryan-1.5 -- runtime/coordinator/navigation/shared-walk.ts | wc -l`), six on 2026-10-09 alone (ea49a71a, aef9643d, b159f3f6, 9acb1e6f, e0e5e3d2, 3bb52c1f; `git log --format='%h %ad' --date=short refs/review/ryan-1.5 -- runtime/coordinator/navigation/shared-walk.ts | grep -c 2026-10-09`), five of them about which walk owns the party after a runtime turnover or restart.
+Every convoy start cancels the active one (convoy.ts:202-203). `start` checks only the escape (241-242). The callers decide on their own: navigation changes restart convoys (farming-navigation.cjs:114-118), event returns start one when the slot is free (179) but retries only when it is free (231), restart rebuild starts one (restart-recovery.ts:89), death recovery cancels travel and starts its own (combat-disengagement.cjs:117-118). Shared walks are the only caller with a written rule, and that rule lets any event walk replace any ordinary convoy, including a Hunt convoy (shared-walk.ts:191). On the character side any new command cancels the running convoy journey (shared.js:10500-10514). Patched by: none at source; each caller adds a "slot is free" or "is mine" check. History: shared-walk.ts has 17 console commits (`git log --oneline refs/review/ryan-1.5 -- runtime/coordinator/navigation/shared-walk.ts | wc -l`), six on 2026-10-09 alone (ea49a71a, aef9643d, b159f3f6, 9acb1e6f, e0e5e3d2, 3bb52c1f; `git log --format='%h %ad' --date=short refs/review/ryan-1.5 -- runtime/coordinator/navigation/shared-walk.ts | grep -c 2026-10-09`), five of them about which walk owns the party after a runtime turnover or restart.
 
 ##### G2. Ownership is a tuple compared in twelve places
 The same question, "does this report belong to the command I issued", is answered by twelve separate functions listed in the stand-ins table, each with a different field set. Examples: `localDefense` and `reportOwned` compare the runtime against `combatSelection.runtimeId` only (convoy-defense.ts:143, 159), while `characterRuntime` falls back to `convoyNavigation.runtimeId` (shared-route-types.ts:133-135); `identity` in the legacy barrier allows a missing `c.expected` (convoy-navigation.cjs:34), the protocol 4 checks do not. Inference: a client that publishes the runtime only in `convoyNavigation` passes the protocol 4 checks and fails the defense checks. Not confirmed by a test.
@@ -2014,8 +2020,8 @@ Convoy defense is off while any member is in an event (convoy-defense.ts:38-41);
 
 ##### Ledger bug 5: Hunt stuck after a death escape (causal chain)
 
-1. A party death starts death recovery; if the encounter cannot be finished it calls escape (combat-disengagement.cjs:77-81, 68-76; hook recovery-hooks.ts:59). Ryan.
-2. The mage Blinks to the best landing on its current map, scored by risk and Town proximity (shared.js:160-188, 250-257). The landing is wherever the map allows, for example an Arena door. Ryan.
+1. A party death starts death recovery; if the encounter cannot be finished it calls escape (combat-disengagement.cjs:77-81, 68-76; hook recovery-hooks.ts:59). Current console.
+2. The mage Blinks to the best landing on its current map, scored by risk and Town proximity (shared.js:160-188, 250-257). The landing is wherever the map allows, for example an Arena door. Current console.
 3. The coordinator accepts the landing as the escape destination (party-escape.cjs:91-94) and advances warrior and priest by arrival within 65 of that landing (95-96). On the priest's arrival the stage becomes `complete` (96). This is the first wrong decision: "complete" means "at the landing", while the owner that waits for it means "at Main".
 4. `step` returns immediately for `complete` (party-escape.cjs:61), so the coordinator never moves the escape on.
 5. On each character, `escapePulse` returns for `complete` (shared.js:208), so nothing walks; `handleOwnedCommand` defers every command while the escape owns the character (shared.js:10397-10398), so no other owner can move it either. Survival pulses still run (shared.js:190).
@@ -2024,7 +2030,7 @@ Convoy defense is off while any member is in an event (convoy-defense.ts:38-41);
 
 Fork fix ce6e7c1a (2026-10-25, party-escape.cjs:96-107 (fork)): when the death recovery owns the escape and the landing is not on Main within 65, the priest's arrival moves the escape to `recovering` instead of `complete`; `recovering` already walks every member to Main (shared.js:209-241) and ends through the recovery convoy. It fixes the symptom for death recoveries and leaves manual escapes completing at their landing. It does not fix the cause: two owners (escape and death recovery) each hold their own goal, and the fix adds a third copy of the goal predicate (party-escape.cjs:105 (fork)). 21b8362d does not touch these files (`git -C pm-worktrees/pta-pull diff af92de45 21b8362d --stat`).
 
-Every copy of the "Main within 65" goal on the Ryan ref (`git grep -n -E "<= ?65|> ?65\b" refs/review/ryan-1.5 -- characters/shared.js scripts/*.cjs runtime/`):
+Every copy of the "Main within 65" goal on the current console (`git grep -n -E "<= ?65|> ?65\b" refs/review/ryan-1.5 -- characters/shared.js scripts/*.cjs runtime/`):
 - characters/shared.js:197 (warrior defense outside Main within 65)
 - characters/shared.js:218 (recovering: already safe)
 - characters/shared.js:238 (recovering: walk to Main when farther than 65)
@@ -2048,7 +2054,7 @@ Not the same goal: shared.js:245 and party-escape.cjs:52 measure 65 to the escap
    retry evidence by a regex over its own finish reasons (rare-hunting.ts:268). History:
    farm-area-recovery.ts has 2 commits, 9fbeadab and 829b85ba 2026-09-22 "complete Hunt recovery"
    (`git log --oneline refs/review/ryan-1.5 -- runtime/coordinator/navigation/farm-area-recovery.ts`).
-3. **A failed rare path never retries (Ryan base).** Chain: pollRareHunting marks
+3. **A failed rare path never retries (the current console).** Chain: pollRareHunting marks
    `rareNavigation.failed` on a rejected `smart_move` or after 30 s (characters/shared.js:3694-3701)
   , then for the same control id it returns true without moving (3688), then an encounter or loot
    control keeps one id for its life (nav/rare-hunting.ts:883), then the fighter stands still, and
@@ -2080,7 +2086,7 @@ Not the same goal: shared.js:245 and party-escape.cjs:52 measure 65 to the escap
 
 ## 3. Fork differences
 
-What the fork (af92de45) and the death fixes (21b8362d) add or change in movement, and what each addition patches. The fork's functions are not in Ryan's function index, so they are described here and not claimed.
+What the fork (af92de45) and the death fixes (21b8362d) add or change in movement, and what each addition patches. The fork's functions are not in the current function index, so they are described here and not claimed.
 
 ### 3.1 Movement service, planning and the mover chain
 
@@ -2131,7 +2137,7 @@ slice's functions:
 
 Hunks from `git diff -U1 refs/review/ryan-1.5 HEAD -- characters/shared.js` inside this range:
 
-| fork change | lines (fork) | hooks into (Ryan) | commit | what it patches |
+| fork change | lines (fork) | hooks into (current) | commit | what it patches |
 |---|---|---|---|---|
 | Leader origin return `xmove` up to 55 units, 10 s | shared.js:16188-16199 | sharedConvoyRendezvous 15327-15328 | a85b9509 | W4 drift fail |
 | Pull mode hands farm travel off on sight | shared.js:16246-16251 | convoyHandoffReachable 15376-15380 | 8dec6e68 | convoy walking into the first monster's range |
@@ -2139,7 +2145,7 @@ Hunks from `git diff -U1 refs/review/ryan-1.5 HEAD -- characters/shared.js` insi
 | `pullHoldsForArrival` first, boss combat check, tank line-clear bypass | shared.js:17637-17644 | formationMove 16755-16758 | 62ab06e5, 0f600a8f | formation pulling the tank off its target |
 | Boss zone and pull idle-reach checks | shared.js:18046-18048 | safeCombatPoint 17159 | b5a7c68c, 754a9179 | W1, only for avoided bosses and pull mode |
 | Tank does not kite its own target | shared.js:18099-18100 | kiteIfNeeded 17209 | 4075d3f2 | tank kiting off target |
-| Franky door flee, tank and off-tank routines, `bossMovementTick` | shared.js:18128-18353 | frankyMovementTick 17237-17262 | d6f67a97 (Fonze port) | Ryan's single Franky approach |
+| Franky door flee, tank and off-tank routines, `bossMovementTick` | shared.js:18128-18353 | frankyMovementTick 17237-17262 | d6f67a97 (Fonze port) | The current single Franky approach |
 | `approachCombatTarget` body moved to `engageMovementTick` | shared.js:18402-18426, 18550-18553 | approachCombatTarget 17311-17334 | d6f67a97 | shared by Franky tank |
 | Tank hold, pull mode, `aggroTank` | shared.js:18428-18548 | the above | 4075d3f2, 0f600a8f, ae116693, 62ab06e5, 754a9179 | bug 3, bug 4 |
 | Tank skips defensive kiting | shared.js:18862-18863 | defensiveFormationMove 17638 | 4075d3f2 | tank evading |
@@ -2187,20 +2193,20 @@ Fork movers (assignment b):
 
 `git diff --stat refs/review/ryan-1.5 HEAD` over the slice 1.4 files shows changes only in shared-walk.ts (+40) and party-escape.cjs (+12); the other fork changes in the folder are in slice 1.5 files.
 
-- **ce6e7c1a** party-escape.cjs: `strandedRescue` (fork 100-107), see bug 5. Patches Ryan's stage choice at 96.
+- **ce6e7c1a** party-escape.cjs: `strandedRescue` (fork 100-107), see bug 5. Patches the current stage choice at 96.
 - **Event walk replacement chain** in shared-walk.ts, each patching the one before:
-  - b0c4d1ef (2026-10-20, port of Thefonze c6569ced): a failed event walk no longer answers or resists walks to a different event (`otherEventAfterFailure`). Patches Ryan's `canReplace` line 189 and `retainedFailure` line 347, which answered every event walk with the old failure after a member left Mr. Green while Mr. Pumpkin was live.
+  - b0c4d1ef (2026-10-20, port of Thefonze c6569ced): a failed event walk no longer answers or resists walks to a different event (`otherEventAfterFailure`). Patches the current `canReplace` line 189 and `retainedFailure` line 347, which answered every event walk with the old failure after a member left Mr. Green while Mr. Pumpkin was live.
   - 029f590b (2026-10-20): moves the rule into `failedLegReplaceable` (fork 194-196) to keep lint complexity at 12. No behaviour change.
-  - 5c504443 (2026-10-23): `retireRecoveredRealmLoss`, `realmLostEntry`, `realmRecovered` (fork 385-399), called from `submit` (fork 494). Ryan's `health` fails a walk as `realm-lost` with no regroup (shared-navigation.ts:295) and `retainedFailure` then answers every resubmit; the fork retires the failed walk once everyone is back on the route realm.
+  - 5c504443 (2026-10-23): `retireRecoveredRealmLoss`, `realmLostEntry`, `realmRecovered` (fork 385-399), called from `submit` (fork 494). The current `health` fails a walk as `realm-lost` with no regroup (shared-navigation.ts:295) and `retainedFailure` then answers every resubmit; the fork retires the failed walk once everyone is back on the route realm.
   - 653238e1 (2026-10-24): `otherEventAfterFailure` also waits until no fresh member is still joined to the failed event, after b0c4d1ef let the leader walk to Mr. Pumpkin alone and die (commit message, US II 2026-10-24 23:20 UTC). Fix on b0c4d1ef.
-  - c5eacf1b (2026-10-24): the hold covers only members whose live selection moved to another event (`stillJoined` fork 364-366, `requested` set fork 359-362). Fix on 653238e1, which broke Ryan's Cipher-interrupts-Green spec.
-  Root cause the chain works around: Ryan's walk keeps one failure per event on the single convoy slot (G1) and `eligible` silently drops members joined to another event (shared-walk.ts:118). Three of the five commits fix the previous commit.
-- **a85b9509** (2026-10-24, characters/shared.js `sharedConvoyRendezvous`, fork lines around 16201-16213): a leader that drifted more than 1 but at most 55 from the planned origin walks back with `xmove` (10 s limit) before the origin check, instead of throwing "Leader moved from planning origin". Patches Ryan's 1 unit rule (G7) on the client; the coordinator rule at shared-route-store.ts:93 and shared-departure.ts:51 is unchanged. The client edit belongs to slice 1.3's area; listed here because the rule it patches is coordinator-side.
+  - c5eacf1b (2026-10-24): the hold covers only members whose live selection moved to another event (`stillJoined` fork 364-366, `requested` set fork 359-362). Fix on 653238e1, which broke the current Cipher-interrupts-Green spec.
+  Root cause the chain works around: the current walk keeps one failure per event on the single convoy slot (G1) and `eligible` silently drops members joined to another event (shared-walk.ts:118). Three of the five commits fix the previous commit.
+- **a85b9509** (2026-10-24, characters/shared.js `sharedConvoyRendezvous`, fork lines around 16201-16213): a leader that drifted more than 1 but at most 55 from the planned origin walks back with `xmove` (10 s limit) before the origin check, instead of throwing "Leader moved from planning origin". Patches the current 1 unit rule (G7) on the client; the coordinator rule at shared-route-store.ts:93 and shared-departure.ts:51 is unchanged. The client edit belongs to slice 1.3's area; listed here because the rule it patches is coordinator-side.
 - 21b8362d: no changes to slice 1.4 files.
 
 ### 3.5 Rare, Phoenix and farm travel, manual commands, coordinator wiring
 
-- **Phoenix split search (3849a095, 2026-10-20, ported from Fonze).** Ryan moves every scan leg as
+- **Phoenix split search (3849a095, 2026-10-20, ported from Fonze).** The current console moves every scan leg as
   one party convoy (nav/phoenix-patrol.ts:208-209; client cancels its path for patrol controls,
   characters/shared.js:3652). The fork gives each fighter its own region and walks it alone:
   `stepSearch` and `assign` pick the nearest unchecked region by planned route per free fighter
@@ -2212,8 +2218,8 @@ Fork movers (assignment b):
   100 otherwise (4074), waits for the coordinator on a failed search point and retries converge
   routes after 5 s (4081-4085). The coordinator adds a converge stage that holds fire until the
   party gathers, with a 300 s minimum wait (fork nav/rare-hunting.ts:53, 489-530).
-  What it patches: Ryan's single-convoy patrol. It runs beside Ryan's design rather than through
-  it: the fork deletes Ryan's convoy-leg tests, including "short scan legs use a convoy and
+  What it patches: the current single-convoy patrol. It runs beside the current design rather than through
+  it: the fork deletes the current convoy-leg tests, including "short scan legs use a convoy and
   obsolete local failures cannot cancel it" and "Steam runtime reload retries the same waypoint
   without consuming geometry fallback attempts" (`git diff --stat refs/review/ryan-1.5 HEAD --
   scripts/tests/phoenix-patrol-regression.test.cjs`: 164 lines changed, mostly removed).
@@ -2233,7 +2239,7 @@ Each test is labelled with what it proves, what it does not cover, whether it re
 
 ### 4.1 Movement service, planning and the mover chain
 
-All in `scripts/tests/` on the Ryan ref; names verified present (`node` check over part1.json, 0
+All in `scripts/tests/` on the current console; names verified present (`node` check over part1.json, 0
 missing).
 - `movement-service.test.cjs` (80 tests, `git show refs/review/ryan-1.5:scripts/tests/movement-service.test.cjs | grep -c -E "^test\("`): unit fixture with a fake
   host and manual `smart_move_logic` ticks. It covers planning, fallback, repair, Cave drift, Town,
@@ -2259,7 +2265,7 @@ missing).
 
 ### 4.2 Character movers in shared.js
 
-All `scripts/tests/*.test.cjs` on the Ryan ref, read not run.
+All `scripts/tests/*.test.cjs` on the current console, read not run.
 - party-escape (MOV-035 to MOV-039): 22 tests cover landing choice, rescue order, warrior skill
   order, potion pulses and recovery travel. They prove the escape state machine with
   stubbed skills. They do not cover monsters near the retreat step (W2-10) or the 20 s
@@ -2334,7 +2340,7 @@ it is missed (gap).
   `live-hunt-hawk-approach.spec.ts`, `live-hunt-targetron-terrain.spec.ts`,
   `live-hunt-engaged-terrain.spec.ts` (terrain recovery on real maps).
 - No test: MOV-067 plumbing, MOV-073 route reuse, MOV-074 travel-to-combat handoff, MOV-080 state queries,
-  MOV-102 spread, MOV-103 Cave move exposure. Fork movers have their own fork tests, not on Ryan's ref.
+  MOV-102 spread, MOV-103 Cave move exposure. Fork movers have their own fork tests, not on the current console.
 - Accuracy not run: no test was executed in this pass.
 
 ### 4.4 Coordinator convoys, shared walks and escape stages
@@ -2350,7 +2356,7 @@ All are unit tests in `scripts/tests/` that drive the coordinator modules with f
 - **hunt-area-arrival.test.cjs**, **hunt-return-town.test.cjs**, **unified-return.test.cjs**, **continuous-hunt-return.test.cjs**, **completed-return-cleanup.test.cjs**: Hunt arrival and continuous return (MOV-129, MOV-135, MOV-136). No test for G8.
 - **convoy-restart-recovery.test.cjs** (5): restart rebuild (MOV-137). Accurate.
 - **farming-navigation.test.cjs** (31 tests): intents and event return dispatch (MOV-142, MOV-143). The last test name records the legacy "empty-backup cancellation" branch (G3, G4).
-- **party-escape.test.cjs** (22): escape stages (MOV-144). Most tests cover skill sequencing in shared.js (survival, 05). No Ryan test covers a death escape that lands off Main (bug 5); the fork adds `scripts/tests/hunt-death-escape-regroup.test.cjs` and `e2e/live-hunt-death-escape.spec.ts` (ce6e7c1a).
+- **party-escape.test.cjs** (22): escape stages (MOV-144). Most tests cover skill sequencing in shared.js (survival, 05). No current test covers a death escape that lands off Main (bug 5); the fork adds `scripts/tests/hunt-death-escape-regroup.test.cjs` and `e2e/live-hunt-death-escape.spec.ts` (ce6e7c1a).
 - **coordinator-recovery-hooks.test.cjs**, **coordinator-travel-runtime.test.cjs**, **coordinator-command-ownership.test.cjs**: wiring (MOV-145 to MOV-147). Accurate, small.
 - **combat-disengagement.test.cjs**: proves death recovery; "failed return convoy retries with delay, survives reload and completes only at the farm" is the only test of the return convoy hook (MOV-145).
 
@@ -2379,7 +2385,7 @@ No test found for MOV-157, MOV-159, MOV-160, MOV-162 (`git grep -n -E 'prepareMo
 
 ## 5. Needs your review
 
-Questions only you can answer: how the party should behave. Each states **Today** (Ryan's base, and
+Questions only you can answer: how the party should behave. Each states **Today** (the current console, and
 the fork where it differs), **Options** with trade-offs, and **Recommendation**. The coordinator copies
 these into `REVIEW-QUEUE.md`.
 
@@ -2438,7 +2444,7 @@ these into `REVIEW-QUEUE.md`.
   section 10). Bugs 3d and 4 both came from steps that ignored idle monsters.
 
 **Q6. Franky and boss approaches.**
-- **Today:** Ryan's `frankyMovementTick` checks terrain only, by design (shared.js:17253-17255); the
+- **Today:** The current `frankyMovementTick` checks terrain only, by design (shared.js:17253-17255); the
   fork's Franky movers do the same (shared.js:18128-18353 (fork)).
 - **Options:** (a) keep: the boss is the only threat, and safety checks could stop the approach.
   (b) use the same step safety as other movers: safer when adds are present.
@@ -2476,10 +2482,10 @@ these into `REVIEW-QUEUE.md`.
   bosses move far enough to matter is unverified (2.4 G5).
 
 **Q10. Missing members at an event walk.**
-- **Today:** Ryan starts an event walk after 20 s without members who have not asked
+- **Today:** the console starts an event walk after 20 s without members who have not asked
   (nav/shared-walk.ts:45). The fork holds for members whose selection moved to the new event but who
   are still joined to the old one (c5eacf1b; shared-walk.ts:359-366 (fork)).
-- **Options:** (a) start after 20 s (Ryan): fast, but the fork's log records a leader walking alone to
+- **Options:** (a) start after 20 s (current): fast, but the fork's log records a leader walking alone to
   Mr. Pumpkin and dying (653238e1). (b) the fork's hold. (c) never start a fighter walk without the
   healer.
 - **Recommendation:** (c). It states the rule the fork's three patches were reaching for, in one line.
@@ -2487,10 +2493,10 @@ these into `REVIEW-QUEUE.md`.
 ### Convoys and regroup
 
 **Q11. Leader drift before departure.**
-- **Today:** Ryan re-plans when any member is more than 1 unit off its planned origin
+- **Today:** the console re-plans when any member is more than 1 unit off its planned origin
   (nav/shared-route-store.ts:93; nav/shared-departure.ts:51; shared.js:15328). The fork walks the
   leader back with `xmove` if within 55 (a85b9509).
-- **Options:** (a) Ryan's re-plan: correct, but combat steps make it fire often. (b) the fork's walk
+- **Options:** (a) the current re-plan: correct, but combat steps make it fire often. (b) the fork's walk
   back. (c) allow drift within the rally range and plan from where the leader stands at departure.
 - **Recommendation:** (c). Combat drift is normal (Q3), so the plan should start where the leader is.
 
@@ -2512,7 +2518,7 @@ these into `REVIEW-QUEUE.md`.
 ### Safe places
 
 **Q14. Where a death escape ends (bug 5).**
-- **Today:** Ryan ends a rescue at the Blink landing (scripts/party-escape.cjs:91-96) while death
+- **Today:** the console ends a rescue at the Blink landing (scripts/party-escape.cjs:91-96) while death
   recovery waits for Main within 65 (scripts/combat-disengagement.cjs:83-92), so the party can wait
   forever. The fork walks a death recovery on to Main (ce6e7c1a).
 - **Options:** (a) always Main Town (the fork). (b) regroup at the landing when it is safe and the
@@ -2540,7 +2546,7 @@ these into `REVIEW-QUEUE.md`.
 
 **Q17. Tank under 50% HP.**
 - **Today (fork):** the tank hold releases below 0.5 HP and re-holds at 0.8
-  (shared.js:18433, 18542-18548 (fork)); the tank then kites with the attackers-only check. Ryan's
+  (shared.js:18433, 18542-18548 (fork)); the tank then kites with the attackers-only check. The current
   base has no tank hold.
 - **Options:** (a) kite (today). (b) step toward the healer. (c) keep holding and let the off tank
   take over.
@@ -2565,16 +2571,16 @@ these into `REVIEW-QUEUE.md`.
 - **Recommendation:** (b), in one list. A trip the user started by hand should finish.
 
 **Q20. Phoenix patrol.**
-- **Today:** Ryan walks the party as one convoy per scan leg (nav/phoenix-patrol.ts:208-209). The fork
+- **Today:** the console walks the party as one convoy per scan leg (nav/phoenix-patrol.ts:208-209). The fork
   sends each fighter to its own region and gathers on a sighting, with a 300 s minimum wait
   (3849a095).
 - **Options:** (a) the fork's split search as an add-on that requests per-character walks: faster
-  search, fighters alone. (b) Ryan's convoy legs: slower, always together. (c) both, as a setting.
+  search, fighters alone. (b) the current convoy legs: slower, always together. (c) both, as a setting.
 - **Recommendation:** (c), with the split search built as an add-on on the movement owner rather
   than beside it.
 
 **Q21. Failed rare walk.**
-- **Today:** Ryan never retries a failed encounter or loot walk for the same encounter, and the
+- **Today:** the console never retries a failed encounter or loot walk for the same encounter, and the
   fighter stands still (shared.js:3688). The fork retries after 5 s, but its timeout branch skips the
   wait (shared.js:4136 (fork)).
 - **Options:** (a) retry after 5 s. (b) end the encounter at once. (c) retry once, then end.
@@ -2673,7 +2679,7 @@ unknown). `catalog/proposed-sections.json` still lists the old 7,857 ids, so the
 have no proposal. All of them are in `e2e/`, `scripts/tests/` and `tools/` (330, 534 and 956;
 `node tools/propose-sections.mjs` on the new index, compared with the old proposals). The name
 heuristic would send 163 of them to 02, but they are test helpers and tools, not movement code, so
-this spec claims none of them; suggest 15-testing and 13-lifecycle.
+this spec claims none of them. Spec 15 and spec 13 claim them (docs/implementation/02-coverage.md).
 
 ### Behaviours with no test
 

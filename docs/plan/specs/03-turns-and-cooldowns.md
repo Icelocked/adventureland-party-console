@@ -1,6 +1,6 @@
 # 03 Turns and cooldowns (TRN)
 
-Checked against Ryan's base `refs/review/ryan-1.5` (b9b5c91e). Line numbers are on
+Checked against the current console `refs/review/ryan-1.5` (b9b5c91e). Line numbers are on
 that ref unless a line says "fork" (af92de45, `HEAD` in
 (local checkout)) or "21b8362d" (the death fixes in
 (local checkout)). Game rules come from the server source
@@ -207,6 +207,12 @@ burst (attack-controller.ts:225). Nothing owns the cooldown edge.
 None of the thresholds above are settings. The farming mode (`scatter` or default)
 switches TRN-014 and TRN-016, and the A/B mode switches TRN-002. Events switch the damage
 budget off (engine.ts:39).
+
+### Added in triage
+
+catalog/triage-log.json lists each behaviour in this group.
+
+- **TRN-017** Role runner support loop: unless dead, occupied or in A/B pending or feed mode, each tick drinks a potion or regenerates, runs beforeTarget, Cave recovery, then beforeAttack on an allowed target; an epoch fences stale ticks. Code: `runtime/characters/roles/runner.ts`.
 
 ## 2. What goes wrong
 

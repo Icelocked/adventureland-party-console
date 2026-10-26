@@ -1,6 +1,6 @@
 # 09. Merchant realm and gear
 
-Checked against Ryan's base `refs/review/ryan-1.5` (b9b5c91e) in (local checkout). Every file:line is on that ref unless it says "fork HEAD" (af92de45). The fork's live tip 21b8362d changes no file in this part (`git diff --stat af92de45 21b8362d` in pm-worktrees/pta-pull touches only characters/shared.js lines 71 and 18438-18926).
+Checked against the current console `refs/review/ryan-1.5` (b9b5c91e) in (local checkout). Every file:line is on that ref unless it says "fork HEAD" (af92de45). The fork's live tip 21b8362d changes no file in this part (`git diff --stat af92de45 21b8362d` in pm-worktrees/pta-pull touches only characters/shared.js lines 71 and 18438-18926).
 
 This spec maps which realm the merchant is on and what it holds. It covers every writer of
 the merchant's realm (party realm switch, party-visit realm check, job-owned realm hops, home
@@ -15,7 +15,7 @@ Jobs and how gathering yields are in [08](08-merchant-jobs.md). Items, bank and 
 
 Counts: 25 behaviours and 347 functions in `catalog/09-merchant-realm-and-gear.json` (counted with `node -e` over that file); 2 handoffs in `catalog/handoffs-09.json`.
 
-How this map was made: four readers went through every function in this part on the Ryan ref (shared.js by its Ryan line ranges, every other file start to end) and checked the full review (local checkout) and the first pass `review/merchant.md` claim by claim. Section 7 lists each review claim with its verdict. Line numbers in the full review are mostly fork HEAD lines; this spec gives Ryan lines.
+How this map was made: four readers went through every function in this part on the current console (shared.js by its current line ranges, every other file start to end) and checked the full review (local checkout) and the first pass `review/merchant.md` claim by claim. Section 7 lists each review claim with its verdict. Line numbers in the full review are mostly fork HEAD lines; this spec gives current lines.
 
 ## 1. What it does today
 
@@ -227,7 +227,7 @@ Rules:
 - companions start only after the earlier group members arrived (bridge.ts:242-247, 294-313)
 - a Steam member missing for 8 s makes the bridge post /steam/restore (bridge.ts:254-263)
 - ensureBootstrap uses a numbered CODE slot 1 to 100 and never overwrites an unknown saved slot (bridge.ts:154-203)
-- characters/steam-bridge.js is the generated bundle of these sources (its line 1); on the Ryan ref it carries steamBridgeVersion 12 (steam-bridge.js:178) while runtime/steam/connection.ts:6 says 14
+- characters/steam-bridge.js is the generated bundle of these sources (its line 1); on the current console it carries steamBridgeVersion 12 (steam-bridge.js:178) while runtime/steam/connection.ts:6 says 14
 
 Settings:
 
@@ -259,7 +259,7 @@ Rules:
 
 - login is refused at 4 hosted characters; the other actions ask for confirmation (steam/switcher.ts:163-206)
 - order: primary, Steam, headless, merchant last (roster/character-order.ts:2-24)
-- the movement-click gate blocks on_map_click when enabled (switcher.ts:22-30); this control and the audio buttons are missing from the generated characters/steam-bridge.js on the Ryan ref (steam-bridge.js:18-175)
+- the movement-click gate blocks on_map_click when enabled (switcher.ts:22-30); this control and the audio buttons are missing from the generated characters/steam-bridge.js on the current console (steam-bridge.js:18-175)
 
 Settings:
 
@@ -306,7 +306,7 @@ Rules:
 - an incompatible weapon type is skipped with an error status; a doublehand clears the offhand first (shared.js:9870-9886)
 - with nothing to restore, a rod, pickaxe or listed item in the mainhand is unequipped (shared.js:9895-9905)
 - each call waits 250 ms and is checked; a failure reports 'Could not restore pre-gathering equipment' and returns false (shared.js:9906-9923)
-- Ryan gatheringCommandHandoff returns true without restoring (shared.js:9994-10008); runMerchantJob suspends gathering for 5 command types without restoring (8454-8459), and its finally does not restore (8483-8487)
+- current gatheringCommandHandoff returns true without restoring (shared.js:9994-10008); runMerchantJob suspends gathering for 5 command types without restoring (8454-8459), and its finally does not restore (8483-8487)
 
 Settings:
 
@@ -381,10 +381,10 @@ The server adds each handled call's cost to a 4 s window and disconnects the soc
 | rule: charge before the handler | a rejected call costs the same | charge at server.js:4980-5021, handler call at 5028; secondhands answers 'distance' beyond 500 from Ponty at 7948-7951 | n/a | n/a | n/a |
 | players | 13 | 1 + CC.players 12 (server.js:4980, 250) | requestPlayerDirectory shared.js:822-824, timer 889-890 | start and every 10 s, every character | 13 |
 | secondhands, background | 17 | 1 + CC.secondhands 16 (server.js:4980, 251) | refreshPontyListings shared.js:1265-1290, timer 17388-17391 | every 10 s on the merchant, anywhere on the map | 17 |
-| secondhands, Ponty job | 17 | same as above | merchantPontyBuy shared.js:8621-8622, plus refreshPontyListings at 8661 and 8666 | Ryan: once per listing after smart_move; fork: once per realm and after each buy, 1.5 s apart (fork HEAD 9215-9230) | Ryan: unbounded, 221 for 13 fast reads; fork: 51 |
+| secondhands, Ponty job | 17 | same as above | merchantPontyBuy shared.js:8621-8622, plus refreshPontyListings at 8661 and 8666 | Current: once per listing after smart_move; fork: once per realm and after each buy, 1.5 s apart (fork HEAD 9215-9230) | Current: unbounded, 221 for 13 fast reads; fork: 51 |
 | tracker | 51 | 1 + CC.tracker 50 (server.js:4980, 258) | requestTrackerSnapshot shared.js:780-786 through installSilentTracker 764-769 | while a Tracktrix is held: every 30 s after a reply, every 2 s while no reply (776-786, 801) | 51, or 102 in the retry loop |
 | skill (mluck) | about 1.1 | 1 + 0.05 per resend part (server.js:4980, 4982, 4643-4659); resend args per cast not read (inference) | luck scan castLuckOnVisiblePlayers shared.js:5543-5575, timer 17382-17387 | scan every 750 ms while moving, up to 4 casts 125 ms apart | about 22 (inference) |
-| move | 2.5, or 4.5 when the handler resends | 1 + CC.move 1.5 (server.js:4980, 249); resend 'u+cid' at 11300 adds 2 | every smart_move segment; xmove follow in ALData buy every 1 s (shared.js:8886-8889); transfer approach one xmove per 500 ms poll while not moving (5380-5394) | per path segment | fork move budget caps 40 moves per 4 s = 100 (fork HEAD move-budget.ts:5, 20-26); Ryan has no cap |
+| move | 2.5, or 4.5 when the handler resends | 1 + CC.move 1.5 (server.js:4980, 249); resend 'u+cid' at 11300 adds 2 | every smart_move segment; xmove follow in ALData buy every 1 s (shared.js:8886-8889); transfer approach one xmove per 500 ms poll while not moving (5380-5394) | per path segment | fork move budget caps 40 moves per 4 s = 100 (fork HEAD move-budget.ts:5, 20-26); the current console has no cap |
 | transport (door) | 9 | 1 + 8 (server.js:4980, 4808) | smart_move across a door | per door | 9 each |
 | transport into and out of a bank floor | about 41 in, about 25 out | 1 + 32 or 16 (server.js:5964, 5978, 5989) + 8 when the mount completes through transport_player_to (4808, inference that the mount path calls it) | smart_move('bank') at shared.js:6054 (merchantVisitBank), 9767 (gathering tool), 9937 (gathering deposit), 9196, 9239, 3912, 4473, 4666, 4690, 4752 | per bank visit | 41 in, 25 out |
 | town | about 2 | 1 + resend parts (inference) | merchantTownReturn use_skill('use_town') shared.js:849 | per stand return from a party | 2 |
@@ -396,7 +396,7 @@ The server adds each handled call's cost to a 4 s window and disconnects the soc
 
 What can add up past 200 (all inference; no log shows these sums):
 
-- Ryan Ponty job, 13 fast reads: 221
+- current Ponty job, 13 fast reads: 221
 - idle merchant with lost tracker replies, then a 16-slot stand reconcile: 102 + 17 + 13 + 144 = 276
 - bank visit while the tracker loop runs: 41 + 20 (10 retrieves) + 25 + 102 + 17 + 13 = 218, plus moves
 - fork Ponty job, tracker healthy: 51 + 13 + about 20 moves + buys = about 90
@@ -405,7 +405,7 @@ What can add up past 200 (all inference; no log shows these sums):
 
 ### Stale homeRealm captured at queue time
 
-Kind: bug. Origin: Ryan base. Confidence: confirmed in code.
+Kind: bug. Origin: the current console. Confidence: confirmed in code.
 
 1. bids.ts:113 and manual-orders.ts:70, 129 store homeRealm = activeRealm when the job is queued
 2. a party realm switch sets activeRealm at finish (realm-switch.ts:249); pauseMerchantForRealm requeues the running job unchanged (realm-pause.ts:20); queued jobs are never rewritten
@@ -416,7 +416,7 @@ Kind: bug. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Job realm route accepts any realm for any realm job
 
-Kind: bug. Origin: Ryan base. Confidence: confirmed in code.
+Kind: bug. Origin: the current console. Confidence: confirmed in code.
 
 1. switchRealm checks only job id, reason in realmJobs and the caller (merchant-realms.ts:24-44)
 2. it accepts any resolvable realm, PVP included (merchant-realms.ts:45-47); only the giveaway executor refuses PVP itself (shared.js:8728)
@@ -432,7 +432,7 @@ Kind: bug. Origin: fork added. Confidence: confirmed in code.
 3. first wrong decision, fork only: npc-shop matchPonty used merchant()?.server as the buy realm (npc-shop.ts is fork only; fix df1858c6 switches it to activeRealm)
 4. the queued Ponty job carries listings on EU II; 'Ponty purchases' skips the home check (home-recovery.ts:33) and the command carries aldataHomeRealm (commands.ts:61, 69)
 5. merchantPontyBuy hops to the listing realm (shared.js:8610-8612); the route accepts (merchant-realms.ts:28, 43-51); the job ends with a hop home (8660); each job boundary is two hops
-6. Ryan base parts that allow the loop remain: the any-realm route, realm-blind selection (priority.ts:85-107) and dispatcher planPonty against the merchant current server (dispatcher.ts:181-194, inference that Ryan's own bid Ponty jobs can hop the same way when listings exist on two realms)
+6. The current console parts that allow the loop remain: the any-realm route, realm-blind selection (priority.ts:85-107) and dispatcher planPonty against the merchant current server (dispatcher.ts:181-194, inference that the current own bid Ponty jobs can hop the same way when listings exist on two realms)
 
 Commits:
 
@@ -440,9 +440,9 @@ Commits:
 
 ### Ledger 12: limitdc from per-listing secondhands reads
 
-Kind: game-rule mismatch. Origin: Ryan base. Confidence: confirmed in code.
+Kind: game-rule mismatch. Origin: the current console. Confidence: confirmed in code.
 
-1. merchantPontyBuy reads Ponty with get_secondhands once per listing inside the listing loop (Ryan shared.js:8607-8622)
+1. merchantPontyBuy reads Ponty with get_secondhands once per listing inside the listing loop (current shared.js:8607-8622)
 2. each read costs 1 + CC.secondhands 16 = 17 (server.js:4980, 251, 5018-5020)
 3. 13 reads inside 4 s cost 221; the server disconnects once the 4 s sum passes 200 (server.js:262, 5022-5026; server_functions.js:5439-5441, 5481-5489), logged as ['secondhands',208]
 4. no character-wide budget exists; the fork pacer spaces every secondhands call 1.5 s apart and the job reads once per realm and after each buy (fork HEAD shared.js:9215-9230)
@@ -453,7 +453,7 @@ Commits:
 
 ### Ledger 6: the rod or pickaxe stays in hand after a job preempts gathering
 
-Kind: bug. Origin: Ryan base. Confidence: confirmed in code.
+Kind: bug. Origin: the current console. Confidence: confirmed in code.
 
 1. equipGatheringTool records the hands and equips the tool; it stays between casts (shared.js:9806-9812, 9842)
 2. only the cooldown branch (10072) and setGathering(null) (10237) restore the hands
@@ -468,7 +468,7 @@ Commits:
 
 ### Dead 15 s branch in attemptReturn
 
-Kind: dead code. Origin: Ryan base. Confidence: confirmed in code.
+Kind: dead code. Origin: the current console. Confidence: confirmed in code.
 
 1. arrivalWindow is 15000 when attempts is 0 (home-recovery.ts:93)
 2. the early return runs only when attempts !== 0 (home-recovery.ts:94), so the 15000 value is never compared
@@ -476,7 +476,7 @@ Kind: dead code. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Four changeRealm copies disagree
 
-Kind: duplicate rule. Origin: Ryan base. Confidence: confirmed in code.
+Kind: duplicate rule. Origin: the current console. Confidence: confirmed in code.
 
 1. merchantPontyBuy continues on alreadyThere (shared.js:8597)
 2. merchantJoinGiveaway, merchantALDataBuy and merchantALDataSell always call awaitRealmRestart (8715, 8831, 8975), which never resolves (8586)
@@ -485,7 +485,7 @@ Kind: duplicate rule. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Failed party realm switch leaves workers on the destination
 
-Kind: bug. Origin: Ryan base. Confidence: confirmed in code.
+Kind: bug. Origin: the current console. Confidence: confirmed in code.
 
 1. depart sets block.realm to the destination for every headless participant before arrival is known (realm-switch.ts:81-85)
 2. on failure run marks the operation failed and returns; it restores no block.realm, keeps the old activeRealm and does not call dispatchMerchant (realm-switch.ts:294-302)
@@ -493,7 +493,7 @@ Kind: bug. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Background secondhands read costs 17 away from Ponty
 
-Kind: game-rule mismatch. Origin: Ryan base. Confidence: confirmed in code.
+Kind: game-rule mismatch. Origin: the current console. Confidence: confirmed in code.
 
 1. the merchant runtime calls refreshPontyListings at start and every 10000 ms anywhere on the map (shared.js:17388-17391)
 2. the server charges 17 before the handler and answers 'distance' beyond 500 from Ponty (server.js:4980, 5018-5020, 7948-7951)
@@ -501,7 +501,7 @@ Kind: game-rule mismatch. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Tracker retry every 2 s at cost 51
 
-Kind: game-rule mismatch. Origin: Ryan base. Confidence: inference.
+Kind: game-rule mismatch. Origin: the current console. Confidence: inference.
 
 1. requestTrackerSnapshot reschedules itself in 2000 ms before every emit; only a reply moves it to 30000 ms (shared.js:780-786, 801)
 2. each tracker call costs 1 + CC.tracker 50 = 51 (server.js:4980, 258)
@@ -509,7 +509,7 @@ Kind: game-rule mismatch. Origin: Ryan base. Confidence: inference.
 
 ### Stand reconcile sends up to 16 unequips back to back
 
-Kind: game-rule mismatch. Origin: Ryan base. Confidence: confirmed in code.
+Kind: game-rule mismatch. Origin: the current console. Confidence: confirmed in code.
 
 1. merchantIdle walks trade1 to trade16 and unequips every slot that no listing matches with no delay (shared.js:9537-9551)
 2. each unequip costs 1 + 6 + 2 for the 'reopen+u+cid' resend = 9 (server.js:4980, 257, 7938, 4643-4659)
@@ -517,7 +517,7 @@ Kind: game-rule mismatch. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Socket listeners and the emit wrapper survive a CODE frame replacement
 
-Kind: bug. Origin: Ryan base. Confidence: inference.
+Kind: bug. Origin: the current console. Confidence: inference.
 
 1. stop removes listeners with socket.off (shared.js:17438-17460), but a native start_runner replaces the iframe without running stop (inference from recovery.ts:130 and the loader dispose condition)
 2. the next runtime sweeps old handlers by source signature only for action, hit, death, kill_credit, disappearing_text, chest_opened, disappear, entities and game_response (shared.js:303-322); q_data, tracker, player and players handlers (879-884) are not swept
@@ -526,7 +526,7 @@ Kind: bug. Origin: Ryan base. Confidence: inference.
 
 ### Generated steam-bridge.js lags its TypeScript source
 
-Kind: patchwork. Origin: Ryan base. Confidence: inference.
+Kind: patchwork. Origin: the current console. Confidence: inference.
 
 1. characters/steam-bridge.js says it is generated from TypeScript (line 1) and carries steamBridgeVersion 12 (178); runtime/steam/connection.ts:6 says 14
 2. its switcher has no movement-click gate and no audio buttons (steam-bridge.js:18-175 versus switcher.ts:22-119)
@@ -535,7 +535,7 @@ Kind: patchwork. Origin: Ryan base. Confidence: inference.
 
 ### Steam navigation uses two different realm sources
 
-Kind: duplicate rule. Origin: Ryan base. Confidence: confirmed in code.
+Kind: duplicate rule. Origin: the current console. Confidence: confirmed in code.
 
 1. the single handoff navigates to reply.realm = activeRealm or configuredRealm (steam/bridge.ts:321-323, roster/routes.ts:152, ownership.ts:167)
 2. the group handoff navigates to the primary current realm or its home (steam-group.ts:63, 76; bridge.ts:288)
@@ -543,7 +543,7 @@ Kind: duplicate rule. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Force stand return for a Steam merchant waits 60 s
 
-Kind: bug. Origin: Ryan base. Confidence: confirmed in code.
+Kind: bug. Origin: the current console. Confidence: confirmed in code.
 
 1. returnHome stops only the headless block (merchant-actions.ts:48) and records {owner:'home', attempts:1} (45)
 2. a Steam merchant has no headless worker to stop, so nothing moves it at once
@@ -551,7 +551,7 @@ Kind: bug. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Two normal-hands records
 
-Kind: duplicate rule. Origin: Ryan base. Confidence: confirmed in code.
+Kind: duplicate rule. Origin: the current console. Confidence: confirmed in code.
 
 1. gatheringSession.mainhand and offhand hold the hands to restore (shared.js:9809-9812)
 2. the coordinator merchantWeapon intent holds a marked weapon (merchant-item-commands.ts:74, transfer-commands.ts:55-63)
@@ -564,20 +564,20 @@ Commits:
 
 ### Home failure text differs between log and job tag
 
-Kind: typo. Origin: Ryan base. Confidence: confirmed in code.
+Kind: typo. Origin: the current console. Confidence: confirmed in code.
 
 1. attemptReturn logs 'retry a queued job to resume' (home-recovery.ts:98)
 2. dispatcher tags jobs 'manual retry required' and matches that exact text to clear it (dispatcher.ts:116-121)
 
 ## 3. Fork differences
 
-What the fork (af92de45) adds or changes in this part. Fork code is not in Ryan's catalog; its lines are fork HEAD.
+What the fork (af92de45) adds or changes in this part. Fork code is not in the current catalog; its lines are fork HEAD.
 
 | What | Commits | What it patches | Where |
 |---|---|---|---|
 | Ponty watch matching uses activeRealm | df1858c6 | ledger 1 hop loop (fork-only npc-shop matchPonty used the merchant live server) | fork HEAD runtime/coordinator/commerce/npc-shop.ts matchPonty |
 | pontySecondhands pacer, 1.5 s between secondhands calls, and pontyStock read once per realm and after each buy | c3a8a57d | ledger 12 limitdc; also paces the 10 s background refresh | fork HEAD shared.js:9215-9230 and merchantPontyBuy |
-| restoreGatheringHandsForJob in gatheringCommandHandoff | 0ce1071a | ledger 6 rod left in hand; works around Ryan 9994-10008 | fork HEAD shared.js:10688-10715 |
+| restoreGatheringHandsForJob in gatheringCommandHandoff | 0ce1071a | ledger 6 rod left in hand; works around current 9994-10008 | fork HEAD shared.js:10688-10715 |
 | move budget: 40 moves per 4 s, defer while character.cc >= 150 |  | move bursts against the 200 per 4 s limit; moves only | fork HEAD runtime/characters/move-budget.ts:5, 20-26 |
 | realm hop blacklist for boss and event chase |  | automatic hops to realms the user dislikes; merchant job hops are not covered | fork HEAD runtime/coordinator/navigation/realm-hop-blacklist.ts:3-14, application.ts:1236 |
 
@@ -629,7 +629,7 @@ Each question gives Today, Options and a Recommendation. The coordinator copies 
 
 ### Q1. When a job interrupts gathering, what must happen to the merchant's hands?
 
-**Today:** in Ryan's base `gatheringCommandHandoff` cancels the gathering attempt and returns
+**Today:** in the current console `gatheringCommandHandoff` cancels the gathering attempt and returns
 without restoring the hands (characters/shared.js:9994-10008), and `runMerchantJob` never restores
 them (characters/shared.js:8420-8488). The merchant walks to the job with the rod or pickaxe and no
 offhand (ledger 6). The fork's 0ce1071a restores the mainhand before commands whose type starts
@@ -665,8 +665,8 @@ only (fork HEAD runtime/coordinator/commerce/npc-shop.ts:357-380, df1858c6).
   and returns home once per group. Keeps cross-realm buying; far fewer hops.
 - C. Keep today's rule.
 
-**Recommendation:** B, with A as the default for the fork's watch orders. It keeps Ryan's
-cross-realm bids, which are his design, and removes the hop at every job boundary (ledger 1).
+**Recommendation:** B, with A as the default for the fork's watch orders. It keeps the current
+cross-realm bids, which are the current design, and removes the hop at every job boundary (ledger 1).
 
 ### Q3. What should happen when a party realm switch fails halfway?
 
@@ -730,31 +730,31 @@ Not yet verified:
 | 2.1 writer 1: party visit begin via travel port at application.ts:381-391 | PARTLY | begin party-realm.ts:62-76 correct; the travel port is application.ts:358-368, not 381-391 |
 | 2.1 writer 1 fail after 60 s, 3 attempts | CONFIRMED | party-realm.ts:53-55, 98-100 |
 | 2.1 writer 2: switchRealm route has no intent, PVP or blacklist check | CONFIRMED | merchant-realms.ts:39-51 |
-| 2.1 writer 2 executor lines 9130-9135, 9266-9271, 9438-9443, 9582-9587 | PARTLY | HEAD lines; Ryan lines are shared.js:8593-8598, 8711-8716, 8827-8832, 8971-8976 |
-| 2.1 writer 3: ensureHome route from merchantIdle | CONFIRMED | merchant-realms.ts:69-89; Ryan shared.js:9477-9486 |
+| 2.1 writer 2 executor lines 9130-9135, 9266-9271, 9438-9443, 9582-9587 | PARTLY | HEAD lines; current lines are shared.js:8593-8598, 8711-8716, 8827-8832, 8971-8976 |
+| 2.1 writer 3: ensureHome route from merchantIdle | CONFIRMED | merchant-realms.ts:69-89; current shared.js:9477-9486 |
 | 2.1 writer 4: attemptReturn 3 attempts 60 s apart, Steam gets native-realm-switch | CONFIRMED | home-recovery.ts:91-111; automation-composition.ts:55-65 |
 | 2.1 writer 8: dispatchMerchant returns early at application.ts:1798, 1835-1837 | WRONG | the early return is application.ts:1662 (dispatchMerchant) and 1681 (dispatchMerchantIdle) through realmOwnsMerchant 1699-1701 |
-| 2.1 writer 9: awaitRealmRestart at 9105-9114 | PARTLY | HEAD lines; Ryan shared.js:8578-8587 |
+| 2.1 writer 9: awaitRealmRestart at 9105-9114 | PARTLY | HEAD lines; current shared.js:8578-8587 |
 | 2.1: only ensureHome (60 s job back-off) and switchRealm (current job) look at another writer | PARTLY | also worker-setup.ts:30-42 deletes merchant requests during a party switch, and ownership.ts:149-151 fences roster changes during a party visit |
-| 2.4: suspend list has six command types | WRONG | five types at Ryan shared.js:8454 |
-| 2.4: status handler release of a listed weapon 12064-12076 | PARTLY | HEAD lines; Ryan shared.js:11341-11353; gate also needs no merchantWeapon mark |
-| 2.4: restore-equipment equips each item with no checks | CONFIRMED | Ryan shared.js:10636-10641 |
-| 2.4: equipDashboardItem rewrites the gathering session (5146e0d2) | CONFIRMED | Ryan shared.js:6769-6782 |
-| 2.4: coordinator merchantWeapon writers merchant-item-commands.ts:74, transfer-commands.ts:63, 80, clear-item-marks.ts:125 | CONFIRMED | git grep merchantWeapon on the Ryan ref |
-| 2.4: equipGatheringTool records displaced hands | CONFIRMED | Ryan shared.js:9806-9812 |
-| 2.4: restoreGatheringEquipment bails when the generation changes and returns false on failure | CONFIRMED | Ryan shared.js:9852-9855, 9918-9923 |
-| 5.1 ledger 1 chain | PARTLY | Ryan parts confirmed (merchant-realms.ts:28, 43-51; home-recovery.ts:33; commands.ts:69; priority.ts:85-107); the first wrong decision lives in fork-only npc-shop.ts, and the application.ts:1556-1560 queueMatches line is fork HEAD (Ryan queuePontyMatches is application.ts:1423-1425 and calls bidPurchases.queuePonty) |
-| 5.2 ledger 6 chain | CONFIRMED | Ryan shared.js:9994-10008 (return true at 9996 and 10007), 8454, 8483-8487; fork 0ce1071a at fork HEAD shared.js:10688-10715 |
-| 5.3 ledger 12 chain: 17 per read, 13 reads cost 221, limit 200 per 4 s | CONFIRMED | Ryan shared.js:8621-8622; server.js:251, 262, 4980, 5018-5026; server_functions.js:5439-5441, 5481-5489 |
-| 5.4: writer lock fixed in Ryan process-lock.ts:13-55 | PARTLY | the file is runtime/coordinator/persistence/process-lock.ts; processLockIdentity 13-22 records start time and boot id, sameProcessStart 49-55 rejects a reused PID |
+| 2.4: suspend list has six command types | WRONG | five types at current shared.js:8454 |
+| 2.4: status handler release of a listed weapon 12064-12076 | PARTLY | HEAD lines; current shared.js:11341-11353; gate also needs no merchantWeapon mark |
+| 2.4: restore-equipment equips each item with no checks | CONFIRMED | current shared.js:10636-10641 |
+| 2.4: equipDashboardItem rewrites the gathering session (5146e0d2) | CONFIRMED | current shared.js:6769-6782 |
+| 2.4: coordinator merchantWeapon writers merchant-item-commands.ts:74, transfer-commands.ts:63, 80, clear-item-marks.ts:125 | CONFIRMED | git grep merchantWeapon on the current console |
+| 2.4: equipGatheringTool records displaced hands | CONFIRMED | current shared.js:9806-9812 |
+| 2.4: restoreGatheringEquipment bails when the generation changes and returns false on failure | CONFIRMED | current shared.js:9852-9855, 9918-9923 |
+| 5.1 ledger 1 chain | PARTLY | current parts confirmed (merchant-realms.ts:28, 43-51; home-recovery.ts:33; commands.ts:69; priority.ts:85-107); the first wrong decision lives in fork-only npc-shop.ts, and the application.ts:1556-1560 queueMatches line is fork HEAD (the current queuePontyMatches is application.ts:1423-1425 and calls bidPurchases.queuePonty) |
+| 5.2 ledger 6 chain | CONFIRMED | current shared.js:9994-10008 (return true at 9996 and 10007), 8454, 8483-8487; fork 0ce1071a at fork HEAD shared.js:10688-10715 |
+| 5.3 ledger 12 chain: 17 per read, 13 reads cost 221, limit 200 per 4 s | CONFIRMED | current shared.js:8621-8622; server.js:251, 262, 4980, 5018-5026; server_functions.js:5439-5441, 5481-5489 |
+| 5.4: writer lock fixed in the current process-lock.ts:13-55 | PARTLY | the file is runtime/coordinator/persistence/process-lock.ts; processLockIdentity 13-22 records start time and boot id, sameProcessStart 49-55 rejects a reused PID |
 | 5.4: production.attempts prune in production.ts:65-72 | PARTLY | the file is runtime/coordinator/inventory/production.ts; completed attempts are pruned at 66-70 |
 | 5.4: Steam orphan runner chain | PARTLY | code facts confirmed: recovery start_runner (recovery.ts:122-134), signature sweep omits q_data, tracker, player, players (shared.js:303-322, 879-884), restore hook on frame root (741, 759-763); the link to the errors stays inference |
 | 6.1: base cost 1 per handled event, CC table, 200 per 4 s, quarter limit with no player | CONFIRMED | server.js:247-262, 4979-4989, 5018-5026; server_functions.js:5421-5448, 5473-5490 |
 | 6.1: resend adds call_modifier for u and for no nc, 4x for reopen to another socket | CONFIRMED | server.js:4632-4670, 4982 |
 | 6.1: transport adds 8; bank floor enter 32, leave 16 | CONFIRMED | server.js:4808, 5964, 5978, 5989 |
 | 6.1: secondhands charged before the distance check | CONFIRMED | charge at server.js:4980, 5018-5020 before f(data) at 5028; distance answer 7948-7951 |
-| 6.2: pursueMerchantTarget moves every 200 ms | WRONG | the Ryan transfer approach loop polls every 500 ms and issues one xmove only while not moving (shared.js:5380-5394) |
-| 2.1 bids.ts:113, manual-orders.ts:70, 129, commands.ts:69, realm-pause.ts:20 keep a stale homeRealm | CONFIRMED | those lines on the Ryan ref |
+| 6.2: pursueMerchantTarget moves every 200 ms | WRONG | the current transfer approach loop polls every 500 ms and issues one xmove only while not moving (shared.js:5380-5394) |
+| 2.1 bids.ts:113, manual-orders.ts:70, 129, commands.ts:69, realm-pause.ts:20 keep a stale homeRealm | CONFIRMED | those lines on the current console |
 | 8.1: the 15 s return window at home-recovery.ts:93-94 is unreachable | CONFIRMED | home-recovery.ts:93-94 |
 
 ## 8. Settings index

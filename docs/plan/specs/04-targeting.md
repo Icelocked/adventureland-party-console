@@ -1,6 +1,6 @@
 # 04 Targeting (TGT)
 
-Checked against Ryan's base `refs/review/ryan-1.5` (b9b5c91e). Line numbers are on
+Checked against the current console `refs/review/ryan-1.5` (b9b5c91e). Line numbers are on
 that ref unless a line says "fork" (af92de45, `HEAD` in
 (local checkout)) or "21b8362d" (the death fixes in
 (local checkout)). Game data: AL MCP v18183.
@@ -222,7 +222,7 @@ policy question (TGT-Q3).
 
 Root: the 18,047-line closure (shared.js) can only be tested by slicing functions out of
 it, and the fact "this monster attacks the party" carries travel and Pause policy. The
-guard keeps both. Ryan's base added the earlier exceptions inside
+guard keeps both. The current console added the earlier exceptions inside
 `isAttackingPartyMember` in five commits (review/full/combat.md section 4: 9fbeadab,
 703d13af, 2a7b45e6, 8e4a6cf0, d640fd58).
 
@@ -246,7 +246,7 @@ guard keeps both. Ryan's base added the earlier exceptions inside
   C21; fork shared.js:18057-18059). Inference: a step lands inside an idle Targetron's
   aggro range. Patched only in pull mode (754a9179).
 
-### Patchwork in Ryan's base
+### Patchwork in the current console
 
 - **P1. Five eligibility gates.** `isAllowedTarget` (14705-14770), `permitted`
   (attack-controller.ts:96-123), `groupedAttackAllowed` (14459-14474), skills
@@ -315,7 +315,7 @@ for boss events (only Franky and Goo Brawl paths). No test covers Targetron refl
   iceroamer 8% stay allowed); (c) per-monster setting.
 - **TGT-Q4. Threat fact vs travel policy.** Should a passing monster that hits the party
   count as a threat (a) always; (b) only on return trips (today); (c) never.
-- **TGT-Q5. Aggro owner.** (a) leader (Ryan); (b) designated tank (fork); (c) tank, then
+- **TGT-Q5. Aggro owner.** (a) leader (current); (b) designated tank (fork); (c) tank, then
   leader when no tank is set.
 
 ## 6. Gaps

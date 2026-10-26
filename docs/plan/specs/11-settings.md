@@ -3,7 +3,7 @@
 Every saved value in the console: where it is declared, saved, loaded, migrated,
 exported or imported, and read. Spec prefix `SET`.
 
-Checked against Ryan's base `refs/review/ryan-1.5` (`b9b5c91e`) in
+Checked against the current console `refs/review/ryan-1.5` (`b9b5c91e`) in
 (local checkout). Fork lines are labelled "fork" and cite `HEAD`
 (`af92de45`) in the same checkout. Line numbers are on those refs. "Inference" marks a
 claim the code supports but that no test, log or live run here proves.
@@ -56,7 +56,7 @@ Two other places hold saved values that this spec only lists:
 
 - **Character-side journals.** Code running in each character writes crash-recovery and
   UI state to its game `localStorage`. Those writes reach the coordinator journal through
-  SET-014. The key prefixes on Ryan's ref are: `party-bank-sort-buffer`,
+  SET-014. The key prefixes on the current console are: `party-bank-sort-buffer`,
   `party-bank-stack-buffer`, `party-cave-revival`, `party-code-stopped`, `party-commerce`,
   `party-console-return`, `party-console-switcher`, `party-deliveries`,
   `party-dungeon-actions`, `party-force-travel`, `party-game-log-*` (5 keys),
@@ -75,7 +75,7 @@ Two other places hold saved values that this spec only lists:
   because no list names them (writer.ts:45).
 - **SET-002** Every service gets the same `persist: persistSettings` port
   (application.ts:1293-1295). It calls `scheduleSettings`, which sets one 1 s timer;
-  further calls inside that second do nothing (writer.ts:186-190). Ryan's coordinator has
+  further calls inside that second do nothing (writer.ts:186-190). The current coordinator has
   607 lines that mention `persist` or `persistSettings`
   (`git grep -c -E "\bpersist(Settings)?\b" refs/review/ryan-1.5 -- runtime/coordinator`, counted by the full review, review/full/core.md:232).
 - **SET-003** A settings save writes selections, the market cache and production first,
@@ -172,7 +172,7 @@ A coordinator setting is declared by hand in up to 14 kinds of list. Counting th
 `settings-field-lists.cjs` checks (the four document lists, `scoped`, `livenessFields`,
 `publicStateFields`, `configFields`, `heartbeatStateFields`, import `validators`,
 `perCharacter`, the dashboard `PartyState` type, a domain initializer, and a saved-contract
-type), the 119 saved fields on Ryan's ref appear in:
+type), the 119 saved fields on the current console appear in:
 
 | Lists | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |
 |---|---|---|---|---|---|---|---|---|
@@ -187,7 +187,7 @@ route that writes it, and every character-side reader in shared.js.
 
 One tie exists between lists: `configFields` must be a subset of `publicStateFields`
 (`satisfies`, telemetry/public-state.ts:92), checked by the type checker. Nothing else ties
-them. Ryan has a test-checked registry for per-character status fields only
+them. the current console has a test-checked registry for per-character status fields only
 (telemetry/character-fields.ts:1-35, scripts/tests/character-field-registry.test.cjs).
 
 ### Export and import
@@ -248,7 +248,7 @@ Characters read settings from the heartbeat response: `heartbeatStateFields`, 27
 
 ## 2. What goes wrong
 
-### SET-W1. A setting has no single declaration (Ryan)
+### SET-W1. A setting has no single declaration (current)
 
 Causal chain:
 1. A new setting is a field on `party` with no declaration object (initial-state.ts:74-114).
@@ -265,7 +265,7 @@ Each step is a separate hand-kept list; 73 of 119 fields need 5 to 8 of them (ta
 fdb0147a removes a field (`gearSets`) by deleting it from these lists, which is the same
 mechanism a mistake would use. Patch history: none; this is the design.
 
-### SET-W2. Partial writes on validation failure (Ryan, fork extends)
+### SET-W2. Partial writes on validation failure (current, fork extends)
 
 1. `formation` writes `state.leader` (formation.ts:96), then `followers[name]` (:84), then
    event settings (:59-77).
@@ -277,7 +277,7 @@ mechanism a mistake would use. Patch history: none; this is the design.
 5. Fork: `tankRoles` writes between the leader and the character fields (fork formation.ts:99-110,
    called at :118), so a bad `character` body also leaves tank roles changed.
 
-### SET-W3. Import and route accept different values (Ryan)
+### SET-W3. Import and route accept different values (current)
 
 - `threshold`: the import validator accepts any finite number (dashboard-import.ts:59); the
   route accepts only safe integers 0 to 1e12 (thresholds.ts:170).
@@ -288,13 +288,13 @@ mechanism a mistake would use. Patch history: none; this is the design.
 - `buyUpgradeBatchSize` and `bankboiPrefix` agree between the two (:56, :61 against
   thresholds.ts:174 and http/dashboard-import.ts:89).
 
-### SET-W4. No record of who changed a setting (Ryan)
+### SET-W4. No record of who changed a setting (current)
 
 `formation` writes leader and follow with no activity line (formation.ts:90-111); most
 settings routes do the same. The only trace is the next journal record, which holds the new
 value and no source. This is why bug 9 cannot be attributed (below).
 
-### SET-W5. The dashboard shows defaults until the config domain loads (Ryan)
+### SET-W5. The dashboard shows defaults until the config domain loads (current)
 
 1. Settings fields are in the `config` domain (public-state.ts:74-92) and removed from `core`
    (:111-115).
@@ -305,7 +305,7 @@ value and no source. This is why bug 9 cannot be attributed (below).
 4. Spec 12 owns the display. This spec records it because it is the display path of bug 9.
    Inference: any control that writes on change can save the default it is showing.
 
-### SET-W6. Smaller findings (Ryan)
+### SET-W6. Smaller findings (current)
 
 - jsonl-store.ts:248 carries a production branch shaped by a test host ("The vm host in
   scripts/tests/helpers/coordinator-host.cjs defines no clearImmediate").
@@ -363,7 +363,7 @@ UI control that writes on non-click changes.
 
 - **Tank roles** (7bd14d7c, ae116693, 62ab06e5, 9e728ca5, 5b784c28): three fields added to 7
   lists each (`settings-field-lists.cjs $R HEAD v`), a heartbeat type line, a shared.js
-  reader and the formation route. Fits Ryan's design; inherits SET-W1 and SET-W2.
+  reader and the formation route. Fits the current design; inherits SET-W1 and SET-W2.
 - **Achievement Hunt document** (09a417ca, a04cc9f3): a ninth document saved by the writer,
   plus 4 more scoped fields saved twice (23 total).
 - **Console Pause is a second owner of 23 settings** (b33aee77, 9a34a4c1; spec 13 covers the

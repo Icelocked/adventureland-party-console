@@ -1,6 +1,6 @@
 # 08. Merchant jobs
 
-Checked against Ryan's base `refs/review/ryan-1.5` (b9b5c91e) in (local checkout). Every file:line is on that ref unless it says "fork HEAD" (af92de45). The fork's live tip 21b8362d changes no file in this part (`git diff --stat af92de45 21b8362d` in pm-worktrees/pta-pull touches only characters/shared.js lines 71 and 18438-18926).
+Checked against the current console `refs/review/ryan-1.5` (b9b5c91e) in (local checkout). Every file:line is on that ref unless it says "fork HEAD" (af92de45). The fork's live tip 21b8362d changes no file in this part (`git diff --stat af92de45 21b8362d` in pm-worktrees/pta-pull touches only characters/shared.js lines 71 and 18438-18926).
 
 This spec maps which job the merchant runs and what interrupts it: the job queue, routine
 priorities, the dispatcher and its gates, the command the coordinator writes for the merchant, the
@@ -15,7 +15,7 @@ Which realm the merchant is on and what it holds in its hands are in
 
 Counts: 48 behaviours and 618 functions in `catalog/08-merchant-jobs.json` (counted with `node -e` over that file); 13 handoffs in `catalog/handoffs-08.json`.
 
-How this map was made: four readers went through every function in this part on the Ryan ref (shared.js by its Ryan line ranges, every other file start to end) and checked the full review (local checkout) and the first pass `review/merchant.md` claim by claim. Section 7 lists each review claim with its verdict. Line numbers in the full review are mostly fork HEAD lines; this spec gives Ryan lines.
+How this map was made: four readers went through every function in this part on the current console (shared.js by its current line ranges, every other file start to end) and checked the full review (local checkout) and the first pass `review/merchant.md` claim by claim. Section 7 lists each review claim with its verdict. Line numbers in the full review are mostly fork HEAD lines; this spec gives current lines.
 
 ## 1. What it does today
 
@@ -608,7 +608,7 @@ Handed over by other specs: 3 functions (03-turns-and-cooldowns, 13-lifecycle).
 
 ### Luck scheduler never refreshes the party's own strong luck before it lapses
 
-Kind: bug. Origin: Ryan base. Confidence: confirmed in code.
+Kind: bug. Origin: the current console. Confidence: confirmed in code.
 
 1. The game marks mluck strong whenever caster and target share an owner (game node/server.js:10896-10898), so every buff our merchant casts on our own account's characters is strong
 2. Characters report the buff with live.strong (characters/shared.js:1830-1845, safeFields 1805-1813 keeps booleans)
@@ -619,7 +619,7 @@ Kind: bug. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Five job command types are dropped from the slot after one heartbeat
 
-Kind: bug. Origin: Ryan base. Confidence: confirmed in code.
+Kind: bug. Origin: the current console. Confidence: confirmed in code.
 
 1. merchant-upgrade-preview, merchant-bank-unlock, merchant-send-mail, merchant-collect-mail and merchant-deconstruct are job commands (runtime/coordinator/merchant/command-kind.ts:4, 15-16, 25; commands.ts:108)
 2. They are missing from retainedCommands (runtime/coordinator/status/response.ts:18-51), so commandFor deletes them after the first delivery (:129)
@@ -628,7 +628,7 @@ Kind: bug. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Merchant command slot has many writers and no claim
 
-Kind: patchwork. Origin: Ryan base. Confidence: inference.
+Kind: patchwork. Origin: the current console. Confidence: inference.
 
 1. Four HTTP routes write merchant-gather without checking merchantCurrent (http/merchant-settings.ts:79-84, 110-114; http/merchant-configuration.ts:88-93; http/merchant-control.ts:97-102)
 2. A gather toggle between dispatch and acceptance replaces the retained job command (dispatcher.ts:221 vs response.ts:127-129)
@@ -637,13 +637,13 @@ Kind: patchwork. Origin: Ryan base. Confidence: inference.
 
 ### A preempting job leaves the rod or pickaxe in hand
 
-Kind: bug. Origin: Ryan base. Confidence: confirmed in code.
+Kind: bug. Origin: the current console. Confidence: confirmed in code.
 
 The rod or pickaxe left in hand after a job preempts gathering is ledger 6. Its causal chain is in [09 What goes wrong](09-merchant-realm-and-gear.md#2-what-goes-wrong), because the fault is what the merchant holds; this spec covers the yield side in MJB-038.
 
 ### Gathering stops at 3 free slots, but deposit needs fewer than 3
 
-Kind: dead code. Origin: Ryan base. Confidence: confirmed in code.
+Kind: dead code. Origin: the current console. Confidence: confirmed in code.
 
 1. gatheringBlockReason returns "inventory capacity" at 3 or fewer free slots (characters/shared.js:10028)
 2. gatheringTick runs it synchronously, then checks freeInventorySlots() < 3 before any await (10034-10054), so depositGatheringGains at 10055 cannot run
@@ -652,7 +652,7 @@ Kind: dead code. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Recovery backoff cap values are unreachable
 
-Kind: dead code. Origin: Ryan base. Confidence: confirmed in code.
+Kind: dead code. Origin: the current console. Confidence: confirmed in code.
 
 1. requeue stops at recoveryAttempts >= 3 (runtime/coordinator/merchant/recovery.ts:80)
 2. The highest attempt number written is 3, so the delay is at most 20000 x 2^2 = 80000 ms (:94-96)
@@ -664,7 +664,7 @@ Commits:
 
 ### Character-observed giveaway jobs never expire
 
-Kind: bug. Origin: Ryan base. Confidence: confirmed in code.
+Kind: bug. Origin: the current console. Confidence: confirmed in code.
 
 1. nearbyGiveaways reports minutes but no expiresAt (characters/shared.js:2339-2341)
 2. enqueueGiveaway copies expiresAt undefined (runtime/coordinator/merchant/giveaway-scheduler.ts:103)
@@ -678,7 +678,7 @@ Commits:
 
 ### Two pause functions strip different fields
 
-Kind: duplicate rule. Origin: Ryan base. Confidence: confirmed in code.
+Kind: duplicate rule. Origin: the current console. Confidence: confirmed in code.
 
 1. Force stand pause unshifts the job and keeps operationStage, checkpointAt, commandId and commandReport (http/merchant-control.ts:112-126)
 2. Checkpoint pause pushes the job and strips them (http/merchant-progress.ts:99-121)
@@ -691,7 +691,7 @@ Commits:
 
 ### Three copies of "is gathering ready"
 
-Kind: duplicate rule. Origin: Ryan base. Confidence: confirmed in code.
+Kind: duplicate rule. Origin: the current console. Confidence: confirmed in code.
 
 1. dispatcher gatherBefore: coordinator cooldowns and more than 3 free slots (dispatcher.ts:127-135)
 2. idle gatheringReady: max of coordinator and status cooldowns and more than 3 free slots (idle.ts:82-93)
@@ -700,7 +700,7 @@ Kind: duplicate rule. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Free-slot threshold copied in a dozen places
 
-Kind: duplicate rule. Origin: Ryan base. Confidence: confirmed in code.
+Kind: duplicate rule. Origin: the current console. Confidence: confirmed in code.
 
 1. 3 or fewer free slots: dispatcher.ts:129, idle.ts:83, job-policy.ts:71, status/merchant-scheduling.ts:133, 177, 199, characters/shared.js:5815, 7041, 10028, 10129
 2. Fewer than 3: characters/shared.js:10054, 10148
@@ -708,15 +708,15 @@ Kind: duplicate rule. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Idle and dispatcher disagree on ready work
 
-Kind: duplicate rule. Origin: Ryan base. Confidence: inference.
+Kind: duplicate rule. Origin: the current console. Confidence: inference.
 
 1. readyQueuedWork copies merchantJobReady (idle-composition.ts:42-50 vs priority.ts:75-83)
 2. dispatcher ready also refuses home-blocked merchant jobs (dispatcher.ts:117-120)
 3. With an exhausted home return and a queued home-needing job, idle sees ready work and stays (idle.ts:102) while the dispatcher refuses it, so the merchant neither works nor returns to the stand
 
-### Ryan's own names and realm hard-coded as defaults
+### the current own names and realm hard-coded as defaults
 
-Kind: wrong value. Origin: Ryan base. Confidence: confirmed in code.
+Kind: wrong value. Origin: the current console. Confidence: confirmed in code.
 
 1. Default merchant "GoldMajesty" and a GoldMajesty lucky slot cleanup (runtime/coordinator/merchant/initial-runtime.ts:36, 40)
 2. Character default merchantHomeRealm "SR_USII" (characters/shared.js:871) and realm fallbacks US/II (8709, 9478)
@@ -724,7 +724,7 @@ Kind: wrong value. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Stand log uses the fixed legacy stand point
 
-Kind: wrong value. Origin: Ryan base. Confidence: confirmed in code.
+Kind: wrong value. Origin: the current console. Confidence: confirmed in code.
 
 1. logStand tests distance to (-63, 100) on main (runtime/coordinator/status/merchant-observation.ts:81-82)
 2. The configured point lives in merchantStandLocation (stand-location.ts:14-44) and idle uses it (idle.ts:105-111)
@@ -732,7 +732,7 @@ Kind: wrong value. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Stand closed three times for one job
 
-Kind: duplicate rule. Origin: Ryan base. Confidence: confirmed in code.
+Kind: duplicate rule. Origin: the current console. Confidence: confirmed in code.
 
 1. handleCommand closes the stand for every merchant command except idle and stand-sync (characters/shared.js:10516-10523)
 2. runMerchantJob closes it again for commerce and upgrade preview (8468)
@@ -740,7 +740,7 @@ Kind: duplicate rule. Origin: Ryan base. Confidence: confirmed in code.
 
 ### Restart requeue keeps stale run fields
 
-Kind: patchwork. Origin: Ryan base. Confidence: inference.
+Kind: patchwork. Origin: the current console. Confidence: inference.
 
 1. recoverMerchantQueue deletes only phase, startedAt and handoff (runtime/coordinator/merchant/restart-queue.ts:33-35)
 2. commandId, commandReport, heartbeatAt, progressAt, checkpointAt and operationStage stay on the queued job
@@ -748,7 +748,7 @@ Kind: patchwork. Origin: Ryan base. Confidence: inference.
 
 ### Every command counts as an inventory command for gathering
 
-Kind: patchwork. Origin: Ryan base. Confidence: confirmed in code.
+Kind: patchwork. Origin: the current console. Confidence: confirmed in code.
 
 1. handle increments root.__partyInventoryCommands around every command, including travel and merchant-gather (characters/shared.js:10388-10393)
 2. gatheringBlockReason returns "inventory command" while it is above 0 (10021)
@@ -760,13 +760,13 @@ Commits:
 
 ## 3. Fork differences
 
-What the fork (af92de45) adds or changes in this part. Fork code is not in Ryan's catalog; its lines are fork HEAD.
+What the fork (af92de45) adds or changes in this part. Fork code is not in the current catalog; its lines are fork HEAD.
 
 | What | Commits | What it patches | Where |
 |---|---|---|---|
 | Prim stack job runs inside the suspend list and closes the stand | 2055dd82 2026-10-20 Icelocked feat: prim stack an item's grace (#65) | Adds a new job type; extends the suspend list rather than replacing it | fork HEAD characters/shared.js:8981, 8995, 11280-11281; merchant/commands.ts:110; merchant/initial-settings.ts:48 |
 | restoreGatheringHandsForJob restores the mainhand when a merchant-* job preempts gathering | 0ce1071a 2026-10-24 Icelocked Restore merchant hands when a job preempts gathering | Ledger 6 (rod kept after a Ponty job); ignores a failed restore, skips non merchant-* commands, triggers only on the mainhand, adds two hold windows | fork HEAD characters/shared.js:10690-10715 |
-| Giveaway expiry from remaining minutes, claim release on expiry, bank exclusion, merchant directory lookup | 79567a23 2026-10-20 Icelocked fix(merchant): find giveaway hosts through the merchant directory; expire giveaway jobs at their real end (#129), 05456efd 2026-10-20 Icelocked lint | Character-observed giveaways never expiring on the Ryan base; ALData expiry capped at 2 minutes | fork HEAD merchant/giveaway-scheduler.ts:50-57, 94-106; merchant/dispatcher.ts:245-250; merchant/dispatch-composition.ts:146-152; characters/shared.js:9282-9330 |
+| Giveaway expiry from remaining minutes, claim release on expiry, bank exclusion, merchant directory lookup | 79567a23 2026-10-20 Icelocked fix(merchant): find giveaway hosts through the merchant directory; expire giveaway jobs at their real end (#129), 05456efd 2026-10-20 Icelocked lint | Character-observed giveaways never expiring on the current console; ALData expiry capped at 2 minutes | fork HEAD merchant/giveaway-scheduler.ts:50-57, 94-106; merchant/dispatcher.ts:245-250; merchant/dispatch-composition.ts:146-152; characters/shared.js:9282-9330 |
 | Ron purchases job type (merchant-ron-buy), retained in the slot | 9476cd15 2026-10-22 Icelocked feat: buy from Ponty and Ron with standing orders | New feature | fork HEAD merchant/command-kind.ts:13; merchant/commands.ts:79; status/response.ts:32; characters/shared.js:11266-11269 |
 | Cosmetic commands handled before merchant preflight | 40abe1b2 2026-10-20 feat(dashboard): show CX jars, manage worn cosmetics and use emotes | New feature; cosmetics set lastCommand, which supersedes an in-flight merchantIdle (ownsIdle) (inference) | fork HEAD characters/shared.js:11163-11169 |
 | merchantHandoff authorizes an ordinary merchant mark that replaces an automatic pickup in the same slot | 947fa15e 2026-10-20 fix(merchant): send auto-merchant copies that also feed a compound rule | Auto-merchant copies that also feed a compound rule were skipped (#43) | fork HEAD characters/shared.js:6351-6357 |
@@ -901,7 +901,7 @@ it keeps the dispatcher as the one place that decides what runs next.
 
 ### Q3. Should giveaways the merchant finds itself expire?
 
-**Today:** on Ryan's base a giveaway job that the merchant queued from what it saw near itself has
+**Today:** on the current console a giveaway job that the merchant queued from what it saw near itself has
 no expiry (characters/shared.js:2330-2345 reports them; runtime/coordinator/merchant/dispatcher.ts:246
 admits queued giveaway jobs with no end check), so the merchant can walk to a giveaway that has
 already ended. The fork adds an expiry from the giveaway's minutes and a 30 minute claim per
@@ -912,7 +912,7 @@ attempt (fork HEAD giveaway-scheduler.ts:51-57, 103-106; dispatcher.ts:248-250, 
 - B. Keep no expiry; rely on the join step failing on arrival. Wasted trips, and the merchant is
   away from its stand.
 
-**Recommendation:** A, and offer it to Ryan as a small issue, because the bug is in his base.
+**Recommendation:** A, and offer it upstream as a small issue, because the bug is in the current console.
 
 ### Q4. When the merchant is gathering and a job arrives, should a cast in progress finish first?
 
@@ -949,49 +949,49 @@ Not yet verified:
 
 | Claim | Verdict | Evidence |
 |---|---|---|
-| Review 2.2: dispatcher command port writes the slot (dispatch-composition.ts:172-174; dispatcher.ts:139, 217-226, 271) | PARTLY | Content right; Ryan lines are dispatch-composition.ts:163-165 and dispatcher.ts:137, 215, 221, 224, 267 (review cites HEAD) |
+| Review 2.2: dispatcher command port writes the slot (dispatch-composition.ts:172-174; dispatcher.ts:139, 217-226, 271) | PARTLY | Content right; current lines are dispatch-composition.ts:163-165 and dispatcher.ts:137, 215, 221, 224, 267 (review cites HEAD) |
 | Review 2.2: idle issue writes merchant-idle (idle-composition.ts:57-59, idle.ts:164-171), skipped for equip/unequip/use-item (idle.ts:157) | CONFIRMED | runtime/coordinator/merchant/idle-composition.ts:57-59; idle.ts:157, 164-171 |
-| Review 2.2: travel port delete at application.ts:386 | PARTLY | HEAD line; Ryan ref is runtime/coordinator/application.ts:363 |
+| Review 2.2: travel port delete at application.ts:386 | PARTLY | HEAD line; the current console is runtime/coordinator/application.ts:363 |
 | Review 2.2: completion delete (completion.ts:83), recovery clearCommand checks job id (recovery-composition.ts:34-36), home recovery deletes (home-recovery.ts:107, 143), automation native-realm-switch (automation-composition.ts:58-61), realm-composition 40-50 | CONFIRMED | completion.ts:83; recovery-composition.ts:34-36; home-recovery.ts:107, 143; automation-composition.ts:58-61; realm-composition.ts:41, 49 |
 | Review 2.2 / Appendix B 3: four merchant-gather writers never check the current job | CONFIRMED | http/merchant-settings.ts:79-84, 110-114; http/merchant-configuration.ts:88-93; http/merchant-control.ts:97-102 |
 | Review 2.2: status/response.ts:18-45 keeps some types until a route clears them | CONFIRMED | status/response.ts:18-51 (list), :129 (delete of all others) |
-| Review 2.3: job executor token (runMerchantJob 8967-8969), cleared in finally (9012) | PARTLY | HEAD lines; Ryan characters/shared.js:8440-8442 and 8485 |
-| Review 2.3: gathering loop gets control when gatheringBlockReason returns null (10717-10737); current() checks attempt, generation, job, anniversary (10682-10686) | PARTLY | HEAD lines; Ryan shared.js:10010-10030 and gatheringAttemptCurrent 9988-9992 |
-| Review 2.3: stand return via merchant-idle or the gathering cooldown branch, ownsIdle | CONFIRMED | Ryan shared.js:9461-9616, cooldown branch 10087, ownsIdle 9475, merchantTownReturn 827-870 |
+| Review 2.3: job executor token (runMerchantJob 8967-8969), cleared in finally (9012) | PARTLY | HEAD lines; current characters/shared.js:8440-8442 and 8485 |
+| Review 2.3: gathering loop gets control when gatheringBlockReason returns null (10717-10737); current() checks attempt, generation, job, anniversary (10682-10686) | PARTLY | HEAD lines; current shared.js:10010-10030 and gatheringAttemptCurrent 9988-9992 |
+| Review 2.3: stand return via merchant-idle or the gathering cooldown branch, ownsIdle | CONFIRMED | current shared.js:9461-9616, cooldown branch 10087, ownsIdle 9475, merchantTownReturn 827-870 |
 | Review 2.3: convoy pause 60 s deadline or job change (merchant-interruption.ts:17-119) | CONFIRMED | navigation/merchant-interruption.ts:24, 117-119 |
 | Review 2.3: coordinator idle infers movement owner with a 10 s window (idle.ts:49-103) | CONFIRMED | merchant/idle.ts:54-60, 62-80 |
-| Review 2.5: gatherBefore dispatcher.ts:129-145 | PARTLY | Ryan lines dispatcher.ts:127-143 |
+| Review 2.5: gatherBefore dispatcher.ts:129-145 | PARTLY | current lines dispatcher.ts:127-143 |
 | Review 2.5: priority yield comparison merchant-progress.ts:77-98 | CONFIRMED | http/merchant-progress.ts:77-98; it ignores free slots, unlike dispatcher.ts:129 |
-| Review 2.5: job suspend list (runMerchantJob 8981-8994, resume 9013) has six command types | PARTLY | Ryan shared.js:8454 lists five (service, npc-sale, deconstruct, commerce, upgrade-preview); the sixth (merchant-prim-stack) is fork commit 2055dd82; resume Ryan 8486 |
-| Review 2.5: in-place stand sync suspend 10181-10194, resume 10299 | PARTLY | Ryan shared.js:9487-9500, resume 9605 |
-| Review 2.5: gatheringBlockReason has 15 reasons; six writers of __merchantLogisticsHoldUntil | PARTLY | 15 reasons confirmed at Ryan shared.js:10010-10030; Ryan has four writers (7042, 7118, 10004, 10182), fork 0ce1071a adds two |
+| Review 2.5: job suspend list (runMerchantJob 8981-8994, resume 9013) has six command types | PARTLY | current shared.js:8454 lists five (service, npc-sale, deconstruct, commerce, upgrade-preview); the sixth (merchant-prim-stack) is fork commit 2055dd82; resume current 8486 |
+| Review 2.5: in-place stand sync suspend 10181-10194, resume 10299 | PARTLY | current shared.js:9487-9500, resume 9605 |
+| Review 2.5: gatheringBlockReason has 15 reasons; six writers of __merchantLogisticsHoldUntil | PARTLY | 15 reasons confirmed at current shared.js:10010-10030; the current console has four writers (7042, 7118, 10004, 10182), fork 0ce1071a adds two |
 | Review 2.6: selectMerchantJob by priority then queuedAt through takeCoordinatorMerchantJob; promote, localStandSync 99, staging 101, bid override, retry unshift, clusters, recovery requeue reorder the queue | CONFIRMED | priority.ts:85-107; queue-selection.ts:100-114; queue.ts:85-97, 147; priority.ts:46, 48; completion-retries.ts:197, 212; clusters.ts:73, 97, 144; recovery.ts:100 |
 | Review 3 row 1.1: priority.ts:85-94 and 97-107 via the pick port | CONFIRMED | priority.ts:85-107; queue-selection.ts:100-114; application.ts:1592-1594 |
-| Review 3 row 1.2: one command in the slot; dispatch-composition.ts:172-174 | PARTLY | Ryan line dispatch-composition.ts:163-165 |
-| Review 3 row 1.3: runMerchantJob token, 5 s heartbeat, /merchant/complete; completion-retries decides requeue (188-216) | CONFIRMED | Ryan shared.js:8440-8451; completion-retries.ts:188-216 |
+| Review 3 row 1.2: one command in the slot; dispatch-composition.ts:172-174 | PARTLY | current line dispatch-composition.ts:163-165 |
+| Review 3 row 1.3: runMerchantJob token, 5 s heartbeat, /merchant/complete; completion-retries decides requeue (188-216) | CONFIRMED | current shared.js:8440-8451; completion-retries.ts:188-216 |
 | Review 3 row 1.4: about 20 gates in the dispatcher | CONFIRMED | dispatcher.ts:89-125, 239-308 (event, production, inventory busy, cast, realm advance, home return, alive, storage, anniversary x4, force stand, current, manual equipment, capacity, gather, stale target, home needs, enabled, giveaway expiry, BankBoi) |
-| Review 3 row 1.5: character chain before accepted (11170-11199) | PARTLY | HEAD lines; Ryan shared.js:10456-10486 |
-| Review 3 row 1.6: 2 s timer and 15 block reasons | CONFIRMED | Ryan shared.js:10274, 10010-10030 |
-| Review 3 row 1.7: gatheringCommandHandoff cancels and stops, or defers during a cast (Ryan 9994-10008) | CONFIRMED | Ryan shared.js:9994-10008 |
-| Review 3 row 1.8: suspend list bumps generation, kills timers, waits up to 15 s, resumes in finally | CONFIRMED | Ryan shared.js:8454-8467, 8486 |
+| Review 3 row 1.5: character chain before accepted (11170-11199) | PARTLY | HEAD lines; current shared.js:10456-10486 |
+| Review 3 row 1.6: 2 s timer and 15 block reasons | CONFIRMED | current shared.js:10274, 10010-10030 |
+| Review 3 row 1.7: gatheringCommandHandoff cancels and stops, or defers during a cast (current 9994-10008) | CONFIRMED | current shared.js:9994-10008 |
+| Review 3 row 1.8: suspend list bumps generation, kills timers, waits up to 15 s, resumes in finally | CONFIRMED | current shared.js:8454-8467, 8486 |
 | Review 3 row 1.9: coordinator gathering decided in several places | CONFIRMED | dispatcher.ts:127-143; idle.ts:82-93; http/merchant-progress.ts:86-92; four HTTP writers (Appendix B 3) |
 | Review 3 row 1.10: merchantInterruption 60 s deadline, four phases | CONFIRMED | navigation/merchant-interruption.ts:8, 24 |
 | Review 3 row 1.11: idle infers movement owner (idle.ts:49-103) | CONFIRMED | merchant/idle.ts:49-103 |
 | Review 3 row 1.12: realm writers table | PARTLY | Out of 08 scope beyond dispatcher gates; dispatch-composition.ts:146-152 home gates confirmed; home-recovery.ts not read in full here (09) |
-| Review 3 row 1.13: merchantHomeReturnAt read in dispatch-composition.ts:155 | PARTLY | Ryan line dispatch-composition.ts:146 |
+| Review 3 row 1.13: merchantHomeReturnAt read in dispatch-composition.ts:155 | PARTLY | current line dispatch-composition.ts:146 |
 | Review 3 row 1.14: completesStorageHandoff job-policy.ts:21-35, coordinatorMerchantTransferBlocked :60-72, reasonAliases priority.ts:27-30, and more reason lists | CONFIRMED | job-policy.ts:21-35, 60-72; priority.ts:27-30; collection.ts:55-57; pickup-jobs.ts:3-9; queue.ts:77; completion-retries.ts:61, 77, 106; completion.ts:68; command-scope.ts:5-11; routines.ts:3-4 |
-| Review 3 row 2.3: no preemption path restores hands in Ryan base; gatheringCommandHandoff returns true after the cancel; ledger 6 Ponty is not in the suspend list | CONFIRMED | Ryan shared.js:9994-10008 (no restore), 8454 (no merchant-ponty-buy), restore only from 10072 and 10237 |
-| Review 3 row 2.4: gathering polls flags; logistics hold set from several places | CONFIRMED | Ryan shared.js:10010-10030; hold writers 7042, 7118, 10004, 10182 |
-| Review 3 row 2.5: two lists decide preemption | CONFIRMED | Ryan shared.js:8454 suspend list; all other types rely on 9994-10008 plus "merchant job" at 10017 |
-| Review 3 row 2.6: gates duplicated across the wire | CONFIRMED | dispatcher.ts:89-113, 276 vs Ryan shared.js:10475-10481; anniversary-control.ts:119-147 vs character merchantAnniversaryWorkReserved |
+| Review 3 row 2.3: no preemption path restores hands in the current console; gatheringCommandHandoff returns true after the cancel; ledger 6 Ponty is not in the suspend list | CONFIRMED | current shared.js:9994-10008 (no restore), 8454 (no merchant-ponty-buy), restore only from 10072 and 10237 |
+| Review 3 row 2.4: gathering polls flags; logistics hold set from several places | CONFIRMED | current shared.js:10010-10030; hold writers 7042, 7118, 10004, 10182 |
+| Review 3 row 2.5: two lists decide preemption | CONFIRMED | current shared.js:8454 suspend list; all other types rely on 9994-10008 plus "merchant job" at 10017 |
+| Review 3 row 2.6: gates duplicated across the wire | CONFIRMED | dispatcher.ts:89-113, 276 vs current shared.js:10475-10481; anniversary-control.ts:119-147 vs character merchantAnniversaryWorkReserved |
 | Review 3 row 2.7: retries classified by error text; three typed kinds | CONFIRMED | completion-retries.ts:24-74, 105, 114, 124, 136; failureKind hunt_movement_owned (:49), commerce_recovery (:71), commerce_movement (commerce-progress.ts:17) |
 | Review 4: dispatcher ready 9fbeadab, dd7a3766, 0631e72c, 3bb52c1f; available adds abd3db8b; productionHeld/dispatch 829b85ba, 0de261d5, 0631e72c, cb8881f6; gatherBefore 2be25ed8 | CONFIRMED | git log -L115,125 / 127,143 / 239,248 / 254,299 on refs/review/ryan-1.5 runtime/coordinator/merchant/dispatcher.ts |
 | Review 4: suspend list history 9fbeadab, dd7a3766, 034dcfdf, 2a1a72f2 (+ fork 2055dd82) | CONFIRMED | git log -L8453,8467:characters/shared.js refs/review/ryan-1.5 |
 | Review 4: gatheringBlockReason history 9fbeadab, 2be25ed8, 580856b6 | CONFIRMED | git log -L10010,10030:characters/shared.js refs/review/ryan-1.5 |
 | Review 5.2 step 3: the coordinator assigns a job by writing the slot | CONFIRMED | dispatch-composition.ts:163-165; dispatcher.ts:221 |
-| Review 5.2 step 4: handleCommand calls gatheringCommandHandoff and it returns true with the tool in hand; true at once between ticks | CONFIRMED | Ryan shared.js:10482, 9996, 10003-10007 |
-| Review 5.2 step 5: merchant-ponty-buy not in the suspend list; gathering returns "merchant job" | CONFIRMED | Ryan shared.js:8454, 10017 |
-| Review 5.2 step 6: runMerchantJob finally and merchant-idle do not touch hands | CONFIRMED | Ryan shared.js:8483-8487, 9461-9616 |
+| Review 5.2 step 4: handleCommand calls gatheringCommandHandoff and it returns true with the tool in hand; true at once between ticks | CONFIRMED | current shared.js:10482, 9996, 10003-10007 |
+| Review 5.2 step 5: merchant-ponty-buy not in the suspend list; gathering returns "merchant job" | CONFIRMED | current shared.js:8454, 10017 |
+| Review 5.2 step 6: runMerchantJob finally and merchant-idle do not touch hands | CONFIRMED | current shared.js:8483-8487, 9461-9616 |
 | Appendix B 3: two pause functions strip different field lists | CONFIRMED | http/merchant-control.ts:112-126 (unshift, keeps operationStage, checkpointAt, commandId, commandReport) vs http/merchant-progress.ts:99-121 (push, strips them) |
 | Appendix B 3: equipmentOwnsSlot overwrites party-monster-travel while handoff admits through the interruption | CONFIRMED | status/merchant-scheduling.ts:247-253; http/merchant-handoff.ts:129 |
 

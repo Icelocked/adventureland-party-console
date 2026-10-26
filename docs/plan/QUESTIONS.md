@@ -1,7 +1,7 @@
-# Questions for Ryan
+# Open questions
 
 These are questions about how you meant the console to behave, collected while I mapped
-your 1.5-feature-branch (b9b5c91e) and my fork side by side. Each answer can be a
+the current console (1.5-feature-branch, b9b5c91e) and my fork side by side. Each answer can be a
 plain yes or no, or "here's why it works this way". Anything you disagree with changes
 the plan.
 

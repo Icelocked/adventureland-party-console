@@ -1,13 +1,13 @@
 # 06 Events
 
-Checked against Ryan's base `refs/review/ryan-1.5` (b9b5c91e) in
+Checked against the current console `refs/review/ryan-1.5` (b9b5c91e) in
 (local checkout). Every `file:line` below is on that
 ref unless it says "fork" (af92de45, HEAD of the same checkout). Behaviour
 ids are `EVT-001` onward; `catalog/06-events.json` lists the functions and
 tests for each one. Evidence leads came from
 `backups/party-console/review/full/events.md` (with Appendix A and B),
 `review/events.md` and the bug ledger in `review/BRIEF.md`; every claim here
-was re-read on the Ryan ref, and line numbers differ from the reviews, which
+was re-read on the current console, and line numbers differ from the reviews, which
 cite the fork.
 
 Words used below:
@@ -328,7 +328,7 @@ Words used below:
 
 ## 2. What goes wrong
 
-Each item: cause chain on the Ryan ref, then patches. "Inference" marks what
+Each item: cause chain on the current console, then patches. "Inference" marks what
 the code alone does not prove.
 
 ### 2.1 Manual move ends the round for that character (ledger 14 family)
@@ -345,7 +345,7 @@ the code alone does not prove.
    can cancel the user's own move.
 5. `ended()` skips the member because it is no longer enabled
    (observations.ts:388); no return starts.
-Patches: Ryan d009eb22 made this the rule. No later patch.
+Patches: upstream commit d009eb22 made this the rule. No later patch.
 
 ### 2.2 Join failures have no owner ("cant_join" every 10 s)
 
@@ -367,7 +367,7 @@ lists the event. No patch.
 4. Every Hunt copy of "at an event" fires (01 GRP-013), so Hunt pauses and
    cancels its convoy (hunt/travel.ts:15-28).
 5. The lead is a literal, not route time plus a margin (5 lines, EVT-008).
-Patch: Ryan dropped the fork's timeout-forced return in #151 (his
+Patch: Upstream dropped the fork's timeout-forced return in #151 (upstream
 `docs/pr-151-integration.md`, "Excluded"); the "spawn hold" was a test
 harness change. "Several minutes early" is not proven from code.
 
@@ -416,7 +416,7 @@ each list.
 ### 2.8 Deferred return fix chain
 
 The deferred return is a second return machine per member beside
-`eventReturn`, and both race with new admissions. Ryan's 2026-10-08..14
+`eventReturn`, and both race with new admissions. The current 2026-10-08..14
 chain: 5487c9f0, 9264b7f5, 7d3c5c1b, 0f07fd0b, dce39092, ea49a71a, 0a85cb1e,
 f781044d, b012e091, a6b0307d, d009eb22, 545ca932; each added a phase or a
 fence (`awaiting-event-handoff`, `awaiting-reconnect`,
@@ -462,7 +462,7 @@ Fork ref af92de45; verified by reading the named fork lines.
   which still calls `skipManualEventOccurrences` (fork monster-selection.ts:76),
   so an automated switch marks live occurrences "manual travel".
 - **Failed event leg chain** in shared-walk.ts: b0c4d1ef, 029f590b, 5c504443,
-  653238e1, c5eacf1b, each patching the previous one on top of Ryan's
+  653238e1, c5eacf1b, each patching the previous one on top of the current
   retained failure.
 - **Cipher patches**: da499b7b (`merchantEventCombat`, merchant sits out
   gathering), 7253caef, e9e4bda3 (2.4).

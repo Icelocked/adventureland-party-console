@@ -1,6 +1,6 @@
 # 05 Survival (SRV)
 
-Checked against Ryan's base `refs/review/ryan-1.5` (b9b5c91e). Line numbers are on
+Checked against the current console `refs/review/ryan-1.5` (b9b5c91e). Line numbers are on
 that ref unless a line says "fork" (af92de45, `HEAD` in
 (local checkout)) or "21b8362d" (the death fixes in
 (local checkout)). Game rules: server source in
@@ -170,7 +170,7 @@ disengagement `safe`).
 Each adds a rule beside the owner it patches: `occupiedPotion` is a sixth potion-group
 writer (spec 03 table), and `pullSupported` is another pull hook.
 
-### Patchwork in Ryan's base
+### Patchwork in the current console
 
 - **P1. Thresholds in six places.** Class files (mage.ts:9, priest.ts:21,
   warrior.ts:44-49), regen order (13785-13792), escape budgets (62-75), skills reserve
@@ -206,7 +206,7 @@ writer (spec 03 table), and `pullSupported` is another pull hook.
 | Test | Proves | Does not cover | Accurate | Guards a patch |
 |---|---|---|---|---|
 | passive-healing (14 tests) | heal ratios, partyheal, passive pulse, merchant potion | potion vs regen collision; W1 MP check | yes | some (Town channel) |
-| party-escape (22) | escape stages, potion budgets, warrior defence order | stranded complete (bug 5) on Ryan's base | yes | several |
+| party-escape (22) | escape stages, potion budgets, warrior defence order | stranded complete (bug 5) on the current console | yes | several |
 | combat-disengagement (13) | finish thresholds, escape, safe regroup, farm return | the Blink-landing stall | yes | some |
 | respawn-recovery (5) | respawn latch, event and farm rejoin | escape-owned revival | yes | yes (lost reply) |
 | cave-priest-recovery (12) | revival journal and reserve | - | yes | no |
@@ -228,7 +228,7 @@ tests stub `useRecoveryPotion`. No test runs two potion-group writers together.
   potion threshold would trigger within those 4 s; (b) regen only out of combat; (c)
   today (regen at any missing HP).
 - **SRV-Q3. Escape potion order.** (a) HP first below 50% then MP budget (21b8362d);
-  (b) one table shared with SRV-Q1; (c) MP first (Ryan).
+  (b) one table shared with SRV-Q1; (c) MP first (current).
 - **SRV-Q4. When does a death end the fight?** (a) finish only when foes are at or below
   25% and survivors at or above 50% (today); (b) always escape; (c) finish while the
   healer lives.

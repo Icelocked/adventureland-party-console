@@ -1,8 +1,8 @@
 # 07 Hunts and farming
 
-Milestone M0 (the map). Prefix `HNT`. Checked against Ryan's base `refs/review/ryan-1.5`
+Milestone M0 (the map). Prefix `HNT`. Checked against the current console `refs/review/ryan-1.5`
 (b9b5c91e) in (local checkout); fork lines are marked "fork af92de45".
-Every file:line is on the Ryan ref unless marked. "Inference:" marks a claim that the code alone
+Every file:line is on the current console unless marked. "Inference:" marks a claim that the code alone
 does not prove.
 
 ## Scope
@@ -633,12 +633,21 @@ How the dungeon's ownership stops other parts of the console is a precedence que
 - The application asks for full floors only for the leader's worker (application.ts:270; characters/manager.ts:52-54).
 - `liveCaveMapDefinition` sends one floor's tiles, placements and tileset files with the map frame, once per floor unless the coordinator answers that it needs it again (shared.js:3746-3763). The handshake itself (runtime/lifecycle/cave-floor-handshake.ts) asks 13.
 
+### Added in triage
+
+catalog/triage-log.json lists each behaviour in this group.
+
+- **HNT-107** The rare owner publishes its encounter and patrol state with a message as rareHuntState, and writes debounced rare diagnostics to the leader combat log. Code: `runtime/coordinator/navigation/rare-hunting.ts`.
+- **HNT-108** The character loot client runs three loot passes (rare, Hunt, convoy defense) from coordinator loot controls: within 180 of the spot it loots, waits for a fresh chest observation and reports a receipt. Code: `characters/shared.js`, `runtime/combat/departure-loot.ts`.
+- **HNT-109** A character farm destination is the highest-priority, then nearest, catalog spawn of its focus monsters; Hunt start, backup and leave-Hunt travel use it. Code: `runtime/coordinator/application.ts`, `runtime/coordinator/navigation/selected-destination.ts`.
+- **HNT-110** The Hunt blacklist route adds a manual entry, removes one with its failure counts, or clears all; saved entries stay removable before the catalog loads. Code: `runtime/coordinator/http/hunt-control.ts`.
+
 ## 2. What goes wrong
 
 
 ### 2.1 Monster Hunt
 
-**B.1 Ledger 13: the wrong pause message, set by call order (Ryan, no patch).**
+**B.1 Ledger 13: the wrong pause message, set by call order (current, no patch).**
 1. A member reports `activeEvent` during the 120 s staging window (`characters/shared.js:11532` opens it; the heartbeat sends `activeEvent` at `shared.js:2987`), or a stale `joinedEvent`: `escapePulse` clears the local variable at `shared.js:237` but not `root.__partyJoinedEvent`, which a reload restores at `shared.js:552`.
 2. `tick.ts:92` runs `travel.combatEvent` before `advance` reaches `recovery.pause` (`tick.ts:37 -> 63`).
 3. `combatEvent` sets `paused-event`, "Paused for combat event", and cancels the Hunt convoy (`travel.ts:21-25`).
@@ -646,7 +655,7 @@ How the dungeon's ownership stops other parts of the console is a precedence que
 5. Later `resumeEvent` restarts mission travel without checking the cancellation (`travel.ts:30-52`); `convoy.start` then refuses and writes "Hunt movement is paused; select Hunt again to resume" (`convoy.ts:31-35`).
 Second producer: any non-Hunt convoy makes `eventOwnsTravel` true (`policy.ts:90-91`), so a rare return or farm-recovery walk shows "Waiting for rare-hunt travel to finish" or "Waiting for shared-walk travel to finish" (`recovery.ts:147-150`). With no convoy and no event return the text says "anniversary" whatever held travel (`recovery.ts:150`). The message is free text written in 55 places across 12 Hunt files (`git grep -n -E "hunt\.message *=" refs/review/ryan-1.5 -- runtime/coordinator/hunt/ | wc -l`). History: `git log -s -L 74,94:runtime/coordinator/hunt/tick.ts refs/review/ryan-1.5` shows 9fbeadab, 9a41afd0, 51eb5324, f023f304, 0631e72c: a new gate added in each. Root cause: no owner record says who holds the party; asks 01.
 
-**B.2 Ledger 5: Hunt stuck after death (Ryan; fork patch ce6e7c1a).**
+**B.2 Ledger 5: Hunt stuck after death (current; fork patch ce6e7c1a).**
 1. Death recovery escapes (`scripts/combat-disengagement.cjs:77-82`).
 2. The escape completes when the priest reaches the Blink landing (`scripts/party-escape.cjs:96`).
 3. Recovery waits until every member is at Main within 65 at half HP (`combat-disengagement.cjs:83-90`).
@@ -658,9 +667,9 @@ Fork ce6e7c1a makes escape continue when the landing is off Main, by copying the
 
 **B.4 Hunt writes other owners' state, and they write Hunt's.** Hunt writes `farmAreaState` (`recovery.ts:100-103`, `mode.ts:44-49`, `lifecycle.ts:214-217`, `route-recovery.ts:175-178, 296`, `farm-walk.ts:58`), `state.location` (`route-recovery.ts:139, 294`), the anniversary cycle (`expired-anniversary.ts:21-23`), and cancels every non-Hunt convoy each step (`participants.ts:89-92`). The farm-area owner writes Hunt's mission and convoy (HNT-051; section 2.2, B8), the rare owner writes Hunt's stage and checkpoint (section 2.3), and event returns write `monsterHunt.stage`, `convoyId` and `message` (`events/hunt-resume.ts`, spec 06). Root cause: no private state per owner.
 
-**B.5 Route budget reset by failure text (Ryan, d5279eab).** `resetChangedGeometry` deletes a destination's budget whenever `preparationChanged(firstFailure)` matches one of seven phrases (`route-recovery.ts:245-251`; `shared-departure.ts:57-60`) and cancels the convoy; the next tick dispatches again (185-199). A failure whose text matches never builds a budget. Inference: a leader that keeps moving during planning loops start, fail, reset without a limit; a candidate coordinator half of ledger 8.
+**B.5 Route budget reset by failure text (current, d5279eab).** `resetChangedGeometry` deletes a destination's budget whenever `preparationChanged(firstFailure)` matches one of seven phrases (`route-recovery.ts:245-251`; `shared-departure.ts:57-60`) and cancels the convoy; the next tick dispatches again (185-199). A failure whose text matches never builds a budget. Inference: a leader that keeps moving during planning loops start, fail, reset without a limit; a candidate coordinator half of ledger 8.
 
-**B.6 Dead paths kept alive by tests and saved state (Ryan).** Three Hunt paths have no production writer:
+**B.6 Dead paths kept alive by tests and saved state (current).** Three Hunt paths have no production writer:
 - the temporary encounter (writer removed by 829b85ba, HNT-021): `encounter.ts`, `nearby-target.ts`, `encounterLootPending` and `travel.temporaryStop`, tested by 16 tests in `hunt-temporary-encounter.test.cjs` that build the record by hand (line 41);
 - `exitMode` (HNT-015);
 - stage `failed-return` and `endReason` (HNT-028), including `newCycle`'s batch recovery keyed on the text "no eligible quests remain (Hunt blacklist)" (`lifecycle.ts:182-184`).
@@ -676,9 +685,9 @@ Inference: these keep old saved cycles working; nothing says when they can go.
 - Freshness windows: 10000 ms (`lifecycle.ts:40`, `backup.ts:13`, `controls.ts:40`, `current-party.ts:6`, `travel.ts:128`, `recovery.ts:185`), 3000 ms (`travel.ts:83, 248`, `convoy.ts:49`, `encounter.ts:16`, `loot.ts:32`, `expiry.ts:11`, `current-party.ts:62`), plus 800 (recovery), 180 (loot), 150 (arrival margin), 15000 (stale interaction), 2000 (event release), 5000 (encounter absence). Each is a literal at its use.
 - The search radius default 400 appears in `travel.ts:193, 257`, `backup.ts:100` and `nearby-target.ts:17` (section 2.2, B10 counts them all).
 
-**B.10 Duplicated wiring for solo characters (Ryan).** `createSoloServices` (`application.ts:1784-2007`) repeats the Hunt composition and actions with small port differences (rare stub at 1787). A new Hunt port must be added twice; section 2.2, B11 counts the same for farm areas.
+**B.10 Duplicated wiring for solo characters (current).** `createSoloServices` (`application.ts:1784-2007`) repeats the Hunt composition and actions with small port differences (rare stub at 1787). A new Hunt port must be added twice; section 2.2, B11 counts the same for farm areas.
 
-**B.11 Event admission does not see escape or death recovery (Ryan; asks 06).** `hunt-control.ts:68-71` allows event travel unless the member is in the event return, Hunt is in a turn-in, or the intent is cancelled. Inference: a member respawning during death recovery can be admitted to an event and put Hunt into `paused-event`.
+**B.11 Event admission does not see escape or death recovery (current; asks 06).** `hunt-control.ts:68-71` allows event travel unless the member is in the event return, Hunt is in a turn-in, or the intent is cancelled. Inference: a member respawning during death recovery can be admitted to an event and put Hunt into `paused-event`.
 
 ### 2.2 Farming modes, focus and farm areas
 
@@ -690,7 +699,7 @@ Inference: these keep old saved cycles working; nothing says when they can go.
 
 **B4. Learned scatter types reset on restart, against the comment.** shared.js:1040 says the coordinator persists them; initial-farming.ts:48-49 resets them with a new epoch, and the character clears its own list on the epoch change (shared.js:11389-11395). Review question FARM-Q2.
 
-**B5. A bestiary pick ends live events for every member.** monster-selection.ts:69 calls `skipManualEventOccurrences` for every member, and `reset` clears event returns, deferred returns and sessions (55-60). The full events review traced the chain: the skipped occurrence drops from the heartbeat selection and the character posts `/event-disabled` (review/full/events.md section 6, "A manual move during an event"). Ryan design (d009eb22). Review question FARM-Q1.
+**B5. A bestiary pick ends live events for every member.** monster-selection.ts:69 calls `skipManualEventOccurrences` for every member, and `reset` clears event returns, deferred returns and sessions (55-60). The full events review traced the chain: the skipped occurrence drops from the heartbeat selection and the character posts `/event-disabled` (review/full/events.md section 6, "A manual move during an event"). current design (d009eb22). Review question FARM-Q1.
 
 **B6. Failure classified by free text, and a pause with no retry.** farm-area-recovery.ts:72 decides transient failures by a regex over the failure text. 829b85ba added `geometry` to that regex and a `geometry-mismatch` code branch that pauses with no retry (97-99), so the two halves disagree on geometry failures. Hunt waits on `farmAreaState.paused` until a Hunt begin, mode reset, death or a new pick clears it (hunt/recovery.ts:167-170, HNT-025). History: `git log -L` on recordFailure and failed shows 9fbeadab then 829b85ba (review/full/events.md Appendix B 3.3). Review question FARM-Q3.
 
@@ -708,7 +717,7 @@ Inference: these keep old saved cycles working; nothing says when they can go.
 
 ### 2.3 Rares and Phoenix
 
-**B1. The rare owner writes other owners' state to pause and resume them.** Ryan base.
+**B1. The rare owner writes other owners' state to pause and resume them.** The current console.
 1. `begin` writes Hunt's travel checkpoint interruption (rare-hunting.ts:372-375).
 2. It writes the Hunt convoy's `huntTravel.committed/primary/reason` (382-388), and rare-combat's
    `release` edits the same record plus `groupedCombat.fights/queue/target/selection`
@@ -722,7 +731,7 @@ Inference: these keep old saved cycles working; nothing says when they can go.
   Commits: 0df7a387, then f023f304 "preserve Hunt ownership through rare encounters" changed the
   cancel into the commit (`git log -L` on retainTravelConvoy).
 
-**B2. "Is the rare still selected" has two owners; three fixes in five days.** Ryan base.
+**B2. "Is the rare still selected" has two owners; three fixes in five days.** The current console.
 `released` infers the release from grouped combat's selected, queued and locked state with a 10 s
 grace and a queue acknowledgement (rare-hunting.ts:755-774). History (`git log refs/review/ryan-1.5
 -L '/function released(/,/^  }/:runtime/coordinator/navigation/rare-hunting.ts' -s`): 9fbeadab,
@@ -730,34 +739,34 @@ grace and a queue acknowledgement (rare-hunting.ts:755-774). History (`git log r
 72f6c570 (2026-10-12, lint split). Each patches a new race between the coordinator nomination and
 the client queue.
 
-**B3. Several "who owns the party" lists for rares alone (asks 01).** Ryan base.
+**B3. Several "who owns the party" lists for rares alone (asks 01).** The current console.
 `protectedActivity` (rare-hunting.ts:153-159), `commandProtected`'s purpose list (118-133), the
 interruptible-travel purpose list in `acquirePassive` (841), and the client's `rareControlCurrent`
 (shared.js:3580-3584) each decide a part of "someone else owns the party". None checks the
 dungeon; the wiring skips the tick instead (application.ts:1073, 1743).
 
-**B4. Convoy purposes carry behaviour by name; `rare-hunt` names two activities.** Ryan base.
+**B4. Convoy purposes carry behaviour by name; `rare-hunt` names two activities.** The current console.
 `rare-hunt` is the pursuit (rare-hunting.ts:522) and the "Resuming farming" return
 (rare-farming-return.cjs:63). `cancelTravel` cancels both (rare-hunting.ts:180-183). The pursuit
 purpose also appears in lists elsewhere (rare-hunting.ts:126-127).
 
-**B5. Ledger 13 producer (narrow on Ryan's base).**
+**B5. Ledger 13 producer (narrow on the current console).**
 1. While an encounter exists, Hunt's tick pauses in `rarePaused` with the encounter message before
    any event check (hunt/tick.ts:88, 95-99).
 2. Without an encounter, a `rare-hunt` convoy makes `eventOwnsTravel` true because its purpose is not
    `monster-hunt` (runtime/hunt/policy.ts:90-91).
 3. `pause` then sets `paused-event` and shows "Waiting for rare-hunt travel to finish"
    (hunt/recovery.ts:157-165, 150).
-- Inference: on Ryan's base step 2 needs a farming return convoy for a non-Hunt saved return while a
+- Inference: on the current console step 2 needs a farming return convoy for a non-Hunt saved return while a
   Hunt cycle runs, since a saved Hunt return hands travel back without a convoy
   (rare-farming-return.cjs:36-43). The appendix B claim that every `rare-hunt` convoy produces the
   mislabel is wider than the code shows.
 
-**B6. Failure classified by reason text.** Ryan base. `rejectUnproductive` stores a rejection when
+**B6. Failure classified by reason text.** The current console. `rejectUnproductive` stores a rejection when
 the reason matches `/selection released|no progress|time limit/i` (rare-hunting.ts:268). Changing a
 message string changes the retry rule.
 
-**B7. A client route failure is a resting state with no reader.** Ryan base.
+**B7. A client route failure is a resting state with no reader.** The current console.
 1. The 30 s timer or a `smart_move` rejection sets `rareNavigation = {id, failed:true}`
    (shared.js:3694-3700).
 2. `pollRareHunting` then returns true for that control id on every poll (3688), so the character
@@ -768,14 +777,14 @@ message string changes the retry rule.
 4. The encounter ends only through the coordinator's 30 s no-progress timer (rare-hunting.ts:497-503).
 - The fork patches step 2 with a client retry (C2).
 
-**B8. The rare tick runs from three periodic paths.** Ryan base. 250 ms travel clock
+**B8. The rare tick runs from three periodic paths.** The current console. 250 ms travel clock
 (navigation/runtime.ts:77-83), every status ingestion (status/ingestion.ts:88) and every combat
 report (combat-ingestion.ts:52), plus `setSettings` (rare-hunting.ts:935). Each tick re-applies
 saved rejections (859-861) and builds a new `rareHuntState` object (184-211). Inference: with three
 fighters at 1 Hz heartbeats this is about 7 ticks per second, and the order of status ingestion
 against the timer decides which sightings a tick sees.
 
-**B9. Per-monster lists and migrations that never end.** Ryan base.
+**B9. Per-monster lists and migrations that never end.** The current console.
 - The six rares are listed in rare-hunting.ts:29-44, again in the client default
   (shared.js:440, 11223) and in the hit tracker (shared.js:1005).
 - `tinyp` is removed from saved focus on every start (rare-hunting.ts:106-111), and passive settings
@@ -785,7 +794,7 @@ against the timer decides which sightings a tick sees.
   patrol cannot start. Inference: today the catalog has five, per the test fixture
   (scripts/tests/rare-hunting.test.cjs:4-5).
 
-**B10. A dead hook and a dead branch.** Ryan base.
+**B10. A dead hook and a dead branch.** The current console.
 - `recoveryHooks.rare.resumeHunt` (navigation/recovery-hooks.ts:35-44) is passed to
   `createRareHunting` (application.ts:1776) but rare-hunting.ts never calls `hooks.resumeHunt`
   (`git grep -n resumeHunt refs/review/ryan-1.5 -- runtime scripts/*.cjs`). A unit test still
@@ -793,21 +802,21 @@ against the timer decides which sightings a tick sees.
 - In `pollRareHunting`, `control.kind === "patrol" && character.name !== leader` (shared.js:3662)
   cannot run: patrol control already returned at 3652.
 
-**B11. typeof guards around rare functions.** Ryan base. 17 call sites test
+**B11. typeof guards around rare functions.** The current console. 17 call sites test
 `typeof rareActive/rareTarget/acceptRareCombatControl/passiveRareCandidate === "function"`
 (`grep -n "typeof \(rareActive\|rareTarget\|rareControlCurrent\|acceptRareCombatControl\|passiveRareCandidate\)" ryan-shared.js`).
 All are declarations in the same closure, so the guards are always true in production. They exist
 because unit tests run slices of shared.js (rare-hunting-client.test.cjs:4, 19-20). Same mechanism
 as ledger 10.
 
-**B12. A farming-mode change cancels a rare.** Ryan base. The owner snapshot includes
+**B12. A farming-mode change cancels a rare.** The current console. The owner snapshot includes
 `farmingPolicy` (rare-hunting.ts:165, 176) and the return checks it (rare-farming-return.cjs:29), so
 any mode change ends the encounter and the return as "new navigation". Whether that is intended is a
 review question (E2).
 
 ### 2.4 Cave and daily dungeons
 
-**B.1 `held` owns everything and ends only by hand.** (Ryan, 4e00a4b8 design; 9162890d patched the stale fields)
+**B.1 `held` owns everything and ends only by hand.** (current, 4e00a4b8 design; 9162890d patched the stale fields)
 1. All members leave the cave (manual exit or run expiry): `reconcileCaves` sets `held` (service.ts:221-226).
 2. `dungeonOwns` stays true in `held` (contracts.ts:142-145).
 3. The coordinator skips escape, death recovery, rare, event return, anniversary, farm areas and Hunt (application.ts:1741-1745, 2087, 2138).
@@ -816,12 +825,12 @@ review question (E2).
 - Inference: after a visit the party waits at Main until the user acts; a participant that went offline blocks Release and therefore every manual travel command, which calls `release()` first and answers 409 (application.ts:941-945); a member dead outside the cave does not respawn until release.
 - Precedence of the dungeon over other owners asks 01; Cave Q1 to Q3 ask the user.
 
-**B.2 Reads that write.** (Ryan)
+**B.2 Reads that write.** (current)
 - GET `/party-api/daily-dungeons` runs `reconcile`, which can issue commands and persist (service.ts:35-36, 582).
 - `control` sets `exitDispatched` while building a heartbeat response (542-545), after the response builder already ran `reconcile` (application.ts:1089, 1096), so every heartbeat response reconciles twice.
 - `eventAllowed` can retire the visit or start an exit (service.ts:244-251) and is reached through `eventsEnabledFor` (application.ts:1240), which event code calls as a question. Root cause: the dungeon owner has no tick of its own; any observer advances it.
 
-**B.3 Cave travel repairs: a counter per failure shape.** (Ryan)
+**B.3 Cave travel repairs: a counter per failure shape.** (current)
 1. 27d7dbeb adds travel with `repairs` (cap 3) for failed receipts (travel.ts:136-147).
 2. a3986593 adds `assemblyRepairs` because combat moved members after a completed gather (98-110).
 3. 545ca932 adds `destinationRepairs` for the same after a completed move, and walk-distance formation (114-135; service.ts:558-576).
@@ -829,19 +838,19 @@ review question (E2).
 - Arrival uses three radii: 80 at Dorr (service.ts:162), 50 in travel and exploration (travel.ts:60, progress.ts:39), and the character walks to tolerance 1 for gather and 20 for move (shared.js:2770). Inference: the coordinator infers displacement after the character reported completion; the character does not own "stay at the point until released".
 - At the `repairs` cap travel stops with no error of its own (travel.ts:142); only the progress message says "Travel failed" (progress.ts:105). Cave Q5.
 
-**B.4 The same settlement rule in two places, and they differ.** (Ryan)
+**B.4 The same settlement rule in two places, and they differ.** (current)
 - `service.ensureSettled` and `voteResolved` settle a vote only when the native choice with the same id is resolved (service.ts:394-409).
 - `progress.actionSettled` settles a vote whenever the current native choice is resolved, whatever its id (progress.ts:14-19).
 - "move, gather and talk never block" is copied in both (service.ts:397, progress.ts:15).
 - Inference: after a new choice opens and resolves, exploration treats an older vote with no receipt as settled while manual actions still refuse; no observed bug.
 
-**B.5 Journal entries without a run block everything except exit.** (Ryan)
+**B.5 Journal entries without a run block everything except exit.** (current)
 - `blocked` counts an unresolved entry with no `run` against every command (dungeon-journal.ts:64-69). `enter` commands carry no run (service.ts:183-187).
 - Unresolved entries are never pruned (dungeon-journal.ts:27).
 - `reconcile` settles an `enter` only once a cave or a resume run is seen (36).
 - Inference: an uncertain entry that the server never confirms keeps blocking later actions on that character until a cave or resume appears. Not observed.
 
-**B.6 Test hooks and dead API in production.** (Ryan)
+**B.6 Test hooks and dead API in production.** (current)
 - `commandIdentity` has callers only in e2e/live-cave.spec.ts:722-723 (dungeons.ts:354-357, 99a6a74b).
 - `paused()` has no caller (dungeons.ts:361; `git grep -n "\.paused()" refs/review/ryan-1.5 -- characters runtime` finds none).
 - daily-dungeons-combat.test.cjs slices shared.js between `function dungeonOwned()` and `function dungeonRuntime()` and runs the slice in a vm (its lines 5-17), the same fragment-loading pattern as ledger 10.
@@ -863,7 +872,7 @@ The fork changes no Monster Hunt logic file except `hunt/scopes.ts`, which adds 
 What it does:
 - A fifth farming mode, `achievements`, runs `createAchievementHunt.tick` (fork `achievement-hunt.ts:419-441`) beside the Hunt tick. Another mode releases its target and restores what it changed (420-425).
 - It orders the selected monsters by kill-achievement ladder and XP from game data, treats rares and boss-like monsters (at most 2 world spawns and at least 50,000 HP) as special, and picks the next unfinished step (fork `achievement-policy.ts:54-162, 63-64, 216-282`).
-- It keeps a target until its milestone, unless a monster at a lower step appears (`achievement-hunt.ts:268-276`), prefers a rarer variant that shares spawn ground (328-355), and starts each target through Ryan's monster selection with `keepPolicy` (301-325; fork `navigation/monster-selection.ts:67-86`).
+- It keeps a target until its milestone, unless a monster at a lower step appears (`achievement-hunt.ts:268-276`), prefers a rarer variant that shares spawn ground (328-355), and starts each target through the current monster selection with `keepPolicy` (301-325; fork `navigation/monster-selection.ts:67-86`).
 - It focuses the target plus nearby fillers and writes every member's `monsterPrioritiesByCharacter` (90 target, 10 filler), saving the old values to restore (`achievement-hunt.ts:193-224`).
 - It switches passive rare rules on for wanted rares and restores them later (146-176).
 - It counts deaths per target (event-trip deaths skipped) and blacklists at 6 deaths by default (227-254; fork `achievement-settings.ts`), keeps the newest 500 entries (fork `rare-retention.ts`, cd7bd857), skips an unroutable target for 10 minutes (81, 106-110), and leaves a target for 10 minutes once an avoided boss attacks a member (111-140).
@@ -887,7 +896,7 @@ What it patches or bypasses:
 - **monster-selection keepPolicy (3bae33fc, cf7cba08).** `select(..., keepPolicy)` keeps the policy and the event state when Achievement Hunt switches targets (fork af92de45 navigation/monster-selection.ts:44-68), but still calls `skipManualEventOccurrences` for every member (review/full/events.md 4.7). The fork also skips the party convoy for a Phoenix pick so fighters split from where they stand (3849a095).
 - **Farm relocation fights Achievement Hunt over the location.** farm-areas.ts has no Achievement Hunt check, so `relocateBusy` can move the party to a filler's spawn; Achievement Hunt walks it back after 30 s (fork af92de45 achievement-hunt.ts:77, 357, 389). The orphan comment at achievement-hunt.ts:357 shows the case was seen. Review question FARM-Q5.
 - **Console Play writes the mode (b33aee77, 9a34a4c1).** Play restores `farmingPolicy`, `location`, `monsterFocus`, `partyFarmingMode` and the Achievement Hunt fields saved at Pause (fork af92de45 lifecycle/console-control.ts:234-236, 272-279, 291-303), overwriting changes made during the pause.
-- **Scatter per engagement (d798cac8, 1865916c, 31dd61f4).** The fork replaces Ryan's one-shot learning on the coordinator with per-engagement estimates: a type is learned when a fighter could kill it alone before help arrives, and a hard-coded set of 19 special monsters always groups (fork af92de45 status/scatter.ts, `SPECIAL_MONSTERS`, `regroupMs`, `soloEngagement`, `learnEngagements`). `git diff --stat refs/review/ryan-1.5 HEAD -- runtime/coordinator/status/scatter.ts` gives 181 lines changed. The explicit Scatter policy keeps Ryan's rule.
+- **Scatter per engagement (d798cac8, 1865916c, 31dd61f4).** The fork replaces the current one-shot learning on the coordinator with per-engagement estimates: a type is learned when a fighter could kill it alone before help arrives, and a hard-coded set of 19 special monsters always groups (fork af92de45 status/scatter.ts, `SPECIAL_MONSTERS`, `regroupMs`, `soloEngagement`, `learnEngagements`). `git diff --stat refs/review/ryan-1.5 HEAD -- runtime/coordinator/status/scatter.ts` gives 181 lines changed. The explicit Scatter policy keeps the current rule.
 - **Heartbeat avoid list.** The farming response adds `avoidMonsters` in achievements mode (fork af92de45 status/response.ts:216-221).
 - **Saved selections.** initial-focus.ts also loads Franky encounter routines and death limits (fork af92de45 initial-focus.ts:19-28).
 
@@ -1058,7 +1067,7 @@ Questions only the user can answer. The coordinator copies them into `REVIEW-QUE
 1. **RARE-Q1.** What may a rare interrupt? (a) keep today's list (farming, Hunt mission, manual monster and party travel); (b) never interrupt Hunt mission travel; (c) user choice per rare. Precedence itself is spec 01.
 2. **RARE-Q2.** Should a farming-mode change end a rare encounter? (a) keep (cancels rare and return); (b) finish the rare, then apply the mode; (c) finish only Fairy and Phoenix.
 3. **RARE-Q3.** After a rare, where does the party go? (a) back to the saved farm location or the Hunt mission, offline members kept; (b) stay where the rare died if the farm target spawns there; (c) drop offline members.
-4. **RARE-Q4.** Phoenix patrol movement: (a) Ryan's whole-party convoy patrol; (b) the fork's split search with converge; (c) split search only with at least N fighters.
+4. **RARE-Q4.** Phoenix patrol movement: (a) the current whole-party convoy patrol; (b) the fork's split search with converge; (c) split search only with at least N fighters.
 5. **RARE-Q5.** Scatter during a rare: (a) keep forcing grouped without direct restore; (b) restore scatter right after the rare; (c) let scatter members fight rares separately.
 
 ### 5.4 Cave and daily dungeons
@@ -1084,7 +1093,7 @@ Command: `LIMIT=100000 node tools/check-claims.mjs`, run in this folder after wr
 
 Behaviours with no test:
 
-- HNT-015: Exit mode after a turn-in sends the party to the leader's saved farm; no production code sets exitMode in Ryan's base
+- HNT-015: Exit mode after a turn-in sends the party to the leader's saved farm; no production code sets exitMode in the current console
 - HNT-041: Each heartbeat response sends focus, priorities, search radius, Hunt target and the party mode (default during rare or death recovery)
 - HNT-052: A focus change that replaces the farmed species queues a move to an area of the new focus
 - HNT-065: Status ingestion persists only when the Hunt record changed, ignoring its message
@@ -1098,7 +1107,7 @@ The tool does not list unclaimed functions by spec. Every one of the 591 functio
 - **Requested from other specs: 294 functions** that implement behaviours in this spec but are proposed elsewhere: 215 in 02-movement (rare-hunting.ts, phoenix-patrol.ts, farm-areas.ts and the other navigation farming modules), 53 in 13-lifecycle (Hunt and farming HTTP routes), 20 in 12-dashboard-and-status (farming-zones.ts, farming-areas.ts) and 6 in 04-targeting (`monsterHuntTick`, `beginMonsterHuntCycle`, `clearMonsterHuntState`, the party and solo `monsterDestination`, and `status/scatter.ts` `reportsTarget`). Count from the `requested` keys in `catalog/07-hunts-and-farming.json`. They stay with their proposed spec until the coordinator moves them.
 - **Yielded to 02 (5) and 04 (1).** Spec 02 claims `planHuntReturn` and its two closures (HNT-062) and the convoy arrival port `acceptArrival` with its solo copy (HNT-018); spec 04 claims `passiveLevelAllowed` (HNT-068).
 - **Yielded to 01: 95 functions.** Spec 01 already claims the Hunt roster (`hunt/controls.ts` participants, `hunt/current-party.ts`), Follow changes (`participants.ts`), the mode switch (`hunt/mode.ts`), turn-in precedence, the pause order, the "at an event" copies, the anniversary yield, the solo-service wiring and the dungeon gate (GRP-001 to GRP-018). Spec 07 still describes those behaviours (HNT-001 to HNT-007, HNT-013, HNT-023 to HNT-036, HNT-038, HNT-043, HNT-050, HNT-051, HNT-079, HNT-084, HNT-090) and lists each function in `catalog/handoffs-07.json` with the GRP behaviour that holds it. If the coordinator decides the Hunt roster or mode switch belongs here, those entries move back.
-- **Fork-only code is not in the Ryan index**, so Achievement Hunt (section 3.1) has no catalog behaviour. `catalog/functions-fork.json` would hold it if the fork gets its own catalog.
+- **Fork-only code is not in the current index**, so Achievement Hunt (section 3.1) has no catalog behaviour. `catalog/functions-fork.json` would hold it if the fork gets its own catalog.
 
 ### 6.2 Monster Hunt (part notes)
 
@@ -1112,7 +1121,7 @@ The tool does not list unclaimed functions by spec. Every one of the 591 functio
 - Not claimed, described only: 138 function ids in `requested` (02-movement 78, 13-lifecycle 39, 12-dashboard-and-status 20, 04-targeting 1). The coordinator moves them to 07 or keeps them with their proposed spec.
 - Triage closures in application.ts left for others: farming-navigation and party-convoy ports (417-420, 1802-1805), heartbeat response ports (546-559, 1901-1914), navigation action ports (761-779 except 771, 1978-1996 except 1988), party configuration ports for events and formation (700, 702, 708-712), solo walks (2000-2002). Inference: these belong to 02-movement, 06-events or 12-dashboard-and-status. Monster Hunt wiring closures are claimed in section 1.1.
 - Behaviours without a test: HNT-041, HNT-052, HNT-065.
-- Not verified: the client farm reunion that `rejoinFarm` calls (shared.js beginFarmReunion) was not read here; it is movement or survival code. The full list of `farmingPolicy` readers was taken from review/full/events.md Appendix B 2.6 and not re-counted on the Ryan ref.
+- Not verified: the client farm reunion that `rejoinFarm` calls (shared.js beginFarmReunion) was not read here; it is movement or survival code. The full list of `farmingPolicy` readers was taken from review/full/events.md Appendix B 2.6 and not re-counted on the current console.
 
 ### 6.4 Rares and Phoenix (part notes)
 

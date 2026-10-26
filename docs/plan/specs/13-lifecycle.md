@@ -4,7 +4,7 @@ Start, stop, deploy, console maintenance, code reload, the character loader and 
 socket listener lifetime, HTTP route plumbing, and the test harness patterns that depend on
 how character code is loaded. Spec prefix `LIF`.
 
-Checked against Ryan's base `refs/review/ryan-1.5` (`b9b5c91e`) in
+Checked against the current console `refs/review/ryan-1.5` (`b9b5c91e`) in
 (local checkout). Fork lines are labelled "fork" and cite `HEAD`
 (`af92de45`). Line numbers are on those refs. "Inference" marks a claim the code supports
 but that no test, log or live run here proves.
@@ -132,7 +132,7 @@ Commands used for counts (run from (local checkout), with
 
 ### shared.js as one closure
 
-- **LIF-020** characters/shared.js (18,047 lines on Ryan's ref, `wc -l`) is one function
+- **LIF-020** characters/shared.js (18,047 lines on the current console, `wc -l`) is one function
   over `root` (:1). Each evaluation bumps `__partyRuntimeGeneration` and fences late callbacks
   with `runtimeCurrent()` (:15-17), and stops the previous `sharedRoutine` (:290-291). On its
   first load in a browser runner it replaces the CODE iframe once to drop old convoy closures
@@ -190,9 +190,9 @@ an older copy from overwriting a newer one.
 
 ### Builds and deploys (managed host)
 
-The index covers runtime, characters, scripts and dashboard only
-(tools/function-index.mjs:16), so tools/console-build and tools/game have no function rows.
-These behaviours are in the catalog with no functions.
+LIF-028 holds the deploy side of tools/console-build and LIF-029 the class bundle build in
+tools/game. The candidate builder and store, the runtime bundles, the caracAL install, the
+host, update and release tools are LIF-031 to LIF-043 under "Added in triage".
 
 - **LIF-028** `ConsoleBuildController` (tools/console-build/controller.ts:11-124) admits one
   deploy at a time through a durable journal (:27-48). A deploy verifies target and previous
@@ -215,8 +215,9 @@ These behaviours are in the catalog with no functions.
 - **LIF-026** characters/party-member.js is the committed bundle of
   runtime/characters/legacy-entry.ts (tools/build-runtime.mts:28), the compatibility entry for
   upstream caracAL: it loads `farming-zones.js`, `shared.js`, `profiles.js` and `roles.js`
-  and starts the role runner (legacy-entry.ts:14-21). Its 174 index rows are copies of
-  runtime/characters movement, rendering, bank stack and upgrade preview modules.
+  and starts the role runner (legacy-entry.ts:14-21). The function index lists the bundle's
+  functions under those sources (runtime/characters movement, rendering, bank stack and
+  upgrade preview modules), and the specs for those parts claim them.
 
 ### HTTP route plumbing
 
@@ -234,9 +235,9 @@ These behaviours are in the catalog with no functions.
 
 ### Test harness patterns
 
-Ryan's character code is one closure, so tests that need one function cut it out of the
-source text. These helpers are outside the function index (`/tests?/` is skipped,
-tools/function-index.mjs:17):
+The current character code is one closure, so tests that need one function cut it out of the
+source text. Spec 15 claims these helpers (TST-001 for the shared.js extraction helpers, TST-002 for the
+coordinator host):
 
 - `namedFunction` parses shared.js with the TypeScript compiler and returns one function
   declaration's text (scripts/tests/helpers/named-function.cjs:4-14).
@@ -249,15 +250,34 @@ tools/function-index.mjs:17):
 - `coordinator-host.cjs` runs the whole application.ts in a vm context with stubbed timers,
   fork and storage (helpers/coordinator-host.cjs:12-71).
 
-Counts on Ryan's ref: 118 test files mention `shared.js`; 41 use `named-function.cjs`, 10 use
+Counts on the current console: 118 test files mention `shared.js`; 41 use `named-function.cjs`, 10 use
 `shared-context.cjs`, and 74 use neither (`grep -l "shared\.js" *.test.cjs`, then
 `xargs grep -l` or `-L` for the helper names). shared.js has 159 `typeof X === "function"`
 guards, 85 of them on 32 functions shared.js declares itself, which are always true in
 production (`node tools/shared-guards.cjs $R refs/review/ryan-1.5`).
 
+### Added in triage
+
+catalog/triage-log.json lists each behaviour in this group.
+
+- **LIF-030** Character CODE calls the coordinator through one request helper: JSON over $.ajax with a 10 s default timeout, recording barrier and status transport timing. Code: `characters/shared.js`.
+- **LIF-031** Console candidate builder: it polls a source fingerprint every 1 s, snapshots the source, links a dependency cache keyed by the package locks, type-checks, bundles, installs caracAL hooks, checks the candidate dashboard serves, then hands the candidate to the store. Code: `tools/console-build/builder.ts`, `tools/console-build/watch.ts`.
+- **LIF-032** Console candidate store: immutable hash-verified candidates and dependency caches under .build/console, an operation lock with stale-owner recovery, active, latest and previous references, live pins, and cleanup past the newest 20; build-history lists, cleans, deploys or rolls back from the command line. Code: `tools/build-history.mts`, `tools/build-store.ts`, `tools/console-build/store.ts`.
+- **LIF-033** build-runtime and build-shared bundle runtime and dashboard/lib TypeScript with esbuild into .build, copy them to characters and dashboard/lib only with --publish, and rewrite a file only when its content changed. Code: `tools/build-runtime.mts`, `tools/build-shared.mts`.
+- **LIF-034** caracAL install: setup clones the pinned caracAL revision and applies the compatibility patch; install transforms CharacterThread.js, writes the maintained coordinator launcher, syntax-checks every file and replaces them atomically; managed processes load code and packages from the active candidate. Code: `tools/caracal/CharacterCoordinator.cjs`, `tools/caracal/coordinator-launcher.mts`, `tools/caracal/install.mts`, `tools/caracal/pinned-native.cjs`, `tools/caracal/setup.mts`, `tools/caracal/upgrade-runner.mts`.
+- **LIF-035** Host startup: native and Docker development launchers check ports, dependencies and a running caracAL supervisor; start.mts writes the account config and launches the managed console or the plain coordinator and dashboard; a service that exits unexpectedly restarts 3 s later; SIGINT or SIGTERM stops everything. Code: `tools/hosting/docker-dev.mts`, `tools/hosting/health.ts`, `tools/hosting/listen.ts`, `tools/hosting/local.mts`, `tools/hosting/native.mts`, `tools/hosting/services.ts`, `tools/hosting/start.mts`.
+- **LIF-036** Host gateway on port 3010: it authorizes browsers by pairing cookie and same origin and the Steam bridge by its token, routes console-build, console-debug and console-update, proxies party-api and CODE to the coordinator and everything else, including websocket upgrades, to the dashboard. Code: `tools/hosting/authorize.ts`, `tools/hosting/gateway.ts`, `tools/hosting/http.ts`, `tools/hosting/request-origin.ts`, `tools/hosting/websocket.ts`.
+- **LIF-037** Setup and pairing: /setup routes, an access file of hashed browser and Steam credentials, one-use invitation links, 8-character access codes that expire after 10 minutes or 5 wrong guesses, account session to config with realm discovery, and the HTTP to HTTPS setup transfer. Code: `tools/hosting/access.ts`, `tools/hosting/account.ts`, `tools/hosting/address.ts`, `tools/hosting/realms.ts`, `tools/hosting/setup-routes.ts`, `tools/hosting/setup-transfer.ts`.
+- **LIF-038** Local HTTPS: it installs a checksum-verified Caddy, runs it with an internal CA for the configured LAN hosts, probes certificate handshakes before reporting ready, and serves the root certificate and trust helper scripts. Code: `tools/hosting/install-caddy.mts`, `tools/hosting/tls-config.ts`, `tools/hosting/tls.ts`, `tools/hosting/trust.ts`, `tools/hosting/verify-https.mts`.
+- **LIF-039** Update service: it checks the GitHub latest release every 6 h, validates the release manifest, tracks the check, download and restart phases and the automatic preference, holds character startup during a boot check, and labels source checkouts with tag, branch or commit. Code: `tools/update/agent.mts`, `tools/update/boot.ts`, `tools/update/contracts.ts`, `tools/update/github.ts`, `tools/update/hosting.ts`, `tools/update/service.ts`, `tools/update/version-label.ts`.
+- **LIF-040** Update install: the Windows adapter downloads and verifies the release zip and the Docker adapter pulls the image by digest; a journaled transaction pauses characters, stops the console, backs up state, starts the target, waits up to 120 s for health and rolls back on failure. Code: `tools/update/docker.ts`, `tools/update/files.ts`, `tools/update/process.ts`, `tools/update/transaction.ts`, `tools/update/windows.ts`.
+- **LIF-041** Release packaging: payload.mts stages a Windows release with release.json file hashes; the semantic-release prepare step checks the asset checksum and immutable image; startup checks confirm a fresh install reaches setup and the packaged dashboard renders. Code: `tools/release/payload.mts`, `tools/release/verify-assets.cjs`, `tools/release/verify-startup.ts`.
+- **LIF-042** Class bundle history: remembers each verified generation, keeps the retained builds and deletes only known bundle files, pins a rollback and resumes the staged build. Code: `tools/game/history.ts`.
+- **LIF-043** Character source watch: file events or 1 s polling on runtime/characters, dashboard/lib and shared.js, a 250 ms debounce, a typecheck, then a verified build and publish. Code: `tools/game/watch.mts`.
+
 ## 2. What goes wrong
 
-### LIF-W1. Bug 15: Steam orphan runner (Ryan)
+### LIF-W1. Bug 15: Steam orphan runner (current)
 
 The memory note: after console restarts the Steam client throws reading `S`/`character`
 every few seconds until the Steam client restarts. Causal chain (code confirmed; the link
@@ -286,27 +306,27 @@ Patch history: facc4224 (Breene26, 2026-10-08, "retire Steam CODE callbacks") ad
 (`git merge-base --is-ancestor facc4224 refs/review/ryan-1.5`). That is a second pass of the
 same workaround.
 
-Ryan already solved this for headless workers: `RunnerScope` records every subscription a
+The current console already solves this for headless workers: `RunnerScope` records every subscription a
 generation makes and removes them on dispose whatever the frame state
 (runner-scope.ts:81-96, :186-203). The native path has no equivalent.
 
-The other two parts of ledger bug 15 are fixed in Ryan's base by cb8881f6 (an ancestor of
+The other two parts of ledger bug 15 are fixed in the current console by cb8881f6 (an ancestor of
 `ryan-1.5`): the writer lock identity (spec 11 SET-009, SET-W6) and production receipt
 pruning (spec 10).
 
-### LIF-W2. The committed universal-loader.js is stale (Ryan)
+### LIF-W2. The committed universal-loader.js is stale (current)
 
-characters/universal-loader.js on Ryan's ref is older than its source: it has no
+characters/universal-loader.js on the current console is older than its source: it has no
 activation record, no console-deployment poll and no maintenance hand-off, and polls only
 in a non-caracAL frame (compare universal-loader.js:102-157 with universal-loader.ts:91-176).
 Its last change is facc4224 (2026-10-08); the source's is 1973bb5d (2026-10-21)
 (`git log -1 refs/review/ryan-1.5 -- <file>`). A build with `--publish` rewrites it
 (tools/build-runtime.mts:26, :46-47), and the managed host copies the built candidate's copy
-(hosting.ts:85, :115), so production uses the fresh one (inference). The function index and
-this catalog list the stale file's 17 functions, which describe code that does not run.
+(hosting.ts:85, :115), so production uses the fresh one (inference). The function index lists
+universal-loader.ts, the source, and not the stale file.
 party-member.js may have the same gap (not checked).
 
-### LIF-W3. A refused deploy still publishes a draining lease (Ryan)
+### LIF-W3. A refused deploy still publishes a draining lease (current)
 
 1. `beginMaintenance` writes the lease (hosting.ts:150) before it checks for a Cave run and
    refuses (:152).
@@ -314,7 +334,7 @@ party-member.js may have the same gap (not checked).
 3. Between the two, characters can read a draining lease and start parking (inference: one
    poll of 250 ms to 2 s).
 
-### LIF-W4. Tests cut functions out of shared.js; production carries guards for them (Ryan)
+### LIF-W4. Tests cut functions out of shared.js; production carries guards for them (current)
 
 1. shared.js has no module boundary, so 74 of 118 test files that mention it cut functions
    out by text or a hand list (counts above).
@@ -322,30 +342,30 @@ party-member.js may have the same gap (not checked).
    builds its own context of stubs and named functions, :19-30).
 3. When production code gains a call to another shared.js function, the extracting tests
    throw. The fix pattern is a `typeof X === "function"` guard: 85 guards on internal
-   functions in Ryan's base (`shared-guards.cjs`).
+   functions in the current console (`shared-guards.cjs`).
 4. A guard hides a real missing function in production: a rename turns the check off with no
    error.
 
-Ryan's own better answer exists: shared-context.cjs injects the real gate functions
+The current own better answer exists: shared-context.cjs injects the real gate functions
 (:15-20). The role runner shows the same tolerance from the other side: it checks
 `typeof sharedRoutine !== 'undefined'` and calls most hooks as `sharedRoutine.x?.()`
 (runner.ts:49-52, :67-110).
 
 ### LIF-W5. Bug 10: unit regressions from the console Pause check (fork)
 
-1. 9a34a4c1 (2026-10-24) adds `consolePauseHolds()` calls inside Ryan's `returnCombatActive`
+1. 9a34a4c1 (2026-10-24) adds `consolePauseHolds()` calls inside the current `returnCombatActive`
    and `isAttackingPartyMember` (fork shared.js:3652, :14847; the function at :3655).
 2. passive-hunting.test.cjs and event-return-turnover-hold.test.cjs evaluate those functions
    in contexts that do not define it (LIF-W4 step 2), so they throw ReferenceError.
 3. 250c61e1 (2026-10-25, "Guard the console Pause check where tests extract the combat
    functions") wraps both calls in `typeof consolePauseHolds === "function"`.
 4. Result: the fork has 189 guards, 112 on internal functions
-   (`node tools/shared-guards.cjs $R HEAD`), 27 more than Ryan.
+   (`node tools/shared-guards.cjs $R HEAD`), 27 more than the current console.
 
 The fix at the cause is to add `consolePauseHolds` to shared-context.cjs or the two fixtures
 and remove the guards. Patch applied: symptom only.
 
-### LIF-W6. Smaller findings (Ryan)
+### LIF-W6. Smaller findings (current)
 
 - `serveTypeCode` binds every interface (`app.listen(settings.port)`, web-services.ts:63)
   while `serveCode` binds 127.0.0.1 (:42). It applies only when TYPECODE is exposed and no
@@ -363,7 +383,7 @@ and remove the guards. Patch applied: symptom only.
 
 - **Console Pause, Play and clean shutdown** (b33aee77, 9a34a4c1, 250c61e1;
   fork runtime/coordinator/lifecycle/console-control.ts, 303 lines). Pause writes
-  `updates/console-pause.json`; `userPauseLease` turns it into Ryan's draining lease with two
+  `updates/console-pause.json`; `userPauseLease` turns it into the current draining lease with two
   new flags, `immediate` and `userPause` (console-control.ts:35-42, :72-82). The coordinator's
   lease reader prefers the deploy lease and falls back to the Pause (fork
   console-maintenance.ts: `hostLease(directory)||userPause()`), and the managed host reads the
@@ -379,7 +399,7 @@ and remove the guards. Patch applied: symptom only.
   bounded at 5 s because the host force-exits 15 s after SIGTERM.
 - **Deploy hold** (0875e047, bce3a9fb; fork tools/console-build/hold.ts:1-22): refuses a
   coordinator deploy during a Cave run or an event. It copies the Cave and event rules
-  (:4-9), a third copy beside console-control.ts:96-102 and Ryan's 17 copies of the event
+  (:4-9), a third copy beside console-control.ts:96-102 and the current 17 copies of the event
   rule (review/full/core.md:184). It runs inside `beginMaintenance` after the lease is
   written, so it inherits LIF-W3.
 - **Builder fixes** (0bea0e19, 4ddff3c9, fed277ae, 738b52d2): packaging fixes with stated
@@ -414,7 +434,7 @@ the fork's guards exist for (LIF-W5). No test covers LIF-018 or LIF-020.
    socket be owned the way headless `RunnerScope` owns them, so the loader removes them
    whatever the frame state? Options: (a) yes, and drop the text search; (b) only extend the
    text search to the 7 missing events; (c) leave it and keep restarting the Steam client.
-   (a) is the fix at the cause; it is Ryan's code, so it would go to him as an issue.
+   (a) is the fix at the cause; it is the current code, so it would go upstream as an issue.
 2. **Pause model (fork).** Should Pause become a hold that owners respect (no snapshot, no
    restore on Play), or stay a snapshot and restore? This decides spec 11 review item 4 too.
 3. **Deploy while paused (fork).** If a deploy starts while paused, should characters
@@ -423,7 +443,7 @@ the fork's guards exist for (LIF-W5). No test covers LIF-018 or LIF-020.
 4. **Shutdown grace.** Is 500 ms before SIGKILL enough for a worker mid-transaction, or should
    shutdown wait for `canReload` like a safe reload does?
 5. **Test extraction.** Fix the 27 fork guards by adding the functions to
-   shared-context.cjs (small, fork-only), and offer Ryan an issue about loading shared.js
+   shared-context.cjs (small, fork-only), and offer an upstream issue about loading shared.js
    whole in tests? (Yes or no for each.)
 
 ## 6. The design
@@ -444,34 +464,16 @@ M1.
 
 ## 10. Gaps
 
-`node tools/check-claims.mjs` (run 2026-10-26, after this spec's catalog was written),
+`LIMIT=100000 node tools/check-claims.mjs` (run 2026-10-26, after the M0 coverage triage),
 filtered to 13-lifecycle:
 
-- Functions claimed: 440 (320 proposed for 13, 4 proposed for 11 and moved here, 116 from
-  triage). Proposed for 13: 896; 576 handed off (handoffs-13.json: 163 to 08, 178 to 10, 73
-  to 06, 54 to 07, 43 to 02, 29 to 11, 15 to 03, 5 to 01, 5 to 05, 4 to 04, 3 to 12, 3 to
-  15, 1 to 09).
-- Claims naming no known function: 0. Claimed by more than one spec: 0 for 13. Four triage
-  functions that 03 and 04 also claimed (`isOccupied`, `consoleDrainKey`,
-  `consoleDrainAllows`, `consoleDrainCombatActive`) were left to them.
-- Behaviours with no test: LIF-018, LIF-020.
+- Functions claimed: 644 in 43 behaviours (count command in docs/implementation/02-coverage.md). Unclaimed functions in the whole index: 0.
+- Claims naming no known function: 0. Claimed by more than one spec: 0.
+- Behaviours with no test: LIF-018, LIF-020, and LIF-030 to LIF-043 (added in triage, tests
+  not yet mapped).
 
 Not yet verified or not covered:
 
-- Expected handoffs into 13 (proposed for other specs by the name heuristic): 10 functions
-  in coordinator/characters/manager.ts and 3 in ipc.ts and storage.ts proposed for 03,
-  `manager.ts#caveFloorArguments@52` and `client-updates.ts#createClientUpdates>request@61`
-  proposed for 07, `client-updates.ts#...>report@24` and `universal-loader.ts#report@88`
-  proposed for 12, `composition.ts#...>resolveRealm@78` proposed for 09. LIF-004 and LIF-003
-  describe them.
-- `application.ts` port lambdas inside other services' composition (about 300 triage rows)
-  are left to the specs of those services.
-- tools/console-build, tools/game and scripts/tests/helpers are outside the function index,
-  so LIF-028, LIF-029 and the harness section have no claimed functions. Whether the index
-  should include tools/ is a question for the coordinator.
-- characters/party-member.js and characters/universal-loader.js are generated bundles that
-  the index lists separately from their sources (LIF-W2, LIF-026). The method says generated
-  bundles are listed under their source; these two are not.
 - The Steam bridge and roster handoff (runtime/steam, runtime/roster, characters/steam-bridge.js)
   are spec 09; LIF-W1 step 3 depends on how they recreate the runner, which was not read.
 - Test accuracy review (method step 2) not done; test names and the bodies cited were read.
