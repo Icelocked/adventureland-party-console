@@ -14,13 +14,19 @@ test('designated tank persists through restart, renders in the dashboard, and ho
     await expect.poll(async () => (await live.state()).designatedTank).toBe(R);
 
     await page.goto(live.url);
-    const tankLabel = page.locator('label').filter({ hasText: 'Tank' });
+    // The Tank picker sits in the dialog each card's Farming settings gear button opens.
+    const card = page.locator('article').filter({ has: page.getByRole('heading', { name: R, exact: true }) });
+    const settings = card.getByRole('button', { name: 'Farming settings', exact: true });
+    const tankLabel = page.getByRole('dialog', { name: /^Farming settings/ }).getByRole('group', { name: 'Party roles' })
+      .locator('label').filter({ hasText: /^Tank/ });
+    await settings.click();
     await expect(tankLabel).toContainText(R);
     await info.attach('tank-dashboard-before-restart', { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' });
 
     await live.restartCoordinator();
     await expect.poll(async () => (await live.state()).designatedTank).toBe(R);
     await page.reload();
+    await settings.click();
     await expect(tankLabel).toContainText(R);
 
     await live.post('/farming-mode', { character: R, mode: 'default' });
