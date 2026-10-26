@@ -14,7 +14,7 @@ start a new journey over the old one, and any code may stop it. Section 1 lists 
 grouped by where the code lives. Section 2 explains what goes wrong and why, and traces ledger bugs
 3, 4, 5, 7 and 8 from the first wrong decision to the symptom.
 
-This spec was written as the deep second pass the full review asked for. Every function claimed in `catalog/02-movement.json` was read in
+This spec is the deep second pass the full review asked for. That pass read every function claimed in `catalog/02-movement.json` in
 full on the current console, in five slices:
 
 | Slice | Code | Behaviours |
@@ -67,7 +67,7 @@ movement-executor.ts:24). The scan does not match `native.stop(`. 232 of the 249
 ### 1.1 Movement service, planning and the mover chain
 
 Ref: `refs/review/ryan-1.5` (b9b5c91e) unless a line says "(fork)" (af92de45) or "(21b8362d)".
-`shared.js` means `characters/shared.js` on the current console. Every file in this slice was read in full:
+`shared.js` means `characters/shared.js` on the current console. This pass read every file in this slice in full:
 `runtime/characters/movement.ts` (445 lines), `movement-executor.ts` (263), `movement-host.ts` (82),
 `movement-correction.ts`, `movement-destination.ts`, `movement-diagnostics.ts`, `movement-error.ts`,
 `movement-relocation.ts`, `native-planner.ts`, `return-planner.ts`, `planning-schedule-metrics.ts`,
@@ -1678,9 +1678,9 @@ Most findings in 2.1 to 2.5 come back to eight causes. Each line names the findi
 | Bug | First wrong decision | Patched? | Chain |
 |---|---|---|---|
 | 3 Targetron deaths (movement parts) | 3a: `pullWalk` re-issues `movement.move` when its `going_x/y` test fails on every segment but the last (shared.js:18490-18497 (fork)), and `move()` restarts the journey (movement.ts:384, 392). 3b/3c: `choosePuller` picks the longest range, the priest, then the mage (runtime/combat/pulling.ts:21-24 (fork)). 3d: the tank hold releases below 0.5 HP (shared.js:18545 (fork)) and the kite arc is checked against attackers only (current 17167-17169, 17223, 17228). | 3a, 3b, 3c partly by 21b8362d (pull only); 3d none | 2.3, "Bug 3" |
-| 4 Fonze tank walk-in | `tankStep` stepped the tank to `min(desiredCombatRange(), 30)` with only `safeCombatPoint` (7bd14d7c, removed in 4075d3f2) | Removed by 4075d3f2; the same terrain-only pattern remains in the current `frankyMovementTick` (17237-17262) and the fork's Franky movers | 2.3, "Bug 4" |
+| 4 Ported tank walk-in | `tankStep` stepped the tank to `min(desiredCombatRange(), 30)` with only `safeCombatPoint` (7bd14d7c, removed in 4075d3f2) | Removed by 4075d3f2; the same terrain-only pattern remains in the current `frankyMovementTick` (17237-17262) and the fork's Franky movers | 2.3, "Bug 4" |
 | 5 Hunt stuck after death | The escape stage becomes `complete` at the Blink landing (scripts/party-escape.cjs:91-96) while death recovery waits for Main within 65 (scripts/combat-disengagement.cjs:83-92) | Symptom fixed by ce6e7c1a (fork); adds a seventh copy of the goal (party-escape.cjs:105 (fork)) | 2.4, "Ledger bug 5" |
-| 7 Icelocked parked at Mr. Pumpkin | An unattributed `stop` ended the event walk (movement.ts:411; caller unknown without `stopStack`); the mage escort then runs the formation solver in a joined event (shared.js:16781), holds "no safe local detour" (16921-16926) with terrain recovery off in events (16448), and the runner stops at `formationMove` before the event detour (runner.ts:244) | None in any ref | 2.3, "Bug 7" |
+| 7 Mage parked at Mr. Pumpkin | An unattributed `stop` ended the event walk (movement.ts:411; caller unknown without `stopStack`); the mage escort then runs the formation solver in a joined event (shared.js:16781), holds "no safe local detour" (16921-16926) with terrain recovery off in events (16448), and the runner stops at `formationMove` before the event detour (runner.ts:244) | None in any ref | 2.3, "Bug 7" |
 | 8 "Movement replaced" every ~100 ms toward winterland | A writer re-issues a non-convoy journey faster than one plan cycle (movement.ts:384; the fold key proves no `convoyId`, movement-diagnostics.ts:10, 13). Four candidates, A to D; the code cannot pick one because `move()` records no replacing caller | 21b8362d removes candidate C for pull walks only | 2.1, "Ledger bug 8" |
 
 Bug 3's priest-heal starvation belongs to 03-turns-and-cooldowns, and its MP-first emergency potion
@@ -1918,7 +1918,7 @@ context).
 - Bug 5 (Hunt stuck after death): the recovering stage here walks to Main within 65
   (218, 236-239). The stuck part is in party-escape.cjs and combat-disengagement.cjs
   (slice 1.4). This slice adds W2-3: the 20 s timeout at 239 leaves the walk running.
-- Bug 7 (Icelocked parked at Mr. Pumpkin after an "Unattributed movement stop"): stop
+- Bug 7 (a mage parked at Mr. Pumpkin after an "Unattributed movement stop"): stop
   callers in this slice that can run during an event walk are the event disable stops
   (11281, 11291, when an event selection changes), applyEventReturnOwner (10322),
   applyNavigationIntent (10297, only if farm, convoy, follow or force owned movement),
@@ -2092,8 +2092,8 @@ Handoffs inside bug 3: the priest's basic attacks starving heals belongs to 03-t
 (attack-controller.ts, `basicAttackReserved`); the emergency potion drinking MP first belongs to
 05-survival (shared.js:70-72).
 
-##### Bug 4: Fonze tank walk-in (fork)
-1. 7bd14d7c (2026-10-20, port of Fonze e5a48112) added `designatedTankHolds`, `tankStep` and
+##### Bug 4: ported tank walk-in (fork)
+1. 7bd14d7c (2026-10-20, port of community commit e5a48112) added `designatedTankHolds`, `tankStep` and
    `tankMovementTick` (`git show 4075d3f2 -- characters/shared.js`, removed lines).
 2. `formationMove` returned false for a holding tank whenever `tankStep` returned a step or a
    hold, or there was no target, so the
@@ -2108,8 +2108,8 @@ range; 0f600a8f the same day keeps the formation bypass only while the line is c
 pattern remains in the current `frankyMovementTick` (17237-17262) and the fork's
 `frankyTankMovementTick` (18222-18244 (fork)): terrain-only steps.
 
-##### Bug 7: Icelocked parked out of range at Mr. Pumpkin
-Assumption: Icelocked is a mage in a party with a priest (inference; the full review says mage
+##### Bug 7: a mage parked out of range at Mr. Pumpkin
+Assumption: the parked character is a mage in a party with a priest (inference; the full review says mage
 escort). The logged `stopStack` was not available.
 1. A stop ended the live event walk journey: any `stop("move")`, `stop("smart")` or `stop()`
    finishes it as "Unattributed movement stop" (movement.ts:411). A failed `stop("move")` on a
@@ -2263,7 +2263,7 @@ Two more dead ends on the same path (the design pass names them UP-2 and UP-3; b
 5. **Restart compatibility branches.** restoredCommunication keeps two legacy failure shapes
    (`capturedCommunicationFailure`, `legacyCompletionFailure`, nav/initial-commands.ts:38-45) that
    convert old saved failures into communication holds, and forces route protocol 4 on every
-   restored convoy (68). These branches stay as long as old saved state might exist. History:
+   restored convoy (68). These branches stay while saved state from older builds can still load. History:
    4 commits incl. 51eb5324 2026-09-23 "recover disconnected hunt convoys" and d5279eab
    2026-09-25 (`git log --oneline refs/review/ryan-1.5 -- runtime/coordinator/navigation/initial-commands.ts`).
 6. **Fixed Town and home points.** Manual Town walks to main (-174, 121) (nav/manual-commands.ts:114)
@@ -2345,7 +2345,7 @@ Hunks from `git diff -U1 refs/review/ryan-1.5 HEAD -- characters/shared.js` insi
 | `pullHoldsForArrival` first, boss combat check, tank line-clear bypass | shared.js:17637-17644 | formationMove 16755-16758 | 62ab06e5, 0f600a8f | formation pulling the tank off its target |
 | Boss zone and pull idle-reach checks | shared.js:18046-18048 | safeCombatPoint 17159 | b5a7c68c, 754a9179 | W1, only for avoided bosses and pull mode |
 | Tank does not kite its own target | shared.js:18099-18100 | kiteIfNeeded 17209 | 4075d3f2 | tank kiting off target |
-| Franky door flee, tank and off-tank routines, `bossMovementTick` | shared.js:18128-18353 | frankyMovementTick 17237-17262 | d6f67a97 (Fonze port) | The current single Franky approach |
+| Franky door flee, tank and off-tank routines, `bossMovementTick` | shared.js:18128-18353 | frankyMovementTick 17237-17262 | d6f67a97 (community port) | The current single Franky approach |
 | `approachCombatTarget` body moved to `engageMovementTick` | shared.js:18402-18426, 18550-18553 | approachCombatTarget 17311-17334 | d6f67a97 | shared by Franky tank |
 | Tank hold, pull mode, `aggroTank` | shared.js:18428-18548 | the above | 4075d3f2, 0f600a8f, ae116693, 62ab06e5, 754a9179 | bug 3, bug 4 |
 | Tank skips defensive kiting | shared.js:18862-18863 | defensiveFormationMove 17638 | 4075d3f2 | tank evading |
@@ -2378,7 +2378,7 @@ Fork movers (assignment b):
   (df)); `pullWalk` keeps its own live `pull` journey (18515, 18522-18524 (df)) and cancels it and
   returns false when `trackPullWalk` sees no progress (18513-18518 (df)); the arrival hold
   releases when `trackPullHold` sees the monster stop short (18565-18567 (df)).
-- **Franky movers** (shared.js:18128-18353 (fork), d6f67a97, a Fonze port). Tank routine: terrain-only
+- **Franky movers** (shared.js:18128-18353 (fork), d6f67a97, a community port). Tank routine: terrain-only
   approach and hold in range (18222-18244). Off-tank: chase last known position for 30 s, wait at the
   "eastmost door of the most common destination" corner (18128-18146), flee through that door with
   `transport` and come back after 3 s (18165-18218), stack at min(desired, 30) with 25 units of
@@ -2407,7 +2407,7 @@ Fork movers (assignment b):
 
 ### 3.5 Rare, Phoenix and farm travel, manual commands, coordinator wiring
 
-- **Phoenix split search (3849a095, 2026-10-20, ported from Fonze).** The current console moves every scan leg as
+- **Phoenix split search (3849a095, 2026-10-20, ported from a community fork).** The current console moves every scan leg as
   one party convoy (nav/phoenix-patrol.ts:208-209; client cancels its path for patrol controls,
   characters/shared.js:3652). The fork gives each fighter its own region and walks it alone:
   `stepSearch` and `assign` pick the nearest unchecked region by planned route per free fighter
@@ -2437,7 +2437,7 @@ Fork movers (assignment b):
 
 ## 4. Tests today
 
-Each test is labelled with what it proves, what it does not cover, whether it reads as accurate, and whether it only guards a patch. The test lists per behaviour are in `catalog/02-movement.json`.
+Each test's label says what it proves, what it does not cover, whether it reads as accurate, and whether it only guards a patch. The test lists per behaviour are in `catalog/02-movement.json`.
 
 ### 4.1 Movement service, planning and the mover chain
 
@@ -2509,7 +2509,7 @@ All `scripts/tests/*.test.cjs` on the current console, read not run.
   precedence. Does not measure the per-tick native re-send (W2-7).
 - encounter-recovery (MOV-062), combat-movement "Dash cannot overshoot the weapon range
   boundary" (MOV-065), e2e live-cave assembly regroup (MOV-041). The e2e live-game test "a
-  lost native follower reconnects and finishes the current convoy" was mapped to MOV-064,
+  lost native follower reconnects and finishes the current convoy" first mapped to MOV-064,
   but it tests a convoy member, not Follow leader, so the catalog no longer maps it there.
 - independent-approach-client "blocked sightline inside weapon range reports active
   approach for existing pursuit recovery" runs `groupedApproachReport` (MOV-063), and its
@@ -2564,7 +2564,7 @@ it is missed (gap).
 
 ### 4.4 Coordinator convoys, shared walks and escape stages
 
-All are unit tests in `scripts/tests/` that drive the coordinator modules with fixture statuses; none run the game. Live end-to-end coverage for this area is limited to `e2e/live-hunt-recovery.spec.ts`, `e2e/live-hunt-failed-collection.spec.ts`, `e2e/live-halloween.spec.ts` and the fault script `e2e/native-terminal-settlement-fault.ts` (`git grep -l` on module names under e2e/); these were found by name and not read test by test.
+All are unit tests in `scripts/tests/` that drive the coordinator modules with fixture statuses; none run the game. Live end-to-end coverage for this area is limited to `e2e/live-hunt-recovery.spec.ts`, `e2e/live-hunt-failed-collection.spec.ts`, `e2e/live-halloween.spec.ts` and the fault script `e2e/native-terminal-settlement-fault.ts` (`git grep -l` on module names under e2e/); this pass found these by name and did not read them test by test.
 
 - **convoy-coordinator.test.cjs** (12 tests): proves the legacy barrier phases, timeouts and identity checks (MOV-111 to MOV-113). Does not cover protocol 4. Accurate: the names match the asserted phases. "assembly repair cannot overwrite a newer manual command" guards a patch (the death recovery reissue at convoy-navigation.cjs:52-58).
 - **shared-convoy.test.cjs** (52 tests, `grep -c -E "^\s*test\("`): the main proof of the protocol 4 machine (MOV-116 to MOV-129). Covers regroup budgets, geometry repair, missing handles, publication, arrival recovery. Does not cover G3 (text-triggered Town disable) or G8. Several names describe a guard between owners rather than a behaviour ("new manual navigation is not overwritten by regroup recovery", "geometry repair never replaces a newer character command", "return runtime recovery cannot overwrite a newer command or navigation revision"); they guard against G1 and G2, not a player-visible feature.
@@ -2665,8 +2665,8 @@ these into `REVIEW-QUEUE.md`.
   from its source: an untargeted aggressive monster sits in a 32-unit grid cell, each player checks
   the 3x3 cells around its own, and the monster must face the player within 45 degrees (2.3 W1
   item 4). That reach is under 64 on each axis and under 90.5 in a straight line.
-- **Options:** (a) every step stays out of idle monsters' aggro reach: safest, but steps get blocked
-  more often in dense packs. (b) the tank and the healer avoid aggro reach, others keep attack range:
+- **Options:** (a) every step stays out of idle monsters' aggro reach: safest, but more steps fail the
+  check in dense packs. (b) the tank and the healer avoid aggro reach, others keep attack range:
   protects the two members whose deaths end a fight. (c) keep today's rule.
 - **Recommendation:** (a), with the step check modelled on the game's 32-unit grid cells rather than
   a radius. Bugs 3d and 4 both came from steps that ignored idle monsters.
@@ -2693,10 +2693,11 @@ these into `REVIEW-QUEUE.md`.
 
 **Q8. Event walk versus active travel.**
 - **Today:** an event walk replaces at once any convoy that is not a shared walk, navigation exempt
-  (manual walks) or non-preemptible (Hunt returns), so an outbound Hunt convoy halfway there is
-  thrown away (nav/shared-walk.ts:191; nav/manual-commands.ts:116; runtime/coordinator/hunt/convoy.ts:78). The fork does
+  (manual walks) or non-preemptible (Hunt returns), so the event walk throws away an outbound Hunt
+  convoy halfway there (nav/shared-walk.ts:191; nav/manual-commands.ts:116; runtime/coordinator/hunt/convoy.ts:78). The fork does
   not change this rule.
-- **Options:** (a) events always win (today): never miss a boss, but a Hunt trip can be thrown away.
+- **Options:** (a) events always win (today): never miss a boss, but the event walk can throw away a
+  Hunt trip.
   (b) the event waits until the current convoy arrives or fails: no wasted trips, may miss short
   windows. (c) per event: short-window bosses win, others wait.
 - **Recommendation:** (c). It keeps today's behaviour where timing matters and stops wasting trips
@@ -2731,7 +2732,7 @@ these into `REVIEW-QUEUE.md`.
   leader back with `xmove` if within 55 (a85b9509).
 - **Options:** (a) the current re-plan: correct, but combat steps make it fire often. (b) the fork's walk
   back. (c) allow drift within the rally range and plan from where the leader stands at departure.
-- **Recommendation:** (c). Combat drift is normal (Q3), so the plan should start where the leader is.
+- **Recommendation:** (c). Combat drift is normal (Q3), so the plan starts where the leader is.
 
 **Q12. Report gaps during travel.**
 - **Today:** a member report older than 3 s, or a stale attacker list, stops the whole convoy. On
@@ -2739,7 +2740,8 @@ these into `REVIEW-QUEUE.md`.
   which resumes after 5 s of stable held reports and at most once per 30 s
   (nav/shared-navigation.ts:437; nav/communication-recovery.ts:88, 136-137). Other convoys, and a
   member with no attacker observation at all, hold in `observing` until 5 s of stopped reports
-  (nav/travel-defense.ts:25-32; nav/convoy-defense.ts:74-102). A test confirms the stop is intended.
+  (nav/travel-defense.ts:25-32; nav/convoy-defense.ts:74-102). `travel-defense.test.cjs` "missing and
+  stale observations explicitly stop a moving route" confirms the stop is intended.
 - **Options:** (a) keep stopping: safe, but slow links stop often. (b) keep walking through gaps under
   a set time unless an attacker is known. (c) stop only the member whose report is stale.
 - **Recommendation:** (b), for both holds. An unknown state with no known attacker is not a reason
@@ -2771,7 +2773,7 @@ these into `REVIEW-QUEUE.md`.
   (0, 0) (`node -e "console.log(Math.hypot(174,121))"`), so it ends outside every 65 radius.
 - **Options:** (a) one radius for all. (b) separate radii per workflow, written in one table.
 - **Recommendation:** (b), one table owned by movement. The workflows want different things (a
-  respawn point, a Town warp landing), but each value should be written once.
+  respawn point, a Town warp landing), and the table writes each value once.
 
 **Q16. Is Town exclusive?**
 - **Today:** while Town casts, a 100 ms watchdog stops every move, and `departurePending` suppresses
@@ -2779,21 +2781,21 @@ these into `REVIEW-QUEUE.md`.
 - **Options:** (a) nothing else moves until Town lands. (b) defensive steps only, then Town resumes.
   (c) today.
 - **Recommendation:** (a), as a movement request Town holds for the cast, not a watchdog. A defensive
-  step would cancel the cast anyway.
+  step cancels the cast.
 
 ### Fork modes
 
 **Q17. Tank under 50% HP.**
 - **Today (fork):** the tank hold releases below 0.5 HP and re-holds at 0.8
   (shared.js:18433, 18542-18548 (fork)); the tank then kites with the attackers-only check. The current
-  base has no tank hold.
+  console has no tank hold.
 - **Options:** (a) kite (today). (b) step toward the healer. (c) keep holding and let the off tank
   take over.
 - **Recommendation:** (b). It moves the tank into heal range instead of into the next pack (bug 3d).
 
 **Q18. Who pulls in pull mode.**
-- **Today (fork):** the longest-range living member with range 100 or more, usually the priest
-  (runtime/combat/pulling.ts:21-24 (fork)); 21b8362d waits for the tank and every priest to be alive.
+- **Today (fork):** the longest-range living member with range 100 or more, in a warrior, mage and
+  priest party the mage or the priest (both range 120; runtime/combat/pulling.ts:21-24 (fork)); 21b8362d waits for the tank and every priest to be alive.
 - **Options:** (a) longest range (today). (b) never the healer. (c) a pull role set in the party
   settings.
 - **Recommendation:** (b) as the default, with (c) as an override. The healer walking away alone is
@@ -2809,7 +2811,7 @@ these into `REVIEW-QUEUE.md`.
 - **Options:** (a) any farming travel (Hunt, relocation, manual monster, empty-spawn recovery, party
   travel), never event or Town travel. (b) as (a), but party travel stays uninterruptible because the
   user chose it by hand. (c) only Hunt and relocation travel.
-- **Recommendation:** (b), in one list. A trip the user started by hand should finish.
+- **Recommendation:** (b), in one list. A trip the user started by hand finishes.
 
 **Q20. Phoenix patrol.**
 - **Today:** the console walks the party as one convoy per scan leg (nav/phoenix-patrol.ts:208-209). The fork
@@ -2908,10 +2910,10 @@ split functions read for this spec and suggested to another spec (164 with `"fro
 81 from the split and single-spec proposals). Every receiving spec now claims its handoffs. Notable ones:
 - `handleCommand`, `handle` and `handleOwnedCommand` (shared.js:10416-10991 and nearby): the command
   router, suggested 01-groups-and-tasks. Its movement writes (Command takeover cancel at
-  10500-10514, town-party stops at 10707-10709, event return stops at 10788-10789) are listed in
+  10500-10514, town-party stops at 10707-10709, event return stops at 10788-10789) appear in
   1.6.
 - The status `tick` in shared.js, suggested 13-lifecycle. Its movement stops (rare handoff, convoy
-  end, event disable, follow off at 11220, 11252, 11281, 11291, 11303) are listed in 1.6.
+  end, event disable, follow off at 11220, 11252, 11281, 11291, 11303) appear in 1.6.
 - `scripts/combat-disengagement.cjs`, read in full for bug 5, suggested 05-survival.
 - `characters/party-member.js` held a generated copy of the movement service (party-member.js:675,
   950) and is proposed to 13-lifecycle; its functions duplicate slice 1.1.
@@ -2946,11 +2948,12 @@ this spec claims none of them. Spec 15 and spec 13 claim them (docs/implementati
 ### Not yet verified
 
 - **Bug 7 caller.** The log entry's `stopStack` (movement.ts:411) names the stop that ended the event
-  walk; this pass had no log. The chain also assumes Icelocked is a mage with a priest in the party.
+  walk; this pass had no log. The chain also assumes the parked character is a mage with a priest in
+  the party.
 - **Bug 8 candidate.** Needs the 10:47-10:50 UTC log lines with `failureContext.replacement`,
   `recoveryStage`, `convoyId`, `elapsedMs` and the code field (2.1, "Ledger bug 8").
 - **Game client cadence.** How often the game calls `smart_move_logic` is not in this repo.
-- **Inference to confirm with a test:** the runtime field mismatch between convoy checks (2.4 G2), the
+- **Inference to confirm with a ChronAL E2E scenario:** the runtime field mismatch between convoy checks (2.4 G2), the
   moving-boss gap (2.4 G5), continuous return with no deadline (2.4 G8), report gaps stopping a convoy
   on slow links (2.4 G9), the farming token loss during an overlapping command dispatch
   (2.2 W2-9), the Phoenix fallback budget per region (2.5 item 4), and ownerless
@@ -2958,15 +2961,16 @@ this spec claims none of them. Spec 15 and spec 13 claim them (docs/implementati
 - **End-to-end tests** that touch the service and the coordinator convoys (`e2e/live-cave`,
   `live-event-entry-failure`, `live-hunt-manual-event-override`, `live-hunt-town-recovery`,
   `live-hunt-recovery`, `live-hunt-failed-collection`, `live-halloween`, the native observers and
-  `native-terminal-settlement-fault.ts`) were found by name and not mapped test by test.
-- **Test mapping method.** Unit tests were matched to behaviours by function name in the test body;
-  a test that reaches a function through a shared harness without naming it is missed. No test was
-  run in this pass, so "accurate" means read as accurate, not run.
-- **History** for the coordinator navigation files was taken per file, not per function
+  `native-terminal-settlement-fault.ts`): this pass found them by name and did not map them test by
+  test.
+- **Test mapping method.** This pass matched unit tests to behaviours by function name in the test
+  body, so it misses a test that reaches a function through a shared harness without naming it. This
+  pass ran no test, so "accurate" means read as accurate, not run.
+- **History:** this pass took the history of the coordinator navigation files per file, not per function
   (`nav/shared-navigation.ts` has 21 commits not split by function).
 - **HTTP handlers** for `/convoy-route`, `/shared-travel`, `/convoy-engage`, `/convoy-complete` and
-  `/movement-barrier` were not traced end to end; slice 1.5 claims the `application.ts` wiring it
-  found, but no pass followed each request from the character to the coordinator module.
+  `/movement-barrier`: slice 1.5 claims the `application.ts` wiring it found, but no pass followed
+  each request from the character to the coordinator module.
 
 ### Resolved while assembling
 

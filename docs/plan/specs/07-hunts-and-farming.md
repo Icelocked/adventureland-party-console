@@ -877,7 +877,7 @@ clock plus once per report; the rate per second was not measured, and the order 
 ingestion against the timer decides which sightings a tick sees.
 
 **B9. Per-monster lists and migrations that never end.** The current console.
-- The six rares are listed in rare-hunting.ts:29-44, again in the client default
+- rare-hunting.ts:29-44 lists the six rares, and they appear again in the client default
   (shared.js:440, 11223) and in the hit tracker (shared.js:1005).
 - `tinyp` is removed from saved focus on every start (rare-hunting.ts:107-111), and passive settings
   are migrated on every start (101-102).
@@ -996,7 +996,7 @@ What it patches or bypasses:
 
 ### 3.3 Rares and Phoenix
 
-**C1. Phoenix split search (fork 3849a095, ported from Fonze).** It replaces the whole-party
+**C1. Phoenix split search (fork 3849a095, ported from a community fork).** It replaces the whole-party
 `phoenix-patrol` convoy with a search where each free fighter takes the nearest unclaimed region
 (fork af92de45 phoenix-patrol.ts:51-68), walked by client `smart_move` (fork af92de45
 shared.js:4049-4058, 4062-4088). It adds a converge stage when any searcher sees a Phoenix (fork
@@ -1041,7 +1041,7 @@ not exist (fork realm-hop-blacklist.ts:4, also README.md:615).
 
 ## 4. Tests today
 
-Each test id is listed under its behaviour in `catalog/07-hunts-and-farming.json`. No tests were run for this spec. "Accurate" means the setup and assertions match the code path, read from the test source.
+`catalog/07-hunts-and-farming.json` lists each test id under its behaviour. This pass ran no tests for this spec. "Accurate" means the setup and assertions match the code path, read from the test source.
 
 ### 4.1 Monster Hunt
 
@@ -1099,7 +1099,7 @@ No test found for HNT-041 (farmingResponse forcing default), HNT-052 (focus-chan
 
 ### 4.3 Rares and Phoenix
 
-Accuracy below comes from reading the test against the code, not from running it (no tests were run).
+Accuracy below comes from reading the test against the code; this pass ran no tests.
 "Patch guard" means the test pins a fix for an interaction between owners rather than a player-facing
 behaviour. Counts are `test(` calls in the file on the ref; a call inside a loop makes one test per
 loop value at run time.
@@ -1129,7 +1129,7 @@ L69); nothing tests the diagnostics log.
 
 ### 4.4 Cave and daily dungeons
 
-Test names and counts were read from the test files on the ref; a count is the number of `test(` calls, and a call inside a `for` loop runs once per loop value. The two main live-cave journeys build their name with a ternary (e2e/live-cave.spec.ts:12-14), so the test index does not list them; they are cited by their two literal names.
+This pass read test names and counts from the test files on the ref; a count is the number of `test(` calls, and a call inside a `for` loop runs once per loop value. The two main live-cave journeys build their name with a ternary (e2e/live-cave.spec.ts:12-14), so the test index does not list them; this section cites them by their two literal names.
 
 | Test | Behaviours | Proves | Does not cover | Accurate? | Guards a patch? |
 |---|---|---|---|---|---|
@@ -1160,7 +1160,7 @@ Questions only the user can answer. The coordinator copies them into `REVIEW-QUE
    (a) Keep today's rule. Negatives: Hunt stops for the whole staging lead; a stale field after a reload pauses Hunt with no event running; one member at an event stops every member's quest.
    (b) Pause only while a member is admitted to an occurrence that is live now (the attendance record, spec 06), or has started the event walk (spec 01 question 2). Negatives: the 15 reads must move to one predicate; Hunt depends on spec 06's attendance record being correct.
    (c) Pause only the members at the event; the rest keep farming the quest. Negatives: the Hunt party splits, so the convoy, the loot barrier and the turn-in need a partial roster; a quest owner at the event leaves the rest farming a quest they cannot turn in.
-   **Recommendation:** (b). Hunt keeps farming until a member really leaves, and the stale-field pause goes away. It beats (a) because staging and reload leftovers no longer stop the quest, and it beats (c) because the roster, loot and turn-in rules stay whole-party. It matches spec 01 question 2 (b). Negatives: one shared predicate to build and test, and it is only as good as the attendance record.
+   **Recommendation:** (b). Hunt keeps farming until a member leaves for the event, and the stale-field pause goes away. It beats (a) because staging and reload leftovers no longer stop the quest, and it beats (c) because the roster, loot and turn-in rules stay whole-party. It matches spec 01 question 2 (b). Negatives: one shared predicate to build and test, and it is only as good as the attendance record.
 2. **MH-Q2. Which message shows when several things hold Hunt?**
    **Today:** the first check in call order writes `hunt.message` (`hunt/tick.ts:74-94`; B.1), so "Paused for combat event" hides a cancelled intent, and `paused-event` shows for rare-hunt and farm-recovery walks (`hunt/recovery.ts:150`). The message has 55 writers in 12 Hunt files.
    **Options:**
@@ -1171,7 +1171,7 @@ Questions only the user can answer. The coordinator copies them into `REVIEW-QUE
 3. **MH-Q3. Old saved cycles and test-only paths.**
    **Today:** temporary encounters (HNT-021), exit mode (HNT-015), `failed-return` with `endReason` (HNT-028) and the `resume` branch of `begin` (HNT-111) have no production writer or caller (B.6). Their tests build the state by hand (`hunt-temporary-encounter.test.cjs:41`, `coordinator-hunt-composition.test.cjs:37`).
    **Options:**
-   (a) Ship one release that converts old saved cycles (clear `encounter`, `exitMode`, `endReason`, map `failed-return` to `checking-quests`), then remove the paths and their tests. Negatives: two releases instead of one; the converter itself needs a test.
+   (a) Ship one release that converts old saved cycles (clear `encounter`, `exitMode`, `endReason`, map `failed-return` to `checking-quests`), then remove the paths and their tests. Negatives: two releases instead of one; the converter itself needs a proof, and that proof is a ChronAL E2E scenario that saves a cycle with each of these fields, restarts the console and checks the loaded stage (persistence coverage, AGENTS.md: E2E first).
    (b) Keep them. Negatives: 26 catalog functions (HNT-015, HNT-021, HNT-028, HNT-111) and at least the 16 hand-built encounter tests cover code no player reaches, and each Hunt change must keep them working.
    (c) Remove them now and reset any old cycle to `checking-quests` at load. Negatives: a player who upgrades mid-encounter or mid-return loses that step and walks back to Daisy.
    **Recommendation:** (a). It removes the dead code without dropping a saved cycle on the floor. It beats (b) because the dead paths stop costing test and review time, and beats (c) because no saved cycle loses its place. Negatives: the converter release must ship first, and nothing measures how many saved cycles still carry these fields.
@@ -1186,7 +1186,7 @@ Questions only the user can answer. The coordinator copies them into `REVIEW-QUE
    **Today:** the default blacklists a Hunt monster after one party death (`hunt/settings.ts:13`), and the blacklist lasts until the user removes it (HNT-110). The dead fallback text says "two party deaths" (`hunt/lifecycle.ts:97`). The fork's Achievement Hunt defaults to 6 after a live test (fork `achievement-settings.ts:41-45`). The game has no such rule.
    **Options:**
    (a) Keep 1. Negatives: one unlucky death, for example from an event monster passing through, removes a monster from Hunt until the user clears it.
-   (b) 2. Negatives: the party dies twice at a truly dangerous spawn before Hunt moves on.
+   (b) 2. Negatives: the party dies twice at a dangerous spawn before Hunt moves on.
    (c) Ask on first use. Negatives: one more dialog; a user who skips it still gets a default.
    **Recommendation:** (b), unless the user's own Hunt runs say otherwise. A second death is better evidence that the spawn is unsafe, and the blacklist does not expire on its own. It beats (a) because a single accident no longer costs a monster for good, and beats (c) because it needs no dialog. Negatives: one extra death at dangerous spawns; no measured data backs 2 over 1.
 6. **AH-Q1 (fork). Achievement Hunt and events.**
@@ -1213,7 +1213,7 @@ Questions only the user can answer. The coordinator copies them into `REVIEW-QUE
    (b) Skip only when the picked spawn is off the event map. Negatives: needs a map check per pick; a misclick that leaves the map still costs the round.
    (c) As (b), plus the rejoin control from spec 06 question 1. Negatives: one more control; rejoin must clear only `manual travel`.
    (d) Ask in the dashboard when an event is live. Negatives: a prompt on every pick during events; automated callers cannot answer it.
-   **Recommendation:** (c), to match spec 06 question 1. Picks that stay on the event map keep attendance, and a mistaken leave can be undone. It beats (a) because (a) drops the round without asking, (b) because (b) has no way back, and (d) because a prompt does not work for automated switches. Automated callers such as Achievement Hunt should not use the manual skip at all. Negatives: a map check and a control.
+   **Recommendation:** (c), to match spec 06 question 1. Picks that stay on the event map keep attendance, and a mistaken leave can be undone. It beats (a) because (a) drops the round without asking, (b) because (b) has no way back, and (d) because a prompt does not work for automated switches. Automated callers such as Achievement Hunt do not use the manual skip (spec 06 question 1). Negatives: a map check and a control.
 2. **FARM-Q2. Keep learned scatter types across restarts (2.2 B4)?**
    **Today:** `initialFarmingState` sets `scatterMonsterTypes` to `[]` and a new epoch on every start (`navigation/initial-farming.ts:48-49`), and the character drops its list on the new epoch (shared.js:11390-11395), so the party fights grouped until each type is one-shot again. The comment at shared.js:1040 says the coordinator persists the list.
    **Options:**
@@ -1227,7 +1227,7 @@ Questions only the user can answer. The coordinator copies them into `REVIEW-QUE
    (a) Stay paused until the user acts. Negatives: an unattended party stands still, Hunt included; the dashboard shows only the travel failure text.
    (b) Retry once after a delay, then pause with a message that names the mismatch. Negatives: a lasting mismatch costs one more failed trip; a timer and a counter to keep.
    (c) Move to the next area, then pause when every area fails. Negatives: a mismatch on the map's geometry likely fails every area on that map the same way, so the party walks several failed trips first.
-   **Recommendation:** (b). The pause follows an exhausted geometry repair (scripts/tests/farm-zone-recovery.test.cjs:130), so a retry helps only when the mismatch passes with time; a lasting one still stops after one try. It beats (a) because (a) stops Hunt with no timer, and beats (c) because (c) repeats a failure that is about the map, not the area. Either way the regex should drop `geometry` so one rule decides. Negatives: one extra failed trip when the mismatch lasts.
+   **Recommendation:** (b). The pause follows an exhausted geometry repair (scripts/tests/farm-zone-recovery.test.cjs:130), so a retry helps only when the mismatch passes with time; a lasting one still stops after one try. It beats (a) because (a) stops Hunt with no timer, and beats (c) because (c) repeats a failure that is about the map, not the area. In every option the regex drops `geometry`, so one rule decides. Negatives: one extra failed trip when the mismatch lasts.
 4. **FARM-Q4 (fork). Should Achievement Hunt survive as a saved mode?**
    **Today:** the fork's leader route accepts `achievements` (fork http/hunt-mode.ts:81), but the follower save path refuses it (saved-farming-mode.ts:12) and a legacy root value loads as `auto` (fork initial-focus.ts:12). Saved profiles keep the value (hunt/scopes.ts:42), so the leader keeps it across restarts.
    **Options:**
@@ -1264,7 +1264,8 @@ Questions only the user can answer. The coordinator copies them into `REVIEW-QUE
    (b) Never interrupt Hunt mission travel. Negatives: a Fairy or Phoenix seen on the way to a Hunt
    spawn is passed by; the commit path that f023f304 added for Hunt convoys loses its main use.
    (c) A per-rare choice, "may interrupt Hunt travel", defaulting to today's behaviour. Negatives:
-   one more field per passive rule, its validation in `validPassiveSettings`, and a test per rule.
+   one more field per passive rule, its validation in `validPassiveSettings`, and a ChronAL E2E case
+   per rule.
    **Recommendation:** (c). It keeps today's behaviour for users who change nothing, and lets a
    user who farms Hunt quests against the timer protect that travel. It beats (a) because (a) gives
    no way to protect Hunt travel, and beats (b) because (b) passes by a Fairy (priority 101) even
@@ -1372,7 +1373,7 @@ Questions only the user can answer. The coordinator copies them into `REVIEW-QUE
    **Today:** after 3 failed-receipt repairs travel stops with no error of its own (travel.ts:142); the dashboard shows "Travel failed; use Retry failed preparation" (progress.ts:105), the same text as for the first failure. The receipt error of the failed member is copied into `error` (service.ts:154). A repair restart resets the regroup counters (travel.ts:30-41, 143-144).
    **Options:**
    (a) Keep. Negatives: the user cannot tell a first failure from an exhausted cap, or which member failed.
-   (b) Show which repair ran out, the member and its receipt error. Negatives: more dashboard text; the counter reset (B.3) should be fixed at the same time so the count shown is true.
+   (b) Show which repair ran out, the member and its receipt error. Negatives: more dashboard text; the counter reset (B.3) needs a fix in the same change so the count shown is true.
    (c) Also exit the run after the cap. Negatives: the remaining run time and rewards are lost for a travel problem that a manual move or Retry may fix.
    **Recommendation:** (b). It beats (a) because the user sees the cause and can choose Retry or a manual move, and beats (c) because it keeps the run. Negatives: a dashboard change and a fix to the counter reset.
 
@@ -1435,7 +1436,7 @@ proposed to other specs or found in triage (50 triage, 157 from 02-movement, 52 
 
 - The `check-claims.mjs` counts are in 6.1.
 - Checked against the local game server copy ((local checkout), commit 43b2c8fc): the game accepts a Monster Hunt request within `B.sell_dist`, 400, of Daisy (`game node/server.js:225, 5483`), and a quest lasts 30 minutes (5513). The console's 100 and 120 are margins inside that. The 800 death-recovery radius is a console value with no game counterpart.
-- Tests were mapped by reading names and setups, not by running them; the e2e specs were read only at the cited lines.
+- This pass mapped tests by reading names and setups, without running them, and read the e2e specs only at the cited lines.
 - Histories rerun on the ref for this check: `git log -s -L 74,94:runtime/coordinator/hunt/tick.ts` (B.1) and `git log -S "preparationChanged(prior.firstFailure)"` for `resetChangedGeometry` (d5279eab, B.5). On the fork, `git log -s -L` for Achievement Hunt `switchTo` and `tick` (section 3.1). The other histories come from review/full/events.md section 5.2.
 
 ### 6.3 Farming modes, focus and farm areas (part notes)
@@ -1443,7 +1444,7 @@ proposed to other specs or found in triage (50 triage, 157 from 02-movement, 52 
 - The `requested` keys of HNT-037 to HNT-065 and HNT-113 to HNT-116 name 138 ids, proposed to 02-movement (78), 13-lifecycle (39), 12-dashboard-and-status (20) and 04-targeting (1) in `catalog/proposed-sections.json`. Today 89 of them are claimed by 07 itself; 49 stay with other specs: 02 (39), 01 (9) and 12 (1).
 - Triage closures in application.ts in the listed ranges (417-420, 1802-1805, 546-559, 1901-1914, 761-779, 1978-1996, 700, 702, 708-712, 2000-2002) are now claimed by other specs: 01 (GRP-003, GRP-004, GRP-009, most solo ports), 02 (MOV-156b, MOV-159 to MOV-162, including `acceptArrival` at 771), 06 (EVT-004), 10 (INV-053) and 12 (DSH-270). Spec 07 claims four of them: the `rareControl` ports at 552 and 1907 (HNT-080, HNT-079) and the `rareEncounter` ports at 556 and 1911 (HNT-041). Monster Hunt wiring closures are claimed in section 1.1.
 - Behaviours without a test: HNT-041, HNT-052, HNT-065, HNT-114.
-- Not verified: the client farm reunion that `rejoinFarm` calls (shared.js beginFarmReunion) was not read here; it is movement or survival code. The `farmingPolicy` writers and readers were recounted on the current console (2.2 B1): 6 writers and 44 reading lines in 31 files; the fork adds 2 writers.
+- Not verified: this pass did not read the client farm reunion that `rejoinFarm` calls (shared.js beginFarmReunion); it is movement or survival code. This pass recounted the `farmingPolicy` writers and readers on the current console (2.2 B1): 6 writers and 44 reading lines in 31 files; the fork adds 2 writers.
 
 ### 6.4 Rares and Phoenix (part notes)
 
@@ -1470,15 +1471,15 @@ proposed to other specs or found in triage (50 triage, 157 from 02-movement, 52 
   node/server.js:13428). The 300 field generator radius matches node/server.js:3620-3630.
 - Not verified: the accuracy of the e2e tests (not read in full); the rare tick rate per second
   (B8).
-- No tests were run.
+- This pass ran no tests.
 
 ### 6.5 Cave and daily dungeons (part notes)
 
 - **HNT-087** (adopt) has no test.
-- The two main live-cave journeys are not in the test index (ternary name); their ids in the catalog are written by hand.
+- The two main live-cave journeys are not in the test index (ternary name); the catalog lists their ids by hand.
 - Checked against the local game server copy (commit 43b2c8fc): the three-member limit (game node/logic/generated_maps.js:465), the Dorr NPC id `dreamkeeper` and its position (game design/maps.js:1966, design/npcs.js:1135), the 160 entry radius (generated_maps.js:478), the 160 talk reach (node/logic/cave_of_many_dreams.js:1940), the 400 chest radius between centres (cave_of_many_dreams.js:558), and Nera on a respawn inside the Cave (node/server.js:6224-6226).
 - B.4 and B.5 effects are inference; no run log shows them.
-- No tests were run.
+- This pass ran no tests.
 - Functions named here but owned by other proposals: cave-recovery.ts and caveRecovery (05), Cave target rules (04), `dungeonRuntime>move/travel/sharedRoute/preparedCaveRoute` and `canMove` (02), cave-floor-handshake.ts (13), dashboard dungeon panel (12). The party-action helpers `exitDungeon` and `releaseDungeon` are claimed here under **HNT-089**.
 
 ## 7. The design

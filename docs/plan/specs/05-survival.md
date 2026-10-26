@@ -172,8 +172,8 @@ None of these numbers is a setting.
   dispatched or uncertain (`reserved`, 130-135). Acknowledgements time out after 2.5 s
   (136-148).
 - **SRV-015 Revival journal.** A per-character localStorage ledger (shared.js:2660,
-  2690-2691) keeps receipts for the current run only (cave-recovery.ts:39-49). The receipt
-  is written before Revive goes out (176). A definite rejection fails, any other rejection
+  2690-2691) keeps receipts for the current run only (cave-recovery.ts:39-49). The priest
+  writes the receipt before Revive goes out (176). A definite rejection fails, any other rejection
   stays uncertain (152-173), and the observed grave or revival channel settles it
   (66-80). A revival that has not completed 12 s after acceptance fails (64). A fallen
   priest or missing Essence fails an authorized preparation (81-86). Failures tell the
@@ -183,7 +183,7 @@ None of these numbers is a setting.
   no action in flight, no heal pending, no living teammate to heal, and Essence in the bag.
   The step itself is spec 02 (MOV-042).
 - **SRV-017 Assignment and report.** `receive` (210-213) stores the coordinator assignment;
-  it is used only while under 3 s old and naming this priest (58). `report` (217-235) sends
+  the priest uses it only while it is under 3 s old and names this priest (58). `report` (217-235) sends
   the priest's HP, MP, Essence, phase and reason back.
 
 ## 2. What goes wrong
@@ -210,7 +210,7 @@ character is occupied (21b8362d runner.ts:289-294, 302), through the same
 
 1. `escapePotions` drinks MP whenever MP is below the class budget (shared.js:71); the
    mage budget is full MP (69).
-2. HP is drunk only when MP is satisfied, and never by a mage (72).
+2. It drinks HP only when MP is satisfied, and never for a mage (72).
 3. Measured on the fork: "the escaping mage drank an MP potion at 531 of 1873 HP and died
    to the next hit" (dab0de01 message, run 4 of the uhills Targetron probe).
 
@@ -236,8 +236,8 @@ second potion policy beside SRV-001.
 5. `recover` waits for every member on `main` within 65 of (0, 0) (cjs:83-89, 90-92).
    It never comes.
 
-Steps 1, 2, 4, 5 are read from code; the condition in step 3 under which all three reach
-the landing is inference. Patch: ce6e7c1a (fork) adds `strandedRescue` (fork
+This spec read steps 1, 2, 4 and 5 from code; the condition in step 3 under which all
+three reach the landing is inference. Patch: ce6e7c1a (fork) adds `strandedRescue` (fork
 party-escape.cjs:100-107). When the priest reaches a landing off Main within 65 of
 (0, 0) and the death recovery still owns the escape, the stage becomes `recovering`
 instead of `complete` (fork :96-97), and the recovering stage walks each member to Main
@@ -338,7 +338,7 @@ runs two potion-group writers together.
     (server.js:12048).
   - **Options:** (a) skip regen when a potion threshold could trigger within 4 s.
     Negatives: needs a damage forecast, and `incomingDps` returns Infinity for unknown
-    monsters (damage.ts:53), so regen would often stop in combat anyway. (b) regen only
+    monsters (damage.ts:53), so regen stops whenever an unknown monster attacks. (b) regen only
     while no monster targets a party member. Negatives: loses 50 HP or 100 MP per 4 s in
     long fights, so MP-hungry classes drink more potions. (c) keep today. Negatives: a
     regen can hold an HP potion back for up to 4 s (bug 3b step 4).
@@ -409,8 +409,13 @@ claimed by more than one spec 0, claims naming no known function 0, behaviours w
 test 1 (SRV-008). `catalog/05-survival.json`: 106 functions in 18 behaviours (counted with
 `node -e` over the catalog; this section said 95 in 11 before the split).
 
-- SRV-008 has no test. Reason: the death message has no unit harness.
-- SRV-001's only test is the merchant path; the class thresholds wait for SRV-Q1.
+- SRV-008 has no test. Reason: the death message has no unit harness. Its proof is a
+  ChronAL E2E scenario in which a monster kills a character; measure: the "Killed by
+  <name>" line and the Hunt trip death stamp; threshold: both present for every death
+  (AGENTS.md: E2E first, no unit test written after the code).
+- SRV-001's only test is the merchant path; the class thresholds wait for SRV-Q1, and their
+  proof is a ChronAL E2E scenario per class that counts HP potions drunk below the chosen
+  threshold.
 - Claimed by other specs: `applyEscape`, `escapeLanding`, `escapePulse`, `escapeCost`,
   `escapeReady`, `escapeUse` (02-movement MOV-035, MOV-036); `party-escape.cjs` (MOV-144);
   `beginFarmReunion` (MOV-056); the grave approach step and `caveRecoveryMove` (MOV-042,

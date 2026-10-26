@@ -7,8 +7,8 @@ unless it says "fork" (af92de45). Behaviour ids are `GRP-001` onward;
 gave this spec no functions by path, so it claims, from the 07, 02 and 06
 lists and triage, only the functions whose job is group membership or
 precedence; every move is in `catalog/handoffs-01.json`. Leads came from
-`backups/party-console/review/full/events.md` and `review/events.md`; each
-was re-read on the current console. A claim-by-claim check of this page is
+`backups/party-console/review/full/events.md` and `review/events.md`; this
+pass re-read each on the current console. A claim-by-claim check of this page is
 in `docs/implementation/06-verification-01-06.md`.
 
 Words used below:
@@ -23,8 +23,8 @@ Words used below:
 - **Owner**: the code that decides it holds the group's movement right now.
 
 Paths: `hunt/`, `navigation/`, `events/`, `http/`, `status/`, `anniversary/`
-and `dungeons/` are under `runtime/coordinator/`. `runtime/hunt/policy.ts`
-and `runtime/dungeons/contracts.ts` are named in full.
+and `dungeons/` are under `runtime/coordinator/`. This spec names
+`runtime/hunt/policy.ts` and `runtime/dungeons/contracts.ts` in full.
 
 ## 1. What it does today
 
@@ -55,8 +55,8 @@ and `runtime/dungeons/contracts.ts` are named in full.
   "Independent services" are the active ones among those (2008-2011).
 - **GRP-022 Scoped settings routes.** Farming settings requests pick the
   scope by character (`http/farming-scope.ts:14-27`, wired at
-  `application.ts:2021-2030`). A follower's mode change is saved only as its
-  own preference (20-21); an edit for the merchant or for a follower's
+  `application.ts:2021-2030`). The route saves a follower's mode change only
+  as its own preference (20-21); an edit for the merchant or for a follower's
   inherited settings returns 409 (22-23, 31-34).
 - **GRP-003 Solo services.** `createSoloServices` builds, per solo character,
   its own copy of farming navigation, party convoys, Hunt, farm areas,
@@ -68,9 +68,9 @@ and `runtime/dungeons/contracts.ts` are named in full.
   and walks allow only Town and event returns during a turn-in (2002). Each
   tick loops over the independent services after the party (convoys
   2012-2020, farm areas 2086-2089, Hunt 2136-2144, event returns 2208-2211).
-- **GRP-004 Follow changes.** When Follow or the leader changes, each member
-  whose owner changed is retired from its old scope and joined to the new
-  one (`hunt/membership.ts:37-78`, called from `application.ts:700`). The
+- **GRP-004 Follow changes.** When Follow or the leader changes, the
+  coordinator retires each member whose owner changed from its old scope and
+  joins it to the new one (`hunt/membership.ts:37-78`, called from `application.ts:700`). The
   retire step ends the old scope's whole convoy if the member was in it and
   deletes every member's command for that convoy (16-24). It removes the
   member's Hunt and farming-follow commands, bumps its navigation revision,
@@ -94,9 +94,9 @@ and `runtime/dungeons/contracts.ts` are named in full.
   testing puts the leader on the other team (`shared.js:17704-17712`).
 - **GRP-007 Hunt roster follows Follow.** Outside a turn-in the Hunt keeps
   only the leader and followers and adds late members
-  (`hunt/participants.ts:32-67`). With Hunt policy version 3 late members
-  are appended (44-46); otherwise late quest owners are appended, and other
-  late members restart assignment only before any mission advanced (48-66).
+  (`hunt/participants.ts:32-67`). With Hunt policy version 3 the Hunt
+  appends late members (44-46); otherwise it appends late quest owners, and
+  other late members restart assignment only before any mission advanced (48-66).
   Whenever the leader is fresh, turn-in or not, the Hunt cancels any convoy
   that is not `monster-hunt` (84-92).
 
@@ -176,8 +176,8 @@ table lists what each reader checks on the current console.
   `paused-event` (`events/hunt-resume.ts:81`, spec 06 EVT-032).
 - **GRP-012 Backup Hunt pause.** Manual cancel first, then escape or death
   recovery, then events (`hunt/backup.ts:33-68`).
-- **GRP-013 and GRP-014 The event check copies.** "A member is at an event"
-  is computed from the status fields `activeEvent || joinedEvent` (sometimes
+- **GRP-013 and GRP-014 The event check copies.** The coordinator computes
+  "a member is at an event" from the status fields `activeEvent || joinedEvent` (sometimes
   with `mapEvent` or `eventTraveling`) in 33 places. 23 sit under
   `runtime/coordinator`:
   anniversary/hunt-handoff.ts:36, http/farming-return.ts:45-47,
@@ -222,9 +222,9 @@ table lists what each reader checks on the current console.
   (2088, 2139-2143). `eventAllowed` refuses events for a member of the visit
   unless protection is off (`dungeons/service.ts:241-253`). With protection
   off, an eligible event starts a Cave exit unless the visit is held
-  (250-251). A held visit is retired when its pending event comes back and
-  every participant is fresh (244-248, 254-262).
-- **GRP-019 Character owner lists.** The reunion is blocked by 22 conditions
+  (250-251). The service retires a held visit when its pending event comes
+  back and every participant is fresh (244-248, 254-262).
+- **GRP-019 Character owner lists.** 22 conditions block the reunion
   (`shared.js:13456-13472`); "event exit owns movement" merges three sources
   (13451-13455). Similar lists: `frankyCombatActive` (12915-12922, spec 06
   EVT-048), `passiveRegenerationEligible` (13810, spec 05).
@@ -314,12 +314,12 @@ solo character's open event trip delays the party's event target cleanup.
 by manual release, which throws unless every participant is fresh and
 outside (`dungeons/service.ts:263-274`), or by its pending event (GRP-018).
 While held, escape and death recovery do not tick (`application.ts:1741-1742`).
-Inference: a member that dies after leaving the Cave is not recovered until
+Inference: nothing recovers a member that dies after leaving the Cave until
 the user releases the visit.
 
 ### 2.7 Duplicated wiring for solo characters
 
-Every owner check has to be added in the party wiring and in
+Each owner check goes into the party wiring and again into
 `createSoloServices` (`application.ts:1784-2007`), and the two already differ
 (GRP-003, and the missing dungeon check in GRP-018).
 
@@ -327,9 +327,9 @@ Every owner check has to be added in the party wiring and in
 
 `travelAllowed` (`http/hunt-control.ts:68-71`) and `authorize`
 (`events/observations.ts:244-259`) do not read `escape` or `combatRecovery`.
-The character checks its own escape first (`shared.js:13283`). Inference: a
-respawned member can be admitted during death recovery and put Hunt into
-`paused-event`.
+The character checks its own escape first (`shared.js:13283`). Inference:
+admission can let a respawned member in during death recovery and put Hunt
+into `paused-event`.
 
 ## 3. Fork differences
 
@@ -423,7 +423,7 @@ landing-to-Main leg end to end on the current console (the fork adds
    cancels its convoy (`hunt/travel.ts:15-28`).
    **Options:**
    (a) Keep: staging pauses Hunt. Negatives: Hunt stops for the whole lead
-   even when the event is close; a mission convoy is thrown away.
+   even when the event is close, and it throws away a mission convoy.
    (b) Pause Hunt only once the event walk starts, with the walk timed by
    spec 06 question 2. Negatives: Hunt must read a "walking to the event"
    signal instead of `activeEvent`, and stop cleanly mid-mission when the
@@ -483,9 +483,9 @@ landing-to-Main leg end to end on the current console (the fork adds
    Negatives: farming still waits for the user; escape can move members
    the user wanted held.
    **Recommendation:** (c). Escape and death recovery protect the
-   characters and should never wait on a farming choice, while the hold
-   stays the user's call. It beats (a) because a death outside the Cave is
-   recovered, and beats (b) because it keeps an explicit hold. Negatives:
+   characters and never wait on a farming choice. The hold stays the user's
+   call. It beats (a) because death recovery reaches a death outside the
+   Cave, and beats (b) because it keeps an explicit hold. Negatives:
    the party still sits idle until the user releases it.
 6. **Follow during A/B testing.**
    **Today:** a follower stops following a leader on the other team

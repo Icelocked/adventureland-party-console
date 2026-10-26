@@ -8,8 +8,8 @@ in (local checkout) (adventureland_mongodb
 43b2c8fc; `server.js` and `server_functions.js` under `node/`, the browser client under
 `js/`), the client file `runner_functions.js` of client 17175 under
 `adventureland-party-console/.build/ci-fixture-tests/run-8tAVKt/17175/`, and AL MCP game
-data version 18183. The server rules are read from that local copy and were not tested in
-the live game. Claim-by-claim verification: `docs/implementation/05-verification-03-05.md`.
+data version 18183. This spec reads the server rules from that local copy; no live-game
+test has confirmed them. Claim-by-claim verification: `docs/implementation/05-verification-03-05.md`.
 
 This part owns one question: which action spends each shared game cooldown, and
 when. Targeting (what to hit) is spec 04. Survival (heals, potions, escape, death) is
@@ -179,7 +179,7 @@ cooldown edge (from reading the writers above).
 - **TRN-006 Engine execution.** `execute` (engine.ts:59-93) records a pending token per
   cooldown family (`share` or the skill id, :25) for 2500 ms, sends `use_skill`, races a
   2500 ms acknowledgement timeout, and on rejection or timeout blocks the skill for
-  1000 ms (:86). The token is removed when the cast settles (:91); `world()` also drops a
+  1000 ms (:86). The engine removes the token when the cast settles (:91); `world()` also drops a
   token once it has aged and its cooldown is not running (:22). `first` casts the first
   affordable choice (:96-99).
 - **TRN-007 MP rules for skills.** `cost` applies `mp_reduction` and uses `mp_cost` for
@@ -361,7 +361,7 @@ priest-formation.test.cjs:512, 665, merchant-events.test.cjs:74).
 Outcome: a priest farming hard spends MP on basic attacks that the reserve was meant to
 keep for its skills. Heal itself does not need the MP on the local server source (W1);
 partyheal (400 MP in game data) and Curse (400 MP) do, through the generic skill check
-(server.js:9846-9852). Whether the removal was intended is unknown (`git log -S
+(server.js:9846-9852). Neither commit says whether the removal was intended (`git log -S
 reserveMana $R` shows only these two commits); question TRN-Q2.
 
 ### Bug 13 (ledger 13): "Recovery failed: not_ready"
@@ -383,7 +383,7 @@ reserveMana $R` shows only these two commits); question TRN-Q2.
    not_ready" (13851-13852).
 
 Not patched. The second half of ledger 13 ("Paused for combat event" instead of "select
-Hunt again") is Hunt status text: handed to spec 07 (runtime/coordinator/hunt/travel.ts:24
+Hunt again") is Hunt status text, and this spec hands it to spec 07 (runtime/coordinator/hunt/travel.ts:24
 writes "Paused for combat event"; convoy.ts:33 and recovery.ts:175 write "select Hunt
 again to resume").
 
@@ -475,12 +475,16 @@ checks the return-mode skill veto.
   (c) The heal wins for the tank only; others wait for the role loop. Negatives: a mage or
   ranger under attack gets heals only in the gaps; needs a tank setting the current
   console does not have.
-  **Recommendation:** (a). It matches the current console's intent and the tested
-  21b8362d patch, and since heal and attack share one cooldown every heal costs one attack
-  under any option. (b) and (c) depend on role-loop gaps that the 127 of 127 measurement
-  shows do not come. Negatives: lower priest damage while members are slightly hurt, and
-  the heartbeat-first filter in `healPartyBelow` (bug 3a "left in place") can still waste a
-  reserved slot.
+  **Recommendation:** (a). It matches the current console's intent and the 21b8362d
+  patch. Heal and attack share one cooldown, so every heal costs one attack under any
+  option. (b) and (c) depend on role-loop gaps that the 127 of 127 measurement shows do
+  not come. Negatives: lower priest damage while members are slightly hurt, and the
+  heartbeat-first filter in `healPartyBelow` (bug 3a "left in place") can still waste a
+  reserved slot. Proof: a ChronAL E2E scenario with a priest under steady attack and an
+  injured member in heal range; measure: priest basic attacks while a party member is
+  under 90% HP and in heal range; threshold: 0. The fork's
+  `priest-heal-reservation.test.cjs` is a unit test added with the patch, so it is not
+  this proof (AGENTS.md: no unit tests written after the code).
 - **TRN-Q2. Should basic attacks keep an MP floor?**
   **Today:** no floor; b989128a removed b03f0855's rule (bug section above). Skills keep
   the class reserve (eligibility.ts:34-42, 75-80). On the local server source heal works
@@ -499,7 +503,8 @@ checks the return-mode skill veto.
   spend. It costs less than (a), which slows every class for a reserve most of them only
   spend on their own damage skills, and it fixes what (c) leaves open. Negatives: priest
   damage drops on long fights, and the value of the floor rests on the server rule that
-  heal needs no MP, read from the local source and not tested live.
+  heal needs no MP, read from the local source and not tested live. A ChronAL E2E scenario
+  in which a priest below `mp_cost` casts heal confirms that rule before the floor ships.
 - **TRN-Q3. Raw casts with their own MP floors (P1, P2).**
   **Today:** Stomp, Dash, Energize, partyheal, the A/B casts, the escape casts and every
   Curse (W3) call `use_skill` directly, each with its own floor or none, outside the
@@ -518,14 +523,14 @@ checks the return-mode skill veto.
   **Recommendation:** (a) for the combat casts, keeping the escape casts on their own
   budget until spec 05 decides escape. One ledger and one reserve remove P1 and P2, and
   W3 shows the dual path already failed silently, which (b) keeps. Negatives: changed
-  cast rates need a live check per class, and the category choice per skill is a new
-  decision.
+  cast rates need a ChronAL E2E scenario per class that measures casts per minute before
+  and after on the same fixed setup, and the category choice per skill is a new decision.
 - **TRN-Q4. Agitate.**
   **Today:** `agitate` sits in the aggro, return and Franky gates (eligibility.ts:73,
   runtime.ts:71, 81); no code casts it.
   **Options:**
-  (a) Drop it from the gates. Negatives: if a caster is added later the gates must be
-  restored, or Agitate would bypass the leader rule and the return and Franky vetoes.
+  (a) Drop it from the gates. Negatives: a later Agitate caster needs the gates back;
+  without them it bypasses the leader rule and the return and Franky vetoes.
   (b) Add an Agitate caster for the warrior. Negatives: Agitate taunts every nearby monster
   (game data), so it needs pull-safety rules (the fork's area-pull block in 4075d3f2 is one
   attempt); new behaviour to design and test.
@@ -544,8 +549,10 @@ together: 9421 functions, 0 unclaimed. Function count from
 TRN-017 plus the splits TRN-018 to TRN-028).
 
 - TRN-002, TRN-014, TRN-015 and TRN-016 have no test. Reason: each is a raw class cast with
-  no unit harness; M1 decides whether they move into the engine (TRN-Q3) before a test is
-  written. TRN-023 (skill diagnostics) has no test.
+  no unit harness. M1 decides whether they move into the engine (TRN-Q3). Their proof is a
+  ChronAL E2E scenario per class that counts each cast against its MP floor on a fixed
+  setup, not a new unit harness (AGENTS.md: E2E first). TRN-023 (skill diagnostics) has no
+  test.
 - Functions of this part claimed by other specs: the role runner body, `start` and `stop`
   (13-lifecycle LIF-025); the escape pulses `escapePulse`, `escapeReady`, `escapeUse`
   (02-movement MOV-036), `escapeCharge`, `escapeWarriorDefense` (MOV-038) and

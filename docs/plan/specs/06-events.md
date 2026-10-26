@@ -6,8 +6,8 @@ ref unless it says "fork" (af92de45, HEAD of the same checkout). Behaviour
 ids are `EVT-001` onward; `catalog/06-events.json` lists the functions and
 tests for each one. Evidence leads came from
 `backups/party-console/review/full/events.md` (with Appendix A and B),
-`review/events.md` and the bug ledger in `review/BRIEF.md`; every claim here
-was re-read on the current console, and line numbers differ from the reviews, which
+`review/events.md` and the bug ledger in `review/BRIEF.md`; this pass re-read
+every claim on the current console. Line numbers differ from the reviews, which
 cite the fork. A claim-by-claim check of this page is in
 `docs/implementation/06-verification-01-06.md`.
 
@@ -445,8 +445,8 @@ means its copy of `S` is stale. No patch.
    cancels its convoy (`hunt/travel.ts:15-28`).
 5. The lead is a literal, not route time plus a margin (5 lines, EVT-008).
 Patch: the integration notes for PR #151 excluded a proposed timeout-driven
-forced return (upstream `docs/pr-151-integration.md:7`). "Several minutes
-early" is not proven from code.
+forced return (upstream `docs/pr-151-integration.md:7`). The code does not
+prove "several minutes early".
 
 ### 2.4 Witch's Cipher deadlock and idle fighters (ledger 2)
 
@@ -456,8 +456,8 @@ early" is not proven from code.
   board the merchant waits "waiting for clues" until another player on the
   realm brews a mix; inference: on a quiet realm that never happens. The
   user can set 0 (`dashboard/lib/event-policy.ts:14`).
-- Fighters: brewing is chosen once every ingredient count is above zero
-  (october-runtime.ts:63-65) though a mix uses five, and brewing mode gives
+- Fighters: the runtime chooses brewing once every ingredient count is above
+  zero (october-runtime.ts:63-65) though a mix uses five, and brewing mode gives
   every member the Witch interaction (98). The e9e4bda3 message reports the
   fighters stood at the Witch for the whole drop window.
 Patches: fork da499b7b (merchant sits out gathering), 7253caef (restricted
@@ -617,7 +617,7 @@ reload (2.9).
    still ends it, and the user can undo a mistaken leave. It beats (a)
    because (a) drops the round without asking, and beats (b) because (b)
    has no way back from a misclick. Automated callers such as the fork's AH
-   should not use the manual skip at all. Negatives: a button and a check
+   do not use the manual skip. Negatives: a button and a check
    per command.
 2. **Staging lead (2.3).**
    **Today:** staging opens 120 s before spawn for every walk event, a
@@ -630,18 +630,20 @@ reload (2.9).
    time estimate from the planner; the coordinator's staging checks
    (observations.ts:161, 398, application.ts:1696) must follow the new
    lead.
-   (c) As (b), and staging does not pause Hunt until the walk actually
+   (c) As (b), and staging does not pause Hunt until the walk
    starts (spec 01 question 2). Negatives: as (b), and Hunt must stop
    cleanly mid-mission when the walk starts.
    **Recommendation:** (c). The party leaves when it has to and keeps
    farming until then. It beats (a) because the waiting time is not lost,
    and beats (b) because (b) alone still pauses Hunt for the whole new lead.
    Negatives: a wrong route estimate makes the party late, so the margin
-   needs a measured value.
+   needs a measured value. A ChronAL E2E scenario per walk event measures
+   it: seconds between arrival at the spawn and the spawn time, with the
+   threshold "at the spawn before it opens".
 3. **Join failures (2.2).**
    **Today:** a rejected `join` is logged and retried on the next 10 s poll
    (13418-13421, 17358), and each try asks permission, which writes
-   (EVT-012). The game's replies are known from its server source: `cant_join`
+   (EVT-012). The game's server source defines its replies: `cant_join`
    means the server has no running event of that name, `join_too_late` ends
    A/B testing entry 120 s after the start, and `cant_when_sick`,
    `cant_in_bank` and `no_merchants` describe the character (2.2).
@@ -667,7 +669,7 @@ reload (2.9).
    and the affordability check (october.ts:27; october-runtime.ts:159, 168,
    175). Brewing mode starts once every ingredient count is above zero and
    gives every member the Witch interaction (63-65, 98). The fork at
-   21b8362d (e9e4bda3) sends fighters to gather in a fully stocked round.
+   21b8362d (e9e4bda3) sends fighters to gather in a stocked round.
    **Options:**
    (a) Default `minClues` to 0 and move the gate after affordability.
    Negatives: on an empty board the first mix is a guess (the solver still

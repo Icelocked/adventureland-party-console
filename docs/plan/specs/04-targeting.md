@@ -390,7 +390,7 @@ policy question (TGT-Q3).
 3. 250c61e1 (fork) adds `typeof consolePauseHolds === "function"` guards at both calls.
    9f244b62 (fork) adds the same kind of guard for `pullModeActive` in `queueCandidates`.
 
-Root: the 18,047-line closure (shared.js, `wc -l`) can only be tested by slicing functions
+Root: tests reach the 18,047-line closure (shared.js, `wc -l`) only by slicing functions
 out of it, and the fact "this monster attacks the party" carries travel and Pause policy.
 The guard keeps both. In the current console the passing exceptions inside
 `isAttackingPartyMember` came from four commits (`git log -L` on the function): 9fbeadab
@@ -515,7 +515,8 @@ TGT-021, TGT-022 and TGT-023 have no test.
   or gone, and hands back at 80% with nothing on the tank (fork tank-handoff.ts:15-22).
   Taunt is warrior only and Absorb Sins priest only (game data).
   **Options:** (a) only a warrior or a priest can be off tank. Negatives: fewer parties get
-  an off tank; a priest off tank that absorbs is often also the healer. (b) any class (the
+  an off tank; in a party with one priest, a priest off tank that absorbs is also the
+  healer. (b) any class (the
   fork). Negatives: an off tank without Taunt or Absorb cannot move the attackers; it only
   becomes the tank in the skill context (fork tank-handoff.ts:25-28), so the attackers stay
   on the tank (inference, not measured).
@@ -540,7 +541,10 @@ TGT-021, TGT-022 and TGT-023 have no test.
   **Recommendation:** (b) at 10%. It keeps the data source of (a), so a new reflector is
   never missed, and keeps the mage's damage where almost every hit lands; (c) brings back
   the hand list. Its negatives: a low-HP mage can still die to a reflected hit at 8%
-  (not measured), and the threshold needs a measurement to confirm.
+  (not measured), and the threshold needs a measurement to confirm. That measurement is a
+  ChronAL E2E scenario: a mage basic-attacks a sparkbot and an iceroamer for a fixed
+  number of attacks; measures: reflected hits per 100 attacks and the mage's lowest HP;
+  threshold: no mage death, with each reflected hit logged with its damage.
 - **TGT-Q4. Threat fact vs travel policy.**
   **Today:** `isAttackingPartyMember` (14001-14013) does not count a passing encounter as
   an attacker unless return-departure defence (14057-14061) or a continuous Hunt return
