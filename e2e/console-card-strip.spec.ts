@@ -42,6 +42,8 @@ async function scrollUnder(page: Page, name: string, depth = 400) {
       const header = document.querySelector('[data-party-header]')!.getBoundingClientRect().height;
       window.scrollTo({ top: window.scrollY + element.getBoundingClientRect().top - header + depth, behavior: 'instant' });
     }, depth);
+    // party-console.tsx restores a saved scroll position on timers up to 500 ms after mount; check after they fire.
+    await page.waitForTimeout(600);
     const top = await card(page, name).evaluate(element => element.getBoundingClientRect().top);
     const header = (await box(page, '[data-party-header]')).height;
     expect(Math.abs(top - (header - depth))).toBeLessThan(2);
@@ -256,8 +258,12 @@ test.describe('the docked strip map', () => {
     await page.route('**/party-api/map-stream/*', route => route.fulfill({ contentType: 'text/event-stream',
       body: 'data: ' + JSON.stringify({ name: 'W', map, x, y, at: Date.now(), entities: [], definition }) + '\n\n' }));
     await open(page);
-    // At this depth W's name is under the header and its Inventory toggle sits below the docked map.
-    await scrollUnder(page, 'W', 300);
+    // Just past the name line: W's name is under the header and its Inventory toggle sits below the docked map.
+    const nameDepth = await card(page, 'W').evaluate(article => {
+      const name = article.querySelector('h2')!.closest('.flex.items-start')!;
+      return Math.ceil(name.getBoundingClientRect().bottom - article.getBoundingClientRect().top) + 16;
+    });
+    await scrollUnder(page, 'W', nameDepth);
     const pinned = strip(page, 'W');
     await expect(pinned).toBeVisible();
     await expect(pinned.locator('[data-card-strip-location]')).toContainText('Cave of Many Dreams [31, 47]');
@@ -323,7 +329,7 @@ test.describe('the docked strip map', () => {
     // The card top and the strip share one open state, and only one copy of the map renders.
     await expect(card(page, 'W').locator('canvas')).toHaveCount(1);
     await expect(card(page, 'W').locator('canvas')).toBeVisible();
-    await scrollUnder(page, 'W', 300);
+    await scrollUnder(page, 'W', nameDepth);
     await expect(dock.locator('canvas')).toBeVisible();
     await expect(card(page, 'W').locator('canvas')).toHaveCount(1);
     // Escape with focus inside the map closes it, and so does the strip arrow.
@@ -340,7 +346,7 @@ test.describe('the docked strip map', () => {
     await expect(card(page, 'W').locator('canvas')).toHaveCount(0);
     await card(page, 'W').getByRole('button', { name: 'Expand live map', exact: true }).first().click();
     await expect(card(page, 'W').locator('canvas')).toHaveCount(1);
-    await scrollUnder(page, 'W', 300);
+    await scrollUnder(page, 'W', nameDepth);
     await expect(dock.locator('canvas')).toBeVisible();
     await expect(card(page, 'W').locator('canvas')).toHaveCount(1);
   });

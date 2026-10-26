@@ -5,7 +5,7 @@ import { RadioGroupItem } from '@/components/ui/radio-group';
 import { EventSelectionControl } from './event-selection-control';
 import { Coins } from 'lucide-react';
 import { abbreviatedGold } from './abbreviated-gold';
-import { ActiveStatuses } from './active-statuses';
+import { StatusIconRow } from './status-icon-row';
 import { CharacterMapSection } from './character-map-section';
 import { MonsterDetailsDialog } from './monster-details-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -330,6 +330,7 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
             </div>
           </div>
         </div>
+        <StatusIconRow conditions={char.conditions || emptyArray()} onSelect={onSelectCondition} />
         <CharacterMapSection char={char} />
         <div className="mt-4 flex gap-5 rounded border border-emerald-900/70 bg-black/20 p-3 text-sm">
           <label
@@ -377,11 +378,6 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
             color={Number(char.cc) >= 180 ? "bg-red-900" : "bg-white"}
           />
         </div>
-        <ActiveStatuses
-          key={char.name}
-          conditions={char.conditions || emptyArray()}
-          onSelect={onSelectCondition}
-        />
         {char.ctype !== 'merchant' ? (
           <FarmingModeControl
             settingsOpen={farmingSettingsCharacter === name}
