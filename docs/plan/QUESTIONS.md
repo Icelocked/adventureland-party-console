@@ -346,3 +346,4 @@ One line each; line numbers on b9b5c91e.
 - **S74.** The Kills game log filter starts off (runtime/game-log-filters.ts:4): is off the default you want?
 - **S75.** Metrics history older than 180 days drops out of the kill total (metrics/service.ts:259): label it, or add a lifetime counter?
 - **S76.** Loot "today" uses America/Toronto midnight (metrics-days.ts:1) while kills and DPS use the browser's: was the fixed zone on purpose?
+- **S77.** Each merchant command deposits all gold above its gold target on its first bank visit, and the target is 0 unless set on the merchant card (characters/shared.js:5942-5949; runtime/coordinator/merchant/commands.ts:12-19), so the next job that spends gold starts with another bank visit; with the stand open, stand funding deposits and withdraws in a loop (http/native-stand.ts:67-77): would a default working gold target for the merchant fit your intent?
