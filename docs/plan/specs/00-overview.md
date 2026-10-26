@@ -58,8 +58,9 @@ goes wrong, in the current code and in ours alike.
    208 to 221 (the logged disconnect read 208), and nothing on the merchant checks the budget first (spec 09 ledger
    12). The fork's Ponty pacer counts only its own calls. The dashboard has the same gap:
    in the default shadow mode the 250 ms fallback poll ships every stored
-   field, including a combat trace of about 146 KB per character (spec 12
-   section 2.2 item 2).
+   field, including the combat trace: about 157 KB per character against 9 KB in
+   enforce mode, from a saved four-character state (docs/state-field-registry.md,
+   section Speed).
 6. **Fixes add guards, not owners.** In both histories most bug fixes add a
    flag, a timer or a special case so one part stops overriding another,
    because there is no owner to fix. The fork is the clearest example: 64

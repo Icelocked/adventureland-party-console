@@ -176,14 +176,16 @@ part then has one place to change its text, and convoys get a label for free.
 
 **Today:** with the default `PARTY_STATE_FIELDS=shadow`, the fast poll sends every
 stored field except seven (runtime/coordinator/telemetry/character-fields.ts:252-255),
-including the combat trace, which the field registry sizes at about 146 KB per character
-(:191). It runs every 250 ms whenever the stream is down or not yet healthy. From the
-registry sizes, four characters send about 2.3 MB/s in that state (an estimate, not a
-measurement).
+including the combat trace and grouped combat state. It runs every 250 ms whenever the
+stream is down or not yet healthy. The state field registry doc (docs/state-field-registry.md,
+section Speed) measured the fast section from a saved four-character state at 627,617 bytes
+in shadow mode against 36,656 in enforce mode, about 157 KB against 9 KB per character. At
+250 ms that is roughly 2.5 MB/s (an estimate from that saved state, not a live measurement).
 
-**What I'd suggest:** default to `enforce`, which sends only the whitelist. Your registry
-test checks that whitelist against each field's listed readers, and your E2E field audit
-can record what the dashboard actually reads. I would first confirm the PWA reads only
+**What I'd suggest:** default to `enforce`, which sends only the whitelist. The registry
+test only compares each field's tier with the hand-kept readers lists; the E2E field audit
+(e2e/console-field-registry.spec.ts) records what the dashboard actually reads, so an
+audit run would confirm the whitelist first. I would first confirm the PWA reads only
 whitelisted fields.
 
 **Your answer:**
@@ -251,7 +253,7 @@ removes every listener whatever the frame state.
 
 **Your answer:**
 
-## 20. Should live progress (the Hunt line, farm zone notice) refresh every second?
+## 20. Should live progress (the Hunt line) refresh every second?
 
 **Today:** these lines read `farmingProfiles`, which sits in the config section polled
 every 15 s (runtime/coordinator/telemetry/public-state.ts:77). The leader's Hunt in the
@@ -330,7 +332,7 @@ One line each; line numbers on b9b5c91e.
 - **S60.** When two Hunt pause reasons apply, the event pause wins because the tick checks it first (runtime/coordinator/hunt/tick.ts:92), hiding "select Hunt again": should a reason that needs a click win over one that clears itself?
 - **S61.** Convoy messages go to the merchant activity log (runtime/coordinator/application.ts:416, 1801): show them on the card instead?
 - **S62.** Game logs live only in memory (telemetry/game-logs.ts:3) while combat logs persist: is memory-only intended, and should the panel say so?
-- **S63.** "Online" uses six freshness windows across the page and the coordinator (5, 8 and 15 s, and 10 s in three places): could every element read one connection state per character?
+- **S63.** "Online" uses several freshness windows across the page and the coordinator (5, 8 and 15 s, and 10 s in more than one place): could every element read one connection state per character?
 - **S64.** Only the dashboard forbids a follower routing itself to a monster (dashboard/lib/party-routing.ts:12-14); the runtime accepts it from any client: enforce it in the runtime?
 - **S65.** A merchant marked as a follower shows the leader's farming settings on its card (farming-context.ts:4-6) while the runtime uses its own: should the merchant be refused as a follower?
 - **S66.** Stand-full is `standIsFull` in three places and a plain 16-listing count in five others: should the coordinator publish free stand slots?
