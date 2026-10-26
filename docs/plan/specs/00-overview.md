@@ -1,0 +1,252 @@
+# Party Console Redesign: Overview
+
+## What this is
+
+A plan to rebuild the core of Ryan Haines's Adventure Land party console so
+that every decision has one owner, the console behaves the same or better
+for every feature it has today, and optional features plug in as add-ons
+instead of living in forks that patch the core.
+
+This folder is the plan. Each numbered spec covers one part of the console:
+what it does today (every behaviour, traced to code), what goes wrong and
+why, the design that replaces it, and how we prove nothing was lost. This
+overview ties them together.
+
+## Why this exists
+
+The console works, but its bugs keep coming back in new shapes. A review of
+Ryan's base and the fork built on it found the
+same cause behind most of them: several parts of the code make the same
+decision for the same character, and nothing decides which one wins. Fixes
+then add a flag, a timer or a special case so one part stops overriding
+another. The history of Ryan's base shows 265 gameplay bug fixes (216 by
+Ryan, the rest from contributors' PRs), of which 166 added a guard of that
+kind instead of fixing a cause. The fork repeats the pattern: pull mode
+needed 8 fixes in two days, Achievement Hunt 21.
+
+Patching symptoms one at a time keeps the console running, but every patch
+adds another rule that the next feature has to work around. The redesign
+fixes the ownership gaps themselves.
+
+## What the review found
+
+The review read Ryan's base (682 commits to b9b5c91e) and the fork (239
+commits) function by function (`review/full/inventory-ryan.md` section 1,
+`inventory-fork.md` section 3). The same six patterns explain most of what
+goes wrong, in Ryan's code and in ours alike.
+
+1. **Many parts move the same character.** Movement has 249 call sites in 131
+   functions, 102 of them `stop()`, and any stop ends any journey (spec 02,
+   `node writers.cjs`). The fork's pull walk re-sent its move every tick, and
+   the priest stood still for 400 s (inventory-fork.md chain 3, 3365dd57).
+2. **One fact is worked out in many places.** "A member is at an event" is
+   computed in 32 places (spec 01 GRP-013). Escape and death recovery each
+   define "safe", so after a death the party can wait at a Blink landing
+   that recovery never accepts (spec 05 bug 5).
+3. **Shared resources have many writers.** The merchant's realm has 13
+   writers: the full review listed nine and spec 09 found four more. Six
+   writers share the potion cooldown, one of them from the fork, so the
+   server refuses the second potion with "not_ready" (spec 03 bug 13,
+   spec 05).
+4. **A setting is declared by hand in many lists.** Each of the 119 saved
+   fields sits in 2 to 9 hand-kept lists, 73 of them in 5 to 8 (spec 11).
+   A field missing from the save list is lost at the next restart.
+5. **Calls share one budget that nobody owns.** The game disconnects a socket
+   whose calls pass 200 in 4 s; 13 Ponty reads cost 221, and nothing on the
+   merchant checks the budget first (spec 09 ledger 12). The fork's two
+   limiters do not count each other's calls. The dashboard has the same gap:
+   in the default shadow mode the 250 ms fallback poll ships every stored
+   field, including a combat trace of about 146 KB per character (spec 12
+   section 2.2 item 2).
+6. **Fixes add guards, not owners.** In both histories most bug fixes add a
+   flag, a timer or a special case so one part stops overriding another,
+   because there is no owner to fix (inventory-ryan.md section 2,
+   inventory-fork.md section 3). The fork is the clearest example: 64 fixes
+   of its own code, pull mode 8 in two days, Achievement Hunt 21, Pause 3
+   (section 6), plus 27 `typeof` guards added to the shared character code
+   (spec 13 LIF-W5).
+
+The fork's patchwork is part of the finding. Its features were built beside
+Ryan's code instead of through shared owners, because the console has no
+owners to register with yet, and they needed more fixing than his code did.
+
+What this costs players:
+
+- **Stalls.** The warrior held 405 s for a pulled monster that stopped short
+  (inventory-fork.md D8). Hunt stays stuck after a death until someone acts
+  (spec 05 bug 5).
+- **Deaths.** 127 of 127 priest attacks while a member was under 90% HP went
+  out instead of a heal (spec 03 bug 3a). An escaping mage drank MP at 531 of
+  1873 HP and died to the next hit (spec 05). A fork event walk left the
+  healer behind and the leader died alone at Mr. Pumpkin (spec 02, 653238e1).
+- **Disconnects.** Merchant call bursts pass the 200-per-4-s limit (spec 09).
+- **Wasted event time.** Fighters stood at the Witch for a whole Cipher drop
+  window (spec 06 section 2.4, e9e4bda3). Staging pauses Hunt 120 s before
+  spawn (spec 06 section 2.3), and a rejected join is retried every 10 s
+  while Hunt waits (section 2.2).
+
+Measured gains so far come from the death fixes on the fork (21b8362d): the
+priest heal fix (648b3be0) removes the cause of the 127 of 127 count above,
+and the Cipher fix (e9e4bda3) sends fighters to gather instead of waiting.
+Their after-fix measurements are not yet recorded in a spec with the command
+that produced them, so this page gives no numbers for them until they are.
+
+## Principles
+
+- **One owner per decision.** Where a character moves, which cooldown it
+  spends, what it attacks, what its group is doing, which realm the merchant
+  is on, and what each setting's value is: each has exactly one owner.
+  Everything else asks that owner.
+- **Written rules, not flags.** Each owner decides from a rule table that a
+  person can read, test, and change in one place. When two requests compete,
+  the table says who wins and what happens to the loser (wait, resume, or
+  cancel).
+- **Groups, not "the party".** A group is any set of characters doing one
+  task together. A full party is a group, a character farming alone is a
+  group of one, and the merchant is its own group. Each group has its own
+  task owner. Movement, turns and cooldowns belong to each character
+  whatever group it is in.
+- **No lost functions.** Every behaviour the console has today is listed in
+  a catalog, traced to the code that does it, and covered by a test. The
+  rebuilt console passes Ryan's tests, and every intentional change is
+  written down as a change, never left as a side effect.
+- **Owners are core design; add-ons are for third parties.** Ryan keeps
+  writing his console the way he does now: his features are ordinary core
+  code that uses the owners like any other part of the core. Nothing he adds
+  has to be built as an add-on. Add-on hooks exist so that other people (the
+  user, other contributors, anyone) can extend his existing code without breaking how it
+  works: a hook accepts a registration (a task, a move request, a target
+  rule, a merchant job type, a setting, a dashboard panel, a status line)
+  and the owner applies it under its own rules. Ryan can merge any add-on
+  into the core if he wants it.
+- **One owner at a time.** The core changes in steps, each one shippable and
+  reversible. A new owner runs beside the old code and compares decisions on
+  real play before it takes over.
+- **The same rules everywhere.** The owners are not only bug fixes. Any
+  system that makes shared decisions follows the same pattern, even where no
+  bug has shown up yet, so future features land in the same structure.
+- **No efficiency regressions.** The efficiency work already in the console
+  (Ryan's base and #148: fewer requests, smaller dashboard payloads, cheaper
+  persistence) is a floor, not a starting point. Every owner is measured
+  before and after against the same benchmarks, and an owner that costs more
+  than the code it replaces does not ship until it is fixed.
+- **Function without bloat.** Every design choice is weighed as what it
+  makes work against what it adds: code, state, calls, time per tick. The
+  simplest structure that does the job wins. A rule table only holds rules
+  the console applies, and an owner holds only the state it decides from.
+- **Hooks are always there, and free when unused.** Each owner exposes its
+  hooks at its decision points from the start, so an add-on never has to
+  edit core code to plug in. With nothing registered, a hook is a check of an
+  empty list and the owner takes its normal path, so it costs next to
+  nothing. Hooks sit at owner decision points, not scattered through the code.
+- **One hook registry, the same way as the field whitelist.** Every hook is
+  declared in a single registry file (name, owning part, what it receives,
+  what it may return), the same pattern as the state field registry and its
+  fork whitelist. Adding a new hook means one entry there plus one call at
+  the owner's decision point. An add-on lives in its own folder and is
+  enabled by one line in the add-on list, so turning one on or off never
+  touches core files.
+- **Two kinds of hook, no more.** A notice tells add-ons something happened
+  and cannot change the outcome. A request goes into the owner's existing
+  rule table like any core request, with a priority the core caps so no
+  add-on outranks escape or death recovery; when several add-ons ask, the
+  rule table decides exactly as it does for core requests. No separate
+  merge rules, ownership claims or bookkeeping are added for add-ons; a new
+  kind is added only when a real add-on needs it.
+- **Every log has a limit.** Decision records live in a fixed-size buffer
+  per character in memory, so the newest replace the oldest. Records are
+  saved to disk only when something goes wrong (a death, a stall, a failed
+  task) and those saved records are pruned by age and count. The comparison
+  logs used during a switch-over are deleted with the comparison code. No
+  store grows without bound, as `production.attempts` did (Ryan's #59).
+- **Clear the noise, then the numbers.** Once handling bugs stop masking
+  them, wrong values, typos and game-rule mismatches become visible. Each one
+  found during the review is fixed or listed in its spec, not deferred.
+- **Explain every change in plain terms.** Each change comes with a short
+  write-up that Ryan, or the agent he works with, can check on his own: what
+  goes wrong today with evidence, what the change does, which tests prove
+  nothing was lost, and what improves. A change he does not take still has
+  to stand on its own in this console.
+
+## Working with Ryan
+
+Ryan started this project and the console is his design. This plan works
+alongside his code, not against it: it watches his updates for fixes and
+ideas, compares his approach with ours for efficiency, and offers changes
+that measurably improve the console. Preference changes (layout, wording)
+are offered as options, never argued. If he does not adopt a change, the
+console here keeps it and keeps taking his updates.
+
+## The parts
+
+| Spec | Part | Owner it defines |
+|---|---|---|
+| [01](01-groups-and-tasks.md) | Groups and tasks | What each group is doing, and which task wins |
+| [02](02-movement.md) | Movement | Where each character moves, and who may stop it |
+| [03](03-turns-and-cooldowns.md) | Turns and cooldowns | Which action spends each shared cooldown |
+| [04](04-targeting.md) | Targeting | What each character attacks or avoids |
+| [05](05-survival.md) | Survival | Heals, potions, escape and death recovery |
+| [06](06-events.md) | Events | Event schedules, travel, joining, attendance and returns |
+| [07](07-hunts-and-farming.md) | Hunts and farming | Monster Hunt, farming modes, farm areas, rares, Cave |
+| [08](08-merchant-jobs.md) | Merchant jobs | Which job the merchant runs and what interrupts it |
+| [09](09-merchant-realm-and-gear.md) | Merchant realm and gear | Which realm the merchant is on, what it holds |
+| [10](10-inventory-bank-commerce.md) | Inventory, bank and commerce | Items, banking, upgrades, markets, Ponty and Ron |
+| [11](11-settings.md) | Settings | Every saved value: one registry, one writer |
+| [12](12-dashboard-and-status.md) | Dashboard and status | What the dashboard shows and where status text comes from |
+| [13](13-lifecycle.md) | Lifecycle | Start, stop, deploy, pause, code reload and the character loader |
+| [14](14-add-on-hooks.md) | Add-on hooks | The registration API each owner exposes |
+| [15](15-testing.md) | Testing | Proof of function: Ryan's tests, the catalog, and pruning |
+
+These parts are not independent. A group's task drives movement requests,
+targeting feeds turns, survival can take movement away from any task, and
+settings and status run through everything. Each spec names the owners it
+asks and the owners that ask it.
+
+## How each spec is laid out
+
+1. **What it does today.** Every behaviour, numbered (for example `MOV-014`),
+   with the functions and files that implement it. Every function in Ryan's
+   base belongs to exactly one spec's catalog; `catalog/` holds the proof.
+2. **What goes wrong.** Each known bug and patchwork pattern in this part,
+   with its causal chain and the commits that patched it.
+3. **The design.** The owner, its rule table, its inputs and outputs, and
+   the hooks it exposes.
+4. **What changes for the player.** Every behaviour that changes on purpose,
+   with the reason. Anything not listed here stays the same.
+5. **Proof.** The tests that show each behaviour still works and each fix
+   holds: Ryan's existing tests, plus new tests where a behaviour has none.
+6. **Migration.** The steps to replace the old code with the owner, what can
+   be deleted after, and how to roll back.
+7. **Gaps.** Must be empty before the spec is done.
+
+## Ground rules while the plan runs
+
+- **Ryan's code keeps moving.** The catalog and the function index are
+  rebuilt on his latest branch at a regular interval, and every spec notes
+  the ref it was checked against. His changes are read for fixes and ideas,
+  and the plan absorbs them rather than freezing on an old version.
+- **Feature freeze.** No new features or fork additions until the plan is
+  done. Only urgent, game-breaking bugs are fixed meanwhile, and each such
+  fix is recorded in the spec it touches.
+- **Game bugs go to the game.** When a problem is in the game itself, it is
+  reported through the game's own channel with a clean reproduction that
+  rules out console code: the smallest script or plain client steps that
+  show it, on Ryan's base or with no console at all.
+- **New code will have bugs.** Each owner ships with its comparison log,
+  its tests and a rollback. A bug in new code is traced to the rule or input
+  that caused it, fixed at the owner, and gets a test, the same standard the
+  plan holds the old code to.
+- **Reviews the user owns** are listed in a separate review queue:
+  every rule table, every "what changes for the player" entry, and every
+  call that needs a decision on how the party should behave.
+
+## Milestones
+
+- **M0: the map.** Every spec's "what it does today" section is complete and
+  every function in Ryan's base is claimed. Every test is mapped to the
+  behaviours it proves.
+- **M1: the designs.** Every owner's rule table and hooks are written and
+  reviewed with Ryan.
+- **M2 onward: one owner per milestone,** in the order set in
+  `docs/implementation/04-migration-order.md`, smallest and most
+  bug-removing first.
