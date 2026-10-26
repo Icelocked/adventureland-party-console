@@ -6,7 +6,8 @@ exported or imported, and read. Spec prefix `SET`.
 Checked against the current console `refs/review/ryan-1.5` (`b9b5c91e`) in
 (local checkout). Fork lines are labelled "fork" and cite `HEAD`
 (`af92de45`) in the same checkout. Line numbers are on those refs. "Inference" marks a
-claim the code supports but that no test, log or live run here proves.
+claim the code supports but that no test, log or live run here proves. Verification log:
+`docs/implementation/09-verification-11-13.md`.
 
 Commands used for counts (run from (local checkout), with
 `R=(local checkout)):
@@ -23,16 +24,16 @@ Commands used for counts (run from (local checkout), with
 ### Where saved values live
 
 The coordinator keeps its state in one mutable `party` object
-(runtime/coordinator/initial-state.ts:60-115). Saved values go to one append-only journal,
-`caraGarage.jsonl` (`/data/localStorage/caraGarage.jsonl` in Docker,
-runtime/coordinator/http/dashboard-import.ts:23-26), through `CoordinatorJsonlStore`
-(runtime/coordinator/persistence/jsonl-store.ts:29, wired as `FileStoredKeyValues` at
-runtime/coordinator/infrastructure/dependencies.ts:71 and created at
-runtime/coordinator/application.ts:99).
+(runtime/coordinator/initial-state.ts:60-115). `CoordinatorJsonlStore`
+(runtime/coordinator/persistence/jsonl-store.ts:29) saves it to one append-only journal,
+`caraGarage.jsonl`. The import metadata route reports the Docker path
+`/data/localStorage/caraGarage.jsonl` (runtime/coordinator/http/dashboard-import.ts:23-26).
+infrastructure/dependencies.ts:71 wires the store as `FileStoredKeyValues`, and
+application.ts:99 creates it.
 
 The journal holds eight coordinator documents under fixed keys
-(runtime/coordinator/persistence/snapshots.ts:2-13), plus every key the character workers
-write to their game `localStorage` (SET-014):
+(runtime/coordinator/persistence/snapshots.ts:2-13), plus every key the headless character
+workers write to their game `localStorage` (SET-014):
 
 | Key | Contents | Field list | Saved when |
 |---|---|---|---|
@@ -42,66 +43,73 @@ write to their game `localStorage` (SET-014):
 | `party_dashboard_production_state_v1` | production receipts | `{production}` (writer.ts:130) | with every settings save |
 | `party_dashboard_roster_state_v1` | 6 roster fields | `rosterFields` (:22-29) | on `persistRosterState` |
 | `party_dashboard_bank_state_v1` | 6 bank fields | `bankFields` (:30-37) | on `persistBankState` |
-| `party_dashboard_history_state_v1` | merchant activity and combat logs, 500 lines each | `historySnapshot` (:222-232) | within 5 s (SET-006) |
+| `party_dashboard_history_state_v1` | merchant activity (newest 500 lines) and combat logs (newest 500 lines per character) | `historySnapshot` (:222-232) | within 5 s (SET-006) |
 | `party_dashboard_aldata_state_v1` | ALData key and auth | `authFields` (:149) | on `persistALData` |
 
 `settingsFields` has 99 names and the four document lists together have 119 distinct
 fields (`settings-field-lists.cjs` "counts" and "persisted").
 
 The console configuration file (`config.js`, read through `require("../config")`,
-application.ts:106-108) holds characters, merchant, session and web settings. The console
-reads it once at start and never writes it (SET-020).
+application.ts:106-108) holds characters, merchant, session and web settings. The
+coordinator reads it once at start and never writes it (SET-020). The host start tool
+writes it at account setup (tools/hosting/start.mts:44-63, spec 13 LIF-035).
 
 Two other places hold saved values that this spec only lists:
 
 - **Character-side journals.** Code running in each character writes crash-recovery and
-  UI state to its game `localStorage`. Those writes reach the coordinator journal through
-  SET-014. The key prefixes on the current console are: `party-bank-sort-buffer`,
+  UI state to its game `localStorage`. For headless workers those writes reach the
+  coordinator journal through SET-014. The `localStorage` and `sessionStorage` key
+  prefixes on the current console are: `party-bank-sort-buffer`,
   `party-bank-stack-buffer`, `party-cave-revival`, `party-code-stopped`, `party-commerce`,
-  `party-console-return`, `party-console-switcher`, `party-deliveries`,
-  `party-dungeon-actions`, `party-force-travel`, `party-game-log-*` (5 keys),
-  `party-lucky-slot-tracking`, `party-lucky-upgrade`, `party-monster-travel`,
-  `party-october-`, `party-preview-supplies`, `party-production`, `party-steam-client`,
-  `party-travel`, `party-upgrade-preview-revision` (from
-  `grep -on "[\"'\`]party-[a-z-]*[:\"'\`]" characters/shared.js runtime/characters/*.ts runtime/characters/*/*.ts runtime/steam/*.ts`
-  on the extracted ref). Each journal belongs to the spec of the feature that writes it
-  (handoffs-11.json names the ones the proposal sent here).
+  `party-console-return`, `party-deliveries`, `party-dungeon-actions`, `party-force-travel`,
+  `party-game-log-*` (5 keys), `party-lucky-slot-tracking`, `party-lucky-upgrade`,
+  `party-monster-travel`, `party-october-`, `party-preview-supplies`, `party-production`,
+  `party-travel`, `party-upgrade-preview-revision`, and the Steam client's
+  `sessionStorage` id `party-steam-client` (runtime/steam/bridge.ts:107-108). The list comes from
+  `git grep -ohE "[\"'\`]party-[a-z-]*[:\"'\`]" refs/review/ryan-1.5 -- characters/shared.js 'runtime/characters/*.ts' 'runtime/characters/*/*.ts' 'runtime/steam/*.ts'`;
+  the grep also finds `party-console-switcher`, which is a DOM id (runtime/steam/switcher.ts:21).
+  Each journal belongs to the spec of the feature that writes it (handoffs-11.json names
+  the ones the proposal sent here).
 - **Dashboard browser storage** (panel state, drafts). Spec 12 owns it.
 
 ### Saving
 
 - **SET-001** Each document is a whitelist snapshot of named `party` fields
-  (`selectSnapshot`, snapshots.ts:152-156). Timers, processes and credentials stay out
-  because no list names them (writer.ts:45).
-- **SET-002** Every service gets the same `persist: persistSettings` port
-  (application.ts:1293-1295). It calls `scheduleSettings`, which sets one 1 s timer;
-  further calls inside that second do nothing (writer.ts:186-190). The current coordinator has
-  607 lines that mention `persist` or `persistSettings`
-  (`git grep -c -E "\bpersist(Settings)?\b" refs/review/ryan-1.5 -- runtime/coordinator`, counted by the full review, review/full/core.md:232).
+  (`selectSnapshot`, snapshots.ts:152-156). Timers and process handles stay out because no
+  list names them. The ALData key and auth go only to their own document (`authFields`,
+  :149; writer.ts:45).
+- **SET-002** `persistSettings` (application.ts:1293-1295) calls `scheduleSettings`, which
+  sets one 1 s timer; further calls inside that second do nothing (writer.ts:186-190).
+  application.ts passes it as `persist: persistSettings` to 57 services; three others get
+  `persistRosterState` or `persistBankState` (:991, :1027, :2486). The current coordinator
+  has 607 lines that mention `persist` or `persistSettings`
+  (`git grep -c -E "\bpersist(Settings)?\b" refs/review/ryan-1.5 -- runtime/coordinator`, summed).
 - **SET-003** A settings save writes selections, the market cache and production first,
   then the settings document, so a settings record with the layout 2 marker always has its
-  split documents on disk (writer.ts:120-146). It serializes each listed field, compares
-  the set with the last saved set, and writes nothing when they match (writer.ts:93-103,
-  :134-138). The journal itself also skips a record whose JSON equals the stored JSON
-  (jsonl-store.ts:227-229).
+  split documents on disk (writer.ts:120-146). It serializes each listed field and compares
+  the set with the last saved set. When they match it skips the settings document
+  (writer.ts:93-103, :134-138); the three split documents are still offered to the store,
+  which skips a record whose JSON equals the stored JSON (jsonl-store.ts:227-229).
 - **SET-004** When the only differences are timestamps inside five liveness fields
   (`eventAttendance`, `eventSessions`, `farmingProfiles`, `farmAreaState`,
   `standPriceHistory`, snapshots.ts:198-200), the save waits until 30 s after the previous
   settings record (`SETTINGS_LIVENESS_MS`, writer.ts:41, :139-144). `withoutLiveness`
-  blanks `lastLiveAt`, `lastObservedAt`, `elapsedMs`, `authorizedAt` and `seenAt`, drops
-  `seen`, and keeps only the keys of `quiet` (snapshots.ts:201-215).
+  sets the numeric values of `lastLiveAt`, `lastObservedAt`, `elapsedMs`, `authorizedAt` and
+  `seenAt` to 0, drops `seen`, and keeps only the keys of `quiet` (snapshots.ts:201-215).
 - **SET-005** Shutdown calls `flush`, which writes every `settingsFields` entry and the
   market fields into the settings document (the v1.4.0 layout) and then saves pending
   history (writer.ts:151-163, :192-198). A v1.4.0 build started after a shutdown reads every
   field.
 - **SET-006** History saves at most 5 s after the first new line (`HISTORY_SAVE_MS`,
-  writer.ts:34, :177-182), each stream capped at the newest 500 lines
-  (snapshots.ts:227-229). A failed timed save stays pending for the next line or the
-  shutdown flush (writer.ts:171-176).
+  writer.ts:34, :177-182). Merchant activity keeps the newest 500 lines and each
+  character's combat log keeps its newest 500 (snapshots.ts:227-229). A failed timed save
+  stays pending for the next line or the shutdown flush (writer.ts:171-176).
 - **SET-007** Roster, bank and ALData credential documents save at once when their owner
   calls (writer.ts:113-119, :183-185; application.ts:1221-1223, :1272-1274, :1301-1303).
-  Offline character snapshots in the roster document save on a content change, not on each
-  30 s refresh (status/character-appearance.ts:150-204).
+  An offline character snapshot is saved to the roster document when its inventory
+  changed or its last saved copy is 5 minutes old (`SNAPSHOT_SAVE_MS`,
+  status/character-appearance.ts:142, :183-192). A roster save between those points carries
+  the last saved copy (`rosterSnapshots`, :199-204).
 
 ### The journal
 
@@ -110,31 +118,35 @@ Two other places hold saved values that this spec only lists:
   (:91-123). A bad last line is a torn write: its bytes go to `<journal>.torn-<time>` and
   the journal is cut back to the last whole record (:129-146). A bad line followed by more
   records is corruption: the start fails with the line number and offset (:98-100,
-  :124-128). It compacts once superseded bytes pass 32 MB and three times the live bytes,
-  or at 128 MB (:18-26, :194-208). Shutdown compacts a live set up to 64 MB (:24, :245-260).
-  A Windows sharing error during compaction defers it 30 s (:179-186).
+  :124-128). A value with no JSON form saves as a deletion (:219-225).
+- **SET-021** The journal compacts by rewriting the live records to the replacement file
+  and renaming it over the journal (`refactor`, jsonl-store.ts:162-178). It compacts at
+  start when the file holds superseded records (:57), after a save once superseded bytes
+  pass 32 MB and three times the live bytes (:18-19, :194-208), at once at 128 MB (:26,
+  :199), and at shutdown for a live set up to 64 MB (:24, :245-255). An `EPERM`, `EACCES`
+  or `EBUSY` rename error defers compaction 30 s (:179-186).
 - **SET-009** One process writes the journal at a time. The writer lock
   (`<journal>.writer.lock`) records PID, platform and, on Linux, process start time, boot
   id and PID namespace (process-lock.ts:13-22); Linux also holds a `flock` guard
-  (jsonl-store.ts:79-90). A lock is removed only when its owner is proven gone
-  (process-lock.ts:58-70). A legacy PID-only lock counts as live while that PID exists
-  (:59-63). `scripts/validate-journal-container-restart.cjs` proves the guard across
-  containers with Docker.
+  (jsonl-store.ts:79-90). The store removes a lock only when its owner is proven gone
+  (process-lock.ts:57-70); an owner it cannot verify fails the start. A legacy PID-only lock
+  counts as live while that PID exists (:59-63). `scripts/validate-journal-container-restart.cjs`
+  proves the guard across containers with Docker.
 
 ### Loading and migrating
 
 - **SET-010** At start, `./localStorage/storage.json` from older caracAL moves into the
   journal entry by entry, then the old file is deleted (persistence/legacy-storage.ts:11-33,
-  called from environment.ts:31).
+  called from environment.ts:31). An empty file is deleted with no transfer (:23-31).
 - **SET-011** Load reads each of the six top-level documents on its own. An unreadable
   document becomes `{}` with a named warning while the others load
   (persistence/initial-snapshots.ts:4-32, :39-59; json-store.ts:20-37).
 - **SET-012** Only a settings document carrying `persistenceLayout: 2` takes its market
-  and production fields from their own keys; a document written by a v1.4.0 build, before or
-  after a rollback, keeps its own copies (initial-snapshots.ts:61-80).
+  and production fields from their own keys (initial-snapshots.ts:61-80). A document written
+  by a v1.4.0 build, before or after a rollback, keeps its own copies.
 - **SET-013** `createInitialCoordinatorState` builds `party` from named fields "in legacy
   evaluation order", each with a default (initial-state.ts:59-115, initial-core.ts:6-58,
-  plus 13 domain initializers it imports at :1-20, owned by their specs). Startup then runs
+  plus 13 domain initializers it imports at :8-20, owned by their specs). Startup then runs
   migrations owned by other specs: shared rules (application.ts:194), farming scopes (:195),
   saved farm areas (:216), the stand location (:217), character selections and monster
   focus (:222-223), empty focus intents (:234-238), and an unconditional delete of the
@@ -151,15 +163,16 @@ top-level fields with getters and setters into the leader's profile in
 `combatHuntBoundary`, `eventReturn`, `eventSessions`, `abtestingStrategy`,
 `rareHuntReturn`, `rareRetryEvidence`, `rarePursuitProgress`, `phoenixPatrolActive`,
 `phoenixPatrolCheckpoint`. The fork adds 4 (`achievementHunt`, `achievementBlacklist`,
-`achievementTarget`, `achievementPassive`), which makes the 23 in the review.
+`achievementTarget`, `achievementPassive`), which makes the 23 in the review; layout 2
+saves both fork copies in the Achievement Hunt document (fork snapshots.ts:202-225).
 
 How the two copies behave (scopes.ts:35-55):
 
 - A save writes both from one object: the top-level getter returns the leader's profile
   value, and `farmingProfiles` holds the same object.
-- Load prefers the saved profile for a leader who has one (:40-44). The top-level copy
-  seeds the "orphan" scope (:36-37). The orphan becomes the leader's profile only when the
-  leader has none (:50), and it is the live scope while `leader` is null (:51).
+- The top-level copy seeds the "orphan" scope (:36-37). The orphan becomes the leader's
+  profile only when the leader has no saved profile (:50), so load uses the saved profile
+  when one exists. The orphan is the live scope while `leader` is null (:51).
 - So the copies differ only in a journal written before scopes existed, or while there is
   no leader. In the no-leader case the top-level copy is the only copy and is needed.
 
@@ -180,59 +193,73 @@ type), the 119 saved fields on the current console appear in:
 
 73 of 119 fields (61%) sit in 5 to 8 lists; `restockPolicies` sits in 9. The fork's tank
 roles (`designatedTank`, `offTank`, `pullMode`) each sit in 7, plus a type line in
-status/response-types.ts:91 (fork) and the character reader at characters/shared.js:11953
-(fork). The lists not counted by the script also need edits for a new setting: the
+status/response-types.ts:91 (fork) and the character reader at characters/shared.js:11953-11955
+(fork). The lists the script does not count also need edits for a new setting: the
 dashboard action-to-domain map (dashboard/features/party/query-actions.ts, spec 12), the
 route that writes it, and every character-side reader in shared.js.
 
 One tie exists between lists: `configFields` must be a subset of `publicStateFields`
-(`satisfies`, telemetry/public-state.ts:92), checked by the type checker. Nothing else ties
-them. the current console has a test-checked registry for per-character status fields only
-(telemetry/character-fields.ts:1-35, scripts/tests/character-field-registry.test.cjs).
+(`satisfies`, telemetry/public-state.ts:92), and the type checker enforces it. Nothing else ties
+them. The current console has a test-checked registry for per-character status fields only
+(telemetry/character-fields.ts, header at :1-12; scripts/tests/character-field-registry.test.cjs).
 
 ### Export and import
 
-- **SET-014** A worker's game `localStorage` writes travel to the coordinator as `stor` IPC
-  messages and land in the same journal; the coordinator then broadcasts each change to
-  every other worker, except metrics outbox keys, which go only to their owner
-  (coordinator/characters/storage.ts:14-59, ipc.ts:117-126). On `init` a worker gets every
-  shared key plus its own outbox keys (storage.ts:20-26, :42-45).
-- **SET-015** `GET /party-api/dashboard-state/export` returns
-  `{format: "party-console-settings", version: 1, settings}` with the 47 fields that have an
-  import validator; farming profiles carry only `huntBlacklist`, `huntFailures` and
-  `huntSettings` (persistence/dashboard-import.ts:29-34, :216-220).
+- **SET-014** A headless worker's game `localStorage` and `sessionStorage` writes travel to
+  the coordinator as `stor` IPC messages (coordinator/characters/storage.ts:40-59,
+  ipc.ts:117-126). `localStorage` writes land in the journal (application.ts:250);
+  `sessionStorage` writes land in an in-memory map (environment.ts:32). The coordinator then
+  sends each change to every worker block, the sender included (ipc.ts:79-81), except
+  metrics outbox keys, which go only to their owner (storage.ts:14-18, :28-38). On `init` a
+  worker gets every shared key plus its own outbox keys (storage.ts:20-26, :42-45). A
+  `clear` deletes every key in the store (:53-55), which for `localStorage` includes the
+  coordinator's own documents; no sender of `clear` was found in this repository.
+- **SET-015** `GET /party-api/dashboard-state/export` (http/dashboard.ts:67) returns
+  `{format: "party-console-settings", version: 1, settings}` with each of the 47 fields
+  that has an import validator and is present in state; farming profiles carry only
+  `huntBlacklist`, `huntFailures` and `huntSettings` (persistence/dashboard-import.ts:29-34,
+  :216-220).
 - **SET-016** Import accepts that format or a raw journal (JSONL replayed in order with
   tombstones, settings then selections) up to 128 MB (dashboard-import.ts:134-174,
-  :221-247). Every present field must pass its validator or nothing imports
+  :221-247). It rejects `__proto__`, `prototype` and `constructor` keys and nesting deeper
+  than 40 (:117-125). Every present field must pass its validator or nothing imports
   (:186-190). Per-character maps drop characters the account no longer owns, and three item
-  lists drop entries naming them (:97-115, :191-214). Preview is read-only and returns a
-  SHA-256 digest; import requires the same digest in `X-State-Preview`, refuses while the
-  roster is loading, copies the journal to `<journal>.before-import-<time>-<hex>.jsonl`
-  with an exclusive create, applies, and restores the previous values in memory if the save
-  throws (http/dashboard-import.ts:30-82, http/dashboard-import-composition.ts:125-141).
-  Import merges farming profiles into existing ones and migrates routine priorities and
-  passive hunting (dashboard-import.ts:249-265). The validator comment says it excludes
-  "jobs, credentials, runtime ownership and navigation checkpoints" (:40); `leader`,
+  lists drop entries naming them (:97-115, :191-214). Import merges farming profiles into
+  existing ones, migrates routine priorities and passive hunting, and clears a pending bank
+  sort request in automatic mode (dashboard-import.ts:249-265). The validator comment says it
+  excludes "jobs, credentials, runtime ownership and navigation checkpoints" (:40); `leader`,
   `followers` and `activeRealm` are not importable.
+- **SET-022** The import routes (http/dashboard.ts:67-77) refuse while the roster is
+  loading (http/dashboard-import.ts:55). Preview is read-only and returns a SHA-256 digest
+  of the file and its parse; import requires the same digest in `X-State-Preview` or
+  answers 409 (:58-63). Import then copies the journal to
+  `<journal>.before-import-<time>-<hex>.jsonl` with an exclusive create
+  (http/dashboard-import-composition.ts:34-37), applies the values and calls `persist`
+  (:30-40). If applying or `persist` throws, it restores the previous values of the
+  imported fields in memory and answers 500 with the backup path (:41-51, :68-75). Its
+  `persist` is `persistSettings` (application.ts:978), which only schedules the save, so a
+  failed journal write one second later never reaches this path.
 
 ### Settings routes in this spec
 
-- **SET-017** `POST /party-api/dashboard-preferences` writes `bankboiPrefix` (empty or 3 to
-  11 of `[A-Za-z0-9_]`) and `anniversaryAutoChat` (boolean), then persists
-  (http/dashboard-import.ts:86-97).
-- **SET-018** `POST /party-api/formation` (http/formation.ts:90-111) writes, in this order:
-  `leader` (must be a managed worker, :93-97), then for `character`: `followers[name]`
-  (:82-85), event limits (:59-67), event priorities (:52-58, a complete order or an older
-  client's order with the October events appended, :44-51), event selections (:28-34), and
-  the legacy `events` flag (:35-43). It then calls `changed` (farming membership reconcile,
-  application.ts:700) and `persist`. Spec 01 owns what leader and follow mean; this spec
-  owns the write path.
-- **SET-019** `POST /party-api/config` writes `threshold` (safe integer 0 to 1e12),
-  `itemCollectionThreshold` (1 to 42) and `buyUpgradeBatchSize` (1 to 42), signals a
-  collection change when the second is present, and persists
-  (http/thresholds.ts:153-186).
-- **SET-020** `config.js` is read once in `initializeCoordinatorEnvironment`
-  (environment.ts:36) and never written.
+- **SET-017** `POST /party-api/dashboard-preferences` (http/dashboard.ts:68) checks
+  `bankboiPrefix` (empty or 3 to 11 of `[A-Za-z0-9_]`) and `anniversaryAutoChat`
+  (boolean), then writes both and persists (http/dashboard-import.ts:86-97). It checks
+  both fields before it writes either.
+- **SET-018** `POST /party-api/formation` (http/formation.ts:90-111, registration.ts:102)
+  writes, in this order: `leader` (must be a managed worker, :93-97), then for `character`:
+  `followers[name]` (:82-85), event limits (:59-67), event priorities (:52-58, a complete
+  order or an older client's order with the October events appended, :44-51), event
+  selections (:28-34), and the legacy `events` flag (:35-43). It then calls `changed`
+  (farming membership reconcile, application.ts:700) and `persist` (:100-101). Spec 01 owns
+  what leader and follow mean; this spec owns the write path.
+- **SET-019** `POST /party-api/config` (registration.ts:267) writes `threshold` (safe
+  integer 0 to 1e12), `itemCollectionThreshold` (1 to 42) and `buyUpgradeBatchSize`
+  (1 to 42), each converted with `Number()` first, so `"5"` and `true` pass
+  (http/thresholds.ts:13-25). It signals a collection change when the second is present,
+  answers 400 when no field is supplied, and persists (:27-45).
+- **SET-020** `initializeCoordinatorEnvironment` reads `config.js` once (environment.ts:36);
+  the coordinator never writes it.
 
 Every other settings route belongs to the spec of its feature (merchant config, hunt
 settings, focus, routine priorities and others); handoffs-13.json lists each.
@@ -256,72 +283,86 @@ Causal chain:
    serializes only listed fields (writer.ts:79-86, :131), so a field left out is silently
    lost at the next restart.
 3. Loading it needs a line in a domain initializer (for example `leader: saved.leader || null`,
-   initial-core.ts:19); without it, the saved value is ignored.
+   initial-core.ts:19); without it, load ignores the saved value.
 4. Showing it needs `publicStateFields`, `configFields` or core, and the `PartyState` type.
 5. Characters see it only through `heartbeatStateFields` or the response builder.
 6. Export and import need a validator, and `perCharacter` if it is keyed by character.
 
 Each step is a separate hand-kept list; 73 of 119 fields need 5 to 8 of them (table above).
-fdb0147a removes a field (`gearSets`) by deleting it from these lists, which is the same
-mechanism a mistake would use. Patch history: none; this is the design.
+The fork commit fdb0147a removes a field (`gearSets`) by deleting it from six of these
+files, which is the same mechanism a mistake would use. Patch history: none; this is the
+design.
 
 ### SET-W2. Partial writes on validation failure (current, fork extends)
 
 1. `formation` writes `state.leader` (formation.ts:96), then `followers[name]` (:84), then
-   event settings (:59-77).
-2. A later check fails and the handler returns 400 before `persist` (:98-99).
-3. The earlier writes stay in memory and reach disk with the next unrelated save. The
-   dashboard sees an error while the leader or follow flag already changed.
-4. `/party-api/config` has the same order: `threshold` is written (thresholds.ts:163) before
-   `itemCollectionThreshold` is checked (:172).
-5. Fork: `tankRoles` writes between the leader and the character fields (fork formation.ts:99-110,
+   event settings (:59-77). Event limits are written before priorities are checked, and
+   priorities before selections (:68-77).
+2. A later check fails and the handler returns 400 or 409 before `changed` and `persist`
+   (:98-101).
+3. The earlier writes stay in memory, and the next save from any of the 57 services
+   carries them to disk. The dashboard sees an error while the leader or follow flag already
+   changed, and the farming membership reconcile has not run for that change.
+4. `/party-api/config` has the same order: `threshold` is written (thresholds.ts:30) before
+   `itemCollectionThreshold` is checked (:32), and both before `buyUpgradeBatchSize` (:34).
+   A failure there also skips the collection signal (:36).
+5. Fork: `tankRoles` writes between the leader and the character fields (fork formation.ts:99-109,
    called at :118), so a bad `character` body also leaves tank roles changed.
+   `tankRoles` itself checks all three fields before it writes any (:100-107).
 
 ### SET-W3. Import and route accept different values (current)
 
 - `threshold`: the import validator accepts any finite number (dashboard-import.ts:59); the
-  route accepts only safe integers 0 to 1e12 (thresholds.ts:170).
+  route accepts only safe integers 0 to 1e12 after `Number()` (thresholds.ts:21-22, :30).
+  The route also accepts `"5"` and `true`, which the validator refuses.
 - `itemCollectionThreshold`: the validator accepts any positive number (:60); the route
-  accepts integers 1 to 42 (:172). 42 is the inventory slot count, so an imported 50 or 0.5
-  is a value the route would refuse and the collection rule cannot meet (inference about
-  its effect).
-- `buyUpgradeBatchSize` and `bankboiPrefix` agree between the two (:56, :61 against
-  thresholds.ts:174 and http/dashboard-import.ts:89).
+  accepts integers 1 to 42 (:32). 42 is the base inventory size (game node/server.js:1483
+  `player.isize = 42`), so an import can save 50 or 0.5, values the route refuses.
+  Inference: the collection rule cannot meet 50.
+- `buyUpgradeBatchSize` and `bankboiPrefix` agree on range between the two (:56, :61 against
+  thresholds.ts:34 and http/dashboard-import.ts:89).
 
 ### SET-W4. No record of who changed a setting (current)
 
-`formation` writes leader and follow with no activity line (formation.ts:90-111); most
-settings routes do the same. The only trace is the next journal record, which holds the new
-value and no source. This is why bug 9 cannot be attributed (below).
+`formation` (formation.ts:90-111), `dashboard-preferences` (http/dashboard-import.ts:86-97)
+and `config` (thresholds.ts:27-45) write with no activity line. The only trace is the next
+journal record, which holds the new value and no source. Bug 9 has no attribution for this
+reason (below).
 
 ### SET-W5. The dashboard shows defaults until the config domain loads (current)
 
 1. Settings fields are in the `config` domain (public-state.ts:74-92) and removed from `core`
    (:111-115).
-2. `config` polls every 15 s (query-cache.tsx:178) with `retry: false` (:41).
+2. `config` loads on mount and then every 15 s (query-cache.tsx:178, :200) with
+   `retry: false` (:41).
 3. The merged state uses defaults for anything `config` has not delivered
-   (use-party-console.tsx:163-164), so a fresh page shows "None" or default values while the
-   saved values are intact.
+   (use-party-console.tsx:163-164). A fresh page shows "None" or default values until the
+   first `config` reply, while the saved values are intact. When that first request fails,
+   for example while a restarted coordinator comes up, the defaults stay until the next
+   poll, up to 15 s later.
 4. Spec 12 owns the display. This spec records it because it is the display path of bug 9.
    Inference: any control that writes on change can save the default it is showing.
 
 ### SET-W6. Smaller findings (current)
 
-- jsonl-store.ts:248 carries a production branch shaped by a test host ("The vm host in
+- jsonl-store.ts:248-249 carries a production guard shaped by a test host ("The vm host in
   scripts/tests/helpers/coordinator-host.cjs defines no clearImmediate").
 - A legacy PID-only writer lock is "live" whenever any process has that PID
-  (process-lock.ts:59-63), and non-Linux owners are judged by PID alone (:69). A Windows
-  reboot that reuses the PID keeps a stale lock until removed by hand (the user's memory note
-  "Console stale writer lock"). The Linux identity check from cb8881f6 fixes this for the
-  Docker stack; cb8881f6 is an ancestor of `ryan-1.5`
-  (`git merge-base --is-ancestor cb8881f6 refs/review/ryan-1.5`).
-- `withoutLiveness` decides liveness by key name at any depth (snapshots.ts:208-215): any
-  nested `seen` key in the five fields is dropped from the comparison. Inference: a real
-  change stored under such a key would wait up to 30 s.
-- Every worker receives every other worker's journal keys on each change (storage.ts:57-58),
-  including crash journals it never reads. Cost only (inference).
+  (process-lock.ts:59-63), and the store judges non-Linux owners by PID alone (:69). A
+  Windows reboot that reuses the PID keeps a stale lock until someone removes it by hand,
+  which matches a reported "Reconnecting" symptom after a reboot. The Linux identity check
+  from cb8881f6 (2026-10-07) fixes this for the Docker stack; cb8881f6 is an ancestor of
+  `ryan-1.5` (`git merge-base --is-ancestor cb8881f6 refs/review/ryan-1.5`).
+- `withoutLiveness` decides liveness by key name at any depth (snapshots.ts:208-215): it
+  drops any nested `seen` key in the five fields from the comparison. Inference: a real
+  change stored under such a key waits up to 30 s.
+- Every worker receives every journal key change, its own included, on each change
+  (storage.ts:57-58, ipc.ts:79-81), including crash journals it never reads. Cost only
+  (inference).
 - Startup migrations run on every start with no record that they finished, for example the
   unconditional delete at application.ts:1210.
+- A worker `clear` message deletes the coordinator's documents with the rest of the journal
+  (storage.ts:53-55, SET-014).
 
 ### Bug 9: tank setting found empty after a deploy (fork)
 
@@ -329,32 +370,36 @@ Tank roles are fork-only (7bd14d7c, 2026-10-20). Verified chain:
 
 Data path, no loss found:
 1. Write: `POST /party-api/formation` with `tank` or `offTank` is the only writer of
-   `designatedTank`/`offTank` (fork formation.ts:99-110). `null` clears; a name
-   must be a managed worker (:55-59).
-2. Save: both are in `settingsFields` (fork snapshots.ts:101) and `null` serializes as
-   `"null"` (writer `fieldJson` keeps any defined JSON).
-3. Load: fork initial-core.ts:20 reads `saved.designatedTank || null`. The layout 2 join
-   touches only market, production and Achievement Hunt fields.
+   `designatedTank`/`offTank` (fork formation.ts:105-106; `git grep designatedTank HEAD`).
+   `null` clears; a name must be a managed worker (:55-59). The Pause resume record does
+   not capture them (fork console-control.ts:234-239).
+2. Save: both are in `settingsFields` (fork snapshots.ts:101-102) and `null` serializes as
+   `null` (writer.ts:82-83 keeps any defined JSON).
+3. Load: fork initial-core.ts:20 reads `saved.designatedTank || null`. The fork's layout 2
+   join touches only market, production and Achievement Hunt fields (fork
+   initial-snapshots.ts:31-36, :81).
 4. Characters: the heartbeat lists the field (fork status/response-types.ts:51); shared.js
    reads it on each heartbeat (fork characters/shared.js:11953).
 5. Import never carries it: the import validators omit it (fork dashboard-import.ts, same as
    `leader`), so an import cannot clear it either.
 
 Path A, a real write from the dashboard (mechanism confirmed, trigger is inference):
-1. Every card's Farming settings dialog mounts `PartyRolesSettings`
-   (fork dashboard/features/party/connected-character-card.tsx:244-247,
-   party-roles-settings.tsx:62-78; moved there by 5b784c28 on 2026-10-26 after 9e728ca5 on
-   2026-10-25).
+1. Each character card builds the roles (fork dashboard/features/party/connected-character-card.tsx:243-247)
+   and passes them to its Farming settings dialog (:449), which mounts `PartyRolesSettings`
+   (farming-mode-control.tsx:174; party-roles-settings.tsx:62-78). 9e728ca5 (2026-10-25)
+   moved the roles out of the party bar, and 5b784c28 (2026-10-26) moved them into the dialog.
 2. Base UI 1.7.0 `Select` runs typeahead on a closed trigger: `onMatch` calls `setValue`
    with reason `none` when the list is closed
    (`@base-ui/react/select/root/SelectRoot.js:310-315`, checked in
    (local checkout), version 1.7.0).
 3. `onValueChange` ignores the reason and posts `{tank: null}` for "None"
-   (party-roles-settings.tsx:42, :67). One "n" keypress on a focused trigger clears the tank.
+   (party-roles-settings.tsx:42, :67). One "n" keypress on a focused trigger clears the tank;
+   another letter sets the first character whose name starts with it.
 4. The route sets `designatedTank = null` and persists, with no log line (SET-W4).
 
-Path B, display only (inference): SET-W5. After a deploy, the page shows "None" for up to
-15 s while the saved value is intact; picking a role then writes through Path A.
+Path B, display only (inference): SET-W5. After a deploy, the page shows "None" until the
+first `config` reply, up to 15 s when that request fails; picking a role then writes through
+Path A.
 
 No patch was applied. Root causes: SET-W4 (no audit), SET-W5 (unknown shows as none), and a
 UI control that writes on non-click changes.
@@ -364,17 +409,20 @@ UI control that writes on non-click changes.
 - **Tank roles** (7bd14d7c, ae116693, 62ab06e5, 9e728ca5, 5b784c28): three fields added to 7
   lists each (`settings-field-lists.cjs $R HEAD v`), a heartbeat type line, a shared.js
   reader and the formation route. Fits the current design; inherits SET-W1 and SET-W2.
-- **Achievement Hunt document** (09a417ca, a04cc9f3): a ninth document saved by the writer,
-  plus 4 more scoped fields saved twice (23 total).
+- **Achievement Hunt document** (09a417ca, a04cc9f3): a ninth document saved by the writer.
+  It holds the 4 top-level Achievement Hunt fields and each profile's copy (fork
+  snapshots.ts:202-225), so the fork saves 23 scoped fields twice.
 - **Console Pause is a second owner of 23 settings** (b33aee77, 9a34a4c1; spec 13 covers the
   hold itself). `captureResumeRecord` copies 13 profile keys per profile and 10 global keys
   (fork runtime/coordinator/lifecycle/console-control.ts:234-239, :251-263). On Play,
-  `restoreFields` writes back every key whose JSON differs (:272-279), so any change the user
-  made while paused reverts, with only "Restored X" lines as a trace. It writes
-  `activeRealm` with no realm switch (:239), re-adds captured merchant jobs that are no
-  longer queued, including ones the user cancelled (:280-289), and restores the captured Hunt
-  whenever the cycle id changed (:265-271). No route checks the Pause, so writes continue
-  while paused. PR #154 captures 19 keys with the same restore (review/full/core.md:267).
+  `restoreFields` writes back every key whose JSON differs (:272-279, :295, :298), so Play
+  reverts any change the user made while paused, with only "Restored X" lines as a trace.
+  It writes `activeRealm` with no realm switch (:239, :298), re-adds captured merchant jobs
+  that are no longer queued and have not expired, including ones the user cancelled
+  (:280-289), and restores the captured Hunt whenever the cycle id changed (:265-271). No
+  route checks the Pause (`git grep -n "consoleControl\|consolePause" HEAD -- runtime/coordinator/http`
+  finds nothing), so writes continue while paused. PR #154 captures 19 keys with the same
+  restore (review/full/core.md, first-pass row 3.1).
 - **Writer and import edits** for the AH document and bank sort layout (fork diff of
   persistence/: 4 files, +129/-29, `git diff --stat refs/review/ryan-1.5 HEAD -- runtime/coordinator/persistence`).
 
@@ -385,38 +433,126 @@ review of every test is M0 work still open (Gaps).
 
 | Behaviours | Tests | Proves | Does not cover |
 |---|---|---|---|
-| SET-002 to 006 | scripts/tests/coordinator-persistence-writer.test.cjs (15 tests) | Write order, coalescing, liveness window, shutdown layout, history window | A real journal on disk except one test (:102-104) |
-| SET-003, 005, 006 | e2e/console-persistence.spec.ts (9 tests) | Real coordinator saves and restarts | Rollback to an actual v1.4.0 build |
-| SET-008, 009 | scripts/tests/coordinator-jsonl-store.test.cjs (25 tests), coordinator-crash-recovery.test.cjs | Replay, torn tail, corruption, compaction, lock identity, flock | Windows PID reuse after a reboot (SET-W6) |
+| SET-002 to 006 | scripts/tests/coordinator-persistence-writer.test.cjs (15 tests) | Write order, coalescing, liveness window, shutdown layout, history window | A real journal on disk except the 5 tests on `settingsFixture` (:100-166) |
+| SET-003, 005, 006, 007 | e2e/console-persistence.spec.ts (9 tests) | Real coordinator saves and restarts | Rollback to an actual v1.4.0 build |
+| SET-008, 009, 021 | scripts/tests/coordinator-jsonl-store.test.cjs (25 tests), coordinator-crash-recovery.test.cjs (1 test per kill point) | Replay, torn tail, corruption, compaction, lock identity, flock | Windows PID reuse after a reboot (SET-W6) |
 | SET-010 | coordinator-legacy-storage.test.cjs (6) | Migration order and failure handling | none noted |
 | SET-011 to 013 | coordinator-initialization.test.cjs (5), coordinator-snapshots.test.cjs (2) | Independent load, layout join, defaults | Which fields a domain initializer drops (SET-W1) |
-| SET-014 | coordinator-workers.test.cjs (2 of 9) | Storage init and broadcast, outbox privacy | none noted |
-| SET-015, 016 | dashboard-state-import.test.cjs (11) | Validation, skipping, preview digest, backup, rollback | SET-W3 bounds |
-| SET-017 | e2e/console.spec.ts "account preference rejects invalid drafts and survives reload and coordinator restart" | Validation and persistence | none noted |
-| SET-018 | coordinator-focus-routes.test.cjs "formation preserves inherited event restrictions...", event-priorities-older-client.test.cjs (2) | Event settings rules | Partial writes (SET-W2); leader and follow writes |
-| SET-019 | coordinator-settings.test.cjs "collection thresholds validate bounds..." | Bounds | Partial writes (SET-W2) |
+| SET-014 | coordinator-workers.test.cjs (2 of 9: :24, :32) | Storage init and broadcast, outbox privacy | `clear`; `sessionStorage` |
+| SET-015, 016, 022 | dashboard-state-import.test.cjs (11) | Validation, skipping, preview digest, backup, rollback | SET-W3 bounds; the rollback test uses a `persist` that throws, which the production `persistSettings` never does |
+| SET-017 | e2e/console.spec.ts:969 "account preference rejects invalid drafts and survives reload and coordinator restart" | Validation and persistence | none noted |
+| SET-018 | coordinator-focus-routes.test.cjs:32 "formation preserves inherited event restrictions...", event-priorities-older-client.test.cjs (3) | Event settings rules | Partial writes (SET-W2); leader and follow writes |
+| SET-019 | coordinator-settings.test.cjs:45 "collection thresholds validate bounds..." | Bounds | Partial writes (SET-W2); `Number()` coercion |
 
 No test guards only a patch in this area. No test covers SET-020 (config file loading); the
 coordinator-host smoke tests load a stub config only.
 
+Rules check (00-method.md, "Rules every change follows"): every test above exists today, and
+none asserts source text. Most are isolated unit tests; under AGENTS.md they stay as proof
+for now, and new proof for this spec starts as E2E (console-persistence.spec.ts is the
+model). The section 5 recommendations name the E2E each one needs.
+
 ## 5. Needs your review
 
-1. **Partial writes (SET-W2).** When one field in a settings request is invalid, should the
-   console (a) refuse the whole request and change nothing, (b) apply the valid fields and
-   report which failed, or (c) keep today's behaviour? Option (a) is the safest; (b) suits a
-   dashboard that sends several fields at once.
-2. **Audit trail (SET-W4).** Should every settings change log previous value, new value and
-   source (route, import, Pause restore)? Options: (a) all settings, (b) only party-wide roles
-   and formation, (c) none. (a) costs one log line per change.
-3. **Unknown versus none (SET-W5, bug 9).** While settings have not loaded, should the
-   dashboard (a) show "loading" and block edits, (b) show the last known value from the
-   browser cache, or (c) keep showing defaults?
-4. **Pause and settings (fork).** While paused, should a settings change (a) be refused,
-   (b) be allowed and kept on Play, or (c) be allowed and reverted on Play as today?
-5. **Import bounds (SET-W3).** Should import use the route's bounds, so an import can never
-   save a value the dashboard would refuse? (Yes or no.)
-6. **Fields saved twice.** Keep the top-level copies of the 19 (fork 23) scoped fields for
-   rollback to v1.4.0, or drop them once a migration moves them into the leader's profile?
+1. **SET-Q1. Partial writes (SET-W2).**
+   **Today:** `formation` and `config` write each field as it passes its check and return
+   400 or 409 at the first bad one, keeping the earlier writes in memory; the next save from
+   any service carries them to disk (formation.ts:93-99, thresholds.ts:30-35).
+   **Options:**
+   (a) Check every field first and write nothing on any failure. Negatives: each route
+   needs a check pass separate from its write pass; a client that sends a valid leader with
+   a bad event list now loses the leader change too.
+   (b) Apply the valid fields and return which ones failed. Negatives: the dashboard must
+   show a per-field result; the response shape changes for every caller.
+   (c) Keep today's behaviour. Negatives: the dashboard shows an error for a change that
+   happened, and the membership reconcile skips it.
+   **Recommendation:** (a). It makes an error mean "nothing changed", which is what the
+   dashboard already tells the user. It beats (b) because no caller needs a new response
+   shape, and beats (c) because memory and disk never hold a half-applied request. Proof:
+   an E2E that posts a formation with a valid leader and a bad event priority list and
+   reads leader, followers and the journal after a restart. Negatives: two passes in each
+   route, and a mixed request from an old client fails whole.
+2. **SET-Q2. Audit trail (SET-W4).**
+   **Today:** no settings route writes an activity line; the journal keeps only the new
+   value (formation.ts:90-111). Bug 9 has no attribution for this reason.
+   **Options:**
+   (a) Log previous value, new value and source (route, import, Pause restore) for every
+   settings change. Negatives: one log line per change, and a busy dashboard (focus
+   priorities, marks) produces many lines.
+   (b) Log only party-wide roles and formation. Negatives: the next unexplained change may
+   be in a field outside the list.
+   (c) None. Negatives: the next bug like bug 9 is again not attributable.
+   **Recommendation:** (a), written once in the settings save path with the source passed
+   by the caller. It beats (b) because it needs no list of which fields matter, and beats
+   (c) because every change gets a source. Proof: an E2E that changes a setting through the
+   dashboard, an import and a Pause restore, and reads three lines with the right sources.
+   Negatives: one log line per change and a source argument on every write.
+3. **SET-Q3. Unknown versus none (SET-W5, bug 9).**
+   **Today:** until the first `config` reply the dashboard merges defaults and shows
+   "None" for an unset tank (use-party-console.tsx:163-164); a failed first reply keeps them
+   for up to 15 s (query-cache.tsx:178, :41).
+   **Options:**
+   (a) Show "loading" and disable edits until `config` has loaded once. Negatives: every
+   settings control needs a disabled state; a slow coordinator blocks edits.
+   (b) Show the last known value from browser storage. Negatives: a stale value from
+   another device can look current, and editing it writes the stale value.
+   (c) Keep showing defaults. Negatives: a control that writes on change can save the
+   default (bug 9 Path B).
+   **Recommendation:** (a). It removes the only way a default can be saved by accident. It
+   beats (b) because the page never shows a value the coordinator does not hold, and beats
+   (c) because a default is never mistaken for a saved value. Proof: an E2E that loads the
+   page while the config request fails and checks that the tank control stays disabled
+   and no formation request is sent. Negatives: one disabled state per control, owned by
+   spec 12.
+4. **SET-Q4. Pause and settings (fork).**
+   **Today:** Pause captures 23 settings and Play writes back each one that changed
+   (fork console-control.ts:234-239, :272-279), so every change made while paused reverts.
+   No route checks the Pause.
+   **Options:**
+   (a) Refuse settings writes while paused. Negatives: the user cannot prepare the next
+   session while paused; every settings route needs the Pause check.
+   (b) Allow writes while paused and keep them on Play (restore only what Pause itself
+   changed). Negatives: Pause must record which values it changed, and today it changes
+   none of the 23.
+   (c) Allow and revert on Play, as today. Negatives: user changes vanish with only a
+   "Restored X" line.
+   **Recommendation:** (b), which here means Play restores nothing from the 23 settings,
+   because Pause writes none of them. It beats (a) because the user can still change
+   settings, and beats (c) because a change the user made stays. It depends on spec 13
+   question 2 (Pause as a hold). Proof: an E2E that pauses, changes focus, plays and
+   reads focus. Negatives: the resume record no longer covers a change some other owner
+   makes while paused.
+5. **SET-Q5. Import bounds (SET-W3).**
+   **Today:** import accepts any finite `threshold` and any positive
+   `itemCollectionThreshold` (dashboard-import.ts:59-60); the route accepts safe integers
+   0 to 1e12 and 1 to 42 (thresholds.ts:30-32).
+   **Options:**
+   (a) Import uses the route's checks. Negatives: an old export holding 50 or 0.5 now fails
+   whole, because one bad field rejects the file (dashboard-import.ts:190).
+   (b) Import clamps to the route's range. Negatives: the user gets a value they did not
+   export, with no message.
+   (c) Keep both. Negatives: an import can save a value the dashboard refuses and the
+   collection rule cannot meet.
+   **Recommendation:** (a), sharing one check function between the route and the
+   validator. It beats (b) because nothing changes silently, and beats (c) because one
+   rule holds for every write. Proof: an import E2E with a file holding
+   `itemCollectionThreshold: 50`, expecting a refusal that names the field. Negatives: old
+   exports with out-of-range values must be fixed by hand.
+6. **SET-Q6. Fields saved twice.**
+   **Today:** 19 scoped fields (fork 23) are saved at top level and in the leader's
+   profile from the same object (scopes.ts:35-55). The top-level copy lets v1.4.0 read them
+   after a rollback and is the only copy while there is no leader.
+   **Options:**
+   (a) Keep both copies. Negatives: the bytes and the second path stay.
+   (b) Drop the top-level copies after a migration moves them into the leader's profile.
+   Negatives: a rollback to v1.4.0 loses these fields; the no-leader case needs its own
+   saved scope.
+   (c) Drop them only after v1.4.0 is no longer a rollback target. Negatives: the cost stays
+   until that decision.
+   **Recommendation:** (c). It keeps the rollback that SET-005 exists for and removes the
+   copies once nobody can roll back. It beats (a) because the copies have an end date, and
+   beats (b) because no rollback loses data. Negatives: needs a release that marks the end
+   of v1.4.0 rollback, and the orphan scope still needs a saved home.
 
 ## 6. The design
 
@@ -436,24 +572,20 @@ M1.
 
 ## 10. Gaps
 
-`node tools/check-claims.mjs` (run 2026-10-26, after this spec's catalog was written),
-filtered to 11-settings:
+`node tools/check-claims.mjs` (run 2026-10-26, after the verification split):
 
-- Functions claimed: 149 (109 proposed for 11, 29 proposed for 13 and moved here, 11 from
-  triage). Proposed for 11: 157; 48 handed off (handoffs-11.json: 4 to 13, 15 to 04, 14 to
-  10, 5 to 12, 4 to 06, 2 to 02, 2 to 09, 1 to 01, 1 to 05).
-- Claims naming no known function: 0. Claimed by more than one spec: 0 for 11.
+- Functions claimed by 11: 156 in 22 behaviours, with 74 distinct tests (sum of
+  `functions` and distinct `tests` over `catalog/11-settings.json`). handoffs-11.json holds
+  47 handoffs out of 11: 13 to 10, 8 to 01, 8 to 04, 8 to 12, 4 to 06, 4 to 13, 2 to 09.
+- Whole index: 0 unclaimed, 0 claimed twice, 0 naming no known function.
 - Behaviours with no test: SET-020.
 
 Not yet verified or not covered:
 
-- Expected handoff into 11: `runtime/coordinator/characters/storage.ts#broadcastable@28` is
-  proposed for 03 and belongs to SET-014.
-- `application.ts#startCoordinatorApplication>remove@102` (legacy storage delete port) is
-  proposed for 02 and belongs to SET-010.
 - The 13 domain initializers (inventory/initial-*.ts, merchant/initial-*.ts,
   navigation/initial-*.ts and others) are claimed by their feature specs; SET-013 depends on
   them.
 - The test accuracy review (method step 2) has not been done for these tests; only names and
   the bodies cited above were read.
-- The full review's count of 600 `persist` lines was not rerun here.
+- No sender of the worker `clear` storage message was found in this repository (caracAL's
+  CharacterThread is not in it); SET-014 records the effect only.
