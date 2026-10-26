@@ -556,7 +556,7 @@ titles match the file text on their first 40 characters. No tool checks the refe
    - Recommendation: (a). It is the only option that never leaves a behaviour without a
      passing proof, and it uses the same record shape as the current console's replacement
      matrix. Its negatives: the slower pace, the larger owner changes, and that retiring a
-     test in the current console is Ryan's decision, so the table is a proposal there.
+     test in the current console is upstream's decision, so the table is a proposal there.
 
 4. **How isolated tests are allowed under AGENTS.md.**
    - Today: AGENTS.md:30-31 says never write unit tests after the code and prefer E2E as the
