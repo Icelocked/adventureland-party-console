@@ -12,4 +12,10 @@ mapping the current console (1.5-feature-branch, b9b5c91e) and my fork side by s
   today, what goes wrong, with file and line on b9b5c91e).
   `implementation/` explains how the plan is checked.
 
+The overview and the questions page were checked claim by claim against the
+code. The detail sections are going through the same check now (the first
+pass found about a quarter of their claims needed a correction, mostly line
+numbers and counts), so treat their details as a draft until each one is
+marked checked.
+
 Nothing here is locked in. Anything you disagree with changes the plan.
