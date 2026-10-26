@@ -20,8 +20,9 @@ import { CharacterStatsTrigger } from './character-stats-trigger';
 import type { CharacterCardModel, InventoryModel } from './character-card-model';
 import { XpMeter } from './xp-meter';
 import { MonsterRouteButton } from './monster-route-button';
+import { CardNameStrip } from './card-name-strip';
 
-import { memo, useCallback, useEffect, useMemo, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { committedLiveRecord } from './live-metrics';
 import { useCharacterData } from './dashboard-live';
 import { ConnectedInventory } from './connected-inventory';
@@ -231,6 +232,9 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
     (mode: FarmingPolicy) => void setFarmingPolicy(mode, name),
     [setFarmingPolicy, name],
   );
+  const identity = useRef<HTMLDivElement>(null);
+  const monsterName = useCallback((id: string) => monsters.find(entry => entry.id === id)?.name
+    || state.bestiaryCatalog?.find(entry => entry.id === id)?.name || id, [monsters, state.bestiaryCatalog]);
   const collectionSettings = useMemo(
     () => ({
       thresholdError, itemCollectionThresholdError, onClearErrors: clearCollectionErrors,
@@ -264,10 +268,11 @@ export const ConnectedCharacterCard = memo(function ConnectedCharacterCard({
   return (
     <article
       key={char.name}
-      className="relative isolate min-w-0 self-start overflow-hidden rounded-lg border border-emerald-900/80 bg-[#0b1916] shadow-2xl shadow-black/20"
+      className="relative isolate min-w-0 self-start overflow-clip rounded-lg border border-emerald-900/80 bg-[#0b1916] shadow-2xl shadow-black/20"
     >
+      <CardNameStrip char={char} state={state} monsterName={monsterName} identity={identity} />
       <div className="border-b border-emerald-900/70 p-5">
-        <div className="flex items-start">
+        <div ref={identity} className="flex items-start">
           <div className="flex min-w-0 flex-1 items-start gap-3">
             <CharacterStatsTrigger character={char} />
             <div className="min-w-0 flex-1">

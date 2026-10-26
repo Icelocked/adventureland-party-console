@@ -26,6 +26,7 @@ import { giveawayDirectory } from "./giveaway-directory.ts";
 import { revisionSections, sendWithRevision } from "./section-revision.ts";
 import { randomUUID } from "node:crypto";
 import { requestObject } from "../http/contracts.ts";
+import { activityPhases } from "./activity-phases.ts";
 
 function catalogs(state: Readonly<PublicState>): Record<string, unknown> {
   return {
@@ -297,6 +298,7 @@ export function createPublicStateRoute(state: Readonly<PublicState>, ports: Publ
                 ]),
               ),
               referenceRevision: referenceRevision(),
+              activityPhases: activityPhases(state),
             }),
     };
     if (!section) return response.json(fullPayload(state, ports, request.query?.catalog === "0"));
