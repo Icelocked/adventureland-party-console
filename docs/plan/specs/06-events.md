@@ -703,6 +703,7 @@ reload (2.9).
    data loss in 2.6. It beats (b) because (b) multiplies the return
    machinery that 2.8 shows is already fragile. Negatives: the lower event
    is missed when both are live.
+   Settled by the event priority list: each member attends the top live event in its own list, and followers use the leader's list (A42).
 6. **Anniversary versus a combat event.**
    **Today:** an event ranked above anniversary interrupts anniversary
    staging and the featured hold, which runs as staging (12166-12168,
@@ -720,6 +721,7 @@ reload (2.9).
    today. It beats (b) because (b) overrides that list for one case.
    Negatives: a user who ranked the event higher by mistake loses the
    featured hold.
+   Settled by the event priority list: ranking anniversary above or below an event decides which one wins (A43).
 
 ## 6. Gaps
 
