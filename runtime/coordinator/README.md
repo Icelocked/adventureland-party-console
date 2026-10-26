@@ -703,6 +703,12 @@ non-leader priest tank via `absorb`, per the issue's own example. No hold-back i
 added for non-tank characters; they keep today's approach/attack timing and are only
 barred from *stealing* aggro via taunt/absorb.
 
+An optional `offTank` field on the same route names the party member that takes the
+tank's attackers while the tank is in danger. `runtime/characters/skills/tank-handoff.ts`
+hands aggro to it when the tank is endangered (`damage.ts`), below half HP or gone, and back
+once the tank is at 80% with nothing on it. During the takeover the skill context's `tank`
+is the off tank, so taunt, absorb and agitate follow it and the released tank kites.
+
 The designated tank also gets a kill-time luck swap built on **gear sets**
 (`runtime/coordinator/characters/gear-sets.ts`, `POST /party-api/gear-sets` with
 `{character, set: "luck" | "tank" | "gold", action: "save" | "clear"}`). A set is

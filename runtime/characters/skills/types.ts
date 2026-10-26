@@ -24,6 +24,8 @@ export type Spending = 'survival' | 'maintenance' | 'damage';
 export interface CombatContext {
   leader: string;
   tank: string | null;
+  /** The party member that takes the main tank's attackers while it is in danger. */
+  offTank?: string | null;
   allies: Combatant[];
   monsters: Combatant[];
   mode: 'grouped' | 'scatter' | 'event' | 'blocked';

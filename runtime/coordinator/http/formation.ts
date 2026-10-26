@@ -4,6 +4,7 @@ import { requestObject, requestText, type HttpRequest, type HttpResponse } from 
 interface FormationState {
   leader: string | null;
   designatedTank: string | null;
+  offTank: string | null;
   merchantCharacter: string | null;
   followers: Record<string, boolean>;
   eventsByCharacter: Record<string, boolean>;
@@ -106,6 +107,11 @@ export function createFormationRoute(state: FormationState, ports: FormationPort
       if (!next) return res.status(400).json({ error: "unknown tank" });
       state.designatedTank = next.name;
     }
+    if (body.offTank !== undefined) {
+      const next = assignManaged(body.offTank);
+      if (!next) return res.status(400).json({ error: "unknown off tank" });
+      state.offTank = next.name;
+    }
     const error = body.character !== undefined ? character(body) : null;
     if (error) return res.status(error.code).json({ error: error.error });
     ports.changed?.(previous);
@@ -114,6 +120,7 @@ export function createFormationRoute(state: FormationState, ports: FormationPort
       ok: true,
       leader: state.leader,
       tank: state.designatedTank,
+      offTank: state.offTank,
       followers: state.followers,
       eventsByCharacter: state.eventsByCharacter,
       eventLimitsByCharacter: state.eventLimitsByCharacter,

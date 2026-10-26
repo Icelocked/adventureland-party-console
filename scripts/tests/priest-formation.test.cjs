@@ -775,6 +775,17 @@ test('designated tank: a holding tank skips the no-target defensive evade',()=>{
  r.c.tank=null;assert.equal(r.c.defense.defensiveFormationMove(),true);assert.equal(evades,1);
 });
 
+test('off tank: holds while the handoff names it and releases the main tank',async()=>{
+ const r=setup();r.c.tank='P';r.c.offTank='W';r.c.bossCombatActive=()=>false;r.c.returnCombatActive=()=>false;
+ r.c.sharedRoutine={aggroTank:()=>'W'};
+ assert.equal(r.c.tankHoldsTarget(),true,'the off tank holds during a takeover');
+ assert.equal(await r.c.kiteIfNeeded(r.monster),false,'and does not kite its target');
+ r.c.sharedRoutine={aggroTank:()=>'P'};
+ assert.equal(r.c.tankHoldsTarget(),false,'after the handoff back the off tank is a damage dealer');
+ const m=setup(true);m.c.tank='P';m.c.offTank='W';m.c.sharedRoutine={aggroTank:()=>'W'};
+ assert.equal(m.c.tankHoldsTarget(),false,'a released main tank kites and recovers');
+});
+
 // 2026-10-25 00:18 UTC: a live priest tank fought while its warrior and mage stood still.
 // The damage dealers' gate is Ryan's grouped one: they attack the tank's target once the
 // party engages it, whichever class the tank is.

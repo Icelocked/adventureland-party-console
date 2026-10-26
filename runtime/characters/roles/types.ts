@@ -22,6 +22,8 @@ export interface SharedCombat {
   merchantVisibilityActive?(): boolean;
   skillTargetAllowed?(target: Target): boolean;
   skillSupport?(): Promise<boolean>;
+  /** Who holds aggro now: the designated tank, or the off tank during a handoff. */
+  aggroTank?(): string | null;
   skillOffense?(target: Target): Promise<boolean>;
   absorbLeaderAggro?(): Promise<boolean>;
   fanOfKnivesFarming?(): boolean;

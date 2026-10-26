@@ -45,8 +45,10 @@ export function PartyWorkspace({ model }: { model: PartyConsoleModel }) {
           <>
           <PartyRolesSettings
             tank={state.designatedTank || null}
+            offTank={state.offTank || null}
             characters={chars.map((char) => char.name)}
             onSelectTank={(tank) => formation({ tank })}
+            onSelectOffTank={(offTank) => formation({ offTank })}
           />
           <RadioGroup
             value={state.leader || ""}

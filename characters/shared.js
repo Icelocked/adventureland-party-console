@@ -362,6 +362,7 @@
   var partyLocation = null;
   var leader = null;
   var tank = null;
+  var offTank = null;
   var followLeader = false;
   var desiredPartyMembers = [];
   var partySyncBusy = false;
@@ -11785,6 +11786,7 @@
       bankQueued = !!state.bankQueued;
       leader = state.leader || null;
       tank = state.designatedTank || null;
+      offTank = state.offTank || null;
       root.partyGearSets = state.gearSets || {};
       root.partyRestockPolicies = state.restockPolicies || {};
       if (root.partyAlninjaReporter) root.partyAlninjaReporter.configure(state.alninjaReporting === true);
@@ -18281,8 +18283,14 @@
     var x = Number.isFinite(target.real_x) ? target.real_x : target.x, y = Number.isFinite(target.real_y) ? target.real_y : target.y;
     return !!can_move({ map: character.map, x: character.real_x, y: character.real_y, going_x: x, going_y: y, base: character.base });
   }
+  // The skill runtime's off-tank handoff names who holds aggro now: the main tank, or the
+  // off tank while the main tank is in danger (runtime/characters/skills/tank-handoff.ts).
+  function aggroTank() {
+    var shared = root.sharedRoutine;
+    return shared && typeof shared.aggroTank === "function" ? shared.aggroTank() : tank;
+  }
   function tankHoldsTarget() {
-    if (typeof tank === "undefined" || !tank || tank !== character.name) return false;
+    if (typeof tank === "undefined" || !tank || aggroTank() !== character.name) return false;
     var health = Number(character.hp) / Math.max(1, Number(character.max_hp));
     if (health < TANK_RELEASE_HP) tankHoldReleased = true;
     else if (health >= TANK_HOLD_HP) tankHoldReleased = false;
@@ -18677,7 +18685,7 @@
     },
     isLeader: function () { return (leader || character.name) === character.name; },
     hasDesignatedTank: function () { return !!tank; },
-    isTank: function () { return !!tank && tank === character.name; },
+    isTank: function () { return !!tank && aggroTank() === character.name; },
     combatContext: function () {
       var event = character.cave ? { name: "cave", types: [] } : activeCombatEvent();
       var roster = currentPartyList();
@@ -18699,7 +18707,7 @@
       var eventCombat = !!character.cave || event && (joinedEvent === event.name ||
         G.maps[character.map] && G.maps[character.map].event === event.name ||
         monsters.some(function(m){return event.types.indexOf(m.mtype) >= 0;}));
-      return { leader: leader || character.name, tank: tank || null, allies: allies, monsters: monsters,
+      return { leader: leader || character.name, tank: tank || null, offTank: offTank || null, allies: allies, monsters: monsters,
         event: eventCombat ? event.name : null,
         bossRoutine: typeof bossCombatActive === "function" && bossCombatActive() ? bossRoutine() : null,
         mode: root.sharedRoutine.isOccupied() || isLiveAbtesting() ? "blocked" : eventCombat ? "event" : !character.cave && farmingMode === "scatter" ? "scatter" : "grouped",

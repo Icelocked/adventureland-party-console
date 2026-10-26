@@ -36,3 +36,9 @@ test('formation preserves inherited event restrictions and independent merchant 
  assert.deepEqual(t.state.eventSelectionsByCharacter.M,['anniversary']);
  t.send('formation',{character:'L',events:true});assert.deepEqual(t.state.eventSelectionsByCharacter.L,['anniversary','franky']);
 });
+test('formation sets and clears the off tank beside the tank, rejecting unknown names',()=>{
+ const t=fixture();const r=t.send('formation',{tank:'L',offTank:'F'});
+ assert.equal(t.state.designatedTank,'L');assert.equal(t.state.offTank,'F');assert.equal(r.body.offTank,'F');
+ assert.equal(t.send('formation',{offTank:'Nobody'}).code,400);assert.equal(t.state.offTank,'F');
+ t.send('formation',{offTank:null});assert.equal(t.state.offTank,null);assert.equal(t.state.designatedTank,'L');
+});
