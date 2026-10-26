@@ -1,6 +1,6 @@
 # 10. Inventory, bank and commerce
 
-Checked against the current console `refs/review/ryan-1.5` (b9b5c91e) in (local checkout). Every file:line is on that ref unless it says "fork HEAD" (af92de45). The fork's live tip 21b8362d changes no file in this part (`git diff --stat af92de45 21b8362d` in pm-worktrees/pta-pull touches only characters/shared.js lines 71 and 18438-18926).
+Checked against the current console `refs/review/ryan-1.5` (b9b5c91e) in (local checkout). Every file:line is on that ref unless it says "fork HEAD" (af92de45). The fork's live tip 21b8362d changes no code in this part: `git diff --stat af92de45 21b8362d` in pm-worktrees/pta-pull lists 17 files, all escape, pull, heal, October event and test code (characters/shared.js hunks at 68 and 18435-18962).
 
 This spec maps everything the console does with items: item identity and the item catalog,
 inventory marks and automatic marks, the bank and bank queues, BankBoi storage, stocking, upgrades,
@@ -12,7 +12,7 @@ The job queue that runs these as merchant jobs is in [08](08-merchant-jobs.md). 
 the market jobs make, the merchant's hands and the game call budget are in
 [09](09-merchant-realm-and-gear.md).
 
-Counts: 111 behaviours and 1445 functions in `catalog/10-inventory-bank-commerce.json` (counted with `node -e` over that file); 16 handoffs in `catalog/handoffs-10.json`.
+Counts: 118 behaviours and 1507 functions in `catalog/10-inventory-bank-commerce.json` (counted with `node -e` over that file); 16 handoffs in `catalog/handoffs-10.json`, and 252 functions handed to this spec by the other handoff files. INV-112 to INV-118 were split out of INV-005, INV-011, INV-023, INV-060, INV-096, INV-097 and INV-093 on 2026-10-26; INV-089 also took merchantALDataBuy's marketplaceMove helper from catalog 08; the check is logged in docs/implementation/07-verification-08-10.md.
 
 How this map was made: four readers went through every function in this part on the current console (shared.js by its current line ranges, every other file start to end) and checked the full review (local checkout) and the first pass `review/merchant.md` claim by claim. Section 7 lists each review claim with its verdict. Line numbers in the full review are mostly fork HEAD lines; this spec gives current lines.
 
@@ -39,7 +39,7 @@ Rules:
 
 - start() refreshes everything once, then merchants every 10 000 ms and trades every 300 000 ms (commerce/market-feeds.ts:71-76)
 - a refresh already running returns the current snapshot instead of starting another (commerce/aldata-service.ts:85)
-- a merchants snapshot with buy orders but no sales counts as partial and is fetched once more (aldata-service.ts:63-67)
+- a merchants snapshot with buy orders but no sales counts as partial, and refreshMerchants fetches it once more (aldata-service.ts:63-67)
 - an empty sales or buy list keeps the previous list (aldata-service.ts:69-72)
 - after merchants: record price history from the sales, then queue ALData bid matches (aldata-service.ts:74-75)
 - after trades: record the highest public WTB per item (aldata-service.ts:81)
@@ -66,7 +66,7 @@ Rules:
 
 Rules:
 
-- history is keyed by item name only; level is kept beside each price (commerce/price-history.ts:24-35)
+- the history keys entries by item name only and keeps the level beside each price (commerce/price-history.ts:24-35)
 - The current market low uses only ALData listings seen in the last 120 000 ms; an item with none loses marketLow (price-history.ts:46-53, 64-73)
 - highestPublicWTB comes from ALData trades with wtb.price >= 1 (price-history.ts:82-113)
 - nearby stand reports also write lowest and recent price at report time, only when lowest or recent changes (commerce/local-market.ts:22-64)
@@ -87,8 +87,21 @@ Rules:
 
 Settings:
 
-- aldata.key and aldata.auth (http/market-account-actions.ts)
+- aldata.key and aldata.auth (written by INV-112)
 - standBids, standListings (public-listings.ts:66-74)
+
+**INV-112 Manage the ALData key and its authentication.** The dashboard generates the party's ALData key, checks whether ALData accepts it, and queues the merchant's authentication mail.
+
+Rules:
+
+- generateKey stores a new 32-byte hex key and resets auth to 'NO', authCheckedAt to 0 and the publish status to idle (http/aldata.ts:39-46; http/market-account-actions.ts:23)
+- auth asks ALData /auth/<character>/<key> for the merchant, or the first known character, stores the answer (default 'NO') and publishes when it is 'CORRECT'; a failed request answers 502 with the error (aldata.ts:47-68)
+- sendAuth needs the merchant online and a key; it returns the queued job instead of adding a second 'ALData authentication' job, then queues, persists and dispatches one (aldata.ts:69-91)
+- the authentication mail itself and the 65 s confirmation are INV-088
+
+Settings:
+
+- aldata.key, aldata.auth, aldata.authCheckedAt (aldata.ts:40-42, 58-59)
 
 Handed over by other specs: 8 functions (13-lifecycle).
 
@@ -117,9 +130,9 @@ Rules:
 
 Rules:
 
-- a sale is seen only while the stand stayed open and gold went up (status/merchant-observation.ts:150-151)
+- observe counts a sale only while the stand stayed open and gold went up (status/merchant-observation.ts:150-151)
 - sold quantity = whole stack when the slot emptied or changed item, else the q drop (merchant-observation.ts:90-96)
-- the matching listing shrinks or is removed; then persist and ALData publish (merchant-observation.ts:100-142)
+- standSales shrinks or removes the matching listing, then persists and publishes to ALData (merchant-observation.ts:100-142)
 - 'Entered bank' logs when the map matches bank or bank_<x> and did not before (merchant-observation.ts:27-46)
 - a new anniversaryState.craftResult.at logs the cake craft result (merchant-observation.ts:31-33, 48-60)
 
@@ -127,7 +140,7 @@ Rules:
 
 Rules:
 
-- key = name|level; name 1-80 of [a-z0-9_], level 0-100 (runtime/market-preferences.ts:7, 11-16)
+- key = name|level; name 1-80 letters, digits or underscores (case-insensitive), level 0-100 (runtime/market-preferences.ts:7, 11-16)
 - marketListingFresh: seenAt within 120 000 ms (market-preferences.ts:8-10)
 - at most 2048 ignored items (http/market-ignored-items.ts:13)
 
@@ -135,7 +148,7 @@ Settings:
 
 - marketIgnoredItems (http/market-ignored-items.ts:4)
 
-Handed over by other specs: 1 functions (13-lifecycle).
+Handed over by other specs: 1 function (13-lifecycle).
 
 ### Bids
 
@@ -147,7 +160,7 @@ Rules:
 - a listing qualifies when a bid for that item has quantity > 0, no bid job for it is pending, price <= bid price, and the level matches (local-market.ts:66-75)
 - level rule: acceptHigherLevels false means exact level, otherwise level >= minimumQuality (commerce/bid-matching.ts:4-7)
 - picks the item with the highest job priority, then the cheapest listing, and fills up to the bid quantity across listings (local-market.ts:95-102, 77-87)
-- the job has no homeRealm and is not stamped (local-market.ts:104-111)
+- observe gives the job no homeRealm and does not stamp it (local-market.ts:104-111)
 
 Settings:
 
@@ -171,6 +184,20 @@ Settings:
 - merchantAutomations['stand bid purchases'] (bids.ts:135, 186)
 - standBids (bids.ts:20)
 
+**INV-113 Set and edit standing bids from the dashboard.** The dashboard creates, edits and clears a standing bid; the console validates it, keeps its revision and re-runs bid matching.
+
+Rules:
+
+- the item must be in the merchant catalog; price 1 to 1 000 000 000 000, quantity at least 1, minimumQuality 0-99 and forced to 0 for items that are neither upgradeable nor compoundable, priorityOverride 0-100 or blank (http/merchant-bid.ts:62-78, 86, 116-120)
+- a single-field edit (price, quantity or priorityOverride) must carry the bid's current revision; a stale edit or a pending native purchase for the item answers 409 (merchant-bid.ts:47-61, 100-107)
+- a new bid takes the next native ledger number as its revision; an edit keeps the revision; asking for a stand slot clears standSuppressed (merchant-bid.ts:80-87)
+- asking for a stand slot when 16 slots are taken needs the user to pick an occupant to displace, else 409 with the occupant list (merchant-bid.ts:108-115)
+- every change drops queued bid jobs for the item, re-runs nearby stand matching, persists, publishes, tries Ponty matching and then ALData matching, and dispatches (merchant-bid.ts:81, 98, 125, 135-138)
+
+Settings:
+
+- standBids[item] price, quantity, minimumQuality, priorityOverride, useStandSlot, acceptHigherLevels, revision (merchant-bid.ts:82-87)
+
 Handed over by other specs: 12 functions (13-lifecycle).
 
 **INV-012 Count filled bid quantity.** When a purchase or a native WTB fill lands, the console lowers the bid's remaining quantity, deletes a finished bid, drops duplicate queued bid jobs and republishes.
@@ -178,18 +205,19 @@ Handed over by other specs: 12 functions (13-lifecycle).
 Rules:
 
 - fulfill needs a bid that accepts the item's level (commerce/bids.ts:62-70)
-- quantity = max(0, quantity - amount); a zero bid is deleted (bids.ts:72-74)
+- fulfill sets quantity = max(0, quantity - amount) and deletes a bid that reaches zero (bids.ts:72-74)
 - removes every queued bid purchase job for that item under any of the three automatic reasons (bids.ts:41-45, 56-60, 75)
 - schedules an ALData publish and logs 'WTB filled' (bids.ts:76-85)
 
-Handed over by other specs: 1 functions (02-movement).
+Handed over by other specs: 1 function (02-movement).
 
-**INV-013 Back off from sellers that fail.** A seller whose listing could not be bought is blocked for automatic purchases with a doubling cooldown; strikes stay until cleared.
+**INV-013 Back off from sellers that fail.** The console blocks a seller whose listing the merchant could not buy from automatic purchases, with a doubling cooldown. Strikes stay until the user clears them.
 
 Rules:
 
 - identity key = seller (or name)|serverRegion|serverIdentifier; a record with empty region and identifier is a wildcard for that seller (commerce/merchant-blacklist.ts:3-17)
-- a record blocks while until is -1 or in the future; manual purchases only honour records with reason 'manual' (merchant-blacklist.ts:18-23)
+- a record blocks while until is -1 or in the future; with autoBlacklistMerchants off only records with reason 'manual' block (merchant-blacklist.ts:18-23, application.ts:1439)
+- the only reader is ALData bid matching (bids.ts:164); manual orders do not check the blacklist (manual-orders.ts:54-141)
 - each failure adds a strike; cooldown = 2^(failures-1) minutes (merchant-blacklist.ts:27-46)
 - automatic blocking is off when autoBlacklistMerchants is false (application.ts:1439)
 
@@ -213,8 +241,6 @@ Settings:
 
 - autoBlacklistMerchants via blacklistingEnabled (purchase-progress.ts:87-88)
 
-Handed over by other specs: 15 functions (13-lifecycle).
-
 **INV-015 Queue manual stand, ALData and Ponty orders.** Dashboard orders become merchant jobs: a stand purchase list, one ALData buy or sell, or one Ponty job per realm.
 
 Rules:
@@ -231,14 +257,14 @@ Handed over by other specs: 10 functions (13-lifecycle).
 
 Rules:
 
-- allocation: bids with useStandSlot first, then (with autoStandBuys) others not suppressed, by priority (override, else routine priority, else 75), limited to 16 minus live sales minus explicit bids (commerce/native-stand.ts:37-47)
+- allocation: bids with useStandSlot first, then (with autoStandBuys) others not suppressed, by priority (override, else routine priority, else 75), limited to 16 minus sales that are not paused minus explicit bids (commerce/native-stand.ts:37-47)
 - an offer quantity is min(bid quantity, 99 for upgradeable or compoundable items, else 9999) (native-stand.ts:155-162)
 - placement refuses level > 12 or price > 99 999 999 999, a full inventory, and too little gold (waits for bank gold when bank plus carried covers it) (native-stand.ts:163-170)
 - one new offer per plan, only with the stand open and nothing to remove (native-stand.ts:174-196)
-- an offer that no longer matches the bid (revision, price, level, quantity) moves to removing; blocked offers are skipped (native-stand.ts:149-154, 190-193)
+- an offer that no longer matches the bid (revision, price, level, quantity) moves to removing. plan() skips blocked offers (native-stand.ts:149-154, 190-193)
 - fill evidence = max(acknowledged, receipt quantity, slot quantity drop on the same rid); each delta calls bid fulfil when the bid revision still matches (native-stand.ts:80-95)
 - an offer follows its rid when trade slots move; a different rid at the slot resets or deletes the offer (native-stand.ts:107-125)
-- an unconfirmed placement without rid is released 10 000 ms after it blocks (native-stand.ts:76-79, 126-133)
+- retryUnconfirmed releases a placement without rid 10 000 ms after it blocks (native-stand.ts:76-79, 126-133)
 - a pending native purchase removes that item from the allocation and records 'Purchase outcome unconfirmed' (native-stand.ts:187-194)
 - displacing an occupant pauses a sale or suppresses a bid's stand slot (native-stand.ts:55-63)
 
@@ -272,8 +298,8 @@ Handed over by other specs: 4 functions (13-lifecycle).
 Rules:
 
 - autoCollect queues collection for untaken attachments; a failed collection retries after 30 000 ms (commerce/mailbox.ts:26-28)
-- autoDelete removes mail whose attachment is taken (mailbox.ts:29)
-- mail already being collected is skipped (mailbox.ts:27, mail-startup.ts:73)
+- autoDelete removes mail whose attachment is taken; mail with no attachment is never auto deleted (mailbox.ts:27, 29)
+- refresh skips mail that a collect job already owns (mailbox.ts:27, mail-startup.ts:73)
 - seen() keeps the newest 2000 read ids (mailbox.ts:6, 39)
 - sent() prepends an outbox record once per id; removeSent deletes one (mailbox.ts:40-42)
 - configure needs both booleans (mailbox.ts:37)
@@ -293,7 +319,7 @@ Rules:
 - entry resolves a source from the merchant inventory, a BankBoi or the bank snapshot (mail-jobs.ts:32-37)
 - postage is read from the downloaded official client HTML; no match gives null, never a guess (scripts/mail-postage.cjs:2-5, application.ts:652-655)
 
-Handed over by other specs: 12 functions (13-lifecycle).
+Handed over by other specs: 7 functions (13-lifecycle).
 
 ### Item identity and marks
 
@@ -322,8 +348,9 @@ Rules:
 - a manual slot mark follows its item to a new slot; a slotless manual mark stays while any matching item exists (inventory/collection-marks.ts:15-30)
 - an automatic mark stays only while the same item sits in that slot and its rule still says that mode (collection-marks.ts:32-46)
 - for the merchant, copies kept for NPC sales count as bank (collection-marks.ts:6, 47-49; mark-reconciliation.ts:40)
+- the stale-order route drops merchant bank marks whose item is no longer in the merchant's inventory (match ignores q) and never removes deliveries (http/stale-orders.ts:13-44)
 - a manual mark on a copy beats the standing rule for that copy; painting a mode removes the other mode's mark on that slot (collection-marks.ts:63-88)
-- with shared merchant rules, automatic marks with conflicting rules are dropped, and items with processing pending are not banked (mark-reconciliation.ts:42-50)
+- with shared merchant rules, reconcile drops automatic marks with conflicting rules. It does not bank items with processing pending (mark-reconciliation.ts:42-50)
 - reconcile skips characters outside the shared rule set (application.ts:1517)
 - settings restore marks from the selection document first, then legacy settings; itemCollectionThreshold and buyUpgradeBatchSize clamp to 1-42, threshold defaults to 100 000 (inventory/initial-collection.ts:15-35)
 
@@ -331,6 +358,8 @@ Settings:
 
 - marked, merchantMarked, autoItemMarks (initial-collection.ts:17-19)
 - threshold default 100000; itemCollectionThreshold default 1, range 1-42; buyUpgradeBatchSize default 1, range 1-42 (initial-collection.ts:27-32)
+
+Handed over by other specs: 4 functions (13-lifecycle).
 
 **INV-023 Mark items for bank or merchant from the dashboard.** The dashboard toggles one-off bank or merchant marks on a slot and sets or clears standing automatic bank or merchant rules.
 
@@ -346,6 +375,16 @@ Settings:
 
 - autoItemMarks[owner][name@+L] = 'bank' | 'merchant' (mark-commands.ts:56)
 
+**INV-114 Route dashboard character commands.** One route takes every dashboard item command, checks the character and any farming selection, and runs the first handler that recognises the command.
+
+Rules:
+
+- a farmingMonsterIds selection must be a non-empty list of names, not tinyp or phoenix, with a known farming location; the route checks it before the character (http/character-command.ts:28-39, 52-55)
+- the character must be a managed worker, or the merchant for bank or shared-rule selections while it is offline (character-command.ts:56; http/character-actions.ts:54-55, 124-130)
+- a farming selection stores the resolved location as the preferred farm area and, when the handler succeeds, sets the farming focus (character-command.ts:24-27, 57-64; character-actions.ts:102-108)
+- handlers run in this order: offering rules, clear marks, navigation, upgrades, stat scrolls, merchant items, compounds, transfers, marks; the first that answers wins, and a null answer returns the character's marks, upgrades, stat scrolls, compounds and withdrawals (character-command.ts:40-51, 65-72; character-actions.ts:110-120)
+- automatic choices made through upgrade, compound, exchange or mark commands go through replaceAutomaticAction; dropping a stand rule triggers an ALData publish and a stand sync (character-actions.ts:56-60; application.ts:962)
+
 Handed over by other specs: 17 functions (13-lifecycle).
 
 **INV-024 Reconcile automatic marks and sales on each status report.** Merchant scheduling calls these hooks on every report so automatic collection, upgrade, compound and sale marks follow the live inventory.
@@ -356,7 +395,7 @@ Rules:
 - upgrade marks: compound groups first, then upgrade marks; either change counts (application.ts:1528-1535)
 - sales: deconstruction reconcile, then automatic merchant sales (application.ts:511, 1499-1503)
 
-Handed over by other specs: 1 functions (02-movement).
+Handed over by other specs: 1 function (02-movement).
 
 **INV-025 Give each item one automatic action.** Choosing an automatic action for an item (bank, upgrade, compound, NPC sale, stand sale, exchange, deconstruction) retires that item's other automatic rules and their reservations.
 
@@ -365,7 +404,7 @@ Rules:
 - every remover except the chosen one runs; choosing merchant keeps bank collection rules (inventory/automatic-action.ts:120-128)
 - removers cover collection rules and auto marks, upgrade rules, compound rules by name, NPC sale rules and marks, stand rules and listings (merchant only), exchange rules and queued exchange lines (merchant only), deconstruction rules and marks (automatic-action.ts:40-108)
 - reservations tied to removed sale or deconstruction ids leave merchantMarked and withdrawals (automatic-action.ts:109-118)
-- any change sets itemMarksCleared on the current merchant job (automatic-action.ts:129)
+- any change sets itemMarksCleared on the current merchant job (automatic-action.ts:130)
 - an exchange reward goes to the first active of exchange, NPC, stand, pending upgrade, pending compound, deconstruction; otherwise to bank (automatic-action.ts:142-153)
 
 Settings:
@@ -381,7 +420,8 @@ Rules:
 - refuses with 409 'Item changed; refresh and try again' unless the live entry equals the posted item exactly (inventory/clear-item-marks.ts:187-189)
 - bank selections only work for the merchant and also clear bank-sourced upgrades, sale marks and withdrawals at that pack and slot (clear-item-marks.ts:42-59)
 - upgrade marks match when the live level is within the mark's start to start + tiers (clear-item-marks.ts:88-93)
-- automatic rules for the item are removed for every shared member; NPC, deconstruction, stand and exchange rules are removed for the rule owner (clear-item-marks.ts:95-141, 204-208)
+- clear removes the item's automatic rules for the rule owner (clear-item-marks.ts:82, 98-106, 128-141); stand and exchange rules only when the rule owner is the merchant (:119-124)
+- every shared member loses its automatic marks for the item (clear-item-marks.ts:84-85, 204-208)
 - the merchant weapon choice clears when it is the same item (clear-item-marks.ts:125)
 - when anything changed it sets itemMarksCleared on a current job of one of ten improvement or sale reasons (clear-item-marks.ts:71-75, 196)
 
@@ -390,7 +430,7 @@ Rules:
 Rules:
 
 - migration runs once, only with a merchant and no existing merchantRules; it stores a backup of the original rule documents (inventory/shared-rules.ts:60-79)
-- for each key the merchant's choice wins; identical choices (ignoring createdAt) merge; otherwise a conflict is recorded and no rule is set (shared-rules.ts:26-32, 134-137)
+- for each key the merchant's choice wins; identical choices (ignoring createdAt) merge; otherwise migration records a conflict and sets no rule (shared-rules.ts:26-32, 134-137)
 - item keys without @+ become name@+0; upgrade rules normalize to {tiers, quantity, default -1} (shared-rules.ts:144-155)
 - POST /party-api/merchant/rule-conflict applies one owner's choice; 404 when it no longer exists (shared-rules.ts:81-101)
 - itemRuleConflicts reports when more than one of processing, NPC sale, stand sale and deconstruction applies (shared-rules.ts:111-120)
@@ -406,7 +446,7 @@ Settings:
 Rules:
 
 - remove drops bank marks by slot (or by full JSON for slotless marks), merchant marks and unequipped upgrade marks on the slot, and compound members on the slot (inventory/reservations.ts:28-40)
-- empty compound groups are removed (reservations.ts:20-26)
+- pruneCompounds removes empty compound groups (reservations.ts:20-26)
 - clearIncoming matches the full serialized item, stack size included (reservations.ts:42-45)
 
 ### Upgrades
@@ -419,14 +459,14 @@ Rules:
 - a manual mark gets a random requestId and an optional offering; a manual offering needs tiers 1 and stock in merchant, bank or BankBoi (upgrade-commands.ts:74-86, 188-193)
 - an automatic rule stores {tiers, quantity}; quantity is kept when tiers stay the same, else -1 (unlimited) (upgrade-commands.ts:97-121)
 - 'update-auto-upgrade-rule' changes tiers or quantity (-1 or >= 1), or removes the rule and its auto marks (upgrade-commands.ts:122-158)
-- a saved mark queues a 'manual upgrades' or 'auto upgrade' bank job (upgrade-commands.ts:90-93)
+- a saved mark queues a 'manual upgrades' or 'auto upgrade' merchant job (upgrade-commands.ts:90-93; ports.queue is queueMerchant, application.ts:954)
 - 'gold-target' stores a whole amount up to 1 000 000 000 000 (upgrade-commands.ts:159-170)
 - on restart a manual mark without requestId takes its passId or a new UUID (inventory/initial-intents.ts:22-33)
 
 Settings:
 
 - upgrades[name] (marks), autoUpgradeMarks[owner][name@+L] = {tiers, quantity} (upgrade-commands.ts:22-23)
-- goldTargets[name] (upgrade-commands.ts:167)
+- goldTargets[name] written at upgrade-commands.ts:167, restored at initial-intents.ts:31; read at inventory/bank-queue.ts:41-43, merchant/dispatch-composition.ts:93 and status/response.ts:203-206
 - upgradeOfferingRules, statScrolls, purchases, compounds, autoCompounds, autoExchanges restored by initialItemIntents (initial-intents.ts:25-31)
 
 **INV-030 Keep automatic upgrade marks on the right copies.** From each report the console keeps automatic upgrade marks on copies still inside their pass, moves a mark when its item moved, adds marks for new copies up to the quota, and drops resolved passes.
@@ -464,13 +504,13 @@ Settings:
 Rules:
 
 - the route refuses (409) unless the job id and command id match the current job and the item and mark are admitted and authorized (inventory/offering-supply.ts:19-46)
-- demand counts unfinished steps per admitted live copy whose resolved offering is the requested one; an explicit offering counts one step; carried stock is subtracted (offering-supply.ts:101-137)
+- demand counts unfinished steps per admitted live copy whose resolved offering is the requested one; an explicit offering counts one step; the route subtracts carried stock (offering-supply.ts:101-137)
 - bank continuation rules admit up to 3 more copies into the command (offering-supply.ts:143-160)
 - withdrawals prefer bank panes over BankBoi stacks and never split an existing request (inventory/storage-service.ts:31-46)
 - a pending supply stores offeringSupply on the job; the job waits until the merchant carries the outstanding offerings or the rules change (offering-waits.ts:55-69)
 - pause reasons: 'Waiting for confirmed merchant collection', the BankBoi worker error, or 'Waiting for BankBoi service and native deposit' (offering-waits.ts:70-77)
-- bank collection jobs that carry offering supply wait until the merchant has more than 3 free slots (offering-waits.ts:117-135)
-- a wait with no offering stock is recorded on the mark with a signature of rules, stock, BankBoi and inventory; the mark is ready again when the signature changes (offering-waits.ts:7-36)
+- the merchant's own 'manual bank exchange', 'withdrawals' or 'bank collection' job waits while a queued job has offering supply with a native bank withdrawal of that offering pending, until the merchant has more than 3 free slots (offering-waits.ts:117-135)
+- recordOfferingWait stores a wait with no offering stock on the mark, with a signature of rules, stock, BankBoi and inventory. The mark is ready again when the signature changes (offering-waits.ts:7-36)
 - a non-BankBoi withdrawal queues 'manual bank exchange' (application.ts:601-605)
 
 Settings:
@@ -511,7 +551,7 @@ Rules:
 Rules:
 
 - only the merchant may attach upgradeTiers; the bank entry must match, be upgradeable, unlocked and unbound, with tiers + level <= 13 (inventory/transfer-commands.ts:144-156)
-- the mark is stored with slot -1 and storage {pack, slot}; an existing one updates tiers (transfer-commands.ts:157-166)
+- putBankUpgrade stores the mark with slot -1 and storage {pack, slot}, or updates the tiers of an existing one (transfer-commands.ts:157-166)
 - a bank receipt with the same pack, slot and item (both directions) sets storageReceived (inventory/bank-upgrade-receipts.ts:5-15)
 
 **INV-036 Estimate gold and scrolls for buy-and-upgrade orders.** For a buy order with a target level the console simulates 3000 deterministic upgrade runs and quotes the 90th percentile gold cost.
@@ -568,21 +608,19 @@ Settings:
 Rules:
 
 - only shortages that match a job exchange line by id and level count (inventory/exchange-storage.ts:21-23, 67-79)
-- whole stacks are requested until the shortage is covered; an existing request for that pack and slot is not repeated (exchange-storage.ts:36-64)
+- collectShortage requests whole stacks until it covers the shortage and does not repeat an existing request for that pack and slot (exchange-storage.ts:36-64)
 - the coordinator persists when anything is pending (inventory/storage-service.ts:15-30)
 - auto exchange scheduling runs through improvementScheduler.exchange (application.ts:1625-1627)
-
-Handed over by other specs: 7 functions (13-lifecycle).
 
 **INV-041 Show exchange reward odds.** The character computes each possible exchange reward and its chance from the game's weighted drop tables, following nested tables.
 
 Rules:
 
-- chance = weight / table total, multiplied through 'open' rows; a table already on the path is skipped (runtime/characters/exchange-rewards.ts:10-31)
+- chance = weight / table total, multiplied through 'open' rows; walk skips a table already on its path (runtime/characters/exchange-rewards.ts:10-31)
 - cosmetic rows count 1; gold, shells and empty get labels (exchange-rewards.ts:32-44)
 - identical rows merge their chances; results sort by chance (exchange-rewards.ts:45-52)
 
-Handed over by other specs: 1 functions (02-movement).
+Handed over by other specs: 1 function (02-movement).
 
 **INV-042 Merchant weapon, exchanges and buy-copy requests.** The dashboard picks the merchant's preferred weapon, toggles auto exchange for an item, queues a one-off exchange (with a pickup from another character), or asks for a copy to be bought.
 
@@ -617,14 +655,14 @@ Settings:
 
 - merchantDeliveries, withdrawals, merchantWeapon (transfer-commands.ts:25-27)
 
-Handed over by other specs: 7 functions (13-lifecycle).
+Handed over by other specs: 3 functions (13-lifecycle).
 
 **INV-044 Apply stat scrolls to equipment.** The dashboard marks inventory or equipped gear for a stat scroll; the console checks the scroll supply first.
 
 Rules:
 
 - inventory marks are only for the merchant; equipped marks use the character's primaryStat (inventory/stat-scroll-commands.ts:73-78, 155, 170)
-- the item must accept stat scrolls (definition.stat) and the stat must be one of 23 supported (stat-scroll-commands.ts:38-59, 127-131)
+- the item must accept stat scrolls (definition.stat) and the stat must be one of 22 supported (4 primary and 18 others) (stat-scroll-commands.ts:38-59, 127-131)
 - non-primary stats need 1, 10, 100 or 1000 scrolls by grade thresholds (default 9, 10, 11) in merchant inventory plus bank (stat-scroll-commands.ts:66-72, 86-105)
 - scroll name = stat + 'scroll', mp_cost -> mpcostscroll (stat-scroll-commands.ts:63-65)
 - an item that already has that stat_type answers 409 (stat-scroll-commands.ts:134-135)
@@ -634,7 +672,7 @@ Settings:
 
 - statScrolls[name] (stat-scroll-commands.ts:29)
 
-Handed over by other specs: 1 functions (13-lifecycle).
+Handed over by other specs: 1 function (13-lifecycle).
 
 ### Lucky slot
 
@@ -642,12 +680,12 @@ Handed over by other specs: 1 functions (13-lifecycle).
 
 Rules:
 
-- counts a q_data upgrade packet with num 0-41, an upgrade scroll and exactly 4 digits; a repeat of the last roll with the same or lower remaining time is ignored (runtime/characters/lucky-slot-tracker.ts:11-25, 39-49)
+- counts a q_data upgrade packet with num 0-41, an upgrade scroll and exactly 4 digits; observe ignores a repeat of the last roll with the same or lower remaining time (runtime/characters/lucky-slot-tracker.ts:11-25, 39-49)
 - per slot: totalRolls, sumRolls, rolls above 0.963, perfect rolls (roll 0) (lucky-slot-tracker.ts:50-54)
 - the cursor moves to the next slot after each roll (lucky-slot-tracker.ts:55-56)
 - each client keeps its own stream id; streams add up without double counting (runtime/lucky-slot-tracking.ts:16-30, 65-80)
-- evidence model: 60% of lucky-slot rolls are max(U/10000, 0.975R - 0.012) (lucky-slot-tracking.ts:81-92)
-- a slot is ruled out with >= 100 samples and 0.999 elimination confidence; the best slot is inferred at 0.999 probability with >= 100 samples (lucky-slot-tracking.ts:93-104, 110-130)
+- evidence model: 60% of lucky-slot rolls are max(U/10000, 0.975R - 0.012) (lucky-slot-tracking.ts:81-92), as in the game's upgrade handler (node/server.js:7360-7363)
+- the search rules out a slot with >= 100 samples and 0.999 elimination confidence, and infers the best slot at 0.999 probability with >= 100 samples (lucky-slot-tracking.ts:93-104, 110-130)
 - select returns the inferred slot or the next slot from the cursor that is not ruled out; errors return null (lucky-slot-tracker.ts:66-69)
 
 Settings:
@@ -658,10 +696,10 @@ Settings:
 
 Rules:
 
-- reports merge per stream; a stream with no valid slots is ignored (status/lucky-slot-tracking.ts:35-43)
+- reports merge per stream; mergeTracking ignores a stream with no valid slots (status/lucky-slot-tracking.ts:35-43)
 - a new account character id for a name drops that name's tracking, verified slot, lock and resume; evidence moves with an id that changes name (lucky-slot-tracking.ts:14-34)
 - evidence counts only when the reported id matches (lucky-slot-tracking.ts:52-56)
-- the resume point is released once its slot records more rolls than at unlock (lucky-slot-tracking.ts:44-51)
+- releaseResume drops the resume point once its slot records more rolls than at unlock (lucky-slot-tracking.ts:44-51)
 - each merchant command gets luckyUpgradeSlot = lock, else resume slot, else verified slot, else null (status/response.ts:134-140)
 - a merged change persists (status/ingestion.ts:100-103)
 
@@ -669,14 +707,14 @@ Settings:
 
 - luckySlotLocks[name], luckySlotResume[name] {slot, rolls}, luckyUpgradeSlots[name], luckySlotTracking, luckySlotCharacterIds (status/lucky-slot-tracking.ts:2-8)
 
-Handed over by other specs: 1 functions (02-movement).
+Handed over by other specs: 1 function (02-movement).
 
 **INV-047 Upgrade in the lucky slot and put everything back.** For each upgrade the merchant swaps the item into the lucky slot, upgrades, and swaps it back, journaling every step so a crash or restart restores the layout.
 
 Rules:
 
 - the journal saves from, to, item, displaced contents and phase preparing, running or restoring, locally and as a production checkpoint (runtime/characters/lucky-upgrade.ts:2, 71-74)
-- every swap must be confirmed by inventory within 5000 ms (lucky-upgrade.ts:75-92)
+- the inventory must confirm every swap within 5000 ms (lucky-upgrade.ts:75-92)
 - failures carry code lucky_slot_unavailable and text 'Couldn't use lucky slot: <reason>' (lucky-upgrade.ts:65-68)
 - the item, scroll and offering must not change during preparation (lucky-upgrade.ts:144-156, 206-207)
 - restore adopts deliveries and potion use in the displaced stack, never recreates consumed units, and refuses a changed layout (lucky-upgrade.ts:23-60, 93-117)
@@ -693,7 +731,7 @@ Handed over by other specs: 2 functions (04-targeting, 05-survival).
 Rules:
 
 - a report without bank releases that character as observer (status/bank.ts:29-33)
-- a carried (unchanged) bank object is skipped (bank.ts:19-26, 34-37)
+- consumeBankReport skips a carried (unchanged) bank object (bank.ts:19-26, 34-37)
 - a change sets seenAt, adopts reserved BankBoi cargo and persists (bank.ts:38-45)
 - BankBoi completion and checkpoint routes also write the snapshot directly (http/bankboi-storage.ts:47-51)
 - restart restores snapshot, BankBoi workers, queue, transaction and withdrawals; the observer resets (inventory/initial-bank.ts:4-15)
@@ -702,7 +740,7 @@ Settings:
 
 - bankSnapshot, bankbois, bankboiQueue, bankboiTransaction, bankboiReservedMigrated, withdrawals in the bank document (initial-bank.ts:6-12)
 
-Handed over by other specs: 7 functions (11-settings, 13-lifecycle).
+Handed over by other specs: 8 functions (11-settings, 12-dashboard-and-status, 13-lifecycle).
 
 **INV-049 Know the bank vaults and how they unlock.** The console reads the vault list (floor, gold and shell cost, key) from the game files, and a character report may replace it.
 
@@ -711,8 +749,6 @@ Rules:
 - parses var bank_packs from game_files/<version>/old_common_functions.js; failure logs a warning and returns [] (infrastructure/game-data.ts:16-38)
 - bank_b needs bkey, bank_u needs ukey (game-data.ts:9-12)
 - a status report with bankVaults replaces the list (status/catalogs.ts:74-80, status/composition.ts:97)
-
-Handed over by other specs: 6 functions (11-settings, 13-lifecycle).
 
 **INV-050 Serialize character bank visits.** Ordinary character bank and upgrade visits run one at a time; the command snapshots marks, withdrawals, upgrades and the gold target when it is sent.
 
@@ -743,7 +779,7 @@ Handed over by other specs: 4 functions (02-movement, 05-survival).
 Rules:
 
 - a report with items stores items, slots and bank under its revision (status/inventory-carry.ts:23-31)
-- a report without items and with a known revision gets the held fields back; an unknown revision is refused (inventory-carry.ts:33-38)
+- a report without items and with a known revision gets the held fields back; complete refuses an unknown revision (inventory-carry.ts:33-38)
 - the response names the held revision (inventory-carry.ts:42-45)
 
 ### BankBoi storage
@@ -779,10 +815,10 @@ Rules:
 - mode: provision for a provisioning worker, retrieve with retrievals, else store (bankboi-service.ts:60-76)
 - on failure to start it puts the merchant back (bankboi-service.ts:100-110)
 - finish stops the BankBoi, reassigns the merchant, clears the BankBoi command, and queues 'manual bank exchange' when normal withdrawals remain (bankboi-service.ts:113-133; bankboi-composition.ts:80-86)
-- a transaction older than 600 000 ms, or older than 120 000 ms with a worker unseen for 30 000 ms or not banking, is recovered (bankboi-service.ts:141-157)
+- start() recovers a transaction older than 600 000 ms, or older than 120 000 ms with a worker unseen for 30 000 ms or not banking (bankboi-service.ts:141-157)
 - recovery marks the worker error 'interrupted' with a 10 000 ms retry (bankboi-composition.ts:61-64)
 - a Steam login release stops the BankBoi, confirms it is offline, frees the slot and keeps pending items (bankboi-service.ts:160-179; application.ts:2389)
-- withdrawals tied to a craft job that left the queue are pruned before planning (bankboi-composition.ts:45-55)
+- plan prunes withdrawals tied to a craft job that left the queue before planning (bankboi-composition.ts:45-55)
 - a character slot counts busy while a BankBoi transaction runs or the character reported banking, stocking or upgrading within 5000 ms (characters/ownership.ts:79-81, 142-145)
 
 **INV-056 Send the BankBoi its storage command.** When the replacement BankBoi first reports, the console records its inventory and sends one bankboi-service command with the planned requests and retrievals.
@@ -794,7 +830,7 @@ Rules:
 - phase moves to processing and bank state persists (bankboi.ts:80-81)
 - every BankBoi report records items, slots, gold and seenAt (bankboi.ts:40-45)
 
-Handed over by other specs: 1 functions (07-hunts-and-farming).
+Handed over by other specs: 1 function (07-hunts-and-farming).
 
 **INV-057 Follow items as storage moves them.** After a BankBoi run the console retargets stand listings, NPC sale marks, upgrade marks, mail attachments and craft allocations to the items' new pack and slot.
 
@@ -825,6 +861,7 @@ Settings:
 Rules:
 
 - tries prefix + 0, 1, 2 ... up to min(10 000, 10^(12 - prefix length)) names, skipping owned names and name errors (characters/creation.ts:75-95)
+- deletion refuses (409) a BankBoi with items, equipment, gold or pending work, and before createdAt + 180 minutes; it succeeds only when the roster stops listing the name (http/bankboi-delete.ts:17-29, 48-57, 62-91)
 - an accepted creation the roster does not confirm stops without trying another name (creation.ts:86-91)
 
 Handed over by other specs: 22 functions (13-lifecycle).
@@ -845,7 +882,7 @@ Settings:
 
 - restockPolicies[name] {hp, mp, elixir {item, min, max, autoConsume, autoAcquire}} (http/restock.ts:29-42)
 
-Handed over by other specs: 6 functions (13-lifecycle).
+Handed over by other specs: 4 functions (13-lifecycle).
 
 **INV-061 Count what the merchant can use from all storage.** One view lists the merchant's bag, bank panes and complete BankBoi stacks, minus anything reserved for crafts or deliveries.
 
@@ -854,10 +891,12 @@ Rules:
 - locations: inventory:<merchant>, each bank pack, bankboi:<name> (inventory/merchant-storage-stock.ts:7-21)
 - a BankBoi stack counts only while untouched by reservations (merchant-storage-stock.ts:19-20)
 - delivery reservations take exact slots first, then matching copies, ignoring q, price, rid, b, giveaway (runtime/craft-reservations.ts:45-57)
-- craft needs keyed name@level are reserved first at their allocated location, then anywhere (craft-reservations.ts:7-42)
+- availableCraftStock reserves craft needs keyed name@level at their allocated location first, then anywhere (craft-reservations.ts:7-42)
 - a protection error hides all stock (craft-reservations.ts:8)
 - storagePack accepts a bank pack name or bankboi:<name> (inventory/storage-source.ts:2-6)
 - storage identity = JSON [name, level, stat_type] (inventory/storage-service.ts:51-60)
+
+Handed over by other specs: 2 functions (12-dashboard-and-status).
 
 ### Item helpers and catalog
 
@@ -873,7 +912,7 @@ Rules:
 - inventoryTotals, inventoryQuantity, itemQuantity and inventoryAmount count by name or match with q defaulting to 1 (shared.js:922-927, 1315-1319, 5487-5495)
 - freeInventorySlots counts empty slots up to character.isize (shared.js:5398-5403)
 
-Handed over by other specs: 1 functions (triage).
+Handed over by other specs: 2 functions (12-dashboard-and-status, triage).
 
 **INV-063 Build the item catalog and per-item details.** The character builds the dashboard's item catalog (buyable, craftable, exchangeable, every item's details, drop sources and suggested prices) from game data.
 
@@ -892,7 +931,7 @@ Handed over by other specs: 4 functions (04-targeting).
 
 Rules:
 
-- statusInventory caches on JSON of items, slots, bank and the active upgrade; the cache key is used only after catalog acknowledgement (shared.js:3195-3209)
+- statusInventory caches on JSON of items, slots, bank and the active upgrade; statusInventory uses the cache key only after catalog acknowledgement (shared.js:3195-3209)
 - attachStatusInventory resends the full inventory at least every 10 s even when the revision is acknowledged (shared.js:3210-3217)
 - acknowledgeStatusInventory ignores combat-only reports (shared.js:3226-3230)
 - bankSnapshot always reports 42 slots per unlocked pack (shared.js:1902-1915)
@@ -909,7 +948,7 @@ Rules:
 - an item in a slot past isize is first swapped into a valid empty slot with a 2500 ms wait (shared.js:4073-4084)
 - it fills existing stacks through the stack service, then uses only locations the coordinator allows (bankStackService().locations) on the current floor (shared.js:4085-4105)
 - with bankStaging on, items1 slots 35-41 are a transfer pane: they take merges and, as a last resort, new deposits (shared.js:344, 4106-4128)
-- a stack whose bankStackHomes owner is another character is not placed in a new slot (virtual home) (shared.js:4116-4118)
+- bankStoreFully never puts a stack whose bankStackHomes owner is another character into a new slot (virtual home) (shared.js:4116-4118)
 - with no destination it asks the BankBoi checkpoint, then throws 'bank_full' (shared.js:4129-4132); completion-retries.ts:136 matches /^(bank_full|inventory_full|no_space)$/
 - after bank_store it waits up to 2500 ms for the slot to change because the promise can resolve before the inventory proxy updates (shared.js:4140-4148)
 - bankboiCheckpoint (merchant only) POSTs /bankboi/checkpoint with the bank snapshot and throws 'bankboi_pending' when storage wants the merchant slot (shared.js:4153-4161); completion-retries.ts:41 matches that text
@@ -932,7 +971,7 @@ Rules:
 - finishBankStacks skips a repeat when [bankStaging, visit id, bank] is unchanged, posts /status after moves, and reports a deferral when buffers are unavailable (shared.js:4058-4068)
 - normalBankStackFits and mergeIntoNormalBank find and fill a partial normal-bank stack outside staging (shared.js:4571-4585)
 
-Handed over by other specs: 1 functions (02-movement).
+Handed over by other specs: 1 function (02-movement).
 
 **INV-067 Withdraw or stage with confirmation.** The character withdraws a bank slot or deposits into an exact bank slot and waits until the game shows the move.
 
@@ -948,17 +987,19 @@ Rules:
 
 - merchantVisitBank closes the stand, walks to the bank, waits for items0, checks BankBoi before and after errands, then sorts the floor (shared.js:6051-6066)
 - errands run once per command (_merchantBankErrandsChecked) (shared.js:5922-5926)
+- every merchant command carries all of the merchant's pending withdrawals and bank marks (merchant/commands.ts:16-25, spread into ownMerchantCommand at :117 and partyMerchantCommand at :167); scopeWork empties npcSales except for NPC sale routines but leaves those two lists (merchant/command-scope.ts:3-16), so the first bank visit of any job runs every pending withdrawal and bank mark
 - withdrawals stop at 3 or fewer free slots; self improve records the deferred ones (shared.js:5950-5959)
-- a withdrawal missing from the bank is acknowledged as stale (shared.js:5963-5971)
+- the errands acknowledge a withdrawal missing from the bank as stale (shared.js:5963-5971)
 - marked items that feed this job's upgrades, compounds, auto compounds or bank upgrade rules stay carried (shared.js:5980-5993)
 - each bank mark asks a protection checkpoint and keeps partly reserved stacks (shared.js:5927-5941, 6003-6006)
 - 'bank_full' defers the deposit and continues (shared.js:6008-6015)
 - NPC sale withdrawals stop at esize <= 3 and call bank_retrieve with no settle wait (shared.js:6019-6032)
+- the errands first deposit every carried coin above merchantGoldTarget, else goldTarget, else 0 (shared.js:5942-5949); the coordinator sends merchantGoldTarget = goldTargets[merchant], or 0 when unset (merchant/commands.ts:12-25), so with no target the merchant banks all its gold on the first bank visit of each job
 - withdrawMerchantCash withdraws max(shortfall, cash target minus carried gold), capped by bank gold (shared.js:5911-5919)
 
 Settings:
 
-- merchantGoldTarget (status setting, default 0) read shared.js:11340, 5912-5913
+- merchantGoldTarget from goldTargets[merchant] (default 0): sent at merchant/commands.ts:19 and status/response.ts:203-206; read at shared.js:571, 11340, 5912-5913, 5942-5944
 
 ### Bank sort
 
@@ -1014,15 +1055,17 @@ Settings:
 
 - goldTarget per bank command shared.js:4487
 
+Handed over by other specs: 2 functions (triage).
+
 **INV-072 Fighter self-upgrade run.** A non-merchant unequips marked gear, buys scrolls and purchases, upgrades and compounds at the upgrade NPC, then returns.
 
 Rules:
 
 - upgradeMarked busy-waits on stocking every 250 ms and sets upgrading (shared.js:3843-3846)
-- tiers are capped by maximumItemLevel minus the current level (shared.js:3865-3867)
+- upgradeMarked caps tiers at maximumItemLevel minus the current level (shared.js:3865-3867)
 - scroll need is one scroll per tier at the grade of each level; compound groups need exactly 3 same-level items (shared.js:3870-3899)
-- a gold shortfall is withdrawn from the bank; it throws when bank plus carried gold is short (shared.js:3905-3917)
-- each tier runs a preview upgrade, then upgradeConfirmed; lucky_slot_unavailable is rethrown, other errors stop that item (shared.js:3938-3957)
+- upgradeMarked withdraws a gold shortfall from the bank and throws when bank plus carried gold is short (shared.js:3905-3917)
+- each tier runs a preview upgrade, then upgradeConfirmed; it rethrows lucky_slot_unavailable, and other errors stop that item (shared.js:3938-3957)
 - compounds use raw compound() without the confirmed wrapper (shared.js:3972-3975)
 - it always returns and POSTs /bank-complete with upgraded, purchased and compounded (shared.js:3983-3997)
 
@@ -1050,13 +1093,13 @@ Rules:
 - trackedProductionWork recovers the old journal, calls yieldMerchantForEvent, checks craft reservations for automatic work, and writes a 'prepared' journal (shared.js:4969-4981)
 - admission POSTs /merchant/production; an already completed attempt returns {alreadyAttempted}; on 409 it inspects and drops the journal only when admission is confirmed absent (shared.js:4982-4998)
 - a commerce journal with no live item and no confirmed destruction throws 'Upgrade outcome uncertain; production receipt requires inventory review' (shared.js:5011-5012); completion-retries.ts:113-118 matches /upgrade.*uncertain/
-- failures matching /timed out|uncertain|interrupted|recovery/ are rethrown without a receipt (shared.js:5014)
+- trackedProductionWork rethrows failures matching /timed out|uncertain|interrupted|recovery/ without a receipt (shared.js:5014)
 - verifyProductionProtection throws 'Item reserved for crafting; automatic production deferred' when a slot is reserved or locked (shared.js:4953-4961)
 - verifyMerchantItemMarks POSTs a protection-only checkpoint for the active job (shared.js:4783-4787)
 - rememberCommerceProduction, replayCompletedCommerce and rememberReviewedCommerce copy outcomes into the commerce journal by sequence, and throw 'Reviewed production is still settling' while a placeholder exists (shared.js:4803-4850)
 - journal storage and recovery (productionJournalKey, read/write, finish, save, recoverProductionJournal(Work), shared.js:4789-4952) are outside this list; cite only
 
-Handed over by other specs: 5 functions (11-settings).
+Handed over by other specs: 11 functions (11-settings, triage).
 
 **INV-075 Confirm an upgrade or compound against inventory.** The merchant fires the native upgrade or compound and decides success, failure or destruction from the inventory, not only from the game promise.
 
@@ -1095,7 +1138,7 @@ Rules:
 - prepareUpgradeOffering records 'wait-offering' and returns {waiting:true} when a required offering is missing (shared.js:6179-6205)
 - upgradeRecoverySignature keys an upgrade recovery block on the marks and the matching items only (merchant/upgrade-recovery.ts:5-9)
 
-Handed over by other specs: 1 functions (07-hunts-and-farming).
+Handed over by other specs: 4 functions (07-hunts-and-farming, triage).
 
 **INV-078 Run purchases, upgrades, compounds and auto compounds.** The merchant buys requested items, upgrades each mark to its target, compounds marked triples and runs auto compound rules from inventory and bank.
 
@@ -1118,23 +1161,25 @@ Rules:
 - prepareManualImprovementScrolls visits the bank only when carried stock is short, retrieves with retrieveFromBankUntil, withdraws gold, then buys at the scrolls NPC (shared.js:6530-6561)
 - ensureOwnedItemQuantity does the same for one item and throws 'Insufficient bank gold for ...' (shared.js:6511-6528)
 
-**INV-080 Apply stat scrolls.** The merchant applies stat scrolls to its own items, delivers scrolls to a fighter, or a fighter applies delivered scrolls to its equipped gear at the shrine.
+Handed over by other specs: 2 functions (triage).
+
+**INV-080 Apply stat scrolls.** The merchant applies stat scrolls to its own items, delivers scrolls to a fighter, or a fighter applies delivered scrolls to its equipped gear at the upgrade NPC.
 
 Rules:
 
 - statScrollQuantity uses 1, 10, 100, 1000 scrolls for grades 0-3 (shared.js:6563-6565), matching the game's needed table (game server.js:7466)
 - applyStatScrolls needs the exact clicked item state, calls raw upgrade(), and waits 2500 ms for stat_type (shared.js:6618-6664)
 - deliverStatScrolls subtracts the target's carried scrolls, meets the target and sends the rest (shared.js:6666-6688)
-- applyOwnedStatScrolls travels fully equipped, unequips one piece at a time, applies via upgradeConfirmed, re-equips, then returns to the leader or its origin and equips delivered items (shared.js:6690-6752)
+- applyOwnedStatScrolls travels fully equipped to the upgrade NPC (find_npc("newupgrade")), unequips one piece at a time, applies via upgradeConfirmed, re-equips, then returns to the leader or its origin and equips delivered items (shared.js:6690-6752)
 
-Handed over by other specs: 1 functions (11-settings).
+Handed over by other specs: 6 functions (11-settings, 12-dashboard-and-status, triage).
 
 **INV-081 Merchant self improve job.** The merchant runs its own improvement pipeline: drop stale stat requests, unequip marked gear, gather bank inputs, buy supplies, improve, store compound leftovers, and re-equip.
 
 Rules:
 
-- stale stat-scroll requests are removed before any gold is withdrawn (shared.js:7295-7309)
-- equipped upgrade and stat marks are unequipped back to back (shared.js:7310-7322)
+- merchantSelfImprove removes stale stat-scroll requests before it withdraws any gold (shared.js:7295-7309)
+- it unequips equipped upgrade and stat marks back to back (shared.js:7310-7322)
 - prepareBankCompounds withdraws reserved bank triples and confirms each within 2500 ms (shared.js:7208-7229)
 - prepareBankUpgrades reserves at most 3 bank items for auto upgrade rules, stops at esize <= 3, and checks each withdrawal with no settle wait (shared.js:7231-7270)
 - leftover compound inputs go back through partyStoreCompoundLeftovers (shared.js:7331-7347)
@@ -1150,15 +1195,17 @@ Rules:
 
 - merchantBuyUpgradeLine resumes the saved line or starts a new one; an unavailable estimate needs a positive goldCap as budget (shared.js:7447-7458)
 - legacy checkpoints without results rebuild them from inventory and throw on a count mismatch (shared.js:7464-7470)
-- every owned group is remapped after inventory moves; a count mismatch throws 'Owned upgrade item is ambiguous' or '... missing' (shared.js:7416-7445, 7479)
+- remapCommerceOwnedItems remaps every owned group after inventory moves; a count mismatch throws 'Owned upgrade item is ambiguous' or '... missing' (shared.js:7416-7445, 7479)
 - batch size is buyUpgradeBatchSize clamped 1-42, minus 3 free slots and one for a missing scroll, cut until it fits the budget (shared.js:7645-7661)
-- each purchase is journaled as pendingPurchase before buying; spend over budget throws '90% estimated budget exhausted' (shared.js:7528-7541)
+- purchaseStock journals each purchase as pendingPurchase before buying; spend over budget throws '90% estimated budget exhausted' (shared.js:7528-7541)
 - settleUpgrade throws 'Commerce production is still settling' while a placeholder exists, records destruction or an operator review, and adopts an intermediate-level survivor (shared.js:7542-7607)
 - the attempt limit defaults to 10000 when the order has none (shared.js:7640-7642)
 
 Settings:
 
 - buyUpgradeBatchSize (default 1, range 1-42) written http/thresholds.ts:34, read shared.js:7645
+
+Handed over by other specs: 2 functions (triage).
 
 **INV-083 Run a shopping, crafting and leveling order.** The merchant collects materials from party members, withdraws and buys what an order needs, buys and levels items, crafts recipes, and reports progress.
 
@@ -1167,15 +1214,13 @@ Rules:
 - version 2 orders take the newer of localStorage 'party-commerce:<id>' and the coordinator resumeState by sequence (shared.js:7722-7727)
 - each checkpoint bumps the sequence, saves locally, POSTs /merchant/checkpoint and throws 'merchant_yield' when the coordinator says yield (shared.js:7754-7776)
 - material handoffs poll /merchant/job every 750 ms for up to 90000 ms (shared.js:7796-7802)
-- bank materials are withdrawn into an empty slot and split to the exact quantity with a fixed 250 ms wait (shared.js:7851-7874)
-- saved scrolls are withdrawn whole with no settle wait between calls (shared.js:7918-7924)
+- retrieveBankQuantity withdraws bank materials into an empty slot and splits the exact quantity with a fixed 250 ms wait (shared.js:7851-7874)
+- merchantCommerce withdraws saved scrolls whole with no settle wait between calls (shared.js:7918-7924)
 - materials at level 0 with a seller are bought; others throw 'Crafting material is unavailable' (shared.js:7943-7950)
 - the legacy engine (not version 2) buys and levels one item at a time with a 10000 attempt safety limit and a compound branch (shared.js:8046-8165)
 - crafts visit recipe.quest's NPC or craftsman and checkpoint after each auto_craft (shared.js:8167-8202)
 - failures with hunt_movement_owned, commerce movement, any version 2 error, or 'interrupted|merchant_anniversary_reserved|bankboi_pending' report as paused with failureKind (shared.js:8210-8224)
 - commerceMove (shared.js:7738-7753) is not in this list; cite only
-
-Handed over by other specs: 1 functions (02-movement).
 
 **INV-084 Validate orders and allocate craft materials.** The coordinator checks order lines and spreads each recipe's material need over merchant inventory, bank, BankBoi and party inventories.
 
@@ -1185,21 +1230,33 @@ Rules:
 - allocateOrderMaterials totals materials per id@level and takes from each source in call order, recording bankboi:, bank, party or merchant allocations (merchant/order-materials.ts:10-71)
 - estimateUpgradeBatch yields through node setImmediate because the caracAL sandbox lacks it (merchant/upgrade-estimate.ts:4-8); estimateUpgrade has no production caller (review 1.1: tests only)
 
-**INV-085 Reserve craft and commerce stock.** The coordinator derives which items are reserved for queued crafts, deliveries and running buy-and-level batches, so other jobs leave them alone.
+**INV-115 Queue a shopping, crafting and leveling order.** The dashboard sends an order of buy lines (optionally to a target level) and craft lines; the console estimates the leveling cost, allocates craft materials and queues one or two 'merchant commerce' jobs.
+
+Rules:
+
+- it needs a merchant and a non-empty order that passes normalizeOrderLines (http/merchant-order.ts:206-220; INV-084)
+- buy lines with a target level get a simulated budget; an unavailable estimate needs acknowledgeUnavailable and a positive goldCap, which becomes the budget (merchant-order.ts:46-70)
+- a merchant or catalog change during the estimate answers 409 (merchant-order.ts:221-228)
+- an identical order already queued or running returns that job instead of a new one (merchant-order.ts:128-145, 171-172, 237-245)
+- the route allocates craft materials from the merchant's bag, bank panes, BankBoi stacks and online party members, minus reservations; a missing material that is not a buyable +0 item answers 409 with the shortfall (merchant-order.ts:72-126, 246-261)
+- an order with both buys and crafts becomes a 'manual buying' job plus a crafting job (merchant-order.ts:147-169)
+- BankBoi allocations become withdrawals tagged craftJobId, the job is blockedOnBankboi and the BankBoi service starts (merchant-order.ts:179-201)
+
+**INV-085 Reserve craft and commerce stock.** The coordinator derives which items queued crafts, deliveries and running buy-and-level batches reserve, so other jobs leave them alone.
 
 Rules:
 
 - craftProtection walks the current job and queue in queuedAt order, once per job id, and returns the error text instead of throwing (merchant/craft-reservations.ts:47-65)
 - a recipe missing from the catalog fails the whole protection with 'Cannot protect crafting ingredients: recipe missing for ...' (craft-reservations.ts:41-42)
 - orders in leveling or crafting phase reserve their needs in merchant inventory (craft-reservations.ts:16-18)
-- deliveries and version 2 commerce results, batch items, the active item, its pending level and a pending base purchase are protected (craft-reservations.ts:67-96)
+- craftProtection protects deliveries and version 2 commerce results, batch items, the active item, its pending level and a pending base purchase (craft-reservations.ts:67-96)
 - a pending purchase reserves before plus quantity (craft-reservations.ts:98-102)
 
 **INV-086 Exchange items and tokens.** The merchant withdraws exchange materials, exchanges them at the right NPC or buys token rewards, reports each step, and banks rewards the rules route to the bank.
 
 Rules:
 
-- lines merge by id, level and reward; their materials are removed from bank marks (shared.js:8253-8269)
+- merchantExchange merges lines by id, level and reward and removes their materials from bank marks (shared.js:8253-8269)
 - each withdrawal waits up to 2500 ms; a shortage asks /merchant/exchange-supply and throws 'bankboi_pending' or 'Not enough ...' (shared.js:8316-8337)
 - token rewards use raw parent.push_deferred plus parent.socket.emit('exchange_buy', {num, name, q}) on the verified stack (shared.js:8356-8361); the game uses q only as a safety check (game server.js:6626-6650)
 - item exchanges split the exact quantity with a fixed 250 ms wait, cast massexchange and verify marks (shared.js:8278-8290, 8362-8366)
@@ -1212,7 +1269,7 @@ Settings:
 - merchantAutomations['automatic exchange'] (default on) improvement-scheduler.ts:163
 - autoExchanges rules improvement-scheduler.ts:89
 
-Handed over by other specs: 1 functions (02-movement).
+Handed over by other specs: 1 function (02-movement).
 
 ### Market purchases
 
@@ -1244,9 +1301,11 @@ Rules:
 - marketplaceMove races smart_move against 45000 ms and stops both movement kinds on timeout (shared.js:8774-8798)
 - it waits up to 60000 ms for the seller, refreshes the location once, and follows with xmove every 1000 ms beyond 300 px (shared.js:8865-8892)
 - a listing matches on name, level, p, not a buy order, and price <= advertised (shared.js:8807-8824)
-- failure codes are seller_not_visible, stand_not_open, listing_not_available, inventory_reserve (shared.js:8893-8906)
+- failure codes are seller_not_visible, stand_not_open, listing_not_available, inventory_reserve (shared.js:8893-8906), and destination_unreachable when marketplaceMove times out (shared.js:8783, 8910)
 - /merchant/aldata-progress can add listings or cancel a seller (shared.js:8912-8926)
 - batchMarketplaceVisits merges queued ALData orders for sellers already on the itinerary and sorts by seller then price (merchant/marketplace-batch.ts:16-42; dispatcher.ts:145-162)
+
+Handed over by other specs: 1 functions (02-movement).
 
 **INV-090 Sell to an ALData buy order.** The merchant gathers matching items, travels to a buyer's want-to-buy listing and sells into it.
 
@@ -1271,13 +1330,15 @@ Rules:
 - a 'ui' socket listener stored on parent counts '+$$' receipts per offer token when slot, item, level and price match (shared.js:9320-9331)
 - nativeStandSync serialises reconciles (shared.js:9339-9344)
 - reconcileNativeStand reports slots, stand state, gold and 'space' as more than 3 empty slots; with suspend it opens the stand and waits 250 ms (shared.js:9345-9368)
-- removals unequip one offer and wait up to 3000 ms (30 x 100 ms) each; creations place at most 16 wishlist offers, each confirmed within 3000 ms (shared.js:9369-9390)
+- removals unequip one offer and wait up to 3000 ms (30 x 100 ms) each and throw when it is still there; creations place at most 16 wishlist offers, wait up to 3000 ms for each and report without failing (shared.js:9369-9390)
 - guardedMarketPurchase syncs the stand, asks /merchant/native-stand action 'purchase' for an allowed quantity, buys, then flushes the receipt (shared.js:9393-9406)
-- saved stand bids restore with useStandSlot false and acceptHigherLevels true (initial-state.ts:126-129)
+- saved stand bids default useStandSlot to false and acceptHigherLevels to true when the field is missing; saved values win (initial-state.ts:126-129)
 
 Settings:
 
 - standBids (per item; useStandSlot default false, acceptHigherLevels default true) initial-state.ts:126-129
+
+Handed over by other specs: 1 function (triage).
 
 **INV-093 Buy from an NPC and keep the logistics reserve.** The character buys from an NPC and waits until the items arrive; market purchases first check that 3 inventory slots stay free.
 
@@ -1287,7 +1348,21 @@ Rules:
 - it polls 100 ms for up to 15000 ms until the count grew by the amount, with a 150 ms grace after the promise settles, else throws 'Purchase did not arrive: <n> x <name>' (shared.js:4532-4553)
 - purchasePreservesLogisticsReserve fills matching partial stacks first, then needs free slots minus new slots >= 3 (shared.js:5405-5414); stand, Ponty and ALData buys throw 'purchase deferred: three merchant logistics slots are reserved' otherwise (shared.js:8546-8547, 8645-8646, 8903-8906)
 
-Handed over by other specs: 2 functions (triage).
+Handed over by other specs: 1 function (triage).
+
+**INV-118 Loot nearby chests.** Every character opens chests near it while it fights or travels; a full bag asks the merchant for a cleanout.
+
+Rules:
+
+- inside a cave it hands off to lootDungeonChests (shared.js:5440)
+- a chest counts when it is not deleted, is on the same map and instance and is within 400 of the character (shared.js:5428-5437)
+- at most two chests per call and at least 250 ms between calls, starting after the last chest tried (shared.js:5447, 5451-5452, 5466)
+- a rejected chest waits 250 ms (cooldown, openning), 30 000 ms (loot_failed) or 5000 ms (other known reasons) before a retry; other errors throw (shared.js:5474-5477)
+- 3 or fewer free slots, or loot_no_space, asks the merchant for a cleanout (shared.js:5463-5465, 5478)
+- the role runner calls it every 250 ms while active and outside A/B test pending or feed mode, also while moving (runtime/characters/roles/runner.ts:272-284, 333)
+- these functions are a candidate handoff to 07 (lootDungeonChests) and 08 (requestMerchantCleanout)
+
+Handed over by other specs: 3 functions (13-lifecycle, triage).
 
 ### Sales
 
@@ -1295,8 +1370,8 @@ Handed over by other specs: 2 functions (triage).
 
 Rules:
 
-- bank-sourced marks are withdrawn with bank_retrieve and looked up at once with no settle wait (shared.js:9239-9248)
-- locked items, changed items and reserved slots are blocked (shared.js:9249-9267)
+- merchantNpcSale withdraws bank-sourced marks with bank_retrieve and looks them up at once with no settle wait (shared.js:9239-9248)
+- it blocks locked items, changed items and reserved slots (shared.js:9249-9267)
 - the job throws 'interrupted' when it is no longer the active job (shared.js:9263)
 - it sells min(mark quantity, stack q) (shared.js:9255, 9262, 9268)
 
@@ -1305,7 +1380,7 @@ Rules:
 Rules:
 
 - reconcileNpcSales signs the inventory and rebuilds marks; marks become 'running' while a sale runs (merchant/npc-sales.ts:78-121)
-- a missing item blocks with 'Marked item is not in merchant inventory'; an automatic mark blocked that way for 300000 ms is dropped by matching the text (npc-sales.ts:36-51)
+- a missing item blocks with 'Marked item is not in merchant inventory'; retainBlocked drops an automatic mark blocked that way for 300000 ms by matching the text (npc-sales.ts:36-51)
 - identity ignores the lock flag (npc-sales.ts:23-24)
 - failNpcSales retries after 5000, 15000, 30000, then 60000 ms (npc-sales.ts:123-135)
 - #116 keep rules sell only spare copies: held minus keep minus marked minus withdrawing (merchant/npc-sale-keep.ts:13-30)
@@ -1317,7 +1392,7 @@ Rules:
 
 - npcSaleRuleKey is the item key, or [character, key] without shared merchant rules (merchant/player-npc-sales.ts:13-16)
 - playerSaleReserved blocks slots with other marks, upgrades, stat scrolls, compounds or deconstruction (player-npc-sales.ts:29-41)
-- a new automatic mark is skipped within 10000 ms of a received copy (player-npc-sales.ts:90-105)
+- automatic skips a new automatic mark within 10000 ms of a received copy (player-npc-sales.ts:90-105)
 - missing, protected, locked, bound or reserved items block with one text (player-npc-sales.ts:129-158)
 - receipts move the mark to the merchant with the received quantity (player-npc-sales.ts:61-83)
 - collection queues 'marked items' for automatic and 'npc sale pickup' for manual marks (player-npc-sales.ts:160-178)
@@ -1327,7 +1402,35 @@ Settings:
 - merchantAutomations['auto npc sales'] (default on) player-npc-sales.ts:159
 - autoNpcSales rules (item, character, keep) player-npc-sales.ts:180
 
+**INV-116 Mark one item for NPC sale from the dashboard.** The dashboard marks one copy (from a party member, the merchant, a bank pane or a BankBoi) for an NPC sale and the console schedules its collection.
+
+Rules:
+
+- the request names the source, a slot and the item; the live entry must match ignoring q, else 409 'the item moved' (http/npc-sale.ts:46-79, 98-107, 144-150)
+- quantity 1 to the stack size; a levelled, stat or p item needs acknowledged true; the route refuses a locked item (npc-sale.ts:80-92)
+- a party member's copy must not be bound or reserved for other work (npc-sale.ts:155-160)
+- the route returns an identical mark instead of a duplicate (npc-sale.ts:168-170)
+- a member's sale queues 'npc sale pickup'; a BankBoi copy becomes a withdrawal and starts the BankBoi service; otherwise the route queues 'npc sales', as a second job when one is running (npc-sale.ts:108-135)
+- removal refuses a running sale and refuses while an 'npc sales' job runs (npc-sale.ts:136-143)
+
 Handed over by other specs: 13 functions (13-lifecycle).
+
+**INV-117 Set automatic NPC sale and stand sale rules.** The dashboard sets or clears the standing rules that sell an item to an NPC or list it on the stand.
+
+Rules:
+
+- an NPC rule is keyed by item, or by [character, item] without shared merchant rules; a keep count (merchant-wide rules only) must be a whole number of at least 0, or blank (http/automatic-sales.ts:49-68, 81-101)
+- changing the keep count drops that rule's unsent automatic marks and NPC withdrawals, and answers 409 while an NPC sale job runs with marks for it (automatic-sales.ts:55-61, 102-106)
+- an NPC rule drops the stand rule for the same key and its automatic listings, unless shared rules are on or the rule is per character (automatic-sales.ts:62-66)
+- a stand rule needs a whole price of at least 1 and drops the NPC rule and marks for the key unless shared rules are on (automatic-sales.ts:112-125)
+- clear-all removes every NPC rule of that owner, or every stand rule with its automatic listings (automatic-sales.ts:75-79, 97, 131-134)
+- each change reconciles, persists and publishes, then syncs the stand or idles the merchant (automatic-sales.ts:69-74, 109, 140-141)
+
+Settings:
+
+- autoNpcSales[key] {item, createdAt, character or keep} (automatic-sales.ts:63); autoStandMarks[key] {item, price, createdAt} (automatic-sales.ts:120)
+
+Handed over by other specs: 11 functions (13-lifecycle).
 
 **INV-097 Mark merchant stock for automatic sale.** On each merchant status report the coordinator marks carried items for NPC sale or stand listing by rule, clamps keep rules, and queues sale or bank trips.
 
@@ -1345,21 +1448,19 @@ Settings:
 - merchantAutomations['auto npc sales'] automatic-sales.ts:207, 231
 - autoNpcSales and autoStandMarks (price >= 1) automatic-sales.ts:91-92, 221
 
-Handed over by other specs: 11 functions (13-lifecycle).
-
 **INV-098 Mark bank stock for automatic sale.** While the merchant is idle, the coordinator marks unreserved whole bank stacks for NPC sale withdrawal or stand listing and queues a bank trip.
 
 Rules:
 
-- bank stock is marked only when a merchant exists and no job is current (automatic-sales.ts:162-164)
-- partly reserved stacks are skipped because withdrawals move whole stacks (automatic-sales.ts:165-172)
-- NPC sale withdrawals per pass are capped at max(10, itemCollectionThreshold) (automatic-sales.ts:135-138, 148)
+- markBankStock marks bank stock only when a merchant exists and no job is current (automatic-sales.ts:162-164)
+- it skips partly reserved stacks because withdrawals move whole stacks (automatic-sales.ts:165-172)
+- it caps NPC sale withdrawals per pass at max(10, itemCollectionThreshold) (automatic-sales.ts:135-138, 148)
 - a bank stand listing adds a withdrawal tagged standListingId and queues 'manual bank exchange' (automatic-sales.ts:152-158, 292-293)
 - queueBankTrip queues 'withdrawals' or 'bank collection' from bankCollectionReason (automatic-sales.ts:258-262)
 
 Settings:
 
-- itemCollectionThreshold (default 10) automatic-sales.ts:138
+- itemCollectionThreshold (saved default 1, inventory/initial-collection.ts:28-30); automatic-sales.ts:138 uses 10 only when the field is missing, and the cap is max(10, threshold)
 
 **INV-099 Plan and reconcile stand listings.** The coordinator keeps the merchant's planned stand listings, caps them at 16 slots including stand bids, reprices all copies of an item, and reconciles them against the live stand.
 
@@ -1392,7 +1493,8 @@ Rules:
 
 Settings:
 
-- merchantAutomations.withdrawals and merchantAutomations['party collection'] (default on), itemCollectionThreshold (default 10) bank-collection.ts:27-28
+- merchantAutomations.withdrawals and merchantAutomations['party collection'] (default on) bank-collection.ts:27-28
+- itemCollectionThreshold (saved default 1, initial-collection.ts:28-30; bank-collection.ts:28 uses 10 only when the field is missing)
 
 ### Deconstruction
 
@@ -1400,19 +1502,22 @@ Settings:
 
 Rules:
 
-- deconstructable needs a dismantle recipe or a compound item above level 0, not locked or bound; boosters are excluded (merchant/deconstruction.ts:51-68)
+- deconstructable needs a dismantle recipe or a compound item above level 0, not locked or bound; buildDeconstructionCatalog leaves out boosters (merchant/deconstruction.ts:51-68)
 - marks left running at startup become blocked 'Interrupted action: verify inventory before retrying' so a lost acknowledgement never replays (deconstruction.ts:93-98)
-- automatic marks are not recreated within 10000 ms of the last mark update (deconstruction.ts:159-166)
+- automatic does not recreate a mark within 10000 ms of the last mark update (deconstruction.ts:159-166)
 - a missing item waits 10000 ms for merged stacks, then blocks; an automatic mark recovers when the item reappears by matching the block text (deconstruction.ts:176-178, 196-200, 219-227)
 - complete marks are kept 60000 ms (deconstruction.ts:233-235)
 - bank marks start as 'withdrawing' with a withdrawal and queue BankBoi or 'manual bank exchange'; automatic bank marks skip a cell touched in the last 60000 ms (merchant/bank-deconstruction.ts:48-77)
 - withdrawal receipts make the mark ready, or block it when the bank item is missing (bank-deconstruction.ts:78-91)
 - each unit claims via /deconstruction/step, checks gold and free space (compound: min(50000000, value x 10) gold and 2 slots, matching the game's dismantle handler), dismantles with a 10000 ms bound and posts a receipt (shared.js:9171-9226)
 - a failed unit blocks the mark and stops that mark (shared.js:9213-9216; deconstruction.ts:326-340)
+- the catalog of deconstructable items is built from game_files/<version>/data.js at start; a load failure logs a warning and disables deconstruction (infrastructure/game-data.ts:58-67)
 
 Settings:
 
 - autoDeconstruction rules per rule owner deconstruction.ts:143, 302-321
+
+Handed over by other specs: 2 functions (11-settings, triage).
 
 ### Automatic improvements
 
@@ -1421,10 +1526,10 @@ Settings:
 Rules:
 
 - evaluateAutoCompounds sets runnable when some level below target has 3 unlocked copies; it never fills completed and keeps every rule (merchant/automatic-improvements.ts:29-54)
-- nothing is scheduled while a production attempt is pending (improvement-scheduler.ts:130-133)
+- compound schedules nothing while a production attempt is pending (improvement-scheduler.ts:130-133)
 - sharedCompoundRules merges rules by name@tier, -1 meaning unlimited, sorted by tier (merchant/banked-improvements.ts:20-32)
 - stageCompound plans BankBoi inputs only when no job, BankBoi transaction or withdrawal is pending and the merchant has more than 3 free slots (improvement-scheduler.ts:55-58, 77-85, 125-126)
-- planCompoundStorage stages only the missing inputs of the highest available triple of the first rule (merchant/compound-storage.ts:13-30)
+- planCompoundStorage walks rules in order and levels from the top; it stages nothing once a visited level already has 3 local copies, and otherwise stages the BankBoi copies for the first level that can reach 3 (merchant/compound-storage.ts:13-30)
 - the merchant is runnable on carried triples, local triples when inputs fit, or compound leftovers (improvement-scheduler.ts:127-128); another member queues 'marked items' when it has an automatic pickup (improvement-scheduler.ts:148-150)
 - pruneCompound drops a queued 'auto compound' when nothing is runnable (improvement-scheduler.ts:154-159)
 
@@ -1433,7 +1538,7 @@ Settings:
 - merchantAutomations['auto compound'] (default on) improvement-scheduler.ts:138
 - autoCompounds rules (name, targetTier, quantity) improvement-scheduler.ts:73
 
-**INV-103 Schedule automatic upgrades from storage.** The coordinator matches auto upgrade rules to protected storage stock, stages BankBoi copies, and queues 'auto upgrade' when the normal bank holds a candidate.
+**INV-103 Schedule automatic upgrades from storage.** The coordinator matches auto upgrade rules to protected storage stock, stages BankBoi copies, and queues 'auto upgrade' when the merchant's bag or the normal bank holds a candidate.
 
 Rules:
 
@@ -1466,7 +1571,7 @@ Settings:
 
 - upgradePreviewResults (cap 100) upgrade-preview.ts:18, 53-55
 
-Handed over by other specs: 1 functions (02-movement).
+Handed over by other specs: 2 functions (02-movement, triage).
 
 ### Other merchant jobs
 
@@ -1475,15 +1580,17 @@ Handed over by other specs: 1 functions (02-movement).
 Rules:
 
 - merchantDonate requires a positive amount, funds from the bank, emits raw parent.socket.emit('lostandfound','info'), waits 350 ms, then calls donate_gold (shared.js:9285-9318)
-- donationRateListener sets 4.8 below 500000000 server gold, 4 below 1000000000, else 3.2 (shared.js:874-877); the game gives 4 up to and including 1000000000 (game server.js donate handler 'S.gold <= 1000000000')
+- donationRateListener sets 4.8 below 500000000 server gold, 4 below 1000000000, else 3.2 (shared.js:874-877); the game gives 4 up to and including 1000000000 (game node/server.js:8636-8639)
+
+Handed over by other specs: 1 function (12-dashboard-and-status).
 
 **INV-106 Send mail with or without an attachment.** The merchant sends a text mail, or fetches the attachment (from inventory or a bank slot), splits the quantity, moves it to slot 0 and mails it.
 
 Rules:
 
-- bank attachments are withdrawn with a fixed 250 ms wait (shared.js:10338-10347)
+- merchantSendMail withdraws bank attachments with a fixed 250 ms wait (shared.js:10338-10347)
 - a partial quantity needs one free slot and a split with a fixed 250 ms wait (shared.js:10352-10362)
-- the attachment is swapped into slot 0 with a 250 ms wait and verified (shared.js:10363-10365)
+- it swaps the attachment into slot 0, waits 250 ms and verifies it (shared.js:10363-10365)
 - send_mail has a 20000 ms timeout; there is no gold check before sending (shared.js:10330, 10366)
 
 **INV-107 Restock the merchant's potions and elixir.** The merchant tops up its configured elixir from the bank and buys HP and MP potions up to their maximums.
@@ -1497,11 +1604,14 @@ Settings:
 
 - restock.hp, restock.mp, restock.elixir (item, max) per command shared.js:9079-9084
 
+Handed over by other specs: 3 functions (triage).
+
 **INV-108 Set the merchant's carried gold.** The merchant visits the bank and deposits or withdraws gold to reach a target.
 
 Rules:
 
-- merchantSelfBank deposits above goldTarget or withdraws the missing amount capped by bank gold (shared.js:9031-9055)
+- merchantSelfBank first runs merchantVisitBank, whose errands already deposit down to merchantGoldTarget (shared.js:5942-5949), then deposits above goldTarget or withdraws the missing amount capped by bank gold (shared.js:9031-9055)
+- for 'native stand funding' goldTarget is the job's own figure (merchant/commands.ts:121), so one visit can deposit and then withdraw
 
 Settings:
 
@@ -1511,8 +1621,11 @@ Settings:
 
 Rules:
 
-- a key is retrieved with retrieveFromBankUntil, activated, then the merchant walks to the pack's NPC (shared.js:9127-9141)
+- merchantBankUnlock retrieves a key with retrieveFromBankUntil, activates it, then walks to the pack's NPC (shared.js:9127-9141)
 - a vault purchase throws when the pack is already unlocked or gold is short, then calls open_bank_pack(pack, 'gold') (shared.js:9142-9157)
+- the coordinator route refuses an unknown or unlocked vault, a floor the merchant cannot reach yet, a missing key and a second queued unlock, then queues one 'bank unlock' job (http/bank-unlock.ts:33-99)
+
+Handed over by other specs: 5 functions (13-lifecycle).
 
 **INV-110 Merge stacks and pin the Tracktrix.** While idle, the merchant merges two matching inventory stacks when the coordinator permits, and keeps a personal tracker in the last slot.
 
@@ -1520,8 +1633,10 @@ Rules:
 
 - consolidateMerchantInventory skips while a job, anniversary, banking, gathering or anniversary reservation is active, and retries no sooner than 10000 ms (shared.js:9408-9418, 9431)
 - it asks /merchant/stack-merge-permission and checks identity, quantities, lock, bound, v flags, stack limit and can_stack before swap (shared.js:9419-9430)
-- the swap is bounded by 2000 ms and confirmed within 1500 ms (shared.js:9433-9443)
+- consolidateMerchantInventory bounds the swap by 2000 ms and confirms it within 1500 ms (shared.js:9433-9443)
 - keepTracktrixLast checks 13 conditions (inventory commands, banking, bankQueued, upgrading, stocking, anniversary, gathering, active job, tidy, preview, lucky pending, rip, runtime) before one swap with a 2000 ms wait (shared.js:5629-5643)
+
+Handed over by other specs: 1 function (triage).
 
 **INV-111 Use an item from the dashboard.** A character consumes an elixir, licence, spawner or a gives-item from a dashboard click when the slot still holds that item.
 
@@ -1560,17 +1675,18 @@ Kind: bug. Origin: the current console. Confidence: confirmed in code.
 
 Commerce jobs keep the `homeRealm` they had when queued (runtime/coordinator/commerce/bids.ts:113, manual-orders.ts:70 and 129). The causal chain and its effect on realm hops are in [09 What goes wrong](09-merchant-realm-and-gear.md#2-what-goes-wrong).
 
-### 120 s listing freshness repeated in seven places
+### 120 s listing freshness written out in seven coordinator checks
 
 Kind: duplicate rule. Origin: the current console. Confidence: confirmed in code.
 
 1. commerce/bids.ts:101 (Ponty candidates) and :165 (ALData candidates)
 2. commerce/manual-orders.ts:111 (manual Ponty)
 3. commerce/price-history.ts:48 (current market low)
-4. commerce/ponty.ts:56 (dismiss window)
-5. http/manual-market-orders.ts:52 (manual ALData)
-6. runtime/market-preferences.ts:8-10 defines marketListingFresh with the same 120000 window, and none of the files above use it
-7. fork HEAD npc-shop.ts:97 adds FRESH_PONTY_MS = 120000; fork HEAD http/manual-market-orders.ts lets check: true bypass the rule
+4. http/manual-market-orders.ts:52 (manual ALData)
+5. merchant/giveaway-scheduler.ts:137 and :144 (giveaway candidates and their expiry)
+6. runtime/market-preferences.ts:8-10 defines marketListingFresh with the same 120000 window; only the dashboard uses it (dashboard/features/party/stand-sheet.tsx:517, 633, 731, 761, 779, 812, 1316, 1598), none of the coordinator files above
+7. commerce/ponty.ts:56 uses the same 120000 for a different rule, the dismiss window
+8. fork HEAD npc-shop.ts:97 adds FRESH_PONTY_MS = 120000; fork HEAD http/manual-market-orders.ts:52, 66 lets check: true bypass the rule
 
 ### Item and listing identity has many encodings
 
@@ -1578,7 +1694,7 @@ Kind: patchwork. Origin: the current console. Confidence: confirmed in code.
 
 1. partial match ignoring q, price, rid, b, giveaway: inventory/item-identity.ts:3, 10-18 (one direction only); compound-marks.ts:8-10 and bank-upgrade-receipts.ts:12 call it both ways
 2. name@+level: item-identity.ts:20-24; shared-rules.ts:128 and offering-supply.ts:68 rebuild it inline
-3. name@level: exchange keys at automatic-action.ts:99, clear-item-marks.ts:123, merchant-item-commands.ts:84; craft needs at runtime/craft-reservations.ts:12, 19
+3. name@level: exchange keys at automatic-action.ts:100, clear-item-marks.ts:123, merchant-item-commands.ts:84; craft needs at runtime/craft-reservations.ts:12, 19
 4. JSON [name, level, p, stat_type]: item-identity.ts:37-44; JSON [name, level, stat_type]: storage-service.ts:51-60
 5. stack identity of 9 fields: runtime/bank-stacks.ts:16-19, copied verbatim at scripts/bank-stack-routing.cjs:7-10
 6. Ponty groupKey (sorted JSON without rid, q, price): scripts/ponty-market.cjs:1-5; Ponty key region:identifier:rid: ponty-market.cjs:48 and status/ponty.ts:44
@@ -1643,7 +1759,7 @@ Kind: patchwork. Origin: the current console. Confidence: confirmed in code.
 
 1. status/bank.ts:41-45 replaces the snapshot only on content or observer change, then adopts cargo and persists
 2. http/bankboi-storage.ts:47-51 overwrites it on every BankBoi checkpoint or completion without that comparison
-3. bank vaults come from game files at start (inventory/initial-bank.ts:11, infrastructure/game-data.ts:16-38) and are replaced by any report carrying bankVaults (status/catalogs.ts:74-80)
+3. bank vaults come from game files at start (inventory/initial-bank.ts:11, infrastructure/game-data.ts:16-38) and consumeBankVaults replaces them with any report carrying bankVaults (status/catalogs.ts:74-80)
 
 ### Mail automation pulls the whole inbox per message
 
@@ -1665,13 +1781,13 @@ Kind: wrong value. Origin: the current console. Confidence: inference.
 
 1. inventory/bankboi-service.ts:141-147 abandons any transaction older than 600 000 ms without checking the worker
 2. start() then marks the worker interrupted with a 10 s retry and restores the merchant (bankboi-service.ts:148-155, bankboi-composition.ts:61-64)
-3. (inference) a BankBoi still working through 7 requests and 7 retrievals past 10 minutes is stopped mid-run; the bank stack journal then retires its intent after 30 s (characters/bank-stacks.ts:115-124)
+3. (inference) start() stops a BankBoi that is still working through 7 requests and 7 retrievals after 10 minutes; the bank stack journal then retires its intent after 30 s (characters/bank-stacks.ts:115-124)
 
 ### BankBoi completion dedupe lives in memory
 
 Kind: patchwork. Origin: the current console. Confidence: confirmed in code.
 
-1. http/bankboi-storage.ts:45 keeps the last 32 completion receipts in a Set
+1. http/bankboi-storage.ts:45 keeps the last 32 completion receipts in a Set (trimmed at :118-119)
 2. a restart loses it; ownsCompletion then guards by transaction and commandId only (bankboi-storage.ts:92-95, 99-102)
 
 ### Failure kinds travel as text
@@ -1680,7 +1796,7 @@ Kind: patchwork. Origin: the current console. Confidence: confirmed in code.
 
 1. production.ts:53-54, 82, 85, 249 throw texts returned as 409 String(error), so the client sees an 'Error: ' prefix (production.ts:154)
 2. merchant/dispatcher.ts:261 logs 'Production recovery pending' again
-3. bankboi-composition.ts:63 stores error 'interrupted', matched as text at merchant/completion-retries.ts:72 and http/merchant-idle.ts:50
+3. bankboi-composition.ts:63 stores the worker error 'interrupted', matched as text by retryableStorageError (scripts/bank-stack-routing.cjs:68); the merchant job error 'interrupted' (thrown at shared.js:7755, 9263) is matched as text at merchant/completion-retries.ts:72 and http/merchant-idle.ts:50
 4. stand-marks route picks 409 by comparing the error text (http/stand-marks.ts:83)
 5. withdrawal-bank-guard.ts:22 auto_bank_confirmation_required and marketplace-progress failure codes (http/marketplace-progress.ts:12-17) are the typed exceptions
 
@@ -1688,7 +1804,7 @@ Kind: patchwork. Origin: the current console. Confidence: confirmed in code.
 
 Kind: patchwork. Origin: the current console. Confidence: confirmed in code.
 
-1. upgrades[name] is written at upgrade-commands.ts:67-69, 88, 117, 154; mark-reconciliation.ts:71, 81; upgrade-continuation.ts:32-33, 46, 66; offering-waits.ts:34-35; offering-supply.ts:152; production.ts:242; transfer-commands.ts:159-164; bankboi-completion.ts:123; bank-upgrade-receipts.ts:13; clear-item-marks.ts:55, 83-85; automatic-action.ts:52; compound-commands.ts:151; reservations.ts:36
+1. these sites write upgrades[name]: upgrade-commands.ts:67-69, 88, 117, 154; mark-reconciliation.ts:71, 81; upgrade-continuation.ts:32-33, 46, 66; offering-waits.ts:34-35; offering-supply.ts:152; production.ts:242; transfer-commands.ts:159-164; bankboi-completion.ts:123; bank-upgrade-receipts.ts:13; clear-item-marks.ts:55, 83-85; automatic-action.ts:53; compound-commands.ts:151; reservations.ts:36
 2. marks carry slot, liveSlot, requestId and legacy passId plus storage (upgrade-marks.ts:4-18)
 3. readers choose different orders: offering-waits.ts:43-44, 91-94; offering-supply.ts:60, 93; upgrade-continuation.ts:28, 80-83; upgrade-marks.ts:132-135
 
@@ -1718,7 +1834,8 @@ Kind: patchwork. Origin: the current console. Confidence: inference.
 
 1. commerce/local-market.ts:104-111 pushes a 'stand bid purchases' job without ports.stamp, persist or dispatch
 2. bids.ts:145-152, 198-199 stamp, persist and dispatch their jobs
-3. (inference) the stand bid job relies on the caller's later persist and dispatch and gets its priority fields at pick time
+3. the caller persists when observe returns true (status/merchant-scheduling.ts:192); no dispatch follows there
+4. (inference) the job waits for the next dispatch from elsewhere and gets its priority fields at pick time
 
 ### Ponty secondhand price formula duplicated by the fork
 
@@ -1753,7 +1870,7 @@ Kind: game-rule mismatch. Origin: the current console. Confidence: confirmed in 
 
 1. maximumItemLevel returns 7 for compound items and 13 for upgrade items (shared.js:1397-1399)
 2. the game's tables stop at upgrade +12 and compound +10: design/upgrades.js upgrades keys 1-12, compounds keys 1-10; server.js:7143-7148 answers 'upgrade_cant' past the table and server.js:6882 does the same for compounds
-3. upgrade marks are capped at 13 by upgradeMarked (shared.js:3865), merchantImprove (shared.js:6224-6225) and findUpgradeMarkSlot (shared.js:6074), and banked-improvements.ts:35 accepts an auto upgrade rule up to level + tiers = 13
+3. upgradeMarked caps upgrade marks at 13 (shared.js:3865), merchantImprove (shared.js:6224-6225) and findUpgradeMarkSlot (shared.js:6074), and banked-improvements.ts:35 accepts an auto upgrade rule up to level + tiers = 13
 4. the catalog reports maxLevel 7 for every compound item (shared.js:1776, 2248), so a +8 to +10 compound target is never offered (inference: depends on the dashboard reading maxLevel)
 5. an auto upgrade rule to +13 can never finish and keeps scheduling attempts that the game refuses (inference)
 
@@ -1761,8 +1878,8 @@ Kind: game-rule mismatch. Origin: the current console. Confidence: confirmed in 
 
 Kind: bug. Origin: the current console. Confidence: confirmed in code.
 
-1. the game queues a stat scroll for 2000 x tmult x tmult ms (tmult 1, 1.5 or 2 by the item's base grade), halved by massproduction, and leaves level unchanged (game server.js:7153-7160, 7465-7512)
-2. merchant path: applyStatScrolls calls raw upgrade() without merchantMassBuff and waits only 2500 ms for stat_type before throwing 'Native stat-scroll outcome was not confirmed' (shared.js:6641-6645); a grade-1 base item needs 4500 ms and a grade-2 base item 8000 ms
+1. the game queues a stat scroll for 2000 x tmult x tmult ms (tmult 1, 1.5 or 2 by the item's base grade), halved by massproduction, and leaves level unchanged (game server.js:7154-7160, 7465-7512)
+2. merchant path: applyStatScrolls awaits raw upgrade(), which the client resolves on 'upgrade_success_stat' after the queue finishes (game js/game.js:2140-2141; node/server.js:14996-15005), then polls 2500 ms for stat_type to cover inventory proxy lag (shared.js:6641-6645); this path does not fail on the queue time
 3. fighter path: applyOwnedStatScrolls calls upgradeConfirmed (shared.js:6711), which routes stat scrolls to observedUpgradeConfirmed then upgradeAtSlotConfirmed (shared.js:5032-5033, 5081)
 4. upgradeAtSlotConfirmed defaults expectedLevel to level+1 (shared.js:5186-5187), so after the stat is applied it throws upgrade_result_not_confirmed 1500 ms later (shared.js:5224-5233)
 5. applyOwnedStatScrolls re-equips and rethrows (shared.js:6718-6725): the run reports failure after spending the scrolls, and the mark no longer matches the changed item (inference)
@@ -1770,7 +1887,7 @@ Kind: bug. Origin: the current console. Confidence: confirmed in code.
 Commits:
 
 - 54159cac 2026-10-18 Breene26: fix: advance delivery identity only from observed stat mutation (added the 2500 ms stat_type poll)
-- 7dfbec89 2026-10-12 Breene26: the scroll-name branch in upgradeConfirmed
+- 9fbeadab 2026-09-20 upstream: the scroll-name branch in upgradeConfirmed has been there since the initial console (`git log -S`)
 
 ### Auto compound evaluation carries dead completion logic
 
@@ -1790,7 +1907,7 @@ Commits:
 Kind: patchwork. Origin: the current console. Confidence: inference.
 
 1. bankStoreFully's own comment says a bank promise can resolve before the inventory proxy updates (shared.js:4140-4141), and bankRetrieveConfirmed polls up to 5000 ms for that reason (shared.js:4600-4605)
-2. retrieveFromBankUntil (shared.js:1336-1345) and merchantALDataSell (shared.js:8983-8987) loop up to 100 bank_retrieve calls re-reading the lagging proxy; each bank call costs about 2 of the 200-per-4-s budget (game server.js:248-262; review 6.1)
+2. retrieveFromBankUntil (shared.js:1336-1345) and merchantALDataSell (shared.js:8983-8987) loop up to 100 bank_retrieve calls re-reading the lagging proxy; each bank call costs 1 of the 200-per-4-s budget: CC has no 'bank' entry (node/server.js:247-260), and the handler's resend(player, "reopen") adds 1 (node/server.js:9478, 4656-4657). The per-call base charge at node/server.js:4980 runs before current_socket is set at :4981, so it lands on the dummy socket (server_functions.js:4-13) and not on the caller
 3. prepareBankUpgrades checks the slot right after bank_retrieve and throws 'Bank upgrade withdrawal was not confirmed' (shared.js:7259-7263)
 4. merchantNpcSale looks the item up right after bank_retrieve and blocks 'NPC-sale item changed before sale' (shared.js:9246-9252)
 5. merchantBankErrands NPC-sale withdrawals (shared.js:6029), goBank (shared.js:4484) and saved-scroll withdrawals in merchantCommerce (shared.js:7918-7924) also skip the wait
@@ -1808,7 +1925,7 @@ Kind: bug. Origin: the current console. Confidence: confirmed in code.
 
 1. the game charges 48000 gold for a mail and 360000 with an item, and fails 'gold_not_enough' (game logic/mail.js:143-144)
 2. merchantSendMail never compares gold or visits the bank before send_mail (shared.js:10326-10367), unlike merchantALDataAuth (shared.js:8681-8687)
-3. result: a merchant carrying less than 360000 gold fails every attachment mail after already withdrawing, splitting and moving the item (shared.js:10338-10365)
+3. result: a merchant carrying less than 360000 gold fails every attachment mail after already withdrawing, splitting and moving the item (shared.js:10338-10365); a text mail below 48000 gold fails the same way (shared.js:10330)
 
 ### Self improve can strand stat-scroll gear unequipped
 
@@ -1828,9 +1945,9 @@ Kind: dead code. Origin: the current console. Confidence: confirmed in code.
 
 1. merchantStandBuy and merchantPontyBuy declare completed = [] and never push to it (shared.js:8526, 8590)
 2. both send bidPurchases: completed on success and failure (shared.js:8555, 8560, 8663, 8669)
-3. completion-results.ts:134 loops over body.bidPurchases, so that loop never runs; purchases are recorded through the native-stand 'purchased' receipt instead (shared.js:9403-9404)
+3. completion-results.ts:134 loops over body.bidPurchases, so that loop never runs; guardedMarketPurchase records purchases through the native-stand 'purchased' receipt (shared.js:9403-9404)
 
-### The 3-slot inventory reserve is restated with three formulas
+### The 3-slot inventory reserve is restated in five forms
 
 Kind: duplicate rule. Origin: the current console. Confidence: confirmed in code.
 
@@ -1891,18 +2008,18 @@ Kind: bug. Origin: the current console. Confidence: inference.
 
 1. provision unequips every equipment slot then sells every inventory slot back to back with no delay (shared.js:4682-4688)
 2. the inventory sort fires swap() without await, 120 ms apart (shared.js:4763)
-3. unequip costs 1 + CC 6 plus resends (game server.js:248-262); review 6.1 estimates about 159 for a full provision in under a second
+3. unequip costs 8: CC.unequip 6 (node/server.js:257) plus 2 from resend(player, "reopen+u+cid") (:7938, 4643-4644, 4656-4657). sell costs 0: it has no CC entry and resends with "nc" (:8074). The base charge at :4980 lands on the dummy socket, not the caller. 16 filled gear slots and 42 sold items cost 16 x 8 = 128 inside about a second, under the 200 limit with 72 left for anything else
 
 Commits:
 
-- dc384390 2026-10-11 Breene26: Fix bank staging, party exchange, Tracktrix and stale navigation
+- 9fbeadab 2026-09-20 upstream: the provision loop and the unawaited 120 ms swaps date from the initial console (`git log -S'command.provision'`)
 
 ### Donation rate boundary off by one
 
 Kind: wrong value. Origin: the current console. Confidence: confirmed in code.
 
 1. donationRateListener uses 4 only while server gold < 1000000000 (shared.js:876)
-2. the game uses S.gold <= 1000000000 for 4 (game server.js donate handler)
+2. the game uses S.gold <= 1000000000 for 4 (game node/server.js:8636-8639)
 3. result: at exactly 1000000000 gold the dashboard shows 3.2 instead of 4
 
 ### Fork recoverSpace undercounts compound space
@@ -1922,10 +2039,10 @@ Commits:
 
 Kind: patchwork. Origin: the current console. Confidence: confirmed in code.
 
-1. 'bankboi_pending' is thrown at shared.js:4160, 6162, 8334 and compared at 6187, 7385, 8214, 8412; completion-retries.ts:41 matches it
-2. 'bank_full' and 'inventory_full' (shared.js:4131, 6418, 7364) are matched by completion-retries.ts:136
-3. 'Upgrade inventory recovery ambiguous:' (shared.js:6086) is matched by completion-retries.ts:124; 'Upgrade outcome uncertain' (shared.js:5012, 5107, 5228, 7562) by completion-retries.ts:113-114
-4. 'Marked item is not in merchant inventory' is written and matched inside npc-sales.ts:40, 45; 'Marked item is missing; refresh inventory before retrying' inside deconstruction.ts:198, 221
+1. shared.js throws 'bankboi_pending' at 4160, 6162, 8334 and compares it at 6187, 7385, 8214, 8412; completion-retries.ts:41 matches it
+2. completion-retries.ts:136 matches 'bank_full' and 'inventory_full' (shared.js:4131, 6418, 7364)
+3. completion-retries.ts:124 matches 'Upgrade inventory recovery ambiguous:' (shared.js:6086), and completion-retries.ts:113-114 matches 'Upgrade outcome uncertain' (shared.js:5012, 5107, 5228, 7562)
+4. npc-sales.ts writes and matches 'Marked item is not in merchant inventory' at :40, 45; 'Marked item is missing; refresh inventory before retrying' inside deconstruction.ts:198, 221
 5. the fork's recoverSpace matches the character's text 'Insufficient inventory space for deconstruction results' across the wire (shared.js:9206; fork HEAD deconstruction.ts:233)
 
 ## 3. Fork differences
@@ -1937,7 +2054,7 @@ What the fork (af92de45) adds or changes in this part. Fork code is not in the c
 | Ponty and Ron watch and buy-now orders (npc-shop.ts) | 9476cd15 2026-10-22 Icelocked: feat: buy from Ponty and Ron with standing orders, 388b9248 2026-10-22 Icelocked: fix: let a queued Ron visit take the current donation consent, 6f4ed09a 2026-10-22 Icelocked: feat: watch list for Ponty and Ron, plus market filters and newest-first sort, 369d64be 2026-10-22 Icelocked: docs: say which item fields the listing identity leaves out, df1858c6 2026-10-25 Icelocked: Match Ponty watch orders against the home realm | Adds standing Ponty watches and Ron visits that the current bid-only Ponty buying lacks; df1858c6 limits Ponty watches to the home realm to stop the US II and EU II hop loop (ledger 1); 388b9248 lets queued Ron jobs take a new donation consent; 6f4ed09a adds firstSeenAt stamping on Ponty and ALData feeds and a migrate() shim for the 9476cd15 order shape | fork HEAD runtime/coordinator/commerce/npc-shop.ts:101-122 (migrate), 131-142 (spendableGold), 357-430 (matchPonty, select, eligible, queuePonty), 438-459 (fulfilled), 466-546 (Ron); wiring fork HEAD application.ts:1539-1565 |
 | Ponty and Ron price helpers (npc-price.ts) | 9476cd15 2026-10-22 Icelocked, 6f4ed09a 2026-10-22 Icelocked | Gives the dashboard per-level unit prices and total estimates for watches; Ron = 4 x calculate_item_value; duplicates the formula in scripts/ponty-market.cjs:6-35 | fork HEAD runtime/coordinator/commerce/npc-price.ts:23-88 |
 | Stat scroll name from prim-stack | 2055dd82 2026-10-20 Icelocked: feat: prim stack an item's grace (#65) | Moves the local scrollName helper to statScrollName in runtime/prim-stack.ts so the prim stack feature shares it; the mapping is unchanged (mp_cost -> mpcostscroll) | fork HEAD runtime/coordinator/inventory/stat-scroll-commands.ts:2, 99, 117; runtime/prim-stack.ts:32-34 |
-| Manual ALData order 'check' flag | eb9acad0 2026-10-20 Icelocked: feat(market): sort owned WTB matches to top, hide stale, check stale listings | Lets the user send the merchant to verify a listing older than 120 s instead of being refused (#34); bypasses the current freshness rule for that one order | fork HEAD runtime/coordinator/http/manual-market-orders.ts:50-53, 62-66, 79 |
+| Manual ALData order 'check' flag | eb9acad0 2026-10-20 Icelocked: feat(market): sort owned WTB matches to top, hide stale, check stale listings | Lets the user send the merchant to verify a listing older than 120 s instead of being refused (#34); bypasses the current freshness rule for that one order | fork HEAD runtime/coordinator/http/manual-market-orders.ts:50-52, 66, 75, 78-90 |
 | Gapped bank sort layout | 3dc61c45 2026-10-20 Icelocked: feat(bank): optional gapped bank sort that moves few items per change, bb37238c 2026-10-20 Icelocked: Keep the bank sort checkpoint under the complexity limit | The current packed sort shifts the whole bank on every new item; the gapped layout starts each category on its own 7-slot row with spare slots so a change moves few items. The checkpoint returns layout with mode; sortCurrentBankFloor includes the layout in its signature | fork HEAD characters/shared.js:4601, 4617-4623, 4800-4881, 4905, 4930-4935; runtime/coordinator/merchant/bank-sort.ts:17-18, 31, 39, 92, 99-101, 116-118 |
 | Deconstruction recoverSpace | 9f7e581e 2026-10-15 Icelocked: fix(deconstruction): retry a mark blocked by a full bag once there is room | The current console leaves a mark blocked by 'Insufficient inventory space for deconstruction results' until the operator retries; the fork retries after 120000 ms once enough slots are free, matching the character's error text (see problem 'Fork recoverSpace undercounts compound space') | fork HEAD runtime/coordinator/merchant/deconstruction.ts:92, 187, 230-239 |
 | Ponty secondhands pacer and per-realm reads | c3a8a57d 2026-10-24 Icelocked: Pace the merchant's Ponty secondhands calls under the game's rate limit | the game disconnected the merchant with limitdc ['secondhands',208] after 13 reads in 4 s (comment at fork HEAD shared.js:9216-9220); pontySecondhands spaces every read 1.5 s apart and merchantPontyBuy reads once per realm and again only after a purchase | fork HEAD characters/shared.js:1294, 9120-9129, 9159, 9184, 9215-9230 |
@@ -1948,12 +2065,12 @@ What the fork (af92de45) adds or changes in this part. Fork code is not in the c
 
 ## 4. Tests today
 
-Tests were mapped to behaviours by what they load: a unit test that requires a TypeScript file maps to the behaviours that own functions in that file, and a test that slices characters/shared.js maps to the behaviours whose functions it names. Within a file, each test goes to the behaviour whose title shares the most words with the test name. The per-test list is in the catalog file. The mapping is mechanical; whether each test proves what its name says, passes for the right reason and matches the game has not been reviewed yet (Gaps).
+The mapping script assigned tests to behaviours by what they load: a unit test that requires a TypeScript file maps to the behaviours that own functions in that file, and a test that slices characters/shared.js maps to the behaviours whose functions it names. Within a file, each test goes to the behaviour whose title shares the most words with the test name. The per-test list is in the catalog file. The mapping is mechanical; whether each test proves what its name says, passes for the right reason and matches the game has not been reviewed yet (Gaps).
 
 | Test file | Tests mapped here | Behaviours |
 |---|---|---|
 | e2e/console.spec.ts | 6 | INV-063, INV-087, INV-089 |
-| scripts/tests/active-wtb-fields.test.cjs | 3 | INV-011 |
+| scripts/tests/active-wtb-fields.test.cjs | 3 | INV-113 |
 | scripts/tests/anniversary-bankboi-supplies.test.cjs | 3 | INV-053 |
 | scripts/tests/anniversary-kiss.test.cjs | 22 | INV-062 |
 | scripts/tests/auto-stand-banner.test.cjs | 2 | INV-099 |
@@ -1966,27 +2083,27 @@ Tests were mapped to behaviours by what they load: a unit test that requires a T
 | scripts/tests/bankboi-recovery.test.cjs | 4 | INV-055 |
 | scripts/tests/bankboi-scheduler.test.cjs | 13 | INV-053, INV-055 |
 | scripts/tests/bankboi-transfer-confirmation.test.cjs | 3 | INV-064, INV-067, INV-073 |
-| scripts/tests/barrier-communication.test.cjs | 13 | INV-093 |
+| scripts/tests/barrier-communication.test.cjs | 13 | INV-118 |
 | scripts/tests/catalog-startup.test.cjs | 3 | INV-063 |
 | scripts/tests/catalog-validation.test.cjs | 4 | INV-049 |
 | scripts/tests/character-field-registry.test.cjs | 10 | INV-064 |
 | scripts/tests/clear-item-marks.test.cjs | 7 | INV-022, INV-026 |
-| scripts/tests/combat-movement.test.cjs | 36 | INV-093 |
+| scripts/tests/combat-movement.test.cjs | 36 | INV-118 |
 | scripts/tests/compound-marks.test.cjs | 5 | INV-038 |
 | scripts/tests/compound-storage-behavior.test.cjs | 8 | INV-039, INV-061, INV-102, INV-103 |
 | scripts/tests/convoy-communication.test.cjs | 22 | INV-062 |
 | scripts/tests/coordinator-account-character-actions.test.cjs | 3 | INV-059 |
-| scripts/tests/coordinator-aldata-routes.test.cjs | 3 | INV-005 |
-| scripts/tests/coordinator-automatic-sales.test.cjs | 8 | INV-097, INV-098 |
+| scripts/tests/coordinator-aldata-routes.test.cjs | 3 | INV-112 |
+| scripts/tests/coordinator-automatic-sales.test.cjs | 8 | INV-097, INV-098, INV-117 |
 | scripts/tests/coordinator-bank-actions.test.cjs | 1 | INV-057 |
 | scripts/tests/coordinator-bankboi-composition.test.cjs | 3 | INV-055 |
 | scripts/tests/coordinator-bankboi-routes.test.cjs | 11 | INV-057, INV-059 |
 | scripts/tests/coordinator-bids.test.cjs | 3 | INV-006, INV-011 |
-| scripts/tests/coordinator-character-actions.test.cjs | 2 | INV-023 |
-| scripts/tests/coordinator-character-command.test.cjs | 11 | INV-023, INV-044, INV-080 |
+| scripts/tests/coordinator-character-actions.test.cjs | 2 | INV-114 |
+| scripts/tests/coordinator-character-command.test.cjs | 11 | INV-044, INV-080, INV-114 |
 | scripts/tests/coordinator-character-creation.test.cjs | 7 | INV-059 |
 | scripts/tests/coordinator-compound-commands.test.cjs | 4 | INV-038 |
-| scripts/tests/coordinator-craft-storage.test.cjs | 5 | INV-058, INV-060 |
+| scripts/tests/coordinator-craft-storage.test.cjs | 5 | INV-058, INV-060, INV-115 |
 | scripts/tests/coordinator-exchange-routes.test.cjs | 3 | INV-040 |
 | scripts/tests/coordinator-game-data.test.cjs | 4 | INV-049 |
 | scripts/tests/coordinator-heartbeat-composition.test.cjs | 5 | INV-053 |
@@ -2005,25 +2122,25 @@ Tests were mapped to behaviours by what they load: a unit test that requires a T
 | scripts/tests/coordinator-marketplace-progress.test.cjs | 6 | INV-014 |
 | scripts/tests/coordinator-merchant-delivery-actions.test.cjs | 1 | INV-019 |
 | scripts/tests/coordinator-merchant-item-commands.test.cjs | 3 | INV-042 |
-| scripts/tests/coordinator-merchant-order.test.cjs | 5 | INV-060, INV-084 |
+| scripts/tests/coordinator-merchant-order.test.cjs | 5 | INV-060, INV-084, INV-115 |
 | scripts/tests/coordinator-merchant-queue.test.cjs | 2 | INV-102 |
 | scripts/tests/coordinator-publication-scheduler.test.cjs | 2 | INV-005 |
 | scripts/tests/coordinator-purchases.test.cjs | 2 | INV-010 |
 | scripts/tests/coordinator-reservations.test.cjs | 2 | INV-028 |
 | scripts/tests/coordinator-reserved-cargo.test.cjs | 5 | INV-058 |
 | scripts/tests/coordinator-restock-completion.test.cjs | 3 | INV-060 |
-| scripts/tests/coordinator-sale-routes.test.cjs | 7 | INV-096, INV-097, INV-099 |
+| scripts/tests/coordinator-sale-routes.test.cjs | 7 | INV-097, INV-099, INV-116, INV-117 |
 | scripts/tests/coordinator-scatter.test.cjs | 3 | INV-049 |
 | scripts/tests/coordinator-scheduling.test.cjs | 3 | INV-043, INV-050 |
-| scripts/tests/coordinator-stand-control.test.cjs | 5 | INV-011, INV-054 |
-| scripts/tests/coordinator-status-composition.test.cjs | 2 | INV-005, INV-006 |
+| scripts/tests/coordinator-stand-control.test.cjs | 5 | INV-054, INV-113 |
+| scripts/tests/coordinator-status-composition.test.cjs | 2 | INV-006, INV-112 |
 | scripts/tests/coordinator-status-ingestion.test.cjs | 4 | INV-006, INV-048, INV-049 |
-| scripts/tests/coordinator-storage-controls.test.cjs | 5 | INV-013, INV-049, INV-060 |
+| scripts/tests/coordinator-storage-controls.test.cjs | 5 | INV-013, INV-060, INV-109 |
 | scripts/tests/coordinator-storage-observation.test.cjs | 2 | INV-056 |
 | scripts/tests/coordinator-storage-observations.test.cjs | 2 | INV-048 |
 | scripts/tests/coordinator-storage-service.test.cjs | 2 | INV-040 |
 | scripts/tests/coordinator-upgrade-commands.test.cjs | 4 | INV-029 |
-| scripts/tests/craft-bank-confirmation.test.cjs | 3 | INV-060 |
+| scripts/tests/craft-bank-confirmation.test.cjs | 3 | INV-115 |
 | scripts/tests/craft-compound-reservations.test.cjs | 12 | INV-069, INV-079, INV-083, INV-085, INV-102, INV-103 |
 | scripts/tests/deconstruction-rewards.test.cjs | 2 | INV-101 |
 | scripts/tests/deconstruction.test.cjs | 13 | INV-020, INV-062, INV-094, INV-101 |
@@ -2034,7 +2151,7 @@ Tests were mapped to behaviours by what they load: a unit test that requires a T
 | scripts/tests/event-bank-recovery.test.cjs | 7 | INV-062, INV-064, INV-068, INV-102 |
 | scripts/tests/farm-zone-recovery.test.cjs | 29 | INV-106 |
 | scripts/tests/geometry-reload-client.test.cjs | 3 | INV-062 |
-| scripts/tests/grouped-combat-coordinator.test.cjs | 5 | INV-023 |
+| scripts/tests/grouped-combat-coordinator.test.cjs | 5 | INV-114 |
 | scripts/tests/hosting.test.cjs | 1 | INV-019 |
 | scripts/tests/independent-approach-client.test.cjs | 30 | INV-062 |
 | scripts/tests/inventory-delta.test.cjs | 10 | INV-064 |
@@ -2066,12 +2183,12 @@ Tests were mapped to behaviours by what they load: a unit test that requires a T
 | scripts/tests/player-npc-sales.test.cjs | 7 | INV-095, INV-096 |
 | scripts/tests/ponty-market.test.cjs | 7 | INV-006, INV-007 |
 | scripts/tests/ponty-order.test.cjs | 3 | INV-007, INV-015 |
-| scripts/tests/priest-formation.test.cjs | 57 | INV-093 |
+| scripts/tests/priest-formation.test.cjs | 57 | INV-118 |
 | scripts/tests/production-journal.test.cjs | 17 | INV-033, INV-062, INV-074, INV-075, INV-076 |
 | scripts/tests/production-reconciliation.test.cjs | 1 | INV-033 |
-| scripts/tests/rare-hunting-client.test.cjs | 12 | INV-093 |
+| scripts/tests/rare-hunting-client.test.cjs | 12 | INV-118 |
 | scripts/tests/roster-routes.test.cjs | 1 | INV-055 |
-| scripts/tests/routine-separation.test.cjs | 4 | INV-089, INV-097, INV-098 |
+| scripts/tests/routine-separation.test.cjs | 4 | INV-089, INV-097, INV-098, INV-117 |
 | scripts/tests/shared-convoy.test.cjs | 1 | INV-062 |
 | scripts/tests/shared-merchant-rules.test.cjs | 8 | INV-027, INV-033 |
 | scripts/tests/smart-loot.test.cjs | 5 | INV-062 |
@@ -2085,41 +2202,58 @@ Tests were mapped to behaviours by what they load: a unit test that requires a T
 | scripts/tests/upgrade-scroll-batch.test.cjs | 7 | INV-031, INV-062, INV-068, INV-078, INV-079 |
 | scripts/tests/wtb-priority.test.cjs | 8 | INV-011, INV-098, INV-099 |
 
-Behaviours with no mapped test (19): INV-001, INV-008, INV-018, INV-021, INV-024, INV-025, INV-035, INV-036, INV-052, INV-071, INV-072, INV-090, INV-091, INV-100, INV-105, INV-107, INV-108, INV-109, INV-111.
+Behaviours with no mapped test (19): INV-001, INV-008, INV-018, INV-021, INV-024, INV-025, INV-035, INV-036, INV-052, INV-071, INV-072, INV-090, INV-091, INV-093, INV-100, INV-105, INV-107, INV-108, INV-111.
 
 ## 5. Needs your review
 
-Each question gives Today, Options and a Recommendation. The coordinator copies them into REVIEW-QUEUE.md.
+Each question gives Today, Options with their costs, and a Recommendation with why it beats the
+other options and what it costs. The coordinator copies them into REVIEW-QUEUE.md.
 
 ### Q1. How many stand slots should the console use?
 
 **Today:** the console assumes 16 trade slots everywhere (runtime/coordinator/merchant/automatic-sales.ts:88
 and 184, stand-marks.ts:107 and 152, characters/shared.js:9382, 9537 and 9559). The game gives a
 merchant 24 slots at level 70 or with a `cstand`, and 30 at level 80
-(game node/server_functions.js:4365-4376). A high-level merchant leaves up to 14 slots empty. The
-fork does not change this.
+(game node/server_functions.js:4364-4376). A high-level merchant leaves 8 to 14 slots unused, and a
+listing a player puts in trade17 or later by hand is never reconciled. The fork does not change this.
 
 **Options:**
-- A. Read the slot count from the game rule (level and stand type). More listings and WTB offers.
-- B. Keep 16 and leave the rest for the user to fill by hand.
+- A. Compute the slot count from the game rule (merchant level and stand type) in one helper that the
+  seven places read. Costs: the coordinator needs the merchant's stand type in its status (the
+  status carries level at characters/shared.js:2922 but the stand only as standOpen at :2962), and
+  the proof needs a ChronAL E2E scenario with a level 70 or 80 merchant (AGENTS.md: E2E first), since
+  today's 16-slot checks are unit tests.
+- B. Keep 16. Costs: up to 14 slots stay empty on a high-level merchant, and hand-placed listings in
+  trade17 or later stay outside reconciliation.
+- C. Make the count a user setting capped at 30. Costs: a wrong setting makes the console plan
+  listings into slots the game does not have, and the user has to know the game rule.
 
-**Recommendation:** A. It is a game-rule mismatch, not a design choice, and one helper replaces
-seven copies of the number.
+**Recommendation:** A. It follows the game rule exactly, so it removes the mismatch that B keeps and
+the wrong-setting risk that C adds. Its own cost: the status report has to carry the stand type,
+and a level change mid-session moves the limit, so the stand reconcile has to tolerate the count
+growing between two reports.
 
 ### Q2. Should the gold reserve bind every purchase?
 
-**Today:** The current bid jobs (stand bids, ALData bids, Ponty bids) spend merchant and bank gold with
+**Today:** the current bid jobs (stand bids, ALData bids, Ponty bids) spend merchant and bank gold with
 no reserve (runtime/coordinator/commerce/bids.ts:93-103, 133-156, 185-202). The fork adds a gold
 reserve that only its own watch and buy-now orders respect (fork HEAD
-runtime/coordinator/commerce/npc-shop.ts:131-142), so the current bid can spend below the reserve.
+runtime/coordinator/commerce/npc-shop.ts:131-142), so a bid purchase can spend below the reserve.
 
 **Options:**
-- A. One reserve for every automatic purchase, read by the current bids and the fork's orders. The
-  reserve means what it says; a bid can wait for gold.
-- B. Reserve for the fork's orders only (today). The current bids behave exactly as in the current console.
+- A. One reserve for every automatic purchase, read by the current bids and the fork's orders.
+  Costs: a bid that used to buy now waits when gold is short, and the bid code gains a gold read it
+  does not have today.
+- B. Reserve for the fork's orders only (today). Costs: the reserve does not mean what its name
+  says, and a bid can spend the gold a watch order was holding back.
+- C. Drop the fork's reserve and rely on the character's own gold check. Costs: the merchant can
+  empty the bank on one bid, and the fork loses a setting users already set.
 
-**Recommendation:** A, offered upstream as a setting with a default of 0, so the current console behaves the
-same until a user sets it.
+**Recommendation:** A, offered upstream as a setting with a default of 0, so the current console
+behaves the same until a user sets it. It beats B because the setting then protects all automatic
+spending, and beats C because it keeps a floor under the bank. Its own cost: bids and watch orders
+compete for the same gold above the reserve with no order between them, so a busy watch list can
+starve a bid (or the reverse) until the routine priorities decide it.
 
 ### Q3. What should happen to a native WTB offer whose slot empties without a receipt?
 
@@ -2131,25 +2265,38 @@ clears it. The fork does not change this.
 
 **Options:**
 - A. After a confirmation window, drop the blocked offer from the ledger and let planning place a
-  new one. Self-healing; a lost receipt can count one purchase short.
-- B. Keep it blocked and show it on the dashboard with a "clear" button. Safe, needs the user.
+  new one. Costs: a fill whose receipt was lost is never counted, so the bid can buy one batch
+  more than asked.
+- B. Keep it blocked and show it on the dashboard with a "clear" button. Costs: the bid stays
+  stalled until someone notices, and stand, ALData and Ponty buys for that item read 0 meanwhile.
+- C. Count the missing quantity as filled and drop the offer. Costs: a manual removal in game is
+  counted as a purchase, so the bid ends short of what was asked.
 
-**Recommendation:** A, with the dashboard notice from B, because a stalled bid looks like a
-working one today.
+**Recommendation:** A, with the dashboard notice from B. It beats B because the bid recovers without
+the user, and beats C because an over-buy of one batch is easier to see and undo than a bid that
+silently stops short. Its own cost: the confirmation window needs a length, and a receipt that
+arrives after the window is ignored.
 
-### Q4. How should mail with an attachment get its postage?
+### Q4. How should mail get its postage?
 
 **Today:** `merchantSendMail` sends without checking gold (characters/shared.js:10326-10380).
-The game charges 360000 gold for mail with an item and 48000 without (game node/logic/mail.js:143).
-With too little gold the send fails on the server.
+The game charges 360000 gold for mail with an item and 48000 without, and refuses with
+`gold_not_enough` (game node/logic/mail.js:143-144). With too little gold the send fails on the
+server after the attachment was already withdrawn, split and moved to slot 0.
 
 **Options:**
 - A. Withdraw the postage from the bank before sending, and fail the job with a clear message when
-  the bank cannot cover it.
-- B. Check gold and fail early, leaving the user to move gold.
+  the bank cannot cover it. Costs: one more bank visit per mail when the merchant is short, and
+  the bank errands on that visit deposit any other carried gold first.
+- B. Check gold and fail early, leaving the user to move gold. Costs: the user has to fund every
+  attachment mail by hand.
+- C. Leave it to the server. Costs: the item has already moved to slot 0 when the send fails.
 
-**Recommendation:** A. The merchant already withdraws gold for other jobs
-(`withdrawMerchantCash`, characters/shared.js:5911-5919).
+**Recommendation:** A. The merchant already withdraws gold this way for other jobs
+(`withdrawMerchantCash`, characters/shared.js:5911-5919), so it beats B on effort for the user and
+beats C because the item is never moved for a send that cannot happen. Its own cost: postage is
+read from the client HTML (scripts/mail-postage.cjs:2-5) and returns null when the page changes,
+so the check needs a fallback to the game's 48000 and 360000.
 
 ## 6. Gaps
 
@@ -2157,16 +2304,16 @@ With too little gold the send fails on the server.
 
 - Functions claimed by this spec and by another spec: 0.
 - Claims naming no known function: 0.
-- Behaviours with no test: 19 (INV-001, INV-008, INV-018, INV-021, INV-024, INV-025, INV-035, INV-036, INV-052, INV-071, INV-072, INV-090, INV-091, INV-100, INV-105, INV-107, INV-108, INV-109, INV-111).
-- Unclaimed functions across all specs: 3743 (the tool does not split these by spec; none of them is in this spec's proposed list).
+- Behaviours with no test: 19 (INV-001, INV-008, INV-018, INV-021, INV-024, INV-025, INV-035, INV-036, INV-052, INV-071, INV-072, INV-090, INV-091, INV-093, INV-100, INV-105, INV-107, INV-108, INV-111).
+- Unclaimed functions across all specs: 0 (`node tools/check-claims.mjs` on 2026-10-26).
 
 Not yet verified:
 
-- http/npc-sale.ts and http/anniversary-commerce.ts: function list only (not my behaviours; NPC sales are part B, anniversary is 06) (reader 10a).
-- http/merchant-order.ts: read 39-70, 170-204, 231-312 only (crafting order build-up 72-169 and handle 213-230 not read) (reader 10a).
-- dispatch-time Ponty replanning in merchant/dispatcher.ts and the character-side gold check (part B) (reader 10a).
-- Test accuracy: no test in section 4 has been reviewed for whether it proves what its name says (method step 2).
-- The test mapping is by file and test name; a test can prove more behaviours than the one it is mapped to.
+- http/npc-sale.ts and http/merchant-order.ts were read in full on 2026-10-26 (INV-115, INV-116). http/anniversary-commerce.ts belongs to 06.
+- dispatch-time Ponty replanning is merchant/dispatcher.ts:181-194 (INV-087). The character-side gold check before a bid purchase was not traced.
+- INV-062 still holds waitForPlayer (shared.js:5378), a delivery rendezvous helper unrelated to item matching.
+- Test accuracy: nobody has reviewed whether each test in section 4 proves what its name says (method step 2).
+- The test mapping is by file and test name; a test can prove more behaviours than the one it maps to.
 
 ## 7. Review claims checked
 
@@ -2180,8 +2327,8 @@ Not yet verified:
 | Appendix A s3: ALData bid jobs every 10 s via market-feeds.ts:74 -> aldata-service.ts:75 -> application.ts:1566 | PARTLY | market-feeds.ts:74 and aldata-service.ts:75 confirmed; the application hook is queueALDataMatches at application.ts:1427 on the current console (1566 is a HEAD line) |
 | Appendix A s3: bid Ponty jobs have no realm and are replanned with the merchant's current server | PARTLY | bids.ts:105-116 sets no realm; purchase-composition.ts:27-33 passes the merchant's status server at queue time; dispatch-time replanning is in merchant/dispatcher.ts (part B) |
 | Appendix A s3: homeRealm table (bids.ts:113, 147; manual-orders.ts:70, 118, 129; npc-shop.ts:416, 418) | CONFIRMED | bids.ts:113; manual-orders.ts:70, 118, 129; fork HEAD npc-shop.ts:416, 418 |
-| Appendix A s3: marked/merchantMarked, withdrawals, compounds and bankboiQueue writer lists | PARTLY | all sites confirmed except automatic-action.ts lines, which sit one lower on the current console: 45 (not 46), 111 (not 112), 113 (not 114) |
-| Appendix A s3: upgrades written at 19 sites in 13 files | PARTLY | sites confirmed; automatic-action.ts:52 (review says 53); offering-waits.ts:34-35 |
+| Appendix A s3: marked/merchantMarked, withdrawals, compounds and bankboiQueue writer lists | CONFIRMED | all sites confirmed; the writes in automatic-action.ts are at 46, 112 and 114 as the review says (45, 111 and 113 are the loop headers) |
+| Appendix A s3: upgrades written at 19 sites in 13 files | CONFIRMED | sites confirmed; the automatic-action.ts write is at :53 as the review says; offering-waits.ts:34-35 |
 | Appendix A s3: merchantWeapon writers merchant-item-commands.ts:74, transfer-commands.ts:63, :80, clear-item-marks.ts:125 | CONFIRMED | same lines on the current console |
 | Appendix A s3: bankboiTransaction single owner with four latches; ready within 10 s; recovery 600 s or 120 s plus stale or not banking | CONFIRMED | bankboi-service.ts:44-47, 49-58, 87, 102, 122, 141-147, 173 |
 | Appendix A s3: production.attempts single owner; one unfinished attempt blocks all; 2048 cap | CONFIRMED | production.ts:65-72, 82, 91, 124, 187-202, 271 |
@@ -2191,11 +2338,11 @@ Not yet verified:
 | Appendix A s4: ponty.ts observe and refresh both call queueMatches, which runs queuePonty, matchPonty and scheduleRon | PARTLY | ponty.ts:51, 71 confirmed; the hook is fork HEAD application.ts:1556-1560 (review cites 1560-1564) |
 | Appendix A s4: production prune present in the current console; upstream #59 addressed at source | CONFIRMED | production.ts:65-72 called at :74, :132, :198; completed commerce journals stay inside the cap (:116-128) |
 | Appendix A s4: string-matched errors (production.ts texts, 'interrupted', deconstruction text, one typed code) | PARTLY | production.ts:53-54, 82, 85, 249, 154 and bankboi-composition.ts:63, completion-retries.ts:72, merchant-idle.ts:50, withdrawal-bank-guard.ts:22 confirmed; the dispatcher log is at merchant/dispatcher.ts:261 on the current console (review says 265); http/marketplace-progress.ts:12-17 also has typed failure codes |
-| Appendix A s4: 120 s window in six places; Ponty local freshness 30 s | PARTLY | bids.ts:101, 165; manual-orders.ts:111; price-history.ts:48; ponty.ts:56; fork npc-shop.ts:97 confirmed; also http/manual-market-orders.ts:52 and the unused helper runtime/market-preferences.ts:8-10; 30 s at ponty.ts:30, 34 and bids.ts:137 |
+| Appendix A s4: 120 s window in six places; Ponty local freshness 30 s | PARTLY | bids.ts:101, 165; manual-orders.ts:111; price-history.ts:48; ponty.ts:56 (a dismiss window); fork npc-shop.ts:97 confirmed; also http/manual-market-orders.ts:52, merchant/giveaway-scheduler.ts:137, 144, and runtime/market-preferences.ts:8-10, which only the dashboard uses; 30 s at ponty.ts:30, 34 and bids.ts:137 |
 | Appendix A s4: magic timeouts list (native-stand 10 s, BankBoi 10/600/120/30 s, mailbox 30 s, delivery 10 s and 400 px, 3 slots, staging 35-41) | CONFIRMED | native-stand.ts:77; bankboi-composition.ts:63; bankboi-service.ts:54, 143, 144, 146; mailbox.ts:28; transfer-commands.ts:223-224; offering-waits.ts:132; reserved-cargo.ts:80 |
 | Appendix A s4: direct Date.now() in native-stand.ts:77, merchant-item-commands.ts:101, production.ts:124, :187, transfer-commands.ts:223 | CONFIRMED | same lines; also native-stand.ts:127, mail-startup.ts:73, http/native-stand.ts:75, http/inventory-receipts.ts:83 |
-| Appendix A s5: merchantQueue written from 19 sites in 10 files | PARTLY | sites confirmed; automatic-action.ts:101 (review says 102) |
-| Appendix A s5: merchantCurrent flags set from outside (itemMarksCleared, offeringSupply, pauseReason) | PARTLY | automatic-action.ts:129, clear-item-marks.ts:74, offering-supply.ts:30 confirmed; pauseReason is at offering-waits.ts:64 and :133 (review says 67) |
+| Appendix A s5: merchantQueue written from 19 sites in 10 files | CONFIRMED | sites confirmed; the automatic-action.ts write is at :102 as the review says |
+| Appendix A s5: merchantCurrent flags set from outside (itemMarksCleared, offeringSupply, pauseReason) | CONFIRMED | automatic-action.ts:130, clear-item-marks.ts:74, offering-supply.ts:30; pauseReason at offering-waits.ts:67 (as the review says) and :133 |
 | Appendix A s5: identity has no single definition; each legacy form keeps a branch | CONFIRMED | see problem 'Item and listing identity has many encodings'; more encodings exist than the review lists (stack identity, Ponty groupKey, name\|level, craft name@level) |
 | Appendix A s6: live tip 21b8362d changes no file in commerce/ or inventory/ | CONFIRMED | not re-run; accepted from the review command git -C pta-pull diff af92de45 21b8362d --stat (no file in this slice differs between the current console and HEAD except the three fork files) |
 | Appendix B s4: luckySlotLocks set by merchant-settings.ts:52, removed by unlock and identity change | CONFIRMED | http/merchant-settings.ts:34, 52; status/lucky-slot-tracking.ts:21 |
@@ -2228,7 +2375,7 @@ Not yet verified:
 | trackedProductionWork failure regex /timed out\|uncertain\|interrupted\|recovery/ and 'Upgrade outcome uncertain' matched by uncertainUpgrade (Appendix C 1) | CONFIRMED | shared.js:5012, 5014; completion-retries.ts:113-118 |
 | upgradeConfirmed bypasses tracking for a non-scroll<digit> scroll (Appendix C 1) | CONFIRMED | shared.js:5032-5033 |
 | merchantImprove calls prepareUpgradeOffering twice per attempt and throws 'Auto compound made no inventory progress' (Appendix C 1) | CONFIRMED | shared.js:6229, 6249, 6388 |
-| applyStatScrolls calls raw upgrade() with a 2500 ms poll as a second confirmation path (Appendix C 1) | CONFIRMED | shared.js:6641-6645; the window is shorter than the game's stat-scroll timer for grade 1-2 base items (server.js:7153-7160, 7498-7512) |
+| applyStatScrolls calls raw upgrade() with a 2500 ms poll as a second confirmation path (Appendix C 1) | CONFIRMED | shared.js:6641-6645; the poll starts after the awaited upgrade() resolves on 'upgrade_success_stat' (game js/game.js:2140-2141), so the game's queue time does not count against it |
 | prepareBankUpgrades: bank_retrieve then immediate findIndex with no settle wait (Appendix C 1) | CONFIRMED | shared.js:7259-7263 |
 | merchantSelfImprove restore fallback 'highest level of the same name' and inventory_full for deferred withdrawals (Appendix C 1) | CONFIRMED | shared.js:7281-7290, 7362-7364 |
 | merchantBuyUpgradeLine: batch cap 42, reserve 3, default 10000 attempts, '90%' budget text, legacyAllowance (Appendix C 1) | CONFIRMED | shared.js:7531, 7640-7661 |
@@ -2241,7 +2388,7 @@ Not yet verified:
 | Typed failureKind only for hunt_movement_owned, commerce_movement and commerce_recovery (Appendix C 4) | CONFIRMED | shared.js:8218 (merchantCommerce); merchantService line not in this list |
 | Fix-on-fix: merchantBuyUpgradeLine remap fixes fde2186d, 2be25ed8, 6f532e38; lucky best effort 17400329 (Appendix C 3) | CONFIRMED | git log -1 of each sha (dates 2026-10-09, 2026-10-09, 2026-10-18, 2026-10-10) |
 | Identity encodings: fingerprint/sameItem, sameItemState, bankStackIdentity (9 fields), bankSortItemState, '@+' rule keys, JSON fingerprint comparisons (Appendix C 4) | CONFIRMED | shared.js:1241-1263, 4019-4023, 4261-4263; also stand-marks.ts:27-35 identity and Ponty exactProperties shared.js:8599-8604 |
-| 6.2: stand reconcile up to 16 unequips with no delay, 144 for a full reprice | PARTLY | shared.js:9537-9550 confirms 16 back-to-back unequips (current line, review cites HEAD 10231-10245); 144 is the review's estimate from CC unequip 6 (server.js:248-262), not measured |
+| 6.2: stand reconcile up to 16 unequips with no delay, 144 for a full reprice | PARTLY | shared.js:9537-9550 confirms 16 back-to-back unequips (current line, review cites HEAD 10231-10245); 16 unequips cost 16 x 8 = 128 (CC.unequip 6 at node/server.js:257 plus 2 from the resend at :7938), not 144 |
 | 6.2: retrieveFromBankUntil loop up to 100 with no settle wait; ALData sell loop with no wait | CONFIRMED | shared.js:1336-1345, 8983-8987 |
 | 1.2: merchantDeconstruct throws the exact text the coordinator matches (vs deconstruction.ts:233) | CONFIRMED | shared.js:9206; deconstruction.ts:233 exists only at fork HEAD |
 | 1.2: merchantDonate raw parent.socket.emit('lostandfound') | CONFIRMED | shared.js:9297 |
@@ -2267,7 +2414,7 @@ Not yet verified:
 | autoCompounds[owner] | {} | inventory/production.ts:46; runtime/compound-storage.ts:9 | inventory/compound-commands.ts:130-138, 156; inventory/automatic-action.ts:58; inventory/clear-item-marks.ts:106 |
 | autoExchanges[name@L] | {} | inventory/automatic-action.ts:145 | inventory/merchant-item-commands.ts:85-88; inventory/automatic-action.ts:100; inventory/clear-item-marks.ts:123 |
 | upgradeOfferingRules | [] | inventory/offering-supply.ts:65; inventory/production.ts:255 | inventory/upgrade-offerings.ts:22, 30 |
-| goldTargets[name] | none | inventory/bank-queue.ts:41-43 | inventory/upgrade-commands.ts:167 |
+| goldTargets[name] | none (the merchant's command uses 0) | inventory/bank-queue.ts:41-43; merchant/dispatch-composition.ts:93; merchant/commands.ts:12-25, 121, 170; status/response.ts:203-206; http/merchant-handoff.ts:103 | inventory/upgrade-commands.ts:167; restored at inventory/initial-intents.ts:31 |
 | merchantRules | null | inventory/shared-rules.ts:20-25 | inventory/shared-rules.ts:77, 91 |
 | merchantWeapon | null | characters/shared.js gathering restore (part B) | inventory/merchant-item-commands.ts:74; inventory/transfer-commands.ts:63, 80; inventory/clear-item-marks.ts:125 |
 | statScrolls[name] | {} | inventory/stat-scroll-commands.ts:107 | inventory/stat-scroll-commands.ts:111-123; http/inventory-receipts.ts:47 |
@@ -2277,20 +2424,20 @@ Not yet verified:
 | bankSortMode | automatic | runtime/coordinator/merchant/bank-sort.ts:26, 108-110; characters/shared.js:4181-4182 | runtime/coordinator/merchant/bank-sort.ts:87 |
 | bankSortRequest | null | runtime/coordinator/merchant/bank-sort.ts:27, 53, 77, 110 | runtime/coordinator/merchant/bank-sort.ts:63, 88-90 |
 | bankSortLayout (fork) | packed | fork HEAD bank-sort.ts:31, 100; fork HEAD shared.js:4619 | fork HEAD bank-sort.ts:92 |
-| itemCollectionThreshold | 10 | runtime/coordinator/merchant/bank-collection.ts:28; runtime/coordinator/merchant/automatic-sales.ts:138 | runtime/coordinator/http/thresholds.ts (cite only) |
+| itemCollectionThreshold | 1 (inventory/initial-collection.ts:28-30; the readers fall back to 10 only when the field is missing) | runtime/coordinator/merchant/bank-collection.ts:28; runtime/coordinator/merchant/automatic-sales.ts:138 | runtime/coordinator/http/thresholds.ts:32 |
 | buyUpgradeBatchSize | 1 (range 1-42) | characters/shared.js:7645 | runtime/coordinator/http/thresholds.ts:34 |
 | merchantAutomations['auto npc sales'] | on (undefined) | automatic-sales.ts:123, 207, 231; bank-collection.ts:18; player-npc-sales.ts:159 | merchant settings routes (spec 11) |
 | merchantAutomations.withdrawals / ['party collection'] | on | bank-collection.ts:27-28 | merchant settings routes (spec 11) |
 | merchantAutomations['auto compound'] / ['auto upgrade'] / ['automatic exchange'] | on | improvement-scheduler.ts:98, 138, 163 | merchant settings routes (spec 11) |
-| autoNpcSales | {} | automatic-sales.ts:49, 122, 221; npc-sale-keep.ts:14; player-npc-sales.ts:180 | http/automatic-sales.ts (cite only) |
-| autoStandMarks | {} | automatic-sales.ts:91, 122 | http routes (cite only) |
-| standBids | {} (useStandSlot false, acceptHigherLevels true) | automatic-sales.ts:88, 183; stand-marks.ts:44; initial-state.ts:126-129 | http/merchant-bid.ts (cite only) |
+| autoNpcSales | {} | automatic-sales.ts:49, 122, 221; npc-sale-keep.ts:14; player-npc-sales.ts:180 | http/automatic-sales.ts:52, 63, 77, 122 (INV-117) |
+| autoStandMarks | {} | automatic-sales.ts:91, 122 | http/automatic-sales.ts:65, 115, 120, 132 (INV-117) |
+| standBids | {} (missing useStandSlot reads false, missing acceptHigherLevels reads true) | automatic-sales.ts:88, 183; stand-marks.ts:44; initial-state.ts:126-129 | http/merchant-bid.ts:82-87, 126 (INV-113) |
 | autoCompounds | {} | improvement-scheduler.ts:73; banked-improvements.ts:26 | improvement-scheduler.ts:141 (writes the same rules back) |
 | autoUpgradeMarks | {} | banked-improvements.ts:40 | http routes (cite only) |
 | autoExchanges | {} | improvement-scheduler.ts:89 | http routes (cite only) |
 | autoDeconstruction | {} | deconstruction.ts:143 | deconstruction.ts:302-321 |
 | upgradePreviewResults | {} (cap 100) | upgrade-preview.ts:18, 26 | upgrade-preview.ts:53-55 |
-| merchantGoldTarget (character merchantCashTarget) | 0 | characters/shared.js:5912-5913 | characters/shared.js:11340 (status handler) |
+| merchantGoldTarget (character merchantCashTarget) | 0 | characters/shared.js:5912-5913, 5942-5944 | sent from goldTargets[merchant] at merchant/commands.ts:19 and status/response.ts:203-206; stored at characters/shared.js:571, 11340 |
 | luckyUpgradeSlot | null | characters/shared.js:5097, 5144 | characters/shared.js status handler (spec 08/11, cite only) |
 
 ## The design

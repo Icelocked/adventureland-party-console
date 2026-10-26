@@ -1,6 +1,6 @@
 # 08. Merchant jobs
 
-Checked against the current console `refs/review/ryan-1.5` (b9b5c91e) in (local checkout). Every file:line is on that ref unless it says "fork HEAD" (af92de45). The fork's live tip 21b8362d changes no file in this part (`git diff --stat af92de45 21b8362d` in pm-worktrees/pta-pull touches only characters/shared.js lines 71 and 18438-18926).
+Checked against the current console `refs/review/ryan-1.5` (b9b5c91e) in (local checkout). Every file:line is on that ref unless it says "fork HEAD" (af92de45). The fork's live tip 21b8362d changes no code in this part: `git diff --stat af92de45 21b8362d` in pm-worktrees/pta-pull lists 17 files, all escape, pull, heal, October event and test code (characters/shared.js hunks at 68 and 18435-18962).
 
 This spec maps which job the merchant runs and what interrupts it: the job queue, routine
 priorities, the dispatcher and its gates, the command the coordinator writes for the merchant, the
@@ -13,7 +13,7 @@ Which realm the merchant is on and what it holds in its hands are in
 [10](10-inventory-bank-commerce.md). Movement during a convoy pause belongs to
 [02](02-movement.md); event reserves come from [06](06-events.md).
 
-Counts: 48 behaviours and 618 functions in `catalog/08-merchant-jobs.json` (counted with `node -e` over that file); 13 handoffs in `catalog/handoffs-08.json`.
+Counts: 51 behaviours and 614 functions in `catalog/08-merchant-jobs.json` (counted with `node -e` over that file); 12 handoffs in `catalog/handoffs-08.json`, and 134 functions handed to this spec by the other handoff files. MJB-049 to MJB-051 were split out of MJB-036, MJB-003 and MJB-046 on 2026-10-26; the check is logged in docs/implementation/07-verification-08-10.md.
 
 How this map was made: four readers went through every function in this part on the current console (shared.js by its current line ranges, every other file start to end) and checked the full review (local checkout) and the first pass `review/merchant.md` claim by claim. Section 7 lists each review claim with its verdict. Line numbers in the full review are mostly fork HEAD lines; this spec gives current lines.
 
@@ -31,8 +31,8 @@ Rules:
 - routineEnabled always allows manual exchange and manual party collection; any other routine runs unless its automation is false (runtime/coordinator/merchant/routines.ts:19-23)
 - migrateRoutinePriorities folds the old keys exchange, stand purchases, ALData marketplace purchases, upgrades and compounds, merchant commerce and npc sales into the split routines, then lets saved current keys win (runtime/coordinator/merchant/routines.ts:30-46)
 - splitLegacyWork splits an old "upgrades and compounds" job into manual upgrades and manual compounds, and a commerce job with both buys and crafts into two jobs (runtime/coordinator/merchant/routines.ts:53-59)
-- stampMerchantJob rewrites "merchant luck exchange" to "merchant luck" with expandLuckCluster false, keeps the oldest queuedAt and stores the computed priority (runtime/coordinator/merchant/priority.ts:52-66)
-- Default priorities: merchant luck 100, inventory cleanout 95, deliveries/withdrawals/party collection/restock/bank unlock/mail 90, gold threshold 85, npc sales and deconstruction 80, manual marketplace purchases 76, upgrades 70, auto compound 68, exchange 67, buying and crafting 65, donation 60, join giveaway 55, stand search 50, stand maintenance 40, fishing and mining 20, merchant idle 0 (runtime/coordinator/merchant/initial-settings.ts:32-77)
+- stampMerchantJob rewrites "merchant luck exchange" to "merchant luck" with expandLuckCluster false and castMerchantLuck true, keeps the oldest queuedAt and stores the computed priority (runtime/coordinator/merchant/priority.ts:52-66)
+- Default priorities: merchant luck 100; inventory cleanout 95; manual visit, deliveries, withdrawals, ALData authentication, party collection, restock, bank unlock, send mail and collect mail 90; gold threshold 85; npc sales, auto npc sales, npc sale pickups, deconstruction and manual bank exchange 80; manual marketplace purchases and ALData marketplace purchases and sales 76; stand purchases and stand bid purchases 75; upgrade preview, manual and auto upgrades and manual compounds 70; auto compound 68; manual and automatic exchange 67; manual buying and crafting 65; donation 60; join giveaway 55; stand search 50; stand maintenance 40; fishing and mining 20; merchant idle 0 (runtime/coordinator/merchant/initial-settings.ts:32-77). A reason with no entry, such as "native stand funding", gets 50 (priority.ts:37)
 - Default automations: craft fishing/mining tools false; deliveries, withdrawals, merchant luck, party collection, auto npc sales, restock, gold threshold, inventory cleanout, auto compound, auto upgrade, automatic exchange, stand bid purchases, join giveaway true (runtime/coordinator/merchant/initial-settings.ts:78-96)
 - coordinatorPrioritizedBids sorts stand bids by their job priority, highest first (runtime/coordinator/merchant/job-policy.ts:49-58)
 
@@ -50,7 +50,7 @@ Rules:
 
 - completesStorageHandoff returns priority 101 only while bankStagingReserved is true, the job is the merchant's own withdrawals, bank collection, manual bank exchange or upgrade/compound routine, and a withdrawal request points at items1 slot 35 or higher that is occupied in the bank snapshot (runtime/coordinator/merchant/job-policy.ts:21-35, runtime/coordinator/merchant/priority.ts:46)
 
-**MJB-003 Queue work once per character and routine.** Asking for the same work twice for the same character leaves one queued job, raised to the higher priority.
+**MJB-003 Queue work once per character and routine.** Asking for the same work twice for the same character leaves one queued job. A fighter's job takes the higher-priority reason; the merchant's own jobs keep their reason, except that withdrawals and bank collection replace each other.
 
 Rules:
 
@@ -62,7 +62,7 @@ Rules:
 - createMerchantQueue merges all queued pickup jobs per target on start; mergePickupJobs keeps the oldest queuedAt, the latest retryAt and any realm block (runtime/coordinator/merchant/queue.ts:48-49, runtime/coordinator/merchant/pickup-jobs.ts:19-36)
 - Job ids are "merchant-<now>-<nextCommandId>" (runtime/coordinator/merchant/queue-composition.ts:63)
 
-Handed over by other specs: 6 functions (13-lifecycle).
+Handed over by other specs: 2 functions (13-lifecycle).
 
 **MJB-004 Hold work that failed for gold or space until resources change.** A job that failed for lack of gold, bag space or an ambiguous upgrade stays blocked until the inventory, bank or gold changes.
 
@@ -116,14 +116,15 @@ Rules:
 
 - observe order: deliveries reconcile, equip resume, receipt reconcile (skipped on the first report after reconnect), luck schedule, merchant observations, compounds, improvements, merchant inventory or fighter collection, stand sync, dispatch or idle, BankBoi, cleanout, bank recovery, gold threshold (runtime/coordinator/status/merchant-scheduling.ts:262-282)
 - It dispatches when the job phase is "switching party realm", or when there is no job and the queue or gathering modes are non-empty; otherwise it idles (runtime/coordinator/status/merchant-scheduling.ts:274-277)
-- merchantInventory sets merchantCapacityBlocked at 3 or fewer free slots and resets transfer signatures when it turns on (runtime/coordinator/status/merchant-scheduling.ts:130-138)
+- merchantInventory sets merchantCapacityBlocked at 3 or fewer free slots and resets transfer signatures when it turns on (runtime/coordinator/status/merchant-scheduling.ts:130-135)
+- merchantInventory also queues "withdrawals" on every merchant report while one marked bank cell is pending, or "bank collection" at the collection threshold when the withdrawals automation is off (runtime/coordinator/status/merchant-scheduling.ts:136-137, runtime/coordinator/merchant/bank-collection.ts:24-30)
 - collection queues "marked items" when slots >= threshold and the signature changed, skipped when the merchant has 3 or fewer free slots (runtime/coordinator/status/merchant-scheduling.ts:161-187)
 - goldThreshold queues "gold threshold" once per run for each member above the threshold (runtime/coordinator/status/merchant-scheduling.ts:210-228)
 - upgradeWork queues "auto upgrade" for the merchant and "marked items" for fighters (runtime/coordinator/status/merchant-scheduling.ts:140-146)
 
 Settings:
 
-- threshold: read at runtime/coordinator/status/merchant-scheduling.ts:213
+- threshold: default 100000 (runtime/coordinator/inventory/initial-collection.ts:27); read at runtime/coordinator/status/merchant-scheduling.ts:213
 
 Handed over by other specs: 1 functions (03-turns-and-cooldowns).
 
@@ -168,14 +169,14 @@ Settings:
 
 - merchantAutomations: read at runtime/coordinator/merchant/dispatch-composition.ts:143
 
-**MJB-012 Hold merchant work while production receipts are unreconciled.** While any paid crafting or upgrade attempt has no receipt, the merchant takes no new job and is asked every 5 s to reconcile its journal.
+**MJB-012 Hold merchant work while production receipts are unreconciled.** While any paid crafting or upgrade attempt has no receipt, the merchant takes no new job and the dispatcher asks it every 5 s to reconcile its journal.
 
 Rules:
 
 - productionHeld returns true while pendingProduction lists attempts; with no current job and a live merchant it writes merchant-production-recover at most every 5000 ms and logs the hold once per pending set (runtime/coordinator/merchant/dispatcher.ts:254-274)
 - The character answers merchant-production-recover only with no active job, runs recoverProductionJournal and reports accepted or deferred (characters/shared.js:10446-10453)
 
-**MJB-013 Hold merchant work during a home-realm return.** While the merchant is being sent back to its home realm, new work waits; after three failed returns, work that needs home is blocked until a manual retry.
+**MJB-013 Hold merchant work during a home-realm return.** While the coordinator sends the merchant back to its home realm, new work waits. After three failed returns, the dispatcher blocks work that needs home until a manual retry.
 
 Rules:
 
@@ -205,9 +206,9 @@ Settings:
 
 - merchantForceStand: default false (runtime/coordinator/merchant/initial-runtime.ts:50); written by the force route (runtime/coordinator/http/merchant-control.ts:131)
 
-Handed over by other specs: 4 functions (13-lifecycle).
+Handed over by other specs: 7 functions (13-lifecycle).
 
-**MJB-016 Wait for a manual equip, unequip or use-item command.** A dashboard equip, unequip or use-item command in the merchant slot blocks dispatch and stand return until it is consumed.
+**MJB-016 Wait for a manual equip, unequip or use-item command.** A dashboard equip, unequip or use-item command in the merchant slot blocks dispatch and stand return until the character consumes it.
 
 Rules:
 
@@ -220,7 +221,7 @@ Rules:
 
 - targetStatus requeues when either status is older than 10_000 ms, or travel is unavailable and the normalized realms differ (runtime/coordinator/merchant/dispatcher.ts:164-179)
 
-**MJB-018 Bank the merchant's own marks before queued fighter cleanouts.** When queued collections are blocked by a full merchant bag, the merchant first runs one bank exchange, at most once a minute.
+**MJB-018 Bank the merchant's own marks before queued fighter cleanouts.** When a full merchant bag blocks queued collections, the merchant first runs one bank exchange, at most once a minute.
 
 Rules:
 
@@ -232,7 +233,7 @@ Rules:
 Rules:
 
 - gatherBefore returns false at 3 or fewer free slots; it sorts modes whose coordinator cooldown passed by routine priority and gathers when the best beats the best ready job (or -1 with none) (runtime/coordinator/merchant/dispatcher.ts:127-135)
-- It writes merchant-gather with all modes only when ensureHome("gathering") allows, but returns true either way, so no job is picked that tick (runtime/coordinator/merchant/dispatcher.ts:136-142)
+- It writes merchant-gather with all modes only when ensureHome("gathering") allows, but returns true either way, so the dispatcher picks no job that tick (runtime/coordinator/merchant/dispatcher.ts:136-142)
 
 Settings:
 
@@ -256,7 +257,7 @@ Handed over by other specs: 12 functions (13-lifecycle).
 Rules:
 
 - assign stamps commerceProgressVersion 2 for buy-upgrade orders, clears pauseReason, sets current with phase assigned, startedAt and a new commandId, then writes merchant-mluck, an own-merchant command or merchant-service (runtime/coordinator/merchant/dispatcher.ts:196-228)
-- ownCommandType maps 21 reasons to merchant-* types, in-place stand maintenance to merchant-stand-sync, and everything else to merchant-self-improve (runtime/coordinator/merchant/command-kind.ts:3-31)
+- ownCommandType maps 22 reasons to merchant-* types, in-place stand maintenance to merchant-stand-sync, and everything else to merchant-self-improve (runtime/coordinator/merchant/command-kind.ts:3-31)
 - ownMerchantCommand builds upgrade preview separately and otherwise merges purchase, marketplace, supplies, per-reason, improvement and commerce details; aldataHomeRealm is job.homeRealm or activeRealm for ALData and Ponty jobs (runtime/coordinator/merchant/commands.ts:57-72, 102-129)
 - partyMerchantCommand builds merchant-service with the target's realm, position, gold, inventory, marks, cluster options, withdrawals, deliveries, restock and cargo (runtime/coordinator/merchant/commands.ts:149-182)
 - scopeWork empties the payload lists that belong to other routines and filters upgrades and npc sales by auto flag (runtime/coordinator/merchant/command-scope.ts:3-16)
@@ -289,7 +290,7 @@ Rules:
 - handle counts every command in root.__partyInventoryCommands while it runs, which gathering reads as "inventory command" (characters/shared.js:10388-10393, 10021)
 - handleOwnedCommand skips commands while a dungeon owns the character, defers during escape and ignores ids at or below lastCommand (characters/shared.js:10395-10414)
 - Preflight order: wait for an inventory tidy and lucky-slot recovery (deferred while a job runs), recover the production journal, defer merchant-* during event work, defer merchant-* except idle and stand-sync during anniversary work, gathering handoff, then report accepted (characters/shared.js:10456-10486)
-- Every merchant command except merchant-idle and merchant-stand-sync clears atStandForCooldown and closes the stand (characters/shared.js:10516-10523)
+- On the merchant, every command except merchant-idle and merchant-stand-sync clears atStandForCooldown and closes the stand, including commands that are not merchant-* (characters/shared.js:10516-10523)
 - Routing: 22 merchant-* types run inside runMerchantJob, all but upgrade preview and stand sync through afterCombat; merchant-idle, bankboi-service, handoff and order handoff run outside it (characters/shared.js:10524-10635)
 - merchant-gather replaces the mode list and calls selectGatheringMode (characters/shared.js:10662-10666)
 - merchant-collect-mail waits up to 20000 ms for mail_item_taken and needs one free slot (characters/shared.js:10598-10623)
@@ -332,7 +333,7 @@ Rules:
 
 - recoverMerchantQueue moves handoff banked marks and gold into merchantCargo, requeues the current job at the head with reason fallback "resumed service", deletes phase, startedAt and handoff, and keeps one commerce job per identical buys and crafts (runtime/coordinator/merchant/restart-queue.ts:16-49)
 - initialMerchantRuntime restores queue, current, cargo, force stand, stand location and realm requests; merchantHomeReturnAt comes from an unexhausted home request (runtime/coordinator/merchant/initial-runtime.ts:27-58)
-- The default merchant name is "GoldMajesty" and a saved lucky slot 7 for GoldMajesty is discarded (runtime/coordinator/merchant/initial-runtime.ts:36, 40)
+- The default merchant name is "GoldMajesty" and initialMerchantRuntime discards a saved lucky slot 7 for GoldMajesty (runtime/coordinator/merchant/initial-runtime.ts:36, 40)
 
 Settings:
 
@@ -370,7 +371,7 @@ Rules:
 
 Rules:
 
-- sendReservedMerchantDelivery writes an "uncertain" receipt to localStorage before the send, asks the coordinator, marks "sending", and stores confirmed or uncertain after (characters/shared.js:7155-7206)
+- sendReservedMerchantDelivery writes an "uncertain" receipt to localStorage before the send, asks the coordinator, marks "sending", and stores confirmed or uncertain after (characters/shared.js:7182-7206; the journal helpers are at 7154-7165)
 - acknowledgeDelivery removes a receipt's mark or sets awaitingEquip for equip-on-delivery marks (runtime/coordinator/merchant/delivery-recovery.ts:123-132)
 - queueEquipment adds equipItems to an existing apply-stat-scrolls command or writes equip-deliveries into an empty fighter slot (runtime/coordinator/merchant/completion-results.ts:121-128)
 - resumeDeliveryEquip rewrites equip-deliveries every 30000 ms (in memory) when the fighter slot is empty or holds party-monster-travel and the convoy admits the interruption (runtime/coordinator/status/merchant-scheduling.ts:230-253)
@@ -399,7 +400,7 @@ Rules:
 
 - leader queues "party collection" for members within the job radius (default 200) of the leader, nearest first (runtime/coordinator/merchant/clusters.ts:64-87)
 - marked replaces queued "marked items" jobs for members within 200 that have marks with one batch at the queue head (runtime/coordinator/merchant/clusters.ts:88-108)
-- Cluster jobs are unshifted to the queue head (runtime/coordinator/merchant/clusters.ts:73, 97)
+- The cluster code unshifts cluster jobs to the queue head (runtime/coordinator/merchant/clusters.ts:73, 97)
 
 Handed over by other specs: 3 functions (13-lifecycle).
 
@@ -458,10 +459,10 @@ Rules:
 Settings:
 
 - gatheringModes: default [] (runtime/coordinator/merchant/initial-gathering.ts:16-20); written by runtime/coordinator/http/merchant-settings.ts:76-78, 109, runtime/coordinator/http/merchant-configuration.ts:84-86, runtime/coordinator/http/merchant-control.ts:107
-- gatheringNoTool: written at runtime/coordinator/http/merchant-settings.ts:75, 108
+- gatheringNoTool: written at runtime/coordinator/http/merchant-settings.ts:75, 108 and runtime/coordinator/http/merchant-configuration.ts:83
 - craft fishing tools / craft mining tools: default false (runtime/coordinator/merchant/initial-settings.ts:80-81), sent at runtime/coordinator/status/response.ts:208-209
 
-Handed over by other specs: 27 functions (03-turns-and-cooldowns, 13-lifecycle).
+Handed over by other specs: 9 functions (03-turns-and-cooldowns, 13-lifecycle).
 
 **MJB-037 Gather on a 2 s tick unless something blocks it.** Every 2 s the merchant checks 15 reasons to wait; if none applies it walks to the spot, equips the tool and casts.
 
@@ -480,7 +481,7 @@ Rules:
 
 Rules:
 
-- gatheringCommandHandoff returns true at once with no attempt or for merchant-gather; during a cast a merchant-* command is deferred with "finishing <mode> cast" unless force stand or anniversary work applies; otherwise it cancels, sets a 1000 ms hold, stops and waits for the attempt (characters/shared.js:9994-10008)
+- gatheringCommandHandoff returns true at once with no attempt or for merchant-gather; during a cast gatheringCommandHandoff defers a merchant-* command with "finishing <mode> cast" unless force stand or anniversary work applies; otherwise it cancels, sets a 1000 ms hold, stops and waits for the attempt (characters/shared.js:9994-10008)
 - It returns without restoring the merchant's hands (characters/shared.js:10006-10007)
 - The coordinator skips dispatch while a fresh status reports gatheringPhase casting (runtime/coordinator/merchant/gathering.ts:2-7, runtime/coordinator/merchant/dispatcher.ts:285)
 - A deferred command sets a 5000 ms logistics hold when the attempt ends (characters/shared.js:10181-10182)
@@ -570,8 +571,6 @@ Rules:
 - merchantJoinGiveaway refuses PVP and expired offers, changes realm, closes the stand, walks to the location (default the stand point), waits up to 60000 ms for the seller and joins each slot not already entered (characters/shared.js:8706-8770)
 - The join command carries seller, slot, rid, realm, location, expiresAt and expectedItem (runtime/coordinator/merchant/commands.ts:88-96)
 
-Handed over by other specs: 8 functions (02-movement, 13-lifecycle).
-
 ### Merchant luck
 
 **MJB-047 Schedule Merchant's Luck before it runs out.** The coordinator queues a luck trip when a party member's luck will expire before the merchant could reach them.
@@ -604,20 +603,80 @@ Rules:
 
 Handed over by other specs: 3 functions (03-turns-and-cooldowns, 13-lifecycle).
 
+### Dashboard routes
+
+**MJB-049 Save merchant settings and the activity log from the dashboard.** The merchant configuration routes save routine priorities, automations, the buy batch size, the gold and item collection thresholds, lucky slot state and the activity log.
+
+Rules:
+
+- createCoordinatorMerchantConfiguration wires the routine priority route, the threshold route and the merchant settings routes to coordinator state (runtime/coordinator/http/merchant-configuration.ts:32-140)
+- The routine priority route accepts whole numbers 0 to 100 for known reasons, saves automation booleans, drops queued jobs whose routine is now off, restamps the queue and dispatches (runtime/coordinator/http/routine-priorities.ts:28-59)
+- The threshold route setters write buyUpgradeBatchSize, threshold and itemCollectionThreshold (runtime/coordinator/http/merchant-configuration.ts:118-133)
+- The lucky slot actions accept only an owned merchant (runtime/coordinator/http/merchant-settings.ts:60-64)
+- activity records the merchant's message only for the current job; clearActivity empties the log (runtime/coordinator/http/merchant-settings.ts:95-97, 121-136)
+
+Settings:
+
+- merchantRoutinePriorities: written at runtime/coordinator/http/routine-priorities.ts:33
+- merchantAutomations: written at runtime/coordinator/http/routine-priorities.ts:41
+- buyUpgradeBatchSize, threshold, itemCollectionThreshold: written at runtime/coordinator/http/merchant-configuration.ts:121, 126, 132; defaults 1, 100000 and 1, clamped to 1-42 (runtime/coordinator/inventory/initial-collection.ts:27-31)
+
+Handed over by other specs: 35 functions (13-lifecycle).
+
+**MJB-050 Cancel queued merchant work from the dashboard.** Cancelling a queued job removes it and clears the intent that would queue it again.
+
+Rules:
+
+- cancel removes the queued job by id and calls cancelIntent (runtime/coordinator/http/merchant-control.ts:85-93)
+- cancelIntent clears the marks, upgrades, stat scrolls or compounds behind the job; cancelling auto upgrade or auto compound also turns that automation off (runtime/coordinator/http/merchant-control.ts:56-78)
+- cancelAutomation turns off automatic exchange or the job's own automation (runtime/coordinator/http/merchant-control.ts:79-84)
+- cancelExchange drops the delivery and pickup jobs of one exchange and its exchange marks (runtime/coordinator/http/merchant-control.ts:49-55)
+
+Handed over by other specs: 6 functions (13-lifecycle).
+
+**MJB-051 Queue manual donation, stand search and giveaway requests.** The dashboard can queue a gold donation, a player stand search for one item, or a giveaway search for a named seller on a realm.
+
+Rules:
+
+- donate needs a configured merchant and a whole amount from 1 to 1000000000000, queues "merchant donation" and answers with the expected XP at the merchant's reported rate or 3.2 (runtime/coordinator/http/merchant-requests.ts:41-51)
+- giveaway needs a seller name of up to 40 characters and a known realm, and queues "join giveaway" for that seller and realm (runtime/coordinator/http/merchant-requests.ts:52-68)
+- search needs an item from the merchant catalog, queues "stand search" and resets standSearch (runtime/coordinator/http/merchant-requests.ts:69-82)
+
+Handed over by other specs: 7 functions (13-lifecycle).
+
 ## 2. What goes wrong
 
-### Luck scheduler never refreshes the party's own strong luck before it lapses
+### 1. Each job's bank visit banks the merchant's working gold, so the next job that spends gold starts at the bank
+
+Kind: bug. Origin: the current console. Confidence: confirmed in code for steps 1-9; the loop frequency in step 8 is inference.
+
+Reported by the user: "every time the merchant does a task it seems to want to visit the bank first."
+
+1. Every merchant command carries merchantGoldTarget = goldTargets[merchant], or 0 when unset (runtime/coordinator/merchant/commands.ts:12-19, spread at :117 and :167). goldTargets is set only by the 'gold-target' command from the character card (runtime/coordinator/inventory/upgrade-commands.ts:159-170; dashboard/features/party/connected-character-card.tsx:146), so a default setup sends 0
+2. merchantVisitBank runs merchantBankErrands once per command (characters/shared.js:6051-6057, 5922-5923). The errands first deposit every coin above that target (5942-5949), so with a 0 target the merchant banks all of its gold, stand sale income included (INV-068 in spec 10)
+3. Steps that spend gold withdraw only what they need: withdrawMerchantCash takes max(shortfall, target minus carried gold) (5911-5919), which is the shortfall when the target is 0. Callers: purchases 6215; scroll supply 6514-6523 and 6536-6553; stat scrolls 6582-6599; stand buys 8531-8536; Ponty 8615-8618 and 8638-8642; ALData buys 8840-8856; restock 9091-9096; donation 9289-9294
+4. So the merchant ends each job with about 0 gold, and the next job that spends gold opens with a bank visit. That visit deposits whatever the merchant carries and withdraws the exact cost again, a deposit then a withdrawal in one visit
+5. Some jobs visit the bank before they check anything: merchant-self-bank, which runs withdrawals, bank collection, manual bank exchange and native stand funding (command-kind.ts:5-8; shared.js:9031-9034); exchange (8314); donation (9289); auto compound, once per command (6322-6323); auto upgrade whenever bank upgrade rules exist (7231-7233, 7324; the rules are sent at commands.ts:134); bank compound inputs (7208-7211); and upgrade offerings stored in the bank (6130-6134). A party visit starts at the bank when the target has withdrawals or is below its gold target (6889-6892), or when stat scrolls for it are missing (6581-6582)
+6. Pending bank withdrawals queue their own job on every merchant report while one marked cell exists (status/merchant-scheduling.ts:136-137; merchant/bank-collection.ts:24-30). "withdrawals" has priority 90 (initial-settings.ts:38), above upgrades (70), exchange (67) and buying (65). While the merchant has no job, markBankStock turns bank stock under automatic NPC sale or stand rules into new withdrawals (merchant/automatic-sales.ts:142-161, 162-164, 289-293). A job queued while the merchant is idle therefore often waits behind a withdrawals trip
+7. Every visit also consolidates the floor and, in the default automatic sort mode (merchant/bank-sort.ts:26), sorts it again when it changed since the last sort in that visit (characters/shared.js:6061-6062, 4381-4385)
+8. Stand funding loop: while the stand is open, each stand report queues "native stand funding" when carried gold is below the highest stand bid that bank and carried gold can cover (http/native-stand.ts:67-77, 113-116). That job runs merchantSelfBank. Its errands deposit down to the 0 target, then it withdraws the bid price again (shared.js:9032-9039; the job's goldTarget at commands.ts:121). The next job's bank visit deposits that gold, and the next stand report queues funding again (inference: how often this repeats depends on how many jobs run between stand reports)
+9. Nothing shares a bank visit between jobs. The errands flag lives on the command object (shared.js:5922), each job is its own command, and the dispatcher combines only marketplace orders (dispatcher.ts:145-162; merchant/marketplace-batch.ts:16). A higher-priority job that becomes ready pauses the current one at its next checkpoint (http/merchant-progress.ts:144-163), and the resumed job is a new command with its own bank visit
+10. Result: on a default setup almost every job begins with a bank trip, and with stand bids on, gold moves from the bank to the merchant and back between jobs
+
+The fork does not change this: withdrawMerchantCash, merchantBankErrands, merchantVisitBank and merchantSelfBank are the same at af92de45. The design choice is section 5 Q5.
+
+### 2. Luck scheduler never refreshes the party's own strong luck before it lapses
 
 Kind: bug. Origin: the current console. Confidence: confirmed in code.
 
 1. The game marks mluck strong whenever caster and target share an owner (game node/server.js:10896-10898), so every buff our merchant casts on our own account's characters is strong
 2. Characters report the buff with live.strong (characters/shared.js:1830-1845, safeFields 1805-1813 keeps booleans)
 3. hasStrongMluck returns true for any strong buff, with no owner check (runtime/coordinator/merchant/luck.ts:59-61)
-4. eligible drops every status with a strong buff (runtime/coordinator/merchant/luck-scheduler.ts:40), so no refresh is queued while the buff exists; snapshot does the same (:85)
+4. eligible drops every status with a strong buff (runtime/coordinator/merchant/luck-scheduler.ts:40), so the scheduler queues no refresh while the buff exists; snapshot does the same (:85)
 5. Only after the buff expires does mluckRemaining return 0 (luck.ts:52) and the member qualify, so the lead time (luck.ts:63-75) never applies to own characters
 6. The character side treats only a foreign strong buff as blocking (shared.js:5517-5522) and the comment says the merchant must refresh its own
 
-### Five job command types are dropped from the slot after one heartbeat
+### 3. commandFor drops five job command types from the slot after one heartbeat
 
 Kind: bug. Origin: the current console. Confidence: confirmed in code.
 
@@ -626,7 +685,7 @@ Kind: bug. Origin: the current console. Confidence: confirmed in code.
 3. When the character defers that delivery (gathering cast at shared.js:9998-10001, event or anniversary at 10475-10481, lucky-slot recovery at 10459) it never sees the command again
 4. The job stays current until workerExpired after 20000 ms with no heartbeat (runtime/coordinator/merchant/recovery.ts:49-56), which costs a recovery attempt and a 20 s or longer backoff (:93-97) (inference: consequence)
 
-### Merchant command slot has many writers and no claim
+### 4. Merchant command slot has many writers and no claim
 
 Kind: patchwork. Origin: the current console. Confidence: inference.
 
@@ -635,13 +694,13 @@ Kind: patchwork. Origin: the current console. Confidence: inference.
 3. Completion deletes whatever is in the merchant slot, including a newer equip or gather command (runtime/coordinator/merchant/completion.ts:83)
 4. The job then waits for recovery after 20 s (recovery.ts:49-56)
 
-### A preempting job leaves the rod or pickaxe in hand
+### 5. A preempting job leaves the rod or pickaxe in hand
 
 Kind: bug. Origin: the current console. Confidence: confirmed in code.
 
 The rod or pickaxe left in hand after a job preempts gathering is ledger 6. Its causal chain is in [09 What goes wrong](09-merchant-realm-and-gear.md#2-what-goes-wrong), because the fault is what the merchant holds; this spec covers the yield side in MJB-038.
 
-### Gathering stops at 3 free slots, but deposit needs fewer than 3
+### 6. Gathering stops at 3 free slots, but deposit needs fewer than 3
 
 Kind: dead code. Origin: the current console. Confidence: confirmed in code.
 
@@ -650,33 +709,21 @@ Kind: dead code. Origin: the current console. Confidence: confirmed in code.
 3. The only other call needs fewer than 3 free slots right after a cast that began with more than 3 (10129, 10148)
 4. The dispatcher and idle also skip gathering at 3 or fewer free slots (dispatcher.ts:129, idle.ts:83), so gathered items are never banked by gathering itself (inference: they wait for other bank work)
 
-### Recovery backoff cap values are unreachable
-
-Kind: dead code. Origin: the current console. Confidence: confirmed in code.
-
-1. requeue stops at recoveryAttempts >= 3 (runtime/coordinator/merchant/recovery.ts:80)
-2. The highest attempt number written is 3, so the delay is at most 20000 x 2^2 = 80000 ms (:94-96)
-3. Math.min(4, ...) and the 300000 ms cap never bind
-
-Commits:
-
-- fad9a38f 2026-09-30 and 0631e72c 2026-10-01 Breene26 added the stop and the backoff (review section 4)
-
-### Character-observed giveaway jobs never expire
+### 7. Character-observed giveaway jobs never expire
 
 Kind: bug. Origin: the current console. Confidence: confirmed in code.
 
 1. nearbyGiveaways reports minutes but no expiresAt (characters/shared.js:2339-2341)
 2. enqueueGiveaway copies expiresAt undefined (runtime/coordinator/merchant/giveaway-scheduler.ts:103)
 3. available drops only jobs with Number(expiresAt) < now, which is false for undefined (dispatcher.ts:246)
-4. An expired ALData job is dropped but its 30-minute claim stays (giveaway-scheduler.ts:117-120)
+4. available drops an expired ALData job, but its 30-minute claim stays (giveaway-scheduler.ts:117-120)
 
 Commits:
 
 - 79567a23 2026-10-20 Icelocked: fork adds withExpiry from minutes, releases the claim on expiry and uses lastSeen + minutes for ALData
 - 05456efd 2026-10-20 Icelocked: lint follow-up
 
-### Two pause functions strip different fields
+### 8. Two pause functions strip different fields
 
 Kind: duplicate rule. Origin: the current console. Confidence: confirmed in code.
 
@@ -687,26 +734,26 @@ Kind: duplicate rule. Origin: the current console. Confidence: confirmed in code
 
 Commits:
 
-- dd7a3766 2026-09-26, 2c323b98 2026-09-27 Breene26 (merchant-progress pause, per review Appendix B)
+- 9fbeadab 2026-09-20 (initial import) strips operationStage in the checkpoint pause, and dd7a3766 2026-09-26 Breene26 adds the commandReport strip and pauseReason (`git log -S` on refs/review/ryan-1.5)
 
-### Three copies of "is gathering ready"
+### 9. Three copies of "is gathering ready"
 
 Kind: duplicate rule. Origin: the current console. Confidence: confirmed in code.
 
 1. dispatcher gatherBefore: coordinator cooldowns and more than 3 free slots (dispatcher.ts:127-135)
 2. idle gatheringReady: max of coordinator and status cooldowns and more than 3 free slots (idle.ts:82-93)
 3. checkpoint priorities: coordinator cooldowns only, no free-slot check (http/merchant-progress.ts:86-92)
-4. A checkpoint can yield to gathering that gatherBefore then refuses, so the paused job is picked again (inference)
+4. A checkpoint can yield to gathering that gatherBefore then refuses, so the dispatcher picks the paused job again (inference)
 
-### Free-slot threshold copied in a dozen places
+### 10. Free-slot threshold copied in a dozen places
 
 Kind: duplicate rule. Origin: the current console. Confidence: confirmed in code.
 
-1. 3 or fewer free slots: dispatcher.ts:129, idle.ts:83, job-policy.ts:71, status/merchant-scheduling.ts:133, 177, 199, characters/shared.js:5815, 7041, 10028, 10129
+1. 3 or fewer free slots: dispatcher.ts:129, idle.ts:83, job-policy.ts:71, status/merchant-scheduling.ts:133, 177, 199, characters/shared.js:5815, 5951, 6023 (esize), 7041, 10028, 10129
 2. Fewer than 3: characters/shared.js:10054, 10148
 3. collectFromTarget reserves 3 or 1 slots (shared.js:6871)
 
-### Idle and dispatcher disagree on ready work
+### 11. Idle and dispatcher disagree on ready work
 
 Kind: duplicate rule. Origin: the current console. Confidence: inference.
 
@@ -714,7 +761,7 @@ Kind: duplicate rule. Origin: the current console. Confidence: inference.
 2. dispatcher ready also refuses home-blocked merchant jobs (dispatcher.ts:117-120)
 3. With an exhausted home return and a queued home-needing job, idle sees ready work and stays (idle.ts:102) while the dispatcher refuses it, so the merchant neither works nor returns to the stand
 
-### the current own names and realm hard-coded as defaults
+### 12. The owner's merchant name and home realm are hard-coded as defaults
 
 Kind: wrong value. Origin: the current console. Confidence: confirmed in code.
 
@@ -722,7 +769,7 @@ Kind: wrong value. Origin: the current console. Confidence: confirmed in code.
 2. Character default merchantHomeRealm "SR_USII" (characters/shared.js:871) and realm fallbacks US/II (8709, 9478)
 3. hasStrongMerchantLuck comment names GoldMajesty (shared.js:5520)
 
-### Stand log uses the fixed legacy stand point
+### 13. Stand log uses the fixed legacy stand point
 
 Kind: wrong value. Origin: the current console. Confidence: confirmed in code.
 
@@ -730,15 +777,16 @@ Kind: wrong value. Origin: the current console. Confidence: confirmed in code.
 2. The configured point lives in merchantStandLocation (stand-location.ts:14-44) and idle uses it (idle.ts:105-111)
 3. A merchant at a configured stand logs "Stand opened away from market"
 
-### Stand closed three times for one job
+### 14. Stand closed three times for one job
 
 Kind: duplicate rule. Origin: the current console. Confidence: confirmed in code.
 
 1. handleCommand closes the stand for every merchant command except idle and stand-sync (characters/shared.js:10516-10523)
 2. runMerchantJob closes it again for commerce and upgrade preview (8468)
 3. merchantJoinGiveaway closes it again (8731)
+4. An `if (character.stand)` guard wraps each close, so only the first sends a game call. The cost is three copies of one rule
 
-### Restart requeue keeps stale run fields
+### 15. Restart requeue keeps stale run fields
 
 Kind: patchwork. Origin: the current console. Confidence: inference.
 
@@ -746,7 +794,7 @@ Kind: patchwork. Origin: the current console. Confidence: inference.
 2. commandId, commandReport, heartbeatAt, progressAt, checkpointAt and operationStage stay on the queued job
 3. assign overwrites commandId and heartbeatAt but keeps commandReport and operationStage (dispatcher.ts:204-211)
 
-### Every command counts as an inventory command for gathering
+### 16. Every command counts as an inventory command for gathering
 
 Kind: patchwork. Origin: the current console. Confidence: confirmed in code.
 
@@ -764,8 +812,8 @@ What the fork (af92de45) adds or changes in this part. Fork code is not in the c
 
 | What | Commits | What it patches | Where |
 |---|---|---|---|
-| Prim stack job runs inside the suspend list and closes the stand | 2055dd82 2026-10-20 Icelocked feat: prim stack an item's grace (#65) | Adds a new job type; extends the suspend list rather than replacing it | fork HEAD characters/shared.js:8981, 8995, 11280-11281; merchant/commands.ts:110; merchant/initial-settings.ts:48 |
-| restoreGatheringHandsForJob restores the mainhand when a merchant-* job preempts gathering | 0ce1071a 2026-10-24 Icelocked Restore merchant hands when a job preempts gathering | Ledger 6 (rod kept after a Ponty job); ignores a failed restore, skips non merchant-* commands, triggers only on the mainhand, adds two hold windows | fork HEAD characters/shared.js:10690-10715 |
+| Prim stack job runs inside the suspend list and closes the stand | 2055dd82 2026-10-20 Icelocked feat: prim stack an item's grace (#65) | Adds a new job type and appends it to the suspend list | fork HEAD characters/shared.js:8981, 8995, 11280-11281; merchant/commands.ts:110; merchant/initial-settings.ts:48 |
+| restoreGatheringHandsForJob restores the gathering session's mainhand and offhand (restoreGatheringEquipment) when a merchant-* job preempts gathering, also when no attempt is running | 0ce1071a 2026-10-24 Icelocked Restore merchant hands when a job preempts gathering | Ledger 6 (rod kept after a Ponty job); ignores a failed restore, skips non merchant-* commands, triggers only while the tool is in the mainhand, adds a 15000 ms and a 1000 ms hold | fork HEAD characters/shared.js:10688-10715 |
 | Giveaway expiry from remaining minutes, claim release on expiry, bank exclusion, merchant directory lookup | 79567a23 2026-10-20 Icelocked fix(merchant): find giveaway hosts through the merchant directory; expire giveaway jobs at their real end (#129), 05456efd 2026-10-20 Icelocked lint | Character-observed giveaways never expiring on the current console; ALData expiry capped at 2 minutes | fork HEAD merchant/giveaway-scheduler.ts:50-57, 94-106; merchant/dispatcher.ts:245-250; merchant/dispatch-composition.ts:146-152; characters/shared.js:9282-9330 |
 | Ron purchases job type (merchant-ron-buy), retained in the slot | 9476cd15 2026-10-22 Icelocked feat: buy from Ponty and Ron with standing orders | New feature | fork HEAD merchant/command-kind.ts:13; merchant/commands.ts:79; status/response.ts:32; characters/shared.js:11266-11269 |
 | Cosmetic commands handled before merchant preflight | 40abe1b2 2026-10-20 feat(dashboard): show CX jars, manage worn cosmetics and use emotes | New feature; cosmetics set lastCommand, which supersedes an in-flight merchantIdle (ownsIdle) (inference) | fork HEAD characters/shared.js:11163-11169 |
@@ -773,20 +821,15 @@ What the fork (af92de45) adds or changes in this part. Fork code is not in the c
 
 ## 4. Tests today
 
-Tests were mapped to behaviours by what they load: a unit test that requires a TypeScript file maps to the behaviours that own functions in that file, and a test that slices characters/shared.js maps to the behaviours whose functions it names. Within a file, each test goes to the behaviour whose title shares the most words with the test name. The per-test list is in the catalog file. The mapping is mechanical; whether each test proves what its name says, passes for the right reason and matches the game has not been reviewed yet (Gaps).
+The mapping assigned tests to behaviours by what they load: a unit test that requires a TypeScript file maps to the behaviours that own functions in that file, and a test that slices characters/shared.js maps to the behaviours whose functions it names. Within a file, each test goes to the behaviour whose title shares the most words with the test name. The per-test list is in the catalog file. The mapping was mechanical. On 2026-10-26, 218 tests that test other parts were taken out (shared convoy, Phoenix patrol, passing admission, farm reunion, event return, Franky recovery, convoy timing and defense, Hunt return, console logging, dashboard e2e, mail, NPC sale, crafting and retention tests that only sliced handleCommand or a shared file) and 4 were moved to a closer behaviour; 239 remain. Whether each test proves what its name says, passes for the right reason and matches the game has not been reviewed yet (Gaps).
 
 | Test file | Tests mapped here | Behaviours |
 |---|---|---|
-| e2e/console.spec.ts | 11 | MJB-023, MJB-041, MJB-046 |
 | scripts/tests/automatic-collection-client.test.cjs | 3 | MJB-032 |
 | scripts/tests/automatic-collection.test.cjs | 9 | MJB-004, MJB-007, MJB-024 |
 | scripts/tests/bankboi-transfer-confirmation.test.cjs | 1 | MJB-027 |
-| scripts/tests/character-field-registry.test.cjs | 1 | MJB-045 |
 | scripts/tests/cleanout-item-level.test.cjs | 1 | MJB-033 |
 | scripts/tests/collection-threshold.test.cjs | 6 | MJB-005, MJB-006 |
-| scripts/tests/console-improvements.test.cjs | 6 | MJB-023 |
-| scripts/tests/convoy-defense.test.cjs | 11 | MJB-023, MJB-025 |
-| scripts/tests/convoy-timing.test.cjs | 10 | MJB-023 |
 | scripts/tests/coordinator-anniversary-control.test.cjs | 3 | MJB-035 |
 | scripts/tests/coordinator-dispatch-composition.test.cjs | 3 | MJB-011, MJB-013, MJB-016 |
 | scripts/tests/coordinator-giveaway-scheduler.test.cjs | 4 | MJB-045 |
@@ -797,8 +840,8 @@ Tests were mapped to behaviours by what they load: a unit test that requires a T
 | scripts/tests/coordinator-merchant-automation.test.cjs | 1 | MJB-047 |
 | scripts/tests/coordinator-merchant-clusters.test.cjs | 3 | MJB-031, MJB-048 |
 | scripts/tests/coordinator-merchant-completion.test.cjs | 7 | MJB-004, MJB-027, MJB-028 |
-| scripts/tests/coordinator-merchant-configuration.test.cjs | 2 | MJB-036 |
-| scripts/tests/coordinator-merchant-control.test.cjs | 5 | MJB-003, MJB-015, MJB-022, MJB-046 |
+| scripts/tests/coordinator-merchant-configuration.test.cjs | 2 | MJB-021, MJB-036 |
+| scripts/tests/coordinator-merchant-control.test.cjs | 5 | MJB-015, MJB-022, MJB-050, MJB-051 |
 | scripts/tests/coordinator-merchant-initial-settings.test.cjs | 2 | MJB-001 |
 | scripts/tests/coordinator-merchant-progress.test.cjs | 7 | MJB-020, MJB-024, MJB-032 |
 | scripts/tests/coordinator-merchant-queue.test.cjs | 7 | MJB-003, MJB-004, MJB-043 |
@@ -807,126 +850,163 @@ Tests were mapped to behaviours by what they load: a unit test that requires a T
 | scripts/tests/coordinator-queue-selection.test.cjs | 5 | MJB-005, MJB-006 |
 | scripts/tests/coordinator-recovery-composition.test.cjs | 3 | MJB-025 |
 | scripts/tests/coordinator-restart-queue.test.cjs | 2 | MJB-026 |
-| scripts/tests/coordinator-retention.test.cjs | 4 | MJB-047 |
+| scripts/tests/coordinator-retention.test.cjs | 1 | MJB-047 |
 | scripts/tests/coordinator-scheduling-composition.test.cjs | 1 | MJB-008 |
 | scripts/tests/coordinator-scheduling.test.cjs | 7 | MJB-008, MJB-033 |
-| scripts/tests/coordinator-settings.test.cjs | 4 | MJB-001, MJB-036 |
-| scripts/tests/coordinator-stand-control.test.cjs | 2 | MJB-041 |
-| scripts/tests/coordinator-state-factory.test.cjs | 4 | MJB-026 |
+| scripts/tests/coordinator-settings.test.cjs | 4 | MJB-001, MJB-006, MJB-036, MJB-049 |
+| scripts/tests/coordinator-stand-control.test.cjs | 1 | MJB-041 |
+| scripts/tests/coordinator-state-factory.test.cjs | 3 | MJB-026 |
 | scripts/tests/coordinator-status-composition.test.cjs | 1 | MJB-010 |
-| scripts/tests/craft-compound-reservations.test.cjs | 1 | MJB-020 |
 | scripts/tests/deconstruction.test.cjs | 1 | MJB-006 |
 | scripts/tests/delivery-precedence.test.cjs | 1 | MJB-027 |
 | scripts/tests/delivery-trip-settings.test.cjs | 3 | MJB-001 |
 | scripts/tests/emergency-cleanout.test.cjs | 3 | MJB-032, MJB-033 |
-| scripts/tests/event-bank-recovery.test.cjs | 1 | MJB-024 |
-| scripts/tests/event-return.test.cjs | 20 | MJB-030 |
-| scripts/tests/farm-reunion.test.cjs | 22 | MJB-032, MJB-033 |
-| scripts/tests/farming-navigation-client.test.cjs | 6 | MJB-023 |
-| scripts/tests/franky-recovery.test.cjs | 10 | MJB-023 |
 | scripts/tests/gathering-destinations.test.cjs | 1 | MJB-037 |
 | scripts/tests/gathering-ownership.test.cjs | 16 | MJB-023, MJB-036, MJB-037, MJB-038 |
 | scripts/tests/gathering-tool.test.cjs | 1 | MJB-037 |
-| scripts/tests/hunt-return-recovery.test.cjs | 3 | MJB-032 |
-| scripts/tests/hunt-return-town.test.cjs | 9 | MJB-023 |
 | scripts/tests/inventory-delta.test.cjs | 2 | MJB-008 |
-| scripts/tests/item-operations.test.cjs | 1 | MJB-024 |
-| scripts/tests/mail-inbox.test.cjs | 1 | MJB-024 |
 | scripts/tests/manual-party-collection.test.cjs | 1 | MJB-001 |
 | scripts/tests/merchant-anniversary-reservation.test.cjs | 8 | MJB-035 |
 | scripts/tests/merchant-bank-full.test.cjs | 1 | MJB-004 |
 | scripts/tests/merchant-buy-cycle.test.cjs | 8 | MJB-004, MJB-020, MJB-028, MJB-030 |
-| scripts/tests/merchant-convoy-interruption.test.cjs | 11 | MJB-022, MJB-027, MJB-032, MJB-033 |
+| scripts/tests/merchant-convoy-interruption.test.cjs | 9 | MJB-022, MJB-027, MJB-032 |
 | scripts/tests/merchant-delivery-recovery.test.cjs | 15 | MJB-027, MJB-029, MJB-032 |
-| scripts/tests/merchant-events.test.cjs | 9 | MJB-017, MJB-035, MJB-042 |
-| scripts/tests/merchant-idle-return.test.cjs | 14 | MJB-024, MJB-036, MJB-041, MJB-042, MJB-044 |
-| scripts/tests/merchant-npc-sales.test.cjs | 1 | MJB-041 |
+| scripts/tests/merchant-events.test.cjs | 5 | MJB-017, MJB-035, MJB-042 |
+| scripts/tests/merchant-idle-return.test.cjs | 13 | MJB-024, MJB-036, MJB-041, MJB-042, MJB-044 |
 | scripts/tests/merchant-party-realm.test.cjs | 8 | MJB-011, MJB-017, MJB-027 |
 | scripts/tests/merchant-rendezvous-retry.test.cjs | 2 | MJB-028 |
 | scripts/tests/merchant-rendezvous.test.cjs | 15 | MJB-030 |
 | scripts/tests/merchant-stand-sync.test.cjs | 5 | MJB-004, MJB-041, MJB-043 |
 | scripts/tests/merchant-visibility.test.cjs | 4 | MJB-034 |
 | scripts/tests/party-status-diagnostics.test.cjs | 1 | MJB-023 |
-| scripts/tests/passing-admission.test.cjs | 14 | MJB-023 |
-| scripts/tests/phoenix-patrol-regression.test.cjs | 24 | MJB-023 |
 | scripts/tests/routine-separation.test.cjs | 2 | MJB-001 |
-| scripts/tests/shared-convoy.test.cjs | 53 | MJB-023 |
 | scripts/tests/shared-merchant-rules.test.cjs | 2 | MJB-006 |
-| scripts/tests/smart-loot.test.cjs | 1 | MJB-030 |
 
-Behaviours with no mapped test (7): MJB-009, MJB-012, MJB-014, MJB-018, MJB-019, MJB-039, MJB-040.
+Behaviours with no mapped test (8): MJB-009, MJB-012, MJB-014, MJB-018, MJB-019, MJB-039, MJB-040, MJB-046.
 
 ## 5. Needs your review
 
-Each question gives Today, Options and a Recommendation. The coordinator copies them into REVIEW-QUEUE.md.
+Each question gives Today, the Options with their negatives, and a Recommendation with why it beats
+the other options and its own negatives. The coordinator copies them into REVIEW-QUEUE.md.
 
 ### Q1. Should the merchant refresh luck on its own characters before it runs out?
 
 **Today:** the game marks every mluck the merchant casts on a character of the same owner as
 "strong" (game node/server.js:10896-10898). The coordinator's luck scheduler skips every member
-whose buff is strong (runtime/coordinator/merchant/luck-scheduler.ts:36-41, through
+whose buff is strong (runtime/coordinator/merchant/luck-scheduler.ts:34-41, through
 `hasStrongMluck`, runtime/coordinator/merchant/luck.ts:59-61), so it queues a refresh for our own
-fighters only after the buff has expired. The character-side scan treats only a strong buff from
-another owner as blocking (characters/shared.js:5517-5522). The fork does not change this.
+fighters only after the buff has expired (section 2 item 2). The character-side scan treats only a
+strong buff from another merchant as blocking (characters/shared.js:5517-5522). The fork does not
+change this.
 
 **Options:**
 - A. Refresh our own characters on the normal lead time (luck.ts:63-75) and skip only strong buffs
-  cast by another owner. Fighters keep luck without a gap; the merchant makes the same number of
-  trips it makes today, just earlier.
-- B. Keep today's rule. Fighters lose luck for the time between expiry and the next visit.
-- C. Never schedule luck trips; cast only when the merchant is already nearby. Fewest trips, most
-  time without luck.
+  cast by another merchant. Negatives: the scheduler has to compare the buff's caster, which the
+  report already carries as `source` (shared.js:1841-1842), and trips start earlier, so a refresh
+  at priority 100 can interrupt a job that today would have finished first.
+- B. Keep today's rule. Negatives: fighters lose luck from expiry until the next visit, and the
+  lead-time code never applies to our own characters.
+- C. Never schedule luck trips; cast only when the merchant is already nearby. Negatives: the
+  longest time without luck of the three, and the scheduler and its tests become dead code.
 
-**Recommendation:** A. It matches what the character side already does, and the gap in B is a
-side effect of the "strong" flag, not a choice anyone made.
+**Recommendation:** A. It beats B because the gap in B is a side effect of the "strong" flag, not
+a rule anyone chose, and the character side already follows A. It beats C because C gives up the
+buff for most of the time. Its own negatives: one more check in the scheduler, and luck trips that
+start earlier and can preempt other work.
 
 ### Q2. Should gathering bank its own catches when the bag fills?
 
 **Today:** gathering stops when the merchant has 3 or fewer free slots
 (characters/shared.js:10028, in `gatheringBlockReason`), but the deposit step only runs with fewer
-than 3 free slots (characters/shared.js:10054), so the deposit code never runs in practice
-(MJB-039). The dispatcher and idle code also skip gathering at 3 or fewer free slots. The merchant
-stops fishing or mining until some other job empties the bag. The fork does not change this.
+than 3 free slots (characters/shared.js:10054, 10148), so the deposit code never runs in practice
+(section 2 item 6). The dispatcher and idle code also skip gathering at 3 or fewer free slots. The
+merchant stops fishing or mining until some other job empties the bag. The fork does not change
+this.
 
 **Options:**
-- A. Let gathering make a bank trip at the 3-slot mark, then go back to the spot. Continuous
-  gathering; one extra bank trip per full bag, and bank visits cost calls (see 09 call budget).
-- B. Keep today's stop and rely on other jobs (bank collection, cleanouts) to empty the bag.
-  Simple; gathering sits idle for long stretches.
-- C. Queue a bank collection job for the merchant when gathering stops for space, at the
-  gathering routine's priority. The dispatcher decides when, so a higher job is never delayed.
+- A. Let gathering make its own bank trip at the 3-slot mark, then go back to the spot.
+  Negatives: a second banking path beside the queue, and each bank visit runs the errands and the
+  gold deposit (section 2 item 1).
+- B. Keep today's stop and rely on other jobs to empty the bag. Negatives: gathering sits idle for
+  long stretches, and the deposit code stays dead.
+- C. Queue a bank job for the merchant when gathering stops for space, at the gathering routine's
+  priority. Negatives: a new queued reason that the dispatcher and idle code must know, and at
+  priority 20 the job waits behind most other work.
 
-**Recommendation:** C. It reuses the queue instead of a second banking path inside gathering, and
-it keeps the dispatcher as the one place that decides what runs next.
+**Recommendation:** C. It beats A because the dispatcher stays the one place that decides what
+runs next and gathering gains no second banking path. It beats B because gathering resumes without the
+user. Its own negatives: one more reason in the queue, and a slow restart when the queue is busy.
 
 ### Q3. Should giveaways the merchant finds itself expire?
 
-**Today:** on the current console a giveaway job that the merchant queued from what it saw near itself has
-no expiry (characters/shared.js:2330-2345 reports them; runtime/coordinator/merchant/dispatcher.ts:246
-admits queued giveaway jobs with no end check), so the merchant can walk to a giveaway that has
-already ended. The fork adds an expiry from the giveaway's minutes and a 30 minute claim per
-attempt (fork HEAD giveaway-scheduler.ts:51-57, 103-106; dispatcher.ts:248-250, commit 79567a23).
+**Today:** on the current console a giveaway job queued from what the merchant saw near itself has
+no expiry (characters/shared.js:2339-2341 reports no `expiresAt`;
+runtime/coordinator/merchant/dispatcher.ts:246 drops only jobs past an `expiresAt`), so the
+merchant can walk to a giveaway that has already ended (section 2 item 7). Both versions claim an
+offer for 30 minutes (giveaway-scheduler.ts:115-121). The fork adds an expiry from the giveaway's
+minutes and releases the claim when a job expires (fork HEAD giveaway-scheduler.ts:51-57, 103-106;
+dispatcher.ts:248-250; dispatch-composition.ts:146-152; commit 79567a23).
 
 **Options:**
-- A. Expire every giveaway job at the giveaway's own end time, as the fork does. No wasted trips.
-- B. Keep no expiry; rely on the join step failing on arrival. Wasted trips, and the merchant is
-  away from its stand.
+- A. Expire every giveaway job at the giveaway's own end time and release its claim, as the fork
+  does. Negatives: the end time comes from the minutes left at the moment of the report, so the
+  merchant can still set out for a giveaway that ends on the way.
+- B. Keep no expiry and rely on the join step failing on arrival. Negatives: wasted trips, and the
+  merchant is away from its stand.
 
-**Recommendation:** A, and offer it upstream as a small issue, because the bug is in the current console.
+**Recommendation:** A, and offer it upstream as a short issue, because the bug is in the current
+console. It beats B because it removes the trips to giveaways that have already ended. Its own
+negative: the end time is an estimate from one report.
 
 ### Q4. When the merchant is gathering and a job arrives, should a cast in progress finish first?
 
-**Today:** `gatheringCommandHandoff` defers the incoming command while a gathering cast is running
-and cancels the gathering attempt otherwise (characters/shared.js:9994-10008). A cast lasts a few
-seconds; the deferred command waits for the next heartbeat.
+**Today:** `gatheringCommandHandoff` defers an incoming merchant-* command while a gathering cast
+is running and cancels the gathering attempt otherwise (characters/shared.js:9994-10008). A cast
+lasts a few seconds. A retained command is sent again on the next heartbeat, but the five command
+types missing from the retained list are lost (section 2 item 3).
 
 **Options:**
-- A. Keep it: finish the cast, then run the job. Small delay, no lost catch.
-- B. Cancel the cast at once for jobs above a priority threshold (for example party visits for a
-  fighter that needs potions). Faster response for urgent work, loses the cast.
+- A. Keep it: finish the cast, then run the job. Negatives: a delay of up to one cast, and the five
+  non-retained command types wait for recovery until item 3 is fixed.
+- B. Cancel the cast at once for jobs above a priority threshold, for example a party visit for a
+  fighter that needs potions. Negatives: the cast and its catch are lost, and a second priority
+  rule appears on the character side.
 
-**Recommendation:** A for all jobs today. The delay is a few seconds and B adds a second priority
-rule; revisit only if a test shows a party visit arriving late because of it.
+**Recommendation:** A for all jobs today, with item 3 fixed so that no deferred command is lost.
+It beats B because the delay is a few seconds and B adds a second priority rule. Its own negative:
+an urgent visit still waits for the cast; revisit only if an E2E scenario on ChronAL virtual time shows a party visit arriving late
+because of it.
+
+### Q5. Should the merchant keep working gold between jobs?
+
+**Today:** every merchant command carries a gold target of 0 unless the user sets one on the
+merchant's card (runtime/coordinator/merchant/commands.ts:12-19). Each job's first bank visit
+deposits all carried gold above it (characters/shared.js:5942-5949), and buying steps withdraw only
+the shortfall (5911-5919). So almost every job that spends gold starts with a bank trip, and stand
+funding moves gold out of the bank and back between jobs (section 2 item 1). The fork does not
+change this.
+
+**Options:**
+- A. Give the merchant a working gold target by default: a merchant setting with a starting value,
+  and stand funding raises the target to the funding amount with no separate bank job.
+  Negatives: gold on the merchant is not in the bank for fighters' gold targets (shared.js:6898), a
+  purchase above the float still needs a trip, and someone has to pick the default.
+- B. Deposit gold only on banking jobs (self-bank and the end of a party visit), or only above a
+  ceiling, and let buying jobs keep what they carry. Negatives: it changes an errand that every
+  bank visit shares (section 2 item 1 steps 3 and 5), and without a ceiling gold builds up on the
+  merchant.
+- C. Withdraw a buffer: withdrawMerchantCash takes max(shortfall, float). Negatives: on its own it
+  does nothing, because the next visit's errands deposit the buffer again; it works only together
+  with A or B.
+- D. Share bank visits between jobs: hold a withdrawals trip until the next job that goes to the
+  bank, and skip the second errand run while the merchant is still in the bank. Negatives: state
+  that spans commands, NPC sales wait longer for their stock, and the gold trips of step 4 remain.
+
+**Recommendation:** A. It beats B because one value changes and the shared errand stays as it is.
+It beats C because C needs A or B to have any effect. It beats D because the gold trips are the
+most common cause and D leaves them. Its own negatives: a default the user tunes, gold
+held on the merchant and not in the bank, and a bank trip for any purchase larger than the float.
+D can follow later if withdrawal trips are still frequent.
 
 ## 6. Gaps
 
@@ -934,16 +1014,16 @@ rule; revisit only if a test shows a party visit arriving late because of it.
 
 - Functions claimed by this spec and by another spec: 0.
 - Claims naming no known function: 0.
-- Behaviours with no test: 7 (MJB-009, MJB-012, MJB-014, MJB-018, MJB-019, MJB-039, MJB-040).
-- Unclaimed functions across all specs: 3743 (the tool does not split these by spec; none of them is in this spec's proposed list).
+- Behaviours with no test: 8 (MJB-009, MJB-012, MJB-014, MJB-018, MJB-019, MJB-039, MJB-040, MJB-046).
+- Unclaimed functions across all specs: 0.
 
 Not yet verified:
 
-- runtime/coordinator/merchant/home-recovery.ts and characters/realm-composition.ts: only the command-slot writer lines were checked (09 scope) (reader 08).
-- http/routine-priorities.ts and http/thresholds.ts: writers of merchantRoutinePriorities, threshold and itemCollectionThreshold not read; defaults for threshold and itemCollectionThreshold not traced (reader 08).
-- characters/shared.js executors called from handleCommand (merchantSelfImprove, merchantSelfBank, merchantPontyBuy and others) belong to 09/10 and were not read here (reader 08).
-- Test accuracy: no test in section 4 has been reviewed for whether it proves what its name says (method step 2).
-- The test mapping is by file and test name; a test can prove more behaviours than the one it is mapped to.
+- runtime/coordinator/merchant/home-recovery.ts and characters/realm-composition.ts: this pass checked only the command-slot writer lines; the rest is 09 scope.
+- http/thresholds.ts: this pass did not read the bounds the threshold route checks. MJB-049 now gives the writers and defaults.
+- characters/shared.js executors called from handleCommand belong to 09/10. This pass read only their bank visit and gold withdrawal steps, for section 2 item 1.
+- Test accuracy: nobody has yet reviewed whether each test in section 4 proves what its name says (method step 2).
+- The mapping works by file and test name, so a test can prove more behaviours than the one it maps to.
 
 ## 7. Review claims checked
 
@@ -999,15 +1079,15 @@ Not yet verified:
 
 | Setting | Default | Read at | Written at |
 |---|---|---|---|
-| merchantRoutinePriorities | initial-settings.ts:32-77 (merged with migrateRoutinePriorities at :117-120) | runtime/coordinator/application.ts:1547; runtime/coordinator/merchant/job-policy.ts:43; runtime/coordinator/http/merchant-progress.ts:91 | http/routine-priorities.ts (route, not read here) |
-| merchantAutomations | initial-settings.ts:78-96 (+ auto upgrade migration :121) | runtime/coordinator/merchant/queue-composition.ts:55; runtime/coordinator/merchant/dispatch-composition.ts:143; runtime/coordinator/merchant/luck-scheduler.ts:47; runtime/coordinator/merchant/giveaway-scheduler.ts:78; runtime/coordinator/status/merchant-scheduling.ts:123, 145, 157, 176, 199, 226; runtime/coordinator/merchant/completion.ts:94; runtime/coordinator/merchant/collection-pickups.ts:23 | runtime/coordinator/http/merchant-control.ts:67, 76, 82, 83 |
+| merchantRoutinePriorities | initial-settings.ts:32-77 (merged with migrateRoutinePriorities at :117-120) | runtime/coordinator/application.ts:1547; runtime/coordinator/merchant/job-policy.ts:43; runtime/coordinator/http/merchant-progress.ts:90 | runtime/coordinator/http/routine-priorities.ts:33 |
+| merchantAutomations | initial-settings.ts:78-96 (+ auto upgrade migration :121) | runtime/coordinator/merchant/queue-composition.ts:55; runtime/coordinator/merchant/dispatch-composition.ts:143; runtime/coordinator/merchant/luck-scheduler.ts:47; runtime/coordinator/merchant/giveaway-scheduler.ts:78; runtime/coordinator/status/merchant-scheduling.ts:123, 144, 157, 176, 199, 226; runtime/coordinator/merchant/completion.ts:94; runtime/coordinator/merchant/collection-pickups.ts:23 | runtime/coordinator/http/merchant-control.ts:67, 76, 82, 83; runtime/coordinator/http/routine-priorities.ts:41 |
 | gatheringModes | [] (initial-gathering.ts:16-20) | runtime/coordinator/merchant/dispatch-composition.ts:159; runtime/coordinator/merchant/idle-composition.ts:51; runtime/coordinator/status/response.ts:207; runtime/coordinator/http/merchant-progress.ts:86; runtime/coordinator/status/merchant-scheduling.ts:275 | runtime/coordinator/http/merchant-settings.ts:76-78, 109; runtime/coordinator/http/merchant-configuration.ts:84-86; runtime/coordinator/http/merchant-control.ts:107 |
 | gatheringCooldowns | {fishing: 0, mining: 0} (initial-gathering.ts:22) | runtime/coordinator/merchant/dispatch-composition.ts:160; runtime/coordinator/merchant/idle-composition.ts:52; runtime/coordinator/http/merchant-progress.ts:87 | runtime/coordinator/status/merchant-scheduling.ts:110-120 |
 | gatheringNoTool | {} (initial-gathering.ts:21) |  | runtime/coordinator/http/merchant-settings.ts:75, 108; runtime/coordinator/http/merchant-configuration.ts:83 |
 | merchantForceStand | false (initial-runtime.ts:50) | runtime/coordinator/merchant/dispatch-composition.ts:156; runtime/coordinator/merchant/idle-composition.ts:40 | runtime/coordinator/http/merchant-control.ts:131 |
 | merchantStandLocation | null, then initializeStandLocation (stand-location.ts:14-33) | runtime/coordinator/merchant/idle-composition.ts:41; characters/shared.js:11339 | runtime/coordinator/merchant/stand-location.ts:17, 25, 30, 40 |
-| itemCollectionThreshold | not read here | runtime/coordinator/merchant/queue-selection.ts:78; runtime/coordinator/status/merchant-scheduling.ts:180, 184 | runtime/coordinator/http/merchant-configuration.ts:131 |
-| threshold | not read here | runtime/coordinator/status/merchant-scheduling.ts:213; runtime/coordinator/merchant/dispatch-composition.ts:107 | runtime/coordinator/http/merchant-configuration.ts:126 |
+| itemCollectionThreshold | 1, clamped to 1-42 (inventory/initial-collection.ts:28-30) | runtime/coordinator/merchant/queue-selection.ts:78; runtime/coordinator/status/merchant-scheduling.ts:180, 184 | runtime/coordinator/http/merchant-configuration.ts:132 |
+| threshold | 100000 (inventory/initial-collection.ts:27) | runtime/coordinator/status/merchant-scheduling.ts:213; runtime/coordinator/merchant/dispatch-composition.ts:107 | runtime/coordinator/http/merchant-configuration.ts:126 |
 | buyUpgradeBatchSize | 1 (dispatch-composition.ts:99) | runtime/coordinator/merchant/commands.ts:122 | runtime/coordinator/http/merchant-configuration.ts:121 |
 | mluckCastAt | {} pruned to 1 hour (initial-gathering.ts:13-14) | runtime/coordinator/application.ts:2217 | runtime/coordinator/merchant/completion-results.ts:46-47 |
 | giveawayAttempts | {} (initial-settings.ts:103) | runtime/coordinator/merchant/giveaway-scheduler.ts:116-119 | runtime/coordinator/merchant/giveaway-scheduler.ts:117, 120 |

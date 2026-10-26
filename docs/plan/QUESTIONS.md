@@ -192,9 +192,9 @@ whitelisted fields.
 
 **Today:** the only check of `character.cc` is a fighter's wait before sending items
 (characters/shared.js:5719-5720). Background reads run on timers wherever the merchant
-is: Ponty every 10 s at cost 17, players every 10 s at cost 13 (characters/shared.js:890,
+is: Ponty every 10 s at cost 16, players every 10 s at cost 12 (characters/shared.js:890,
 17388-17391). The Ponty job reads stock once per listing (characters/shared.js:8607-8622),
-and thirteen of those reads inside 4 s cost 221 against the 200 limit, which disconnects
+and thirteen of those reads inside 4 s cost 208 against the 200 limit, which disconnects
 the socket. My fork added two limiters: a move cap that also backs off once `character.cc`
 reaches 150, and a Ponty pacer that spaces only its own reads 1.5 s apart.
 
@@ -221,7 +221,7 @@ pickaxe with no offhand. My fork restores both hands, but only for `merchant-` c
 and only while the tool is still in the mainhand, which covers one case.
 
 **What I'd suggest:** restore both hands before any command other than gathering, and
-defer the command if the restore fails. Equip and unequip cost about 6 and 9 of the 200 call-cost points per 4 s.
+defer the command if the restore fails. Equip and unequip cost about 5 and 8 of the 200 call-cost points per 4 s.
 
 **Your answer:**
 
