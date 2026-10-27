@@ -243,6 +243,13 @@ party-escape.cjs:100-107). When the priest reaches a landing off Main within 65 
 instead of `complete` (fork :96-97), and the recovering stage walks each member to Main
 (shared.js:229-240). The two definitions of "safe" stay (P5).
 
+### Bug candidate (D4): the warrior's Scare never scares anything
+
+runtime/characters/classes/warrior.ts:23-27 (refs/review/ryan-1.5) casts Scare only when the boss
+is not targeting the warrior. The game server (node/server.js around line 10711) applies Scare
+only to non-immune monsters whose target is the caster, so that call never scares a monster.
+The redesign casts Scare when monsters target the caster, as an escape tool (D4).
+
 ### Death-fix commits on 21b8362d
 
 None of these is in af92de45 (`git merge-base --is-ancestor`).
@@ -325,9 +332,12 @@ These decisions replace any working assumption or recommendation for the same it
 
 - **A6** (MOV-Q14 and SRV-Q5: where the party regroups after an escape or a death; decided by your answer): The party regroups in Main near the spawn point for now, and a safer regroup spot is part of the avoidance and pathing design (queue item AV).
 - **A9** (SRV-Q2: regen during fights; decided by your answer): Regen waits while any fighter keeps dropping below 80% HP, so the potion cooldown stays free for an HP potion.
-- **A38** (SRV-Q4: when a death ends the fight; decided by the plan): After a death the party finishes the fight while the monsters' HP falls faster than the survivors' HP, and escapes once it does not (rule R2).
-- **C3** (SRV-Q1: HP potions per class; decided by the plan): Every fighter drinks an HP potion below a per-character setting with today's 50% as the default, and never when the missing HP is less than the potion heals in game data (rule R2).
-- **C4** (SRV-Q3: potions during an escape; decided by the plan): An escaping character drinks HP first, using the same per-character potion setting as combat (rule R2).
+- **A38** (SRV-Q4: when a death ends the fight; decided by your answer): After a death the console judges the general trend of monster HP against survivor HP, ignores a short burst of bad luck, and recalculates at once when the fight changes, such as an extra monster aggroing or a member dying or arriving.
+- **C3** (SRV-Q1: HP potions per class; decided by your answer): Every fighter drinks an HP potion below a per-character setting, default 50%, and regen runs only when no monster targets the party and the missing HP is less than a potion restores (A9). Game data sets the trade: regen_hp restores 50 HP and locks HP potions, MP potions and regen for 4 s, while hpot1 restores 400 HP on a 2 s cooldown, so in a fight a potion always wins.
+- **C4** (SRV-Q3: potions during an escape; decided by your answer): An escaping character drinks HP first, with the same per-character potion setting, default 50%, and regen follows the C3 rule.
+- **A39** (SRV-Q6: parties without the warrior, mage and priest trio; decided by your answer under AV): Without the warrior, mage and priest trio, a mage Blinks out and Magiports members to it while its MP lasts, and anyone left walks out along the safe path (AV).
+- **AV** (avoidance and pathing; decided by your answer): Escape and death settings still apply at an event, but the whole team does not Town out of one, and the console weighs the risk by whether other players at the event share the damage (spec 02 holds the full decision).
+- **D4** (Finishing the fight before a new task; decided by your answer): Scare from a Jack-o Lantern orb is one of the escape tools, so a character holding a jacko sheds the monsters that target it before it leaves or teleports (spec 01 holds the full decision; see the Scare bug candidate in section 2).
 
 
 - **SRV-Q1. Which classes drink HP potions, and when?**

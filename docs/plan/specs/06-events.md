@@ -601,6 +601,7 @@ These decisions replace any working assumption or recommendation for the same it
 - **A12** (EVT-Q2, GRP-Q2 and MH-Q1: walking to an event and pausing Hunt; decided by your answer): The event walk starts when the route time says it must, and the party may arrive a few seconds late but never more than 60 s after the spawn.
 - **A14** (EVT-Q4: Witch's Cipher; decided by your answer): The default stays at 1 clue, and a setting lets the merchant start a cipher no one else has submitted yet.
 - **A41** (EVT-Q3: an event join the game refuses; decided by the plan): A no such event or too late reply skips that round at once, and a sick or in the bank reply retries with growing waits.
+- **AV** (avoidance and pathing; decided by your answer): When the console confirms the rest of the team is fighting at an event and one fighter is not, that fighter fights the event boss or monsters on its own as best it can; the whole team does not Town out of an event, and the console checks whether other players share the damage (spec 02 holds the full decision).
 
 
 1. **Manual move during an event (2.1).**

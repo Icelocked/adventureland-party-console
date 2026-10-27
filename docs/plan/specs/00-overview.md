@@ -261,6 +261,10 @@ asks and the owners that ask it.
   every rule table, every "what changes for the player" entry, and every
   call that needs a decision on how the party should behave.
 
+## Decided 2026-10-26
+
+- **C1** (the overview and principles; decided by your answer): The overview and principles, with rules R1 to R6 from the review queue, are signed off and can go upstream.
+
 ## Milestones
 
 - **M0: the map.** Every spec's "what it does today" section is complete and

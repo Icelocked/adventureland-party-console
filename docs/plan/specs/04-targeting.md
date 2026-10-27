@@ -498,6 +498,7 @@ These decisions replace any working assumption or recommendation for the same it
 - **B3** (TGT-Q2: which classes can be the off tank (fork); decided by your answer): Only a warrior or a priest can be off tank; the list shows only those members, says no suitable off tank class when the party has none, and every tank rule works with or without an off tank.
 - **C5** (TGT-Q3: when a mage or priest stops hitting a monster that reflects; decided by your answer): Reflect handling becomes a per-character setting that covers magic reflect and physical reflect (porcupines included), with defaults that match the current console's monster list.
 - **C6** (TGT-Q5: who uses Taunt and Absorb; decided by the plan): The tank you set uses Taunt and Absorb Sins, or the leader when no tank is set, limited to a warrior or a priest as B3 decided.
+- **A40** (TGT-Q4: is a passing monster that hits the party a threat; decided by your answer under AV): On a walk, fighters fight what the defender and passive monster settings say and keep heading for the destination, and at the farm zone the party fights to clear the way (AV).
 
 
 - **TGT-Q1. Who may pull?**

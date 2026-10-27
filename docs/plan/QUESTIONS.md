@@ -53,7 +53,7 @@ Tasks and travel
 - A travel command during an escape or death recovery ends it, and the console carries on from wherever the party is.
 - A group walk keeps going through a late member report while no attacker is known, for up to two report intervals.
 - A group walk starts from where the leader stands, and a drifting leader no longer restarts Hunt travel.
-- Stuck walks, Hunt travel and realm switch stragglers keep trying while they make progress, and the card says stuck when they stop.
+- Stuck walks, Hunt travel and realm switch stragglers keep trying while they make progress. When progress stops, the console changes strategy and keeps going, and the card shows what it is trying.
 
 Events
 
@@ -80,7 +80,8 @@ Combat and survival
 - Every fighter drinks HP potions below a per-character setting, default 50%, and skips a potion that would heal more than is missing.
 - Regen waits while any fighter keeps dropping below 80% HP, so the potion cooldown stays free.
 - An escaping character drinks HP first, with the same potion setting.
-- After a death the party finishes the fight while the monsters' HP falls faster than the survivors', and escapes otherwise.
+- Regen runs only when no monster targets the party and the missing HP is less than a potion restores.
+- After a death the console judges the general trend of monster HP against survivor HP, ignores a short burst of bad luck, and recalculates at once when the fight changes.
 - Stomp, Dash, Energize, Curse and Party Heal share the skill engine's MP reserve.
 - The set tank uses Taunt and Absorb Sins, or the leader when no tank is set, and only a warrior or a priest can hold that role.
 - Reflect handling becomes a per-character setting for magic and physical reflect, with today's monster list as the default.
@@ -88,7 +89,7 @@ Combat and survival
 Cave of Many Dreams
 
 - After a visit, escape and death recovery work outside the Cave, and the party resumes once everyone is out and walking. Release still ends the wait sooner.
-- A member drops from the visit when the game reports it offline or it stops making progress.
+- A member drops from the visit when the game reports it offline. A member that stops making progress makes the console change strategy to bring it out.
 - With event protection off, the party leaves between encounters while it can still reach the event within 60 s of the spawn.
 - Cave travel repairs keep going with growing waits, and the card names the failing member.
 

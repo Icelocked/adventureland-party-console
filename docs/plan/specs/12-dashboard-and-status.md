@@ -1102,7 +1102,7 @@ These decisions replace any working assumption or recommendation for the same it
 - **A85** (DSH-Q22: the Tracktrix estimate; decided by the plan): A Tracktrix total the console adds up itself is marked as calculated.
 - **A87** (DSH-Q24: the Kills filter in the game log; decided by the plan): The Kills filter starts off in a new browser, and each browser keeps your choice.
 - **A88** (DSH-Q25: the connection notice; decided by the plan): The header shows Live or Reconnecting, and unused screens go.
-- **B11** (DSH-Q14: Load now during a Cave run; decided by the plan): Load now during a Cave run shows a warning that you can override (rule R3).
+- **B11** (DSH-Q14: Load now during a Cave run; decided by the plan): Load now during a Cave run needs a two-step warning, a checkbox you tick before it goes, the same as D2 (rule R3).
 - **B12** (DSH-Q18: one live map per character (fork); decided by the plan): One live map moves between the card and the name strip.
 - **C11** (DSH-Q5: the dashboard's backup refresh; decided by the plan): The backup refresh sends only the fields the dashboard, PWA and Android app use, after a test run confirms what the PWA reads.
 - **C12** (DSH-Q19: when a metrics day starts; decided by the plan): Kills, DPS and loot all use your browser's midnight, labelled.

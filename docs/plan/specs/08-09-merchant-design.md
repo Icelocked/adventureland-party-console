@@ -1299,7 +1299,7 @@ These decisions replace any working assumption or recommendation for the same it
 - **A17** (MRG-Q2: merchant realm hops for trading; decided by the plan): The merchant never enters PVP or blacklisted realms for automatic work, does all jobs on one realm before one trip home, and watch orders stay on the home realm.
 - **A21** (MJB-Q1: Merchant's Luck on your own characters; decided by the plan): The merchant refreshes Merchant's Luck on your fighters before it runs out, starting early by the trip's length at walk speed.
 - **A56** (MJB-Q2: a full bag while gathering; decided by the plan): A full bag while gathering queues a bank trip, and gathering resumes after it.
-- **A59** (MRG-Q3: a party realm switch that fails halfway; decided by the plan): Stragglers in a failed realm switch keep retrying while their logins make progress, the status line names them, and the card says stuck when nothing changes (rule R2).
+- **A59** (MRG-Q3: a party realm switch that fails halfway; decided by the plan): Stragglers in a failed realm switch keep retrying while their logins make progress, and the status line names them; when nothing changes the owner changes strategy, and the card shows what it is trying (rule R2).
 - **A90** (MJB-Q6: the merchant's trip home after 3 failures; decided by the plan): Trips home keep trying with growing waits, and Retry stays as a shortcut.
 - **M3** (When a more urgent job takes over; decided by the plan): A more urgent job takes over at the running job's next safe stopping point, and a never interrupt job finishes first.
 - **M4** (Pausing a merchant job; decided by the plan): Every pause clears the same parts of a job and keeps its place in line.
