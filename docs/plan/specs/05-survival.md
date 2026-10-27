@@ -319,6 +319,17 @@ runs two potion-group writers together.
 
 ## 5. Needs your review
 
+### Decided 2026-10-26
+
+These decisions replace any working assumption or recommendation for the same item elsewhere in this document.
+
+- **A6** (MOV-Q14 and SRV-Q5: where the party regroups after an escape or a death; decided by your answer): The party regroups in Main near the spawn point for now, and a safer regroup spot is part of the avoidance and pathing design (queue item AV).
+- **A9** (SRV-Q2: regen during fights; decided by your answer): Regen waits while any fighter keeps dropping below 80% HP, so the potion cooldown stays free for an HP potion.
+- **A38** (SRV-Q4: when a death ends the fight; decided by the plan): After a death the party finishes the fight while the monsters' HP falls faster than the survivors' HP, and escapes once it does not (rule R2).
+- **C3** (SRV-Q1: HP potions per class; decided by the plan): Every fighter drinks an HP potion below a per-character setting with today's 50% as the default, and never when the missing HP is less than the potion heals in game data (rule R2).
+- **C4** (SRV-Q3: potions during an escape; decided by the plan): An escaping character drinks HP first, using the same per-character potion setting as combat (rule R2).
+
+
 - **SRV-Q1. Which classes drink HP potions, and when?**
   - **Today:** the priest and mage drink HP below 50% (priest.ts:21, mage.ts:9). The
     warrior drinks only MP, and only as leader (warrior.ts:44-49). Paladin, ranger and

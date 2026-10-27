@@ -189,3 +189,10 @@ base charge of 1 from `add_call_cost(-1)` (node/server.js:4980) runs before
 charge always lands on that placeholder and never on a player. A move costs
 1.5 and a Ponty read 16. The logged merchant disconnect (13 Ponty reads,
 208 = 13 x 16) matches.
+
+## Decided 2026-10-26
+
+These decisions replace any working assumption or recommendation for the same item elsewhere in this document.
+
+- **C2** (implementation/00-method: how changes get checked; decided by the plan): Every change is proven by an automated game run first, and code-only tests are the exception.
+

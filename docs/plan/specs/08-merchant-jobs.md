@@ -1,6 +1,6 @@
 # 08. Merchant jobs
 
-Checked against the current console `refs/review/ryan-1.5` (b9b5c91e) in (local checkout). Every file:line is on that ref unless it says "fork HEAD" (af92de45). The fork's live tip 21b8362d changes no code in this part: `git diff --stat af92de45 21b8362d` in pm-worktrees/pta-pull lists 17 files, all escape, pull, heal, October event and test code (characters/shared.js hunks at 68 and 18435-18962).
+Checked against the current console `refs/review/ryan-1.5` (b9b5c91e) in (local checkout). Every file:line is on that ref unless it says "fork HEAD" (af92de45). The fork's live tip 21b8362d changes no code in this part: `git diff --stat af92de45 21b8362d` in (local checkout) lists 17 files, all escape, pull, heal, October event and test code (characters/shared.js hunks at 68 and 18435-18962).
 
 This spec maps which job the merchant runs and what interrupts it: the job queue, routine
 priorities, the dispatcher and its gates, the command the coordinator writes for the merchant, the
@@ -900,7 +900,7 @@ Behaviours with no mapped test (8): MJB-009, MJB-012, MJB-014, MJB-018, MJB-019,
 ## 5. Needs your review
 
 Each question gives Today, the Options with their negatives, and a Recommendation with why it beats
-the other options and its own negatives. The coordinator copies them into REVIEW-QUEUE.md.
+the other options and its own negatives. The coordinator copies them into the review queue.
 
 ### Q1. Should the merchant refresh luck on its own characters before it runs out?
 
@@ -1047,7 +1047,7 @@ dashboard. It beats C because the merchant stays on the realm where its stand an
 Retry stays as a shortcut that ends the current wait. Its own negatives: one login attempt a minute
 while the failure lasts, and home jobs wait through it.
 
-**Changed:** new question; MJB-013 described this give-up without flagging it (REVIEW-QUEUE A90).
+**Changed:** new question; MJB-013 described this give-up without flagging it (the review queue A90).
 
 ## 6. Gaps
 

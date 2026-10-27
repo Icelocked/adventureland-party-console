@@ -7,7 +7,7 @@ unless it says "fork" (af92de45). Behaviour ids are `GRP-001` onward;
 gave this spec no functions by path, so it claims, from the 07, 02 and 06
 lists and triage, only the functions whose job is group membership or
 precedence; every move is in `catalog/handoffs-01.json`. Leads came from
-`backups/party-console/review/full/events.md` and `review/events.md`; this
+(local checkout) and `review/events.md`; this
 pass re-read each on the current console. A claim-by-claim check of this page is
 in `docs/implementation/06-verification-01-06.md`.
 
@@ -130,7 +130,7 @@ table lists what each reader checks on the current console.
 
 | Reader | Yields to | Does not check |
 |---|---|---|
-| Hunt tick (`hunt/tick.ts:74-94`) | leader present and no dungeon (application.ts:2138), comms hold, rare encounter, any member at an event, turn-in, death recovery, route and farm-walk recovery, event return / non-Hunt convoy / anniversary, farm-area hold, cancelled intent | escape, except through the loot gate (tick.ts:39-44) and an escape convoy counted by `eventOwnsTravel`; boss chase and AH (fork) |
+| Hunt tick (`hunt/tick.ts:74-94`) | leader present and no dungeon (application.ts:2138), comms hold, rare encounter, any member at an event, turn-in, death recovery, route and farm-walk recovery, event return / non-Hunt convoy / anniversary, farm-area hold, cancelled intent | escape, except through the loot gate (tick.ts:39-44) and an escape convoy counted by `eventOwnsTravel`; AH (fork) |
 | Event admission (`http/hunt-control.ts:68-71`, `events/observations.ts:246`) | event return membership, Hunt turn-in, cancelled intent, selection and limits, dungeon, a registered anniversary kiss (observations.ts:225-228) | escape, death recovery, rare |
 | Event return (`events/returns.ts:226-241`) | Hunt handoff, anniversary hold, any convoy, Town cycle | rare, escape, death recovery (none is read in returns.ts, return-guards.ts, return-policy.ts or repair-return-walk.ts); the dispatch waits for any convoy (231), so an escape-recovery or death-recovery convoy holds it, and the open cases are the escape stages and recovery phases that run without a convoy |
 | Rare hunt (`navigation/rare-hunting.ts:118-159`) | stale or dead leader, Town cycle, event return, anniversary, death recovery, Hunt loot, escape, turn-in, members that joined or travel to an event, are dead, below 35% HP or hold a protected command | farm-area relocation; a member's staging `activeEvent` (137 reads `joinedEvent`, `movement.event` and `eventTraveling` only) |
@@ -349,7 +349,7 @@ Fork ref af92de45, read at the named lines.
 - **Achievement Hunt** (3bae33fc .. cd7bd857): farming mode `achievements`,
   its own busy list: dungeon, any event session, event return or deferred
   return, rare, any travelling convoy (fork application.ts:829-841). It does
-  not check escape, death recovery, boss chase or farm relocation. The event
+  not check escape, death recovery or farm relocation. The event
   gate treats any session as a trip, and a session exists for every enabled
   member that reports the event live (`events/observations.ts:138-144`), so
   it waits whenever a selected event is live anywhere on the realm
@@ -358,11 +358,8 @@ Fork ref af92de45, read at the named lines.
   `achievements` is missing from two mode whitelists (fork
   navigation/initial-focus.ts:12, fork http/saved-farming-mode.ts:12; full
   review F-FA5).
-- **Boss chase** (e990e787, 3ed84536): a realm-hopping owner whose tick
-  checks only a running realm switch (fork events/boss-chase.ts:371-387). No
-  other owner reads its state; outside boss-chase.ts only the wiring,
-  telemetry and the dashboard route use it (fork application.ts:1260-1265,
-  2442).
+- **Boss chase**: the fork drops it, with the realm-hop blacklist it alone
+  read (972c9fce).
 - **Console Pause and Play** (9a34a4c1, b33aee77): Play writes back the
   saved profile fields (farming policy, location, focus, AH target and
   more) and settings that changed during the pause, and restores a Hunt only
@@ -387,7 +384,7 @@ reviewed" until method step 2.
 | scripts/tests/hunt-safety.test.cjs | GRP-009..011 | turn-in, event return wait, cancel handling | message precedence (2.1) | not reviewed | several guard patches |
 | e2e/live-game.spec.ts (Goobrawl interrupts Hunt) | GRP-011 | event pause and resume on a native server | staging pause, cancelled intent | not reviewed | no |
 | scripts/tests/daily-dungeons.test.cjs | GRP-018 | protection blocks events; recovery paused in Cave | `held` after exit (2.6); a Follow change during a visit (GRP-018) | not reviewed | no |
-| scripts/tests/rare-hunting.test.cjs | GRP-017 | event combat prevents rare interruption | boss chase | not reviewed | no |
+| scripts/tests/rare-hunting.test.cjs | GRP-017 | event combat prevents rare interruption | realm hops | not reviewed | no |
 | scripts/tests/farm-reunion.test.cjs | GRP-019 | reunion blocked by convoy, anniversary, event exit, attackers and cancelled navigation | the other 17 conditions one by one | not reviewed | no |
 | scripts/tests/hunt-farm-walk.test.cjs | GRP-015 | expired anniversary yields to Daisy | live anniversary | not reviewed | yes (reported Ghost stall) |
 
@@ -404,29 +401,24 @@ landing-to-Main leg end to end on the current console (the fork adds
    partial list (table 1.3), and inside the Hunt tick the order of calls
    decides (GRP-011, `hunt/tick.ts:74-94`). Admission does not read escape or
    death recovery (2.8); farm areas do not read death recovery; the fork's
-   AH and boss chase keep their own lists (section 3).
+   AH keeps its own list (section 3).
    **Options:**
    (a) One fixed ranking: escape > death recovery > dungeon visit > Hunt
    turn-in > event return > event attendance > rare encounter > Hunt
-   mission > Achievement Hunt (fork) > boss chase (fork) > farm-area moves.
-   Negatives: a live boss never pulls the party off a quest mission; every
-   owner below event attendance stops whenever an event starts.
-   (b) As (a), with boss chase above Hunt missions. Negatives: a realm hop
-   in the middle of a mission throws away its travel, and the quest timer
-   keeps running while the party is away.
-   (c) As (a), with a featured anniversary hold above event attendance.
+   mission > Achievement Hunt (fork) > farm-area moves.
+   Negatives: every owner below event attendance stops whenever an event
+   starts.
+   (b) As (a), with a featured anniversary hold above event attendance.
    Negatives: the party reaches combat events up to one minute late during
    a featured round.
    **Recommendation:** (a). It keeps the order most of today's checks
    already follow (turn-in before events, GRP-009; events before Hunt,
    GRP-011; the dungeon suspends the rest, GRP-018), so the player sees few
    changes, and one list replaces the seven in table 1.3. It beats (b)
-   because the Hunt is the mode the user picked, and boss chase is an extra
-   the user can pick instead. It beats (c) because the featured hold lasts
-   one minute and an event already interrupts it today
-   (`shared.js:13314-13330`). Negatives: boss chase and AH always lose to an
-   active quest, and every new owner has to take a place in the list before
-   it ships.
+   because the featured hold lasts one minute and an event already
+   interrupts it today (`shared.js:13314-13330`). Negatives: AH always loses
+   to an active quest, and every new owner has to take a place in the list
+   before it ships.
 2. **Staging and Hunt.**
    **Today:** staging opens 120 s before spawn (`shared.js:11532`). From that
    moment the heartbeat reports `activeEvent` (2864, 2987), the character
@@ -509,7 +501,7 @@ landing-to-Main leg end to end on the current console (the fork adds
    the user pauses the console, and a phase check goes into each gate.
    **Changed:** the earlier recommendation was (c), which still needs the
    user to press Release; the upstream priorities rule that out, so (d) is
-   new and now recommended (REVIEW-QUEUE A13).
+   new and now recommended (the review queue A13).
 6. **Follow during A/B testing.**
    **Today:** a follower stops following a leader on the other team
    (`shared.js:17709-17711`) and acts alone. The game puts each character on

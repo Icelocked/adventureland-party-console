@@ -490,8 +490,18 @@ TGT-021, TGT-022 and TGT-023 have no test.
 
 ## 5. Needs your review
 
+### Decided 2026-10-26
+
+These decisions replace any working assumption or recommendation for the same item elsewhere in this document.
+
+- **B2** (MOV-Q18 and TGT-Q1: who pulls in pull mode; decided by your answer): The priest never pulls unless it is the designated tank; a party setting picks the puller, and in your trio the mage pulls.
+- **B3** (TGT-Q2: which classes can be the off tank (fork); decided by your answer): Only a warrior or a priest can be off tank; the list shows only those members, says no suitable off tank class when the party has none, and every tank rule works with or without an off tank.
+- **C5** (TGT-Q3: when a mage or priest stops hitting a monster that reflects; decided by your answer): Reflect handling becomes a per-character setting that covers magic reflect and physical reflect (porcupines included), with defaults that match the current console's monster list.
+- **C6** (TGT-Q5: who uses Taunt and Absorb; decided by the plan): The tank you set uses Taunt and Absorb Sins, or the leader when no tank is set, limited to a warrior or a priest as B3 decided.
+
+
 - **TGT-Q1. Who may pull?**
-  **Today:** the current console has no pull mode; the grouped queue picks a target and
+  **Today:** The current console has no pull mode; the grouped queue picks a target and
   every member approaches it (TGT-017). The fork's pull mode takes the living member with
   the longest attack range of at least 100 (fork runtime/combat/pulling.ts:20-24), and
   4ce3dcdd (21b8362d) holds pulls while the tank or a priest is dead. Class base ranges in
@@ -510,7 +520,7 @@ TGT-021, TGT-022 and TGT-023 have no test.
   low-HP ranged class that takes the first hits until the tank takes aggro, and the hold
   exists only on 21b8362d.
 - **TGT-Q2. Off tank class.**
-  **Today:** the current console has no off tank. The fork (ae116693) lets any party
+  **Today:** The current console has no off tank. The fork (ae116693) lets any party
   member be off tank; it takes the tank's attackers when the tank is endangered, below 50%
   or gone, and hands back at 80% with nothing on the tank (fork tank-handoff.ts:15-22).
   Taunt is warrior only and Absorb Sins priest only (game data).
@@ -525,7 +535,7 @@ TGT-021, TGT-022 and TGT-023 have no test.
   Its negatives: a party without a second warrior or a spare priest has no off tank, and
   the dashboard has to refuse the other classes.
 - **TGT-Q3. Reflection threshold.**
-  **Today:** the current console blocks magical attacks only on slenderman, tiger and
+  **Today:** The current console blocks magical attacks only on slenderman, tiger and
   goblin (monster-attack-policy.ts:3, 32-33). 21b8362d (d988fcbd) blocks every monster
   with reflection above 0. The server reflects a magical hit with a chance of `reflection`
   percent and sends the whole hit back (al-server node/server.js:3816-3840). Values:
@@ -563,7 +573,7 @@ TGT-021, TGT-022 and TGT-023 have no test.
   guards; (a) stops walks and (c) drops return defence. Its negatives: outbound walks still
   take hits without a full defence, and moving the rule touches every caller.
 - **TGT-Q5. Aggro owner.**
-  **Today:** the current console gives aggro skills to the party leader (eligibility.ts:
+  **Today:** The current console gives aggro skills to the party leader (eligibility.ts:
   72-74, warrior-combat.ts:32, protection.ts:6). The fork (7bd14d7c) gives them to the
   designated tank when one is set, else the leader (fork eligibility.ts:81,
   warrior-combat.ts:31-33, protection.ts:6-7).

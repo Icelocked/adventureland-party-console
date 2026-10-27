@@ -69,7 +69,7 @@ goes wrong, in the current code and in ours alike.
    (spec 13 LIF-W5).
 
 The fork's patchwork is part of the finding. Its features were built beside
-the current code instead of through shared owners, because the console has no
+The current code instead of through shared owners, because the console has no
 owners to register with yet, and they needed more fixing than the code they sit on.
 
 What this costs players:
@@ -92,6 +92,27 @@ heal fix (648b3be0) targets the cause of the 127 of 127 count above,
 and the Cipher fix (e9e4bda3) sends fighters to gather instead of waiting.
 Their after-fix measurements are not yet recorded in a spec with the command
 that produced them, so this page gives no numbers for them until they are.
+
+## Upstream priorities
+
+Reported upstream on 2026-10-26. Anything that needs manual intervention
+to get a character moving again is a high to critical issue, because a main
+goal of the project is fully AFK play for as long as the player wants.
+Hard-coded retry counts are not an accepted approach: after a fixed number
+of failures today, a character can be left stuck until someone steps in.
+Known cases, each a required end-to-end test of the redesign:
+
+- **UP-1.** After a party death during an event such as Mr. Green or the
+  Headless Horseman, the party fails to navigate back to the event.
+- **UP-2.** After a death during normal farming, the escape does not finish:
+  characters get stuck on the return route.
+- **UP-3.** After a respawn, a character does not return to the right
+  activity. For example: dies during an event, the event ends, and the
+  character stays at spawn instead of going back to its farm.
+
+Every owner's failure handling follows from this: a failure leads to a
+different next step (re-plan, a different route, regroup, return to a safe
+point and start the task again), never to a dead end.
 
 ## Principles
 
@@ -175,7 +196,7 @@ This plan builds on the current console, not around it: it follows upstream
 updates for fixes and ideas, compares approaches for efficiency, and offers
 changes that measurably improve the console. Preference changes (layout,
 wording) are offered as options, never argued. A change that is not adopted
-upstream stays in the fork, and the fork keeps taking upstream updates.
+Upstream stays in the fork, and the fork keeps taking upstream updates.
 
 ## The parts
 

@@ -530,6 +530,16 @@ change follows"):
 
 ## 5. Needs your review
 
+### Decided 2026-10-26
+
+These decisions replace any working assumption or recommendation for the same item elsewhere in this document.
+
+- **B9** (LIF-Q2: what Pause does (fork); decided by your answer): Pause stops the console at once and Play rewrites no settings; after a pause, deploy, restart, bug fix or your own changes in game, the console reads the state it finds and carries on from there.
+- **A19** (LIF-Q1: leftover game handlers after a console restart; decided by the plan): A console restart cleans up every old game handler, and upstream gets a short issue for it after review.
+- **A67** (LIF-Q4: how long shutdown waits; decided by the plan): Shutdown waits while a trade is in progress, and after the next start the console picks up whatever state the trade left (rule R3).
+- **B10** (LIF-Q3: a deploy while paused (fork); decided by the plan): A deploy while paused keeps the party in defend-only mode until you press Play, and the console then starts from the state it finds (rule R3).
+
+
 1. **Listener ownership (bug 15, LIF-W1).**
    - Today: 10 socket listeners sit outside the owner registry; only `stop` removes them,
      and the loader skips `stop` once the frame is detached. A text search cleans 9 events

@@ -1,208 +1,131 @@
 # Open questions
 
-Questions about how the current console is meant to behave. Each has what I'd
-suggest in one line; a yes, no or "here's why" is plenty. The full context for
-each (how it works today, with file and line on b9b5c91e) is in
-[QUESTIONS-DETAILS.md](QUESTIONS-DETAILS.md) under the same number.
+A few questions about the current console that only its author can answer. A
+yes, no or "here's why" is plenty. The context for each, with file and line
+on b9b5c91e, is in [QUESTIONS-DETAILS.md](QUESTIONS-DETAILS.md) under the same
+number. The section after the questions lists what the fork will change in
+The current console's behaviour, so you can object to any of it.
 
-## 1. When two tasks want the party, which one wins?
+## 1. Is a caller planned for `pause()`?
 
-**Suggestion:** one written order that every part reads: escape, death recovery, dungeon visit, Hunt turn-in, event return, event attendance, rare, Hunt mission, then farm-area moves (fork add-ons go below Hunt missions).
-
-**Your answer:**
-
-## 2. Who may stop a journey it did not start?
-
-**Suggestion:** only the journey's owner, plus escape and death recovery.
+Movement has a `pause()` for combat during a walk, and no combat mover calls it.
 
 **Your answer:**
 
-## 3. Should asking for the same destination twice restart the walk?
+## 2. Is a caster planned for Agitate?
 
-**Suggestion:** keep the live journey when the same owner asks for the same place.
-
-**Your answer:**
-
-## 4. Was `pause()` meant for combat steps during travel?
-
-**Suggestion:** combat pauses the journey and resumes it after the fight.
+Agitate sits in three skill gates, and nothing casts it.
 
 **Your answer:**
 
-## 5. Should combat steps avoid monsters that are not attacking yet?
+## 3. Was `mp_cost` meant in the priest MP checks?
 
-**Suggestion:** every step stays out of idle monsters' aggro reach, once the reach is confirmed from the game source.
-
-**Your answer:**
-
-## 6. Where is "safe" after an escape or a death?
-
-**Suggestion:** one goal shared by escape and death recovery: Main Town.
+Three priest checks read `G.skills.heal.mp`, which game data does not have.
 
 **Your answer:**
 
-## 7. Should a due heal always take the priest's attack slot?
+## 4. Do the unused Hunt cycle records have a writer in unpushed work?
 
-**Suggestion:** yes, a due heal wins the slot whenever a member is under the heal threshold.
-
-**Your answer:**
-
-## 8. Was removing the basic-attack MP reserve intended?
-
-**Suggestion:** if the removal was a side effect of the merge, restore the floor for the priest at least, so heals keep their MP.
+Temporary encounters, `exitMode`, stage `failed-return` and the `resume` branch of `begin` have no production writer or caller on b9b5c91e.
 
 **Your answer:**
 
-## 9. Which classes should drink HP potions, and when may regen run?
+## 5. How long does v1.4.0 stay a rollback target?
 
-**Suggestion:** one potion table for every fighter, and regen only when no potion threshold would trigger within those 4 s.
-
-**Your answer:**
-
-## 10. Should a manual move during an event leave the event for good?
-
-**Suggestion:** only a move whose destination leaves the event map skips the event, plus a "rejoin" button that clears the skip.
+19 scoped fields are saved twice only so a rollback to v1.4.0 can read them.
 
 **Your answer:**
 
-## 11. How early should the party stage for a walk event, and should staging pause Hunt?
+## Decided on our side
 
-**Suggestion:** a lead based on the planned route time plus a margin, and Hunt keeps going until the walk actually starts.
+The fork will change these behaviours of the current console.
 
-**Your answer:**
+Tasks and travel
 
-## 12. After a Cave visit ends, should the party release on its own?
+- One fixed order decides which task gets the party, and Hunt and Achievement Hunt are on and off toggles that cannot both be on.
+- Only whatever started a walk, an escape or death recovery can stop that walk.
+- Asking for the same destination again keeps the current walk, and the walk's owner fixes a party that is not moving.
+- A walk past its deadline stops, and whatever asked for it decides what happens next.
+- On a walk, fighters fight as the defender and passive monster settings say, keep heading for the destination, and resume the walk after the fight.
+- Steps and routes keep the whole following party out of idle monsters' aggro where the area allows, boss approaches included.
+- After an escape or a death the party regroups in Main near the spawn point.
+- Home is where the game puts a character, the Main spawn point after a respawn and the Town landing point after Town, and every feature checks those same points.
+- A travel command during an escape or death recovery ends it, and the console carries on from wherever the party is.
+- A group walk keeps going through a late member report while no attacker is known, for up to two report intervals.
+- A group walk starts from where the leader stands, and a drifting leader no longer restarts Hunt travel.
+- Stuck walks, Hunt travel and realm switch stragglers keep trying while they make progress, and the card says stuck when they stop.
 
-**Suggestion:** release on its own once every participant is outside and nothing is pending, and keep escape and death recovery on outside the Cave.
+Events
 
-**Your answer:**
+- A manual move or a bestiary pick drops a character from an event only when it leaves the event map, and a rejoin button undoes it.
+- Event walks start when the route time says, Hunt keeps farming until then, and the party arrives no more than 60 s after the spawn.
+- Short-window bosses take over a trip in progress at once, and other events wait for the trip to arrive or fail.
+- Walks follow every boss that moves.
+- An event walk waits for the priest only while the party can still arrive within 60 s of the spawn.
+- A refused join skips that round on no such event or too late, and retries with growing waits on sick or in the bank.
+- Witch's Cipher keeps 1 clue as the default, and a setting lets the merchant start a cipher nobody has submitted.
+- Solo characters and the party never wait on each other's event trips.
 
-## 13. When several parts hold a character, who writes the "what is it doing" line?
+Rares
 
-**Suggestion:** each part publishes a small `{phase, label, since}` per character through one status registration, and the dashboard shows the highest-priority label.
+- One list says what a rare may interrupt: farming and Hunt travel, with a per-rare switch for Hunt travel. Trips started by hand finish first.
+- A failed walk to a rare keeps trying while the party gets closer, and stops when the rare is gone.
+- A farming mode change during a rare applies at once, after a warning that it ends the fight and its loot.
+- Scatter comes back as soon as the rare is done.
 
-**Your answer:**
+Combat and survival
 
-## 14. How much should the 250 ms fallback poll send while the live stream is down?
+- The priest heals first when anyone is under a per-character setting, default 80% HP.
+- The priest keeps basic attacking while its MP covers the heals the party needs, from heal costs in game data.
+- Every fighter drinks HP potions below a per-character setting, default 50%, and skips a potion that would heal more than is missing.
+- Regen waits while any fighter keeps dropping below 80% HP, so the potion cooldown stays free.
+- An escaping character drinks HP first, with the same potion setting.
+- After a death the party finishes the fight while the monsters' HP falls faster than the survivors', and escapes otherwise.
+- Stomp, Dash, Energize, Curse and Party Heal share the skill engine's MP reserve.
+- The set tank uses Taunt and Absorb Sins, or the leader when no tank is set, and only a warrior or a priest can hold that role.
+- Reflect handling becomes a per-character setting for magic and physical reflect, with today's monster list as the default.
 
-**Suggestion:** default to `enforce`, which sends only the whitelist.
+Cave of Many Dreams
 
-**Your answer:**
+- After a visit, escape and death recovery work outside the Cave, and the party resumes once everyone is out and walking. Release still ends the wait sooner.
+- A member drops from the visit when the game reports it offline or it stops making progress.
+- With event protection off, the party leaves between encounters while it can still reach the event within 60 s of the spawn.
+- Cave travel repairs keep going with growing waits, and the card names the failing member.
 
-## 15. Should one call budget decide which calls wait?
+Merchant
 
-**Suggestion:** one budget with priorities: survival and combat first, job steps next, background reads last.
+- The merchant keeps the gold its queued jobs, stand buy orders and the player's minimum need, and one reserve, default 0, covers every automatic purchase. Short gold pauses a buy order or holds a job.
+- The merchant puts its normal gear back on when a job interrupts gathering, and a full bag while gathering queues a bank trip.
+- Automatic work never enters PVP or blacklisted realms, and the merchant finishes all jobs on one realm before one trip home.
+- Escape, potion and heal calls keep the share of the call limit they need, and background lookups wait when the limit gets close.
+- The merchant refreshes Merchant's Luck on the party's fighters before it runs out.
+- Giveaways the merchant found itself expire at their end time.
+- Stand slots follow the game's count, so a level 70 or 80 merchant uses 24 or 30.
+- When a buy order's slot empties without a receipt, the merchant counts what it received and places a new order for the rest.
+- The merchant takes mail postage from the bank first, and fails clearly when the bank is short.
+- Shutdown waits while a trade is in progress.
 
-**Your answer:**
+Settings
 
-## 16. Should Witch's Cipher default `minClues` to 0?
+- A save or an import with one bad field changes nothing and names the field.
+- Every settings change writes a log line with the old value, the new value and its source.
+- Controls show loading and stay locked until settings arrive.
 
-**Suggestion:** default to 0 and move the check after affordability.
+Dashboard
 
-**Your answer:**
-
-## 17. When a job interrupts gathering, should the merchant's hands be restored?
-
-**Suggestion:** restore both hands before any command other than gathering, and defer the command if the restore fails.
-
-**Your answer:**
-
-## 18. Which realms may the merchant hop to for a job?
-
-**Suggestion:** keep your cross-realm buying, but refuse PVP and blacklisted realms, group ready jobs by realm, and return home once per group.
-
-**Your answer:**
-
-## 19. Should the native loader own its socket listeners the way headless workers do?
-
-**Suggestion:** reuse your `RunnerScope` approach for the native path, so dispose removes every listener whatever the frame state.
-
-**Your answer:**
-
-## 20. Should live progress (the Hunt line) refresh every second?
-
-**Suggestion:** core carries each profile's live phase fields, and config keeps only settings.
-
-**Your answer:**
-
-## Smaller questions
-
-One line each; details in QUESTIONS-DETAILS.md.
-
-- **S1.** `anniversaryWithTimeout` rejects at its deadline but leaves the walk running, and escape's walk to Main has no stop after it: should the deadline stop the walk?
-- **S2.** Franky approaches check terrain only: would step safety, with the boss excluded, get in the way?
-- **S3.** A blocked mage escort in an event waits with no detour: should it fall back to the event approach detour?
-- **S4.** An event walk replaces any ordinary convoy, including a Hunt trip halfway there; only Hunt returns, manual walks and other shared walks are protected: always, or only for short-window bosses?
-- **S5.** Walks follow three moving bosses while five more only share a fixed point: is the shorter list on purpose?
-- **S6.** An event walk starts after 20 s without members who have not asked: should a fighter walk ever start without the healer?
-- **S7.** Any leader drift over 1 unit re-plans the departure: would planning from where the leader stands work?
-- **S8.** After three failed regroup routes new pulls wait until the group changes: should the separated member go to the farm point instead?
-- **S9.** "Home" is 65 for escape, 90 for Town and event return, 100 for anniversary, and the manual Town walk parks 212 from (0, 0): are the different radii on purpose?
-- **S10.** While Town casts, a 100 ms watchdog stops every move: is "nothing else moves" the intent?
-- **S11.** Three lists of travel a rare may interrupt disagree on `party-travel` and `empty-spawn-recovery`: which is right?
-- **S12.** A failed rare encounter or loot walk is never retried: would one retry fit?
-- **S13.** A farming-mode change cancels a live rare and its return: finish the rare first?
-- **S14.** After a rare the party returns to the saved farm or Hunt mission and keeps offline members: is that the intent?
-- **S15.** During a rare and its return to the farm, scatter is forced to grouped, so scatter comes back only once that return ends: should it come back as soon as the rare dies?
-- **S16.** Stomp (25%), Dash (50%), Energize (35%) and Curse (50%) keep their own MP floors outside the skill engine, and partyheal casts with no floor: should they use the engine's reserve?
-- **S17.** Agitate is listed in three gates but nothing casts it: drop it, or is a caster planned?
-- **S18.** The priest MP checks compare with `G.skills.heal.mp`, which game data does not have: was `mp_cost` meant?
-- **S19.** Escape drinks MP first and the mage never drinks HP while escaping: is MP-first on purpose?
-- **S20.** A death ends the fight unless foes are at or below 25% and survivors at or above 50%: are these the thresholds you want?
-- **S21.** The coordinated escape needs exactly one warrior, mage and priest: should another Blink or teleport class lead it?
-- **S22.** A passing monster that hits the party counts as a threat only on return trips: is that the intent outside return trips too?
-- **S23.** Aggro skills belong to the leader only: is that tied to the leader on purpose, or to whoever tanks?
-- **S24.** Magical basic attacks are blocked only for slenderman, tiger and goblin, while game data lists reflection on eight monsters: was the list meant to cover all of them?
-- **S25.** A rejected event `join` is retried every 10 s: the game answers `cant_join` when the event's server flag is off, so should it skip at once on `cant_join` and `join_too_late`, and back off only on `cant_when_sick` or `cant_in_bank`?
-- **S26.** (Dropped: each member's event priority list already decides which live event it attends, and followers use the leader's list.)
-- **S27.** (Dropped: the event priority list already decides whether anniversary staging yields to another event.)
-- **S28.** When several parts hold Hunt, the first check in call order writes the message: should the highest-priority holder's text win?
-- **S29.** Hunt event trips are stored root-wide, and the party's combat event handoff stays open while any character's trip is open: should a solo character's trip ever hold the party?
-- **S30.** During A/B testing a follower stops following a leader on the other team: keep, or follow a same-team member?
-- **S31.** Saved Hunt cycles can hold records with no production writer (stage `failed-return`, temporary encounters, `exitMode`), read for example at hunt/tick.ts:83: drop them after one converting release?
-- **S32.** A drifting leader can restart Hunt travel without a limit: count drift resets and stop after N?
-- **S33.** A quest monster is blacklisted after one party death: is 1 the default you want?
-- **S34.** Learned scatter types reset on every coordinator restart: save them per roster?
-- **S35.** A geometry-mismatch farm travel failure pauses farming with no retry: retry once first?
-- **S36.** Competition relocation outside Hunt is always on for shaped areas: should it have its own setting?
-- **S37.** An offline Cave participant blocks Release for the rest: release the online members?
-- **S38.** With event protection off, a live event exits the Cave visit at once, mid-encounter included: exit only between encounters?
-- **S39.** Cave travel stops after three repairs with no error of its own: show which repair ran out?
-- **S40.** Gathering stops at 3 free slots but its deposit step needs fewer than 3: should a full bag queue a bank job?
-- **S41.** A giveaway the merchant found itself has no expiry: expire it at the giveaway's end time?
-- **S42.** A running gathering cast finishes before an incoming job: is the short wait intended for every job?
-- **S43.** A failed party realm switch leaves moved workers on the new realm: retry stragglers once, then roll back?
-- **S44.** The stand uses 16 slots everywhere, while the game gives 24 at level 70 or with a `cstand` and 30 at level 80: read it from the game rule?
-- **S45.** A native WTB offer whose slot empties without a receipt stays blocked, because only offers without a native id are retried: drop it after a confirmation window?
-- **S46.** Mail with an item costs 360000 gold and is sent without a gold check: withdraw postage first?
-- **S47.** Your bid jobs spend with no gold reserve: would a reserve setting defaulting to 0 suit you?
-- **S48.** Settings changes leave no record of the previous value or source: log one line per change?
-- **S49.** The dashboard shows defaults until the config domain loads: show "loading" instead?
-- **S50.** Import accepts values the route refuses, such as `itemCollectionThreshold` 50: use the route's bounds?
-- **S51.** 19 scoped fields are saved twice for rollback to v1.4.0: drop the top-level copies after a migration?
-- **S52.** Workers get 500 ms before SIGKILL at shutdown: should shutdown wait for `canReload` like a safe reload?
-- **S53.** Many tests load single functions from shared.js, and shared.js carries 85 `typeof` guards so those functions run on their own (my fork added 27 more): would a test loader for the whole file suit you?
-- **S54.** If one field in a settings request is invalid, `formation` has already written the leader and follow flags before it returns 400: should it check every field first and change nothing on an error?
-- **S55.** One member report older than 3 s stops the whole convoy, and a test says this is intended: could it keep walking through short gaps unless an attacker is known?
-- **S56.** Luck the merchant casts on its own owner's characters is "strong", and the scheduler skips every strong buff, so the party's fighters are refreshed only after expiry: refresh them on the normal lead time?
-- **S57.** Every heartbeat sends up to 160 combat trace and 256 handoff timing entries, and no dashboard view reads them: send them only while a diagnostics viewer is subscribed, the way map telemetry is?
-- **S58.** The dashboard keeps its own copies of runtime rules (stand full, Cave entry, reserved bag slots, priority ranges, the farming owner, prices), and some have drifted, such as the merchant follower case and the stand-full count: should each owner publish the answer the dashboard needs?
-- **S59.** With cards on screen, nothing renders the computed connection state, so a stopped coordinator leaves stale numbers with no sign: render `DashboardHealth` in the header?
-- **S60.** When two Hunt pause reasons apply, the event pause wins because the tick checks it first, hiding "select Hunt again": should a reason that needs a click win over one that clears itself?
-- **S61.** Convoy messages go to the merchant activity log: show them on the card instead?
-- **S62.** Game logs live only in memory while combat logs persist: is memory-only intended, and should the panel say so?
-- **S63.** "Online" uses several freshness windows across the page and the coordinator (5, 8 and 15 s, and 10 s in more than one place): could every element read one connection state per character?
-- **S64.** Only the dashboard forbids a follower routing itself to a monster; the runtime accepts it from any client: enforce it in the runtime?
-- **S65.** A merchant marked as a follower shows the leader's farming settings on its card while the runtime uses its own: should the merchant be refused as a follower?
-- **S66.** Stand-full is `standIsFull` in three places and a plain 16-listing count in five others: should the coordinator publish free stand slots?
-- **S67.** The merchant card shows fishing and mining rows from its own 3-slot rule though the runtime never queued them: should the runtime publish gathering readiness?
-- **S68.** Hunt preparation shows priority boxes that don't change anything yet: hide them until they do?
-- **S69.** Make WTB and Add to WTB store the listing price and then drop it: prefill it?
-- **S70.** A player's own automatic NPC sale rules are not listed anywhere: show them on the merchant card with the owner's name?
-- **S71.** The header account total counts offline gold on the coordinator but not in the dashboard fallback: count it in both?
-- **S72.** Without `monster_stats`, the character adds up Tracktrix rewards itself: mark the number as calculated?
-- **S73.** The elixir shows in Active status and on the Equipped tile with two timers: drive both from one clock?
-- **S74.** The Kills game log filter starts off: is off the default you want?
-- **S75.** Metrics history older than 180 days drops out of the kill total: label it, or add a lifetime counter?
-- **S76.** Loot "today" uses America/Toronto midnight while kills and DPS use the browser's: was the fixed zone on purpose?
-- **S77.** Each merchant command deposits all gold above its gold target on its first bank visit, and the target is 0 unless set on the merchant card, so the next job that spends gold starts with another bank visit; with the stand open, stand funding deposits and withdraws in a loop: would a default working gold target for the merchant fit your intent?
+- Each part writes its own activity line, the card shows the most important one first, and a Hunt pause reason that needs a click goes on top.
+- Each member's card shows its own group walk progress, and the Hunt line refreshes every second.
+- The 250 ms backup refresh sends only the fields the clients read.
+- Characters send debug data only while a diagnostics view is open.
+- The header shows Live or Reconnecting from one connection state per character.
+- The dashboard reads rule answers from the console, such as free stand slots and Cave entry, instead of keeping its own copies.
+- The console refuses routing a follower to a monster and marking the merchant as a follower.
+- The merchant card shows the gathering the console actually plans, and each character's NPC sale rules with the owner's name.
+- The Hunt setup priority boxes go, and priorities are set in the focus picker.
+- The WTB dialog opens with the listing's price filled in.
+- The gold total includes offline characters' gold, marked as such.
+- A Tracktrix total the console adds up itself is marked as calculated.
+- Both elixir timers run from one clock.
+- Game logs stay in memory only, and the panel says so.
+- The kill total is a lifetime count, and kills, DPS and loot all use the browser's midnight.
+- A console restart removes every old game handler.

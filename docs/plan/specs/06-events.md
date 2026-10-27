@@ -5,7 +5,7 @@ Checked against the current console `refs/review/ryan-1.5` (b9b5c91e) in
 ref unless it says "fork" (af92de45, HEAD of the same checkout). Behaviour
 ids are `EVT-001` onward; `catalog/06-events.json` lists the functions and
 tests for each one. Evidence leads came from
-`backups/party-console/review/full/events.md` (with Appendix A and B),
+(local checkout) (with Appendix A and B),
 `review/events.md` and the bug ledger in `review/BRIEF.md`; this pass re-read
 every claim on the current console. Line numbers differ from the reviews, which
 cite the fork. A claim-by-claim check of this page is in
@@ -541,12 +541,7 @@ finished event.
 
 Fork ref af92de45; verified by reading the named fork lines.
 
-- **Boss chase** (e990e787, 3ed84536, d22cec71): a new owner that hops realms
-  for 7 bosses (fork events/boss-chase.ts:14) on a 60 s tick (90); its tick
-  checks only `realmSwitchBusy` (371-387), and the realm hop blacklist
-  from d22cec71 at hop time. It reads raw selections (fork
-  application.ts:1237-1241), so it ignores follower inheritance, attendance
-  limits and the dungeon gate.
+- **Boss chase**: the fork drops it, with its realm hop blacklist (972c9fce).
 - **Achievement Hunt** gates on any event session (fork application.ts:829-832);
   sessions exist for every member reporting a selected live event, attended
   or not. AH target switches go through monster-selection with `keepPolicy`,
@@ -597,6 +592,16 @@ or EVT-060. No test covers join failures (2.2), two live events (2.6),
 reload (2.9).
 
 ## 5. Needs your review
+
+### Decided 2026-10-26
+
+These decisions replace any working assumption or recommendation for the same item elsewhere in this document.
+
+- **A10** (EVT-Q1: moving a character by hand during an event; decided by your answer): Only a move off the event map drops a character from the event, and a rejoin button undoes a mistake.
+- **A12** (EVT-Q2, GRP-Q2 and MH-Q1: walking to an event and pausing Hunt; decided by your answer): The event walk starts when the route time says it must, and the party may arrive a few seconds late but never more than 60 s after the spawn.
+- **A14** (EVT-Q4: Witch's Cipher; decided by your answer): The default stays at 1 clue, and a setting lets the merchant start a cipher no one else has submitted yet.
+- **A41** (EVT-Q3: an event join the game refuses; decided by the plan): A no such event or too late reply skips that round at once, and a sick or in the bank reply retries with growing waits.
+
 
 1. **Manual move during an event (2.1).**
    **Today:** most manual commands mark the actor's live occurrence "manual

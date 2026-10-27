@@ -636,7 +636,7 @@ Two facts from the movement service that every entry below depends on:
 
 Scope: `characters/shared.js` 15079-17660 and the movement files in `runtime/combat/`
 on `refs/review/ryan-1.5` (b9b5c91e). Every `file:line` is on that ref unless marked
-(fork) = `HEAD` af92de45, or (df) = `21b8362d` in pm-worktrees/pta-pull. `shared.js`
+(fork) = `HEAD` af92de45, or (df) = `21b8362d` in (local checkout) `shared.js`
 means `characters/shared.js`. Read in full: shared.js 15079-17660; formation-recovery-client.ts,
 formation-recovery.ts, formation-recovery-progress.ts, independent-approach-client.ts,
 independent-approach.ts, recovery-route.ts, sight-recovery.ts, interception.ts, hunt-travel.ts,
@@ -2214,7 +2214,7 @@ Convoy defense is off while any member is in an event (convoy-defense.ts:38-41);
 6. Death recovery sits in `recovering` and waits for `safe`: every member fresh, alive, stopped with a settled movement report, at 50% HP, on Main within 65 and with no threats (combat-disengagement.cjs:83-89, checked by `recover` at 90-92).
 7. Only `recover` releases the escape, and only after `safe` passes (combat-disengagement.cjs:94-97). No other automatic path releases it: a navigation change that fails `current` releases it (131-133), and so do player actions such as a manual travel command (manual-commands.ts:78) or a Hunt mode change (`runtime/coordinator/hunt/mode.ts`:59, 75). The Hunt retreat restart needs stage `recovering` (`runtime/coordinator/hunt/retreat-restart.ts`:56-58), so it does not apply. The party stands at the landing at full HP with the message "Waiting for respawn and safe regroup at 50% HP" (line 91) indefinitely.
 
-Fork fix ce6e7c1a (2026-10-25, party-escape.cjs:96-107 (fork)): when the death recovery owns the escape and the landing is not on Main within 65, the priest's arrival moves the escape to `recovering` instead of `complete`; `recovering` already walks every member to Main (shared.js:209-241) and ends through the recovery convoy. It fixes the symptom for death recoveries and leaves manual escapes completing at their landing. It does not fix the cause: two owners (escape and death recovery) each hold their own goal, and the fix adds a seventh copy of the Main within 65 check (party-escape.cjs:105 (fork)). 21b8362d does not touch these files (`git -C pm-worktrees/pta-pull diff af92de45 21b8362d --stat`).
+Fork fix ce6e7c1a (2026-10-25, party-escape.cjs:96-107 (fork)): when the death recovery owns the escape and the landing is not on Main within 65, the priest's arrival moves the escape to `recovering` instead of `complete`; `recovering` already walks every member to Main (shared.js:209-241) and ends through the recovery convoy. It fixes the symptom for death recoveries and leaves manual escapes completing at their landing. It does not fix the cause: two owners (escape and death recovery) each hold their own goal, and the fix adds a seventh copy of the Main within 65 check (party-escape.cjs:105 (fork)). 21b8362d does not touch these files (`git -C (local checkout) diff af92de45 21b8362d --stat`).
 
 Every copy of the "Main within 65" goal on the current console (`git grep -n -E "<= ?65|> ?65\b" refs/review/ryan-1.5 -- characters/shared.js scripts/*.cjs runtime/`):
 - characters/shared.js:197 (warrior defense outside Main within 65)
@@ -2329,7 +2329,7 @@ slice's functions:
 - handleCommand: cosmetics commands never take movement (fork 11163-11169); Ron buy and
   prim stack merchant jobs (fork 11266-11269, 11280-11281).
 21b8362d changes no function this spec claims in this slice
-(`git -C pm-worktrees/pta-pull diff -U0 af92de45 21b8362d -- characters/shared.js`). Its hunks
+(`git -C (local checkout) diff -U0 af92de45 21b8362d -- characters/shared.js`). Its hunks
 change `escapePotions` (fork 69-75: below half HP any class drinks HP first; spec 05) and
 the tank hold and pull code (fork 18438-18565, slice 1.3).
 
@@ -2608,7 +2608,7 @@ No test found for MOV-157, MOV-159, MOV-160, MOV-162 (`git grep -n -E 'prepareMo
 
 Questions only you can answer: how the party should behave. Each states **Today** (the current console, and
 the fork where it differs), **Options** with trade-offs, and **Recommendation**. The coordinator copies
-these into `REVIEW-QUEUE.md`.
+these into the review queue.
 
 ### Journeys
 

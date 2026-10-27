@@ -1003,8 +1003,9 @@ shared.js:4049-4058, 4062-4088). It adds a converge stage when any searcher sees
 rare-hunting.ts:486-535), a second protection list with a 10 s leader grace (fork 182-194), and a
 realm-hop suspend (fork 829-866). Diff: rare-hunting.ts +287/-105, phoenix-patrol.ts +166/-217
 (`git diff --numstat refs/review/ryan-1.5 af92de45`).
-- It patches: no owner for a stuck whole-party scan, and realm hops by boss chase, which the rare
-  owner learns only from the leader's realm (fork 202-213, comment 835-836).
+- It patches: no owner for a stuck whole-party scan, and realm hops, which the rare owner learns
+  only from the leader's realm (fork 202-213, comment 835-836). Boss chase made the observed hop;
+  with it gone, a manual realm switch is the remaining source.
 - It leaves `phoenix-patrol` in purpose lists with no writer: no fork code starts a convoy with that
   purpose (`git grep -n phoenix-patrol af92de45 -- runtime characters scripts ':!scripts/tests'`).
   The lists are at fork rare-hunting.ts:137, 224, 759, 1000; shared.js:3608, 3956, 14931, 14938,
@@ -1027,9 +1028,8 @@ application.ts:878) and restores them later (fork achievement-hunt.ts:146-176), 
 a user setting. AH's blacklist cap lives in rare-retention.ts (fork cd7bd857,
 `keepNewestAchievementBlacklist`, 500 entries). Covered in the AH part.
 
-**C4. Realm-hop blacklist (fork d22cec71)** is read only by boss chase (fork application.ts:1236
-to events/boss-chase.ts:241, 297, 325); its comment names a "daily-event chase" consumer that does
-not exist (fork realm-hop-blacklist.ts:4, also README.md:615).
+**C4. Boss chase and the realm-hop blacklist**: the fork drops both (972c9fce). Boss chase was the
+blacklist's only reader.
 
 ### 3.4 Cave and daily dungeons
 
@@ -1150,7 +1150,33 @@ Not mapped here: daily-dungeons-dashboard.test.cjs (dashboard panel, 2 tests); c
 
 ## 5. Needs your review
 
-Questions only the user can answer. The coordinator copies them into `REVIEW-QUEUE.md`.
+### Decided 2026-10-26
+
+These decisions replace any working assumption or recommendation for the same item elsewhere in this document.
+
+- **C8** (MOV-Q20 and RARE-Q4: how the party searches for the Phoenix; decided by your answer): The plan settles the search by working out find time plus regroup time for each option from the Phoenix region distances and walk speed, and keeps the faster one.
+- **A11** (FARM-Q1: a bestiary pick during an event; decided by your answer): Only a bestiary pick (choosing a monster from the monster list) off the event map drops the party from the event, with the same rejoin button.
+- **A12** (EVT-Q2, GRP-Q2 and MH-Q1: walking to an event and pausing Hunt; decided by your answer): The event walk starts when the route time says it must, and the party may arrive a few seconds late but never more than 60 s after the spawn.
+- **A13** (GRP-Q5, Cave Q1 and Cave Q3: after the Cave run; decided by your answer): Escape and death handling work after the Cave, and the party resumes once everyone is out and walking, with no fixed wait; Release still ends it sooner.
+- **A31** (MOV-Q19 and RARE-Q1: which trips a rare monster may interrupt; decided by the plan): One list: a rare can interrupt farming and Hunt travel, trips you start by hand finish, and each rare has a may interrupt Hunt travel switch.
+- **A33** (RARE-Q2: changing farming mode during a rare fight; decided by the plan): A mode change applies at once; during a rare fight the card warns that the change ends the fight and its loot, and you can go ahead anyway (rule R3).
+- **A34** (RARE-Q3: where the party goes after a rare; decided by the plan): The party walks back to its saved farm spot after a rare, as today.
+- **A35** (RARE-Q5: scatter mode during a rare; decided by the plan): The party fights rares grouped and goes back to the farming style Auto has set, default or scatter, once the rare is done (rule R4).
+- **A48** (MH-Q4: Hunt travel restarted by a drifting leader; decided by the plan): Hunt travel keeps going while the party gets closer to its target, a drifting leader no longer restarts it, and the card says stuck when it makes no progress (rule R2).
+- **A49** (MH-Q5: deaths before Hunt blacklists a monster, for new installs; decided by the plan): The deaths before blacklisting default for a new install stays at today's 1 (rule R2).
+- **A50** (FARM-Q2: scatter monsters after a restart; decided by the plan): The party saves which monsters it can scatter on, so that knowledge survives a restart (rule R3).
+- **A51** (FARM-Q3: farm travel failing on the map's shape; decided by the plan): A map-shape travel failure retries with growing waits and a message that names the problem.
+- **A52** (FARM-Q6: leaving a contested spawn outside Hunt; decided by the plan): One relocate if competing setting covers every mode, on by default.
+- **A53** (Cave Q2: an offline member after the Cave; decided by the plan): A member drops from the Cave visit when the game reports it offline or it stops making progress, not after a fixed 5 minutes, and a member that reconnects inside the cave leaves alone (rule R2).
+- **A54** (Cave Q4: an event during a Cave visit; decided by the plan): With Don't leave the Cave of Many Dreams for other events off, the party leaves between encounters while that still lands it at the event within 60 s of the spawn (rule R6).
+- **A55** (Cave Q5: travel inside the Cave that keeps failing; decided by the plan): Cave travel repairs keep going with growing waits, and the card names the failing member and why.
+- **B4** (AH-Q1: Achievement Hunt and events (fork); decided by the plan): Achievement Hunt keeps farming until someone actually attends an event, and target switches cost no event rounds (rule R4).
+- **B5** (AH-Q2: Achievement Hunt and your settings (fork); decided by the plan): Achievement Hunt lays a temporary override over your settings and never rewrites your saved values (rule R4).
+- **B6** (FARM-Q4: Achievement Hunt as a saved mode (fork); decided by the plan): One list of valid modes everywhere, so followers can save Achievement Hunt too, and Hunt and Achievement Hunt stay toggles that cannot both be on (rule R4).
+- **B7** (FARM-Q5: a contested spawn during Achievement Hunt (fork); decided by the plan): Relocation during Achievement Hunt moves only to another spawn of the same target (rule R4).
+
+
+Questions only the user can answer. The coordinator copies them into the review queue.
 
 ### 5.1 Monster Hunt
 
@@ -1183,7 +1209,7 @@ Questions only the user can answer. The coordinator copies them into `REVIEW-QUE
    (c) Wait until the leader stands still before planning. Negatives: a leader that keeps kiting or fighting never stands still, so Hunt never leaves; it needs its own timeout.
    (d) Count a drift reset as a failure on the task ladder (`01-groups-and-tasks-design.md` 4.1): repeated resets climb to a regroup, then the walk to the saved farm point, then the 5, 15, 30 and 60 s backoff, with no hold. Negatives: a leader that keeps drifting walks the party back to the saved farm point and then retries every 60 s; it depends on the task ladder.
    **Recommendation:** (d), and stop the reset from cancelling a native attempt that is already running. It beats (a) because (a)'s hold needs Retry or a new mode selection after N, and N is a guess; it beats (b) because the loop climbs instead of repeating, and beats (c) because a busy leader cannot hold Hunt forever. Negatives: the first retries still cost time, and the walk back to the farm point costs a trip.
-   **Changed:** the earlier recommendation was (a), which ends in a hold that needs the user; the upstream priorities (00-overview) rule that out, so (d) is new and now recommended, matching the task design's D11 (REVIEW-QUEUE A48).
+   **Changed:** the earlier recommendation was (a), which ends in a hold that needs the user; the upstream priorities (00-overview) rule that out, so (d) is new and now recommended, matching the task design's D11 (the review queue A48).
 5. **MH-Q5. Death threshold default.**
    **Today:** the default blacklists a Hunt monster after one party death (`hunt/settings.ts:13`), and the blacklist lasts until the user removes it (HNT-110). The dead fallback text says "two party deaths" (`hunt/lifecycle.ts:97`). The fork's Achievement Hunt defaults to 6 after a live test (fork `achievement-settings.ts:41-45`). The game has no such rule.
    **Options:**
@@ -1231,7 +1257,7 @@ Questions only the user can answer. The coordinator copies them into `REVIEW-QUE
    (c) Move to the next area, then pause when every area fails. Negatives: a mismatch on the map's geometry likely fails every area on that map the same way, so the party walks several failed trips first.
    (d) Retry on the backoff with no end (5, 15, 30, then every 60 s, the task ladder's last step), with a message that names the mismatch. Negatives: a lasting mismatch costs a failed trip every 60 s.
    **Recommendation:** (d). The pause follows an exhausted geometry repair (scripts/tests/farm-zone-recovery.test.cjs:130), so a retry helps only when the mismatch passes with time, and the backoff keeps a lasting one to one trip a minute. It beats (a) and (b) because both end in a pause that waits for the user, and beats (c) because (c) repeats a failure that is about the map, not the area. In every option the regex drops `geometry`, so one rule decides. Negatives: a failed trip every 60 s while the mismatch lasts.
-   **Changed:** the earlier recommendation was (b), which pauses after one retry until the user acts; the upstream priorities (00-overview) rule that out, so (d) is new and now recommended (REVIEW-QUEUE A51).
+   **Changed:** the earlier recommendation was (b), which pauses after one retry until the user acts; the upstream priorities (00-overview) rule that out, so (d) is new and now recommended (the review queue A51).
 4. **FARM-Q4 (fork). Should Achievement Hunt survive as a saved mode?**
    **Today:** the fork's leader route accepts `achievements` (fork http/hunt-mode.ts:81), but the follower save path refuses it (saved-farming-mode.ts:12) and a legacy root value loads as `auto` (fork initial-focus.ts:12). Saved profiles keep the value (hunt/scopes.ts:42), so the leader keeps it across restarts.
    **Options:**
@@ -1353,7 +1379,7 @@ Questions only the user can answer. The coordinator copies them into `REVIEW-QUE
    (c) Release on its own but go to Town and wait for a new order. Negatives: a Town trip nobody asked for; the party still idles afterwards; an offline member still blocks it.
    (d) Release on its own 5 minutes after every fresh participant is outside, then resume the waiting task; Release ends the hold sooner (`01-groups-and-tasks-design.md` D9). Negatives: a hold the user wanted longer ends after 5 minutes unless the user pauses the console; 5 minutes is not measured; an offline member still blocks it unless Cave Q2 (d) drops it.
    **Recommendation:** (d), together with Cave Q3 (b) and Cave Q2 (d), which matches spec 01 question 5 (d): death handling no longer waits on the hold, and the party farms again without the user once the run result has been visible for 5 minutes. It beats (a) because (a) leaves the party idle until the user presses Release, beats (b) because the result stays on the card before farming starts, and beats (c) because (c) adds travel with no target and no farming. Negatives: a deliberate hold ends after 5 minutes unless the user pauses the console.
-   **Changed:** the earlier recommendation was (a), the manual Release; the upstream priorities (00-overview) rate a party that idles until the user acts as high to critical, so (d) is new and now recommended (REVIEW-QUEUE A13).
+   **Changed:** the earlier recommendation was (a), the manual Release; the upstream priorities (00-overview) rate a party that idles until the user acts as high to critical, so (d) is new and now recommended (the review queue A13).
 2. **Cave Q2. An offline participant and Release.**
    **Today:** Release refuses while any participant is offline or more than 3 s stale (service.ts:30-31, 267-271). The manual navigation commands and the Travel and Resume actions call Release first and answer 409 (application.ts:941-945; http/party-actions.ts:62, 141, 153-156), so one stale member blocks travel for the whole party.
    **Options:**
@@ -1362,7 +1388,7 @@ Questions only the user can answer. The coordinator copies them into `REVIEW-QUE
    (c) Keep blocking, name the stale member on the dashboard, and offer an explicit "drop from visit" action. Negatives: one more control; the user still has to act.
    (d) Drop a participant on its own once it has been offline or stale for 5 minutes, the wait Cave Q1 (d) gives a held visit; release the others; and limit `adopt` (service.ts:133-146) to the members that report inside, so a dropped member that reconnects inside the cave exits alone. The dashboard names the stale member, and (c)'s action drops it sooner. Negatives: the online members wait up to 5 minutes; while the reconnected member exits, the visit owns the party again, so its farming pauses for that exit; `adopt` changes; 5 minutes is not measured.
    **Recommendation:** (d). No stale member keeps the party waiting for the user, and a member that comes back inside the cave gets out without pulling the whole roster into `entering`. It beats (c) because (c) still needs the user, beats (b) because a short disconnect does not drop a member and `adopt` no longer restarts the whole visit, and beats (a) because the online members move again. Negatives: up to 5 minutes of waiting, the farming pause during a late exit, and the `adopt` change and its E2E.
-   **Changed:** the earlier recommendation was (c), which leaves the party waiting until the user acts; the upstream priorities (00-overview) rule that out, so (d) is new and now recommended (REVIEW-QUEUE A53).
+   **Changed:** the earlier recommendation was (c), which leaves the party waiting until the user acts; the upstream priorities (00-overview) rule that out, so (d) is new and now recommended (the review queue A53).
 3. **Cave Q3. Death handling outside the cave.**
    **Today:** while the dungeon owns the party, the coordinator skips escape and death recovery (application.ts:1741-1742), and the character's death recovery neither respawns nor runs while `dungeonOwned` is true (roles.js:2623-2624; runner.ts:67-69). `dungeonOwned` stays true in `held` outside the cave because the coordinator keeps sending `owned: true` (service.ts:547; dungeons.ts:332, 360). Inside the cave the game answers a respawn by calling Nera (game node/server.js:6224-6226).
    **Options:**
@@ -1385,7 +1411,7 @@ Questions only the user can answer. The coordinator copies them into `REVIEW-QUE
    (c) Also exit the run after the cap. Negatives: the remaining run time and rewards are lost for a travel problem that a manual move or Retry may fix.
    (d) No fixed cap: each failed repair is followed by the next one on the backoff (5, 15, 30, then every 60 s) while the run lasts, with (b)'s display of the member and its receipt error; the run's own expiry still ends the visit (service.ts:221-226). Negatives: a lasting failure costs a repair every 60 s and the party spends that run time standing; the counter reset still needs its fix so the count shown is true.
    **Recommendation:** (d), with (b)'s display. It beats (a) and (b) because both stop after 3 repairs until the user presses Retry or moves the party, and beats (c) because it keeps the run. Negatives: a dashboard change, a fix to the counter reset, and one repair a minute while a failure lasts.
-   **Changed:** the earlier recommendation was (b), which keeps the cap of 3 at travel.ts:142, a fixed retry count that ends travel inside the cave until the user acts; the upstream priorities (00-overview) rule that out, so (d) is new and now recommended (REVIEW-QUEUE A55).
+   **Changed:** the earlier recommendation was (b), which keeps the cap of 3 at travel.ts:142, a fixed retry count that ends travel inside the cave until the user acts; the upstream priorities (00-overview) rule that out, so (d) is new and now recommended (the review queue A55).
 
 ## 6. Gaps
 

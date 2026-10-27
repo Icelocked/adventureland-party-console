@@ -716,8 +716,9 @@ Pause controls post the same way (HEAD console-controls.tsx:19, full review 2.6)
 | Console Pause and Play in the pinned header; `consoleControl` in core and fast | HEAD party-header.tsx:20, :60-90, public-state.ts:174, :219; b33aee77, 7e6decdf | Own fetch with no session-loss handling (full review 2.6) |
 | Status icon row under the XP bar replaces the Active status list | HEAD status-icon-row.tsx:1-95, connected-character-card.tsx:360; 9336972a, f117b7a1 | The current `ActiveStatuses` stays in the tree unused |
 | Card layout: combat log at the bottom, cosmetics panel, Franky routine dialog, Achievement Hunt settings, tank roles in Farming settings | HEAD connected-character-card.tsx:189-529, farming-mode-control.tsx:130-282, farming-context.ts:16-22; 9989199a, 739c13ea, d6f67a97, 5854cb05, 9e728ca5, fdcbbd81 | `farmingContext` grows the dashboard copy of the owner rule (2.3) |
-| Config section gains tank roles, Achievement Hunt fields (including the live `achievementMessage`), boss chase and realm hop blacklist | HEAD public-state.ts:87-93; 7bd14d7c, 3bae33fc, e990e787, d22cec71 | Achievement Hunt progress text lags 15 s like the Hunt line (2.2 item 1). Tank roles arrive with config. Correction to the full review (summary item 3): config is fetched on mount together with core (use-party-console.tsx:159-160, query-cache.tsx:335-350), so a fresh page shows the roles after one request, not up to 15 s later; until then the merged state has no roles |
-| Ten more action routes (`/encounter-mode`, `/achievement-hunt`, `/realm/boss-chase`, `/realm/hop-blacklist`, `/prim-stack`, five `/npc-shop/*`) | HEAD query-actions.ts:26-77 | none |
+| Config section gains tank roles and Achievement Hunt fields (including the live `achievementMessage`) | HEAD public-state.ts:87-93; 7bd14d7c, 3bae33fc | Achievement Hunt progress text lags 15 s like the Hunt line (2.2 item 1). Tank roles arrive with config. Correction to the full review (summary item 3): config is fetched on mount together with core (use-party-console.tsx:159-160, query-cache.tsx:335-350), so a fresh page shows the roles after one request, not up to 15 s later; until then the merged state has no roles |
+| Eight more action routes (`/encounter-mode`, `/achievement-hunt`, `/prim-stack`, five `/npc-shop/*`) | HEAD query-actions.ts:26-77 | none |
+| Boss chase and its realm hop blacklist: the fork drops both, with their config fields and routes (972c9fce) | - | none |
 | Field registry gains `cosmetics` (lean) and `soloKills`, `avoidSightings` (debug) | HEAD character-fields.ts; f3d66355, 88d20cec, d798cac8 | `soloKills` feeds automatic scatter through the status report |
 | Market: per-tab filters, server choice, sort, Ponty and Ron watch list, NPC shop orders; Live WTB owned-first sort and stale Check buttons | HEAD market-view.tsx, market-filter.ts, stand-sheet.tsx:373-3573, merchant-card-controls.tsx:344; 6f4ed09a, 26807920, 5bb696ff, eb9acad0, 9476cd15 | none |
 | Bank: gapped sort; bank section loaded whenever market or stand is open | HEAD bank-sort-control.tsx:21, party-inventory-panels.tsx:67; 3dc61c45, 8f2d20e1 | Live WTB "You have N" missed bank stock because only the market section was loaded |
@@ -1085,17 +1086,40 @@ import test passes on the fixed Docker path line, so it cannot show the server v
 
 ## 5. Needs your review
 
+### Decided 2026-10-26
+
+These decisions replace any working assumption or recommendation for the same item elsewhere in this document.
+
+- **A69** (DSH-Q1: the "what is this character doing" line; decided by the plan): Each part of the console writes its own activity line, and the card shows the most important one.
+- **A70** (DSH-Q2: two Hunt pause reasons at once; decided by the plan): The Hunt pause reason that needs you goes on top.
+- **A71** (DSH-Q3: group walk progress on the cards; decided by the plan): Each member's card shows its own group walk progress.
+- **A73** (DSH-Q6: debug data in every report; decided by the plan): Characters send debug data only while someone has a diagnostics view open.
+- **A74** (DSH-Q7: game logs after a restart; decided by the plan): Game logs stay in memory only, labelled that way in the panel.
+- **A80** (DSH-Q13: gathering rows on the merchant card; decided by the plan): The merchant card shows the gathering the console actually plans.
+- **A82** (DSH-Q16: the listing price in the want-to-buy dialog; decided by the plan): The want-to-buy dialog opens with the listing's price filled in, still editable.
+- **A83** (DSH-Q17: where each character's NPC sale rules show; decided by the plan): The merchant card lists each character's NPC sale rules with the owner's name.
+- **A84** (DSH-Q20: offline gold in the account total; decided by the plan): The gold total always includes offline characters' gold, marked as such.
+- **A85** (DSH-Q22: the Tracktrix estimate; decided by the plan): A Tracktrix total the console adds up itself is marked as calculated.
+- **A87** (DSH-Q24: the Kills filter in the game log; decided by the plan): The Kills filter starts off in a new browser, and each browser keeps your choice.
+- **A88** (DSH-Q25: the connection notice; decided by the plan): The header shows Live or Reconnecting, and unused screens go.
+- **B11** (DSH-Q14: Load now during a Cave run; decided by the plan): Load now during a Cave run shows a warning that you can override (rule R3).
+- **B12** (DSH-Q18: one live map per character (fork); decided by the plan): One live map moves between the card and the name strip.
+- **C11** (DSH-Q5: the dashboard's backup refresh; decided by the plan): The backup refresh sends only the fields the dashboard, PWA and Android app use, after a test run confirms what the PWA reads.
+- **C12** (DSH-Q19: when a metrics day starts; decided by the plan): Kills, DPS and loot all use your browser's midnight, labelled.
+- **C13** (DSH-Q21: the kill total; decided by the plan): The kill total is a lifetime count that only a reset clears.
+
+
 Questions only you can answer: what the dashboard should show and how the party should behave.
 Each states **Today** (the current console, and the fork where it differs), **Options** with their
 negatives, and a **Recommendation** that says why it beats the other options and what it costs. The
-coordinator copies these into `REVIEW-QUEUE.md`. Any test a question proposes follows AGENTS.md:
+coordinator copies these into the review queue. Any test a question proposes follows AGENTS.md:
 an E2E first, and an isolated test only where an E2E cannot reach the case, with its failure list
 written before the code.
 
 ### Status text
 
 **Q1. Who writes the "what is this character doing" text?**
-- **Today:** the current console has no such line on the card. Each owner writes free text next to
+- **Today:** The current console has no such line on the card. Each owner writes free text next to
   its own state (49 `hunt.message` writes, 2.1 item 1). The Farming settings Hunt line prints the
   stage and the message (farming-mode-control.tsx:256-260). The merchant job label keeps its own
   routine table (merchant-job-label.ts:4-25). Convoy progress reaches the player only as log lines

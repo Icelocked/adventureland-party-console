@@ -460,8 +460,18 @@ checks the return-mode skill veto.
 
 ## 5. Needs your review
 
+### Decided 2026-10-26
+
+These decisions replace any working assumption or recommendation for the same item elsewhere in this document.
+
+- **A7** (TRN-Q1: priest heal or attack when someone is hurt; decided by your answer): The priest heals first when anyone is below a per-character setting, default 80% HP.
+- **A8** (TRN-Q2: a priest MP floor for basic attacks; decided by your answer): The priest keeps basic attacking while its MP still covers the heals the party needs, worked out from heal costs in game data.
+- **A36** (TRN-Q3: Stomp, Dash, Energize, Curse and partyheal MP rules; decided by the plan): These skills move into the main skill system and share its MP reserve; the test checks that each class still casts them and keeps its reserve, with no cast-rate pass mark (B13).
+- **A37** (TRN-Q4: Agitate; decided by the plan): Nothing casts Agitate, as today.
+
+
 - **TRN-Q1. Who wins the attack slot when a member is hurt?**
-  **Today:** the current console means to give the slot to a heal when any member is under
+  **Today:** The current console means to give the slot to a heal when any member is under
   90% live HP (`basicAttackReserved`, shared.js:17694-17703), but the check runs 2 ms
   before `can_heal` can be true, so the basic attack wins (bug 3a). On 21b8362d the heal
   wins whenever an injured member is in heal range (648b3be0).

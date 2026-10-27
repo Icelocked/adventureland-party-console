@@ -1,6 +1,6 @@
 # 09. Merchant realm and gear
 
-Checked against the current console `refs/review/ryan-1.5` (b9b5c91e) in (local checkout). Every file:line is on that ref unless it says "fork HEAD" (af92de45). The fork's live tip 21b8362d changes no code in this part: `git diff --stat af92de45 21b8362d` in pm-worktrees/pta-pull lists 17 files, all escape, pull, heal, October event and test code (characters/shared.js hunks at 68 and 18435-18962).
+Checked against the current console `refs/review/ryan-1.5` (b9b5c91e) in (local checkout). Every file:line is on that ref unless it says "fork HEAD" (af92de45). The fork's live tip 21b8362d changes no code in this part: `git diff --stat af92de45 21b8362d` in (local checkout) lists 17 files, all escape, pull, heal, October event and test code (characters/shared.js hunks at 68 and 18435-18962).
 
 Short paths: bare `x.ts:N` paths are under runtime/coordinator/. `roster/` is runtime/roster/, `steam/` is runtime/steam/, `tools/steam/` is tools/steam/. Game server lines (server.js, server_functions.js, js/) are in the local clone (local checkout) (kaansoral/adventureland_mongodb 43b2c8fc), under node/ unless they start with js/.
 
@@ -446,7 +446,7 @@ Kind: bug. Origin: the current console. Confidence: confirmed in code.
 
 1. switchRealm checks only job id, reason in realmJobs and the caller (merchant-realms.ts:24-44)
 2. it accepts any resolvable realm, PVP included (merchant-realms.ts:45-47); only the giveaway executor refuses PVP itself (shared.js:8728)
-3. the current console has no realm hop blacklist; the fork's covers boss and event chase only (fork HEAD application.ts:1236; navigation/realm-hop-blacklist.ts:3-14)
+3. The current console has no realm hop blacklist; the fork had one for boss chase only (af92de45 application.ts:1236; navigation/realm-hop-blacklist.ts:3-14), and 972c9fce drops both
 4. job selection has no realm term (priority.ts:85-107), so queue order decides the hops
 
 ### Ledger 1: Ponty watch hopped the merchant between US II and EU II
@@ -605,7 +605,7 @@ What the fork (af92de45) adds or changes in this part. Fork code is not in the c
 | pontySecondhands pacer, 1.5 s between secondhands calls, and pontyStock read once per realm and after each buy | c3a8a57d | ledger 12 limitdc; also paces the 10 s background refresh | fork HEAD shared.js:9215-9230 and merchantPontyBuy |
 | restoreGatheringHandsForJob in gatheringCommandHandoff | 0ce1071a | ledger 6 rod left in hand; works around current 9994-10008 | fork HEAD shared.js:10688-10715 |
 | move budget: 40 moves per 4 s, defer while character.cc >= 150 | not traced | move bursts against the 200 per 4 s limit; moves only. Its comment prices a move at 2.5 (fork HEAD move-budget.ts:1-3); the clone charges 1.5, so the cap is 60 of 200 | fork HEAD runtime/characters/move-budget.ts:5, 20-26 |
-| realm hop blacklist for boss and event chase | not traced | automatic hops to realms the user dislikes; merchant job hops are not covered | fork HEAD runtime/coordinator/navigation/realm-hop-blacklist.ts:3-14, application.ts:1236 |
+| boss chase and its realm hop blacklist | not traced | the fork drops both in 972c9fce | fork af92de45 runtime/coordinator/navigation/realm-hop-blacklist.ts:3-14, application.ts:1236 |
 
 ## 4. Tests today
 
@@ -648,7 +648,7 @@ Behaviours with no mapped test (2): MRG-004, MRG-025.
 
 ## 5. Needs your review
 
-Each question gives Today, Options and a Recommendation. The coordinator copies them into REVIEW-QUEUE.md.
+Each question gives Today, Options and a Recommendation. The coordinator copies them into the review queue.
 
 ### Q1. When a job interrupts gathering, what must happen to the merchant's hands?
 
@@ -681,7 +681,7 @@ costs one failed attempt a minute while the merchant idles.
 
 **Changed:** the earlier recommendation capped the deferral at 3 failed restores; the upstream
 priorities (00-overview) rule out hard-coded retry counts, so a failure no longer holds the command
-and the restore moves to the backoff (REVIEW-QUEUE A15).
+and the restore moves to the backoff (the review queue A15).
 
 ### Q2. Should the merchant leave the party's realm for commerce?
 
@@ -690,9 +690,9 @@ separate `changeRealm` copies (characters/shared.js:8593-8598, 8711-8716, 8827-8
 8971-8976); Ponty and ALData buy hop back at the end. The job realm route accepts any resolvable
 realm for a job whose reason is in its list (runtime/coordinator/http/merchant-realms.ts:39-68);
 only the giveaway step refuses PVP (characters/shared.js:8728). The current console has no realm
-hop blacklist; the fork's covers boss and event chase only (fork HEAD
-runtime/coordinator/navigation/realm-hop-blacklist.ts:3-14). Job selection ignores realm
-(runtime/coordinator/merchant/priority.ts:85-107). The fork's watch orders buy on the home realm
+hop blacklist; the fork's covered boss chase only (fork af92de45
+runtime/coordinator/navigation/realm-hop-blacklist.ts:3-14), and 972c9fce drops both. Job
+selection ignores realm (runtime/coordinator/merchant/priority.ts:85-107). The fork's watch orders buy on the home realm
 only (fork HEAD runtime/coordinator/commerce/npc-shop.ts:357-380, df1858c6).
 
 **Options:**
@@ -740,7 +740,7 @@ is whole again and longer while a login keeps failing, and the rollback must als
 
 **Changed:** the earlier recommendation gave a failed rollback login no next step, which leaves the
 party split until the user acts; the upstream priorities (00-overview) rule that out, so the
-rollback now retries on the backoff (REVIEW-QUEUE A59).
+rollback now retries on the backoff (the review queue A59).
 
 ### Q4. When the call budget is tight, which calls wait?
 

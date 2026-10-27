@@ -454,6 +454,17 @@ model). The section 5 recommendations name the E2E each one needs.
 
 ## 5. Needs your review
 
+### Decided 2026-10-26
+
+These decisions replace any working assumption or recommendation for the same item elsewhere in this document.
+
+- **A18** (SET-Q1: a settings save with one bad field; decided by the plan): A save with one bad field changes nothing and names the bad field.
+- **A63** (SET-Q2: a log of settings changes; decided by the plan): Every settings change writes a log line with the old value, the new value and where it came from.
+- **A64** (SET-Q3: the dashboard while settings load; decided by the plan): Controls show loading and stay locked until settings arrive.
+- **A65** (SET-Q5: importing settings; decided by the plan): Import refuses an out-of-range value and names the field.
+- **B8** (SET-Q4: settings changed while paused (fork); decided by the plan): Settings you change while paused stay when you press Play (B9).
+
+
 1. **SET-Q1. Partial writes (SET-W2).**
    **Today:** `formation` and `config` write each field as it passes its check and return
    400 or 409 at the first bad one, keeping the earlier writes in memory; the next save from

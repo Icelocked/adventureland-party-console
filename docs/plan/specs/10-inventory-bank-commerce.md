@@ -1,6 +1,6 @@
 # 10. Inventory, bank and commerce
 
-Checked against the current console `refs/review/ryan-1.5` (b9b5c91e) in (local checkout). Every file:line is on that ref unless it says "fork HEAD" (af92de45). The fork's live tip 21b8362d changes no code in this part: `git diff --stat af92de45 21b8362d` in pm-worktrees/pta-pull lists 17 files, all escape, pull, heal, October event and test code (characters/shared.js hunks at 68 and 18435-18962).
+Checked against the current console `refs/review/ryan-1.5` (b9b5c91e) in (local checkout). Every file:line is on that ref unless it says "fork HEAD" (af92de45). The fork's live tip 21b8362d changes no code in this part: `git diff --stat af92de45 21b8362d` in (local checkout) lists 17 files, all escape, pull, heal, October event and test code (characters/shared.js hunks at 68 and 18435-18962).
 
 This spec maps everything the console does with items: item identity and the item catalog,
 inventory marks and automatic marks, the bank and bank queues, BankBoi storage, stocking, upgrades,
@@ -2206,8 +2206,17 @@ Behaviours with no mapped test (19): INV-001, INV-008, INV-018, INV-021, INV-024
 
 ## 5. Needs your review
 
+### Decided 2026-10-26
+
+These decisions replace any working assumption or recommendation for the same item elsewhere in this document.
+
+- **A61** (INV-Q3: a want-to-buy order whose slot empties without a receipt; decided by the plan): When a buy order's slot empties without a receipt, the merchant counts the items it actually received and places a new order for the rest, with a notice (rule R2).
+- **A62** (INV-Q4: mail postage; decided by the plan): The merchant takes mail postage from the bank first and fails clearly when the bank is short.
+- **C9** (INV-Q2: one gold reserve for every purchase; decided by the plan): Every automatic purchase respects one gold reserve, default 0, and short gold pauses the order or holds the job as A89 decided.
+
+
 Each question gives Today, Options with their costs, and a Recommendation with why it beats the
-other options and what it costs. The coordinator copies them into REVIEW-QUEUE.md.
+other options and what it costs. The coordinator copies them into the review queue.
 
 ### Q1. How many stand slots should the console use?
 
@@ -2235,7 +2244,7 @@ growing between two reports.
 
 ### Q2. Should the gold reserve bind every purchase?
 
-**Today:** the current bid jobs (stand bids, ALData bids, Ponty bids) spend merchant and bank gold with
+**Today:** The current bid jobs (stand bids, ALData bids, Ponty bids) spend merchant and bank gold with
 no reserve (runtime/coordinator/commerce/bids.ts:93-103, 133-156, 185-202). The fork adds a gold
 reserve that only its own watch and buy-now orders respect (fork HEAD
 runtime/coordinator/commerce/npc-shop.ts:131-142), so a bid purchase can spend below the reserve.
@@ -2353,7 +2362,7 @@ Not yet verified:
 | Appendix B s4: completion-retries matches the exact 'item or scroll unavailable' sentence and treats other lucky texts as capacity | CONFIRMED | merchant/completion-retries.ts:67-73, 136; lucky-upgrade.ts:182 |
 | Appendix B s4: the character already sends a typed code; the coordinator ignores it and parses English text | PARTLY | the code exists on the character's Error (lucky-upgrade.ts:67) and is used there (lucky-upgrade.ts:135, shared.js:3951); no errorCode field reaches the coordinator in the merchant completion path found by git grep, so the coordinator cannot read it (inference on the report shape) |
 | Appendix B http rows: bankboi-storage second snapshot writer; in-memory dedupe of 32 receipts; 10 s error retry | CONFIRMED | http/bankboi-storage.ts:45, 47-51, 108, 117-120 |
-| Appendix B http rows: manual-market-orders freshness and check flag (eb9acad0) | CONFIRMED | the current http/manual-market-orders.ts:50-57; fork HEAD adds allowStale through body.check === true (git diff) |
+| Appendix B http rows: manual-market-orders freshness and check flag (eb9acad0) | CONFIRMED | The current http/manual-market-orders.ts:50-57; fork HEAD adds allowStale through body.check === true (git diff) |
 | Appendix B http rows: marketplace-location 25 px move threshold and one retry per seller | CONFIRMED | http/marketplace-location.ts:74-76, 116-119 |
 | Appendix B http rows: restock compatibility comment, policy includes elixir | CONFIRMED | http/restock.ts:13, 29-42 |
 | Brief: production.ts prune is part of ledger 15 (upstream #59) | CONFIRMED | production.ts:65-72 caps completed receipts at 2048 since cb8881f6; unfinished attempts are never pruned (:66) |
