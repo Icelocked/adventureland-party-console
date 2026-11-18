@@ -26,6 +26,13 @@ scenarioTable('the queue client sends reports and long polls at once, backs off 
  f.readiness({target:'A',selection:'s',at:1001,ready:true,confirmation:'c1'});f.listeners.get('entities')?.({});await update();await settle();assert.equal(f.reports().length,2);
  f.readiness({target:'A',selection:'s',at:1001,ready:false});f.listeners.get('entities')?.({});await update();await settle();assert.equal(f.reports().length,3);
  f.client.stop();assert.equal(f.listeners.size,0);})],
+ // Observed on the live console 2026-11-18: re-ticking on the reply sent one report per round trip.
+ ['a change during an open report sends with the next update, not on the reply', fixture=>fixture(async f=>{
+ f.client.tick();assert.equal(f.reports().length,1);
+ f.readiness({target:'A',selection:'s',at:1000,ready:true,confirmation:'c1'});
+ f.listeners.get('player')?.({});await update();await settle();assert.equal(f.reports().length,1,'the open report holds the change');
+ f.reports()[0].resolve(f.response());await settle();assert.equal(f.reports().length,1,'the reply sends nothing');
+ await update();await settle();assert.equal(f.reports().length,2,'the next update sends the change');})],
 ]);
 test('handoff timing preserves local times, ignores old-target results, and stays bounded',()=>{
  let now=100;const entries=[],t=createHandoffTiming(entries,()=>true,()=>now);

@@ -163,7 +163,11 @@ export function installQueueClient(root:any, shared:any, scope:ScopeHandle, noti
       if(!active)return;
       timing.response({sequence,roundTripMs:Math.max(0,performance.now()-started),coordinator:data.combatReportReceipt});return channelReply(data);
     }).catch(()=>{signature='';retryAt=Date.now()+interval();})
-      .finally(()=>{busy=false;if(dirty)tick();});
+      // A change that came while the report was out sends with the next game update (run.ts
+      // `afterUpdate`), the cadence the position wake already keeps. Re-ticking on the reply sent one
+      // report per round trip while a character moved: about 22 a second per character, 66 KB each,
+      // on the live console (2026-11-18).
+      .finally(()=>{busy=false;if(dirty)scope.afterUpdate(()=>{if(active&&dirty)tick();});});
   }
   const socket=host.socket;let wakeQueued=false;
   function nativePositionChanged(){

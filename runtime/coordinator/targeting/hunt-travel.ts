@@ -7,6 +7,7 @@ import { huntDefense, outboundHunt } from '../../movement/api/coordinator.ts';
 import type { WalkView } from '../../protocol/records.ts';
 import { recoverLostTargets } from './unseen.ts';
 import { fresh } from '../../protocol/reports.ts';
+import { LIST_BOUNDS } from '../../characters/targeting/rules.ts';
 
 export function stopCandidates(members: Member[], settings: PassiveTravelSettings | undefined, now: number): Fight[] {
   const fresh=observations(members,now).filter(m=>sampled(m,now)), names=members.map(m=>m.name);
@@ -61,8 +62,11 @@ function retainedEncounters(state: TravelState): Fight[] {
 }
 export function reconcileRetirements(state: TravelState, members: Member[], now: number): void {
   const fresh=observations(members,now);
-  state.retired=[...new Set([...(state.retired||[]),...deaths(fresh)])];
-  const retained=retainedEncounters(state).filter(t=>!state.retired!.includes(passingIdentity(t)));
+  // The walk keeps the newest deaths up to the queue's tombstone bound, the list they come from. The
+  // union alone kept every death of the walk, and the list rides on every status reply.
+  state.retired=[...new Set([...(state.retired||[]),...deaths(fresh)])].slice(-LIST_BOUNDS.tombstones);
+  const retired=new Set(state.retired);
+  const retained=retainedEncounters(state).filter(t=>!retired.has(passingIdentity(t)));
   const recovery=recoverLostTargets(retained,members,state.searches,now);
   state.searches=recovery.searches;
   const lost=fresh.flatMap(m=>m.status?.groupedCombat?.state?.lostTargets||[]);
