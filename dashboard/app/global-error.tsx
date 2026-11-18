@@ -1,5 +1,6 @@
 'use client';
 import { useDashboardRecovery } from '@/hooks/use-dashboard-recovery';
+import { PROBE_TIMEOUT_MS } from '@/lib/dashboard-recovery';
 
 export default function GlobalError({
   error,
@@ -7,7 +8,7 @@ export default function GlobalError({
   error: Error;
   reset: () => void;
 }) {
-  const recovery = useDashboardRecovery(true);
+  const recovery = useDashboardRecovery();
   if (process.env.NODE_ENV === 'development')
     console.error('Party Console render failed', error);
   return (
@@ -25,6 +26,7 @@ export default function GlobalError({
           <p>
             Your characters are managed separately. The dashboard will reconnect automatically when it is ready.
           </p>
+          {recovery.timedOut && <p>The last check timed out after {PROBE_TIMEOUT_MS / 1000}s.</p>}
           {recovery.blocked && <p>The server is ready, but automatic reload is paused to prevent a repeated error loop. You can reload now.</p>}
           <p role="status">{recovery.checking ? 'Checking dashboard…' : `Checking again in ${recovery.seconds}s…`}</p>
           <button
