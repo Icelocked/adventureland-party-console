@@ -49,7 +49,8 @@ export type OverkillSkip = ReturnType<typeof createOverkillSkip>;
 export interface RetirePorts {
   // `fail` sets the mark and answers its expiry on the character's clock; `any` answers whether a
   // mark that has not expired is set.
-  marks: { fail(id: string): number | void; clear(): void; any(): boolean };
+  // `marked` answers whether the target's mark has not expired.
+  marks: { fail(id: string): number | void; clear(): void; any(): boolean; marked(id: string): boolean };
   // The role runner's selection and its drop (runner.ts `dropTarget`, beside `invalidateTarget`).
   selected(): string | null;
   drop(id: string): void;
@@ -99,12 +100,13 @@ export function createRetire(ports: RetirePorts) {
         unreachableLock = { id, map: lock.map, in: lock.in, at: Date.now(), ...(typeof until === 'number' ? { until } : {}) };
     },
     report,
-    // Whether this character's notice on its lock target `id` still waits for the queue's retire
-    // inside the notice's mark. The lock stays `id` for one queue round trip after the notice, so
-    // the approach reads this to start no new approach to it in that window.
+    // Whether the approach to `id` must not start: this character's notice on its lock target still
+    // waits for the queue's retire inside the notice's mark, or the target's mark is live. The lock
+    // stays `id` for one queue round trip after the notice and then goes null, while the member's
+    // cached lock target stays `id` one update longer; the live mark covers that update.
     retiring(id: string): boolean {
       const held = report()[0];
-      return !!held && held.id === String(id) && (held.until === undefined || Date.now() < held.until);
+      return (!!held && held.id === String(id) && (held.until === undefined || Date.now() < held.until)) || ports.marks.marked(String(id));
     },
     pass(): void {
       if (!ports.marks.any()) { fought = null; return; }

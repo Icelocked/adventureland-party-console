@@ -115,10 +115,24 @@ scenarioTable("the targeting owner's ring, overkill skip, retire and scope",targ
     w.retire.notice({character:'W',target:'ghost1',why:'approach'});
     assert.deepEqual(w.retire.report().map(e=>[e.id,e.map,e.in,typeof e.at]),[['ghost1','main','main','number']]);
     assert.equal(w.retire.retiring('ghost1'),true,'the approach holds off the lock until the queue retires it');
-    assert.equal(w.retire.retiring('ghost2'),false);
+    assert.equal(w.retire.retiring('ghost2'),true,'a marked target that is not the lock holds too');
+    assert.equal(w.retire.retiring('ghost9'),false);
     w.lock={id:'ghost3',map:'main',in:'main'};
     assert.deepEqual(w.retire.report(),[],'the report ends once the queue holds another lock');
-    assert.equal(w.retire.retiring('ghost1'),false);
+    assert.equal(w.retire.retiring('ghost1'),true,'the live mark still holds the approach');
+    w.marks.ghost1=Date.now()-1;
+    assert.equal(w.retire.retiring('ghost1'),false,'the approach starts again once the mark lapses');
+  })],
+  // e2e/live-targeting-hooks.spec.ts TG13: the queue's retire lands and the lock goes null, while
+  // the member's cached lock target is still the retired one for one more game update. The
+  // approach reads retiring in that gap and must not start.
+  ['a target whose mark is live stays retiring after the lock goes null',w=>w.as('W',()=>{
+    w.lock={id:'ghost1',map:'main',in:'main'};w.leader=true;
+    w.retire.notice({character:'W',target:'ghost1',why:'approach'});
+    w.lock=null;
+    assert.deepEqual(w.retire.report(),[],'the report ends with the lock');
+    assert.equal(w.retire.retiring('ghost1'),true,'the mark holds the approach in the gap');
+    assert.equal(w.retire.retiring('ghost2'),false,'an unmarked target is free');
   })],
   // (3.3; v1.5.0 shared.js:14724-14727): in death recovery every target is refused, a
   // party attacker included, unless the verdict is `finish` and the target is on the finishing

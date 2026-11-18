@@ -39721,12 +39721,13 @@ ${hook}`, was = errors.get(key3);
           unreachableLock = { id: id2, map: lock.map, in: lock.in, at: Date.now(), ...typeof until === "number" ? { until } : {} };
       },
       report,
-      // Whether this character's notice on its lock target `id` still waits for the queue's retire
-      // inside the notice's mark. The lock stays `id` for one queue round trip after the notice, so
-      // the approach reads this to start no new approach to it in that window.
+      // Whether the approach to `id` must not start: this character's notice on its lock target still
+      // waits for the queue's retire inside the notice's mark, or the target's mark is live. The lock
+      // stays `id` for one queue round trip after the notice and then goes null, while the member's
+      // cached lock target stays `id` one update longer; the live mark covers that update.
       retiring(id2) {
         const held = report()[0];
-        return !!held && held.id === String(id2) && (held.until === void 0 || Date.now() < held.until);
+        return !!held && held.id === String(id2) && (held.until === void 0 || Date.now() < held.until) || ports.marks.marked(String(id2));
       },
       pass() {
         if (!ports.marks.any()) {
@@ -40625,6 +40626,7 @@ ${hook}`, was = errors.get(key3);
     t.clearSetAside = () => {
       s.setAside = {};
     };
+    t.isSetAside = (id2) => s.setAside[id2] > Date.now();
     t.anySetAside = () => {
       const now = Date.now();
       return Object.values(s.setAside).some((until) => until > now);
@@ -40702,7 +40704,7 @@ ${hook}`, was = errors.get(key3);
       }
     });
     const retire = createRetire({
-      marks: { fail: module.setAsideFor, clear: module.clearSetAside, any: module.anySetAside },
+      marks: { fail: module.setAsideFor, clear: module.clearSetAside, any: module.anySetAside, marked: module.isSetAside },
       selected: ports.selected,
       drop: ports.drop,
       fighting: () => ports.hooks.survival.fighting(character.name),

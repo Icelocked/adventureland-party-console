@@ -21,7 +21,7 @@ function targetingWorld() {
   w.refused = refusalRecorder(e => w.ring.record(e));
   w.retire = createRetire({
     marks: { fail: id => { w.marks[id] = Date.now() + 10000; }, clear: () => { for (const k of Object.keys(w.marks)) delete w.marks[k]; },
-      any: () => Object.keys(w.marks).length > 0 },
+      any: () => Object.keys(w.marks).length > 0, marked: id => w.marks[id] > Date.now() },
     selected: () => w.selected, drop: id => { w.dropped.push(id); w.selected = null; }, fighting: () => (w.fightAsks = (w.fightAsks || 0) + 1, w.fighting),
     record: e => w.ring.record(e), leader: () => w.leader, lock: () => w.lock,
   });

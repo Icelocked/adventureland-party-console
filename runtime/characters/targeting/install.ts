@@ -188,6 +188,7 @@ export function create(p: TargetingPorts): TargetingMap {
   // queue's next reset; the retire marks it, and A23, A28 and the finders read it.
   t.setAsideFor = (id: string) => (s.setAside[id] = Date.now() + pick('setAsideMs'));
   t.clearSetAside = () => { s.setAside = {}; };
+  t.isSetAside = (id: string) => s.setAside[id] > Date.now();
   t.anySetAside = () => { const now = Date.now(); return Object.values(s.setAside).some(until => until > now); };
   // Table A's `reflect-lists` row, which applies targeting's delivered settings: a reply that carries
   // either reflect list replaces both, and each hidden pick it carries replaces the held one.
@@ -301,7 +302,7 @@ export function installTargeting(realm: object, ports: RunnerTargetingPorts): Ta
   const answers = createAnswers({ ...ports, reflect, record: ring.record });
   const skip = createOverkillSkip({ incoming: id => ports.hooks.turns.incoming(id, character.name), record: ring.record,
     live: id => { const entity = get_entity(id); return !!entity && !entity.dead; } });
-  const retire = createRetire({ marks: { fail: module.setAsideFor, clear: module.clearSetAside, any: module.anySetAside }, selected: ports.selected, drop: ports.drop,
+  const retire = createRetire({ marks: { fail: module.setAsideFor, clear: module.clearSetAside, any: module.anySetAside, marked: module.isSetAside }, selected: ports.selected, drop: ports.drop,
     fighting: () => ports.hooks.survival.fighting(character.name), record: ring.record,
     leader: () => !!module.isLeader(), lock: () => lockTarget(root) });
   module.adopt({ changeTarget: answers.changeTarget,
