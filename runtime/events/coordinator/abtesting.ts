@@ -1,6 +1,9 @@
+// The A/B strategy on the coordinator. Moved from
+// runtime/coordinator/events/abtesting.ts and abtesting-update.ts.
+import { partyHooks } from '../../hooks/index.ts';
+import { ageOf } from '../../protocol/reports.ts';
 export interface ABStrategy {
   eventId: string;
-  firstSeenAt: number;
   expectedNames: string[];
   teams: Record<string, string>;
   mode: "pending" | "uniform" | "balanced" | "split";
@@ -19,8 +22,6 @@ export interface ABReport {
   eventTeam?: string;
 }
 
-const teamDiscoveryMs = 20_000;
-
 function inEvent(status: ABReport | undefined): status is ABReport {
   return (
     !!status &&
@@ -30,10 +31,9 @@ function inEvent(status: ABReport | undefined): status is ABReport {
   );
 }
 
-function pending(eventId: string, participants: readonly string[], now: number): ABStrategy {
+function pending(eventId: string, participants: readonly string[]): ABStrategy {
   return {
     eventId,
-    firstSeenAt: now,
     expectedNames: participants.slice().sort(),
     teams: {},
     mode: "pending",
@@ -85,17 +85,62 @@ export function resolveABStrategy(
   if (!reporters.length) return previous;
   const eventId = reporters.map((status) => status.activeEventId).find(Boolean) || "abtesting-live";
   const strategy =
-    previous?.eventId === eventId ? structuredClone(previous) : pending(eventId, participants, now);
+    previous?.eventId === eventId ? structuredClone(previous) : pending(eventId, participants);
   strategy.expectedNames = [...new Set(strategy.expectedNames.concat(participants))].sort();
   for (const status of reporters)
     if (status.eventTeam) strategy.teams[status.name] = status.eventTeam;
-  const known = strategy.expectedNames.filter((name) => strategy.teams[name]);
-  if (
-    known.length === strategy.expectedNames.length ||
-    now - strategy.firstSeenAt >= teamDiscoveryMs
-  ) {
+  // The strategy decides once every expected participant (each active, opted-in member) has
+  // reported its team, which the game sets at the join; b9b5c91e held `pending` until then
+  // (abtesting.ts:92-98). A member that leaves the opted-in set drops out of `participants`.
+  if (participants.every((name) => !!strategy.teams[name])) {
     resolveTeams(strategy, groupTeams(strategy));
     if (!strategy.resolvedAt) strategy.resolvedAt = now;
   }
   return strategy;
+}
+
+interface Status extends ABReport {
+  seenAt: number;
+}
+interface StrategyState {
+  statuses: Record<string, Status>;
+  abtestingStrategy: ABStrategy | null;
+  merchantCharacter: string | null;
+}
+
+export function activeCoordinatorNames(
+  statuses: Record<string, { name: string; seenAt: number }>,
+  now: number,
+): string[] {
+  return Object.values(statuses)
+    .filter((entry) => entry.seenAt >= now - ageOf('presence'))
+    .map((entry) => entry.name);
+}
+
+/** Persist only changes in the resolved strategy, retaining the existing serialized equality check. */
+export function updateCoordinatorABStrategy(
+  state: StrategyState,
+  ports: {
+    activeNames: () => string[];
+    enabled: (name: string, event: string) => boolean;
+    now: () => number;
+    persist: () => void;
+  },
+): ABStrategy | null {
+  const previousSerialized = JSON.stringify(state.abtestingStrategy);
+  const participants = ports
+    .activeNames()
+    .filter((name) => ports.enabled(name, "abtesting"));
+  state.abtestingStrategy = resolveABStrategy(
+    state.abtestingStrategy,
+    participants,
+    state.statuses,
+    ports.now(),
+  );
+  if (JSON.stringify(state.abtestingStrategy) !== previousSerialized) {
+    ports.persist();
+    // `abtesting.strategy`: the strategy and its teams, once per change.
+    partyHooks().notify('abtesting.strategy', { strategy: state.abtestingStrategy, by: 'core:events' });
+  }
+  return state.abtestingStrategy;
 }
