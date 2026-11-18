@@ -59,4 +59,21 @@ scenarioTable('the game party asks once per change of the pair, for the leader, 
   r.state.party = []; await r.m.reconcile();
   assert.deepEqual(r.calls, ['leave'], 'with no party it does nothing');
 }, { follow: false }],
+['a follower that accepted an invite does not also ask to join the same pair', async r => {
+  r.hold(); await r.m.reconcile(); r.send(); r.m.acceptInvite('W');
+  assert.deepEqual(r.calls, ['accept W'], 'the follower accepts the invite');
+  await r.m.reconcile();
+  assert.deepEqual(r.calls, ['accept W'], 'the accept in flight holds the request, so the pair has one path into the party');
+}],
+['the leader that invited a pair does not accept its request, and one that accepted a request does not invite', async r => {
+  await r.m.reconcile();
+  assert.deepEqual(r.calls, ['invite P'], 'the leader invites');
+  r.m.acceptRequest('P');
+  assert.deepEqual(r.calls, ['invite P'], 'a request crossing the invite is left for the accept of the invite');
+  r.state.party = ['X', 'W']; await r.m.reconcile(); r.state.party = ['W'];
+  r.m.acceptRequest('P');
+  assert.deepEqual(r.calls, ['invite P', 'leave', 'raccept P'], 'a changed pair accepts a request');
+  await r.m.reconcile();
+  assert.equal(r.calls.length, 3, 'the accept in flight holds an invite for the same pair');
+}, { leader: 'W', me: 'W' }],
 ]);

@@ -51,13 +51,22 @@ export function installPartyMembership(ports: MembershipPorts) {
   const game = globalThis as unknown as PartyGame;
   let busy = false, acted: string | null = null, actedOn: GameSocket | null = null;
   let pending: { kind: 'accept' | 'raccept'; name: string } | null = null;
+  // The pair each side's last party call answered or started, so a pair gets one path into the
+  // party. The leader's invite and the follower's request cross whenever both sides see the same
+  // party_update, and the game keeps both until one is accepted. The accept that comes second
+  // finds nothing to accept: the server charges it nothing, but the call budget's ledger books it
+  // at the price of an accept. The follower's accept of an invite always goes. The leader skips
+  // a request's accept for a pair it invited, and invites no pair it already accepted.
+  let invited: string | null = null, accepted: string | null = null, joined: string | null = null;
   const wanted = (kind: 'accept' | 'raccept', name: string) => kind === 'accept'
     ? follows && name === partyLeader && ports.partyList()[0] !== name
     : partyLeader === ports.name() && members.includes(name) && !ports.partyList().includes(name);
   function accept(kind: 'accept' | 'raccept', name: string): void {
-    if (!wanted(kind, name)) { if (pending?.kind === kind && pending.name === name) pending = null; return; }
+    const here = pair(ports.partyList());
+    if (!wanted(kind, name) || (kind === 'raccept' && invited === here)) { if (pending?.kind === kind && pending.name === name) pending = null; return; }
     if (registry().calls.band(party(kind, name)) !== 'send') { pending = { kind, name }; return; }
     pending = null;
+    if (kind === 'raccept') accepted = here; else joined = here;
     (kind === 'accept' ? game.accept_party_invite(name) : game.accept_party_request(name)).catch((error: unknown) => {
       const why = reason(error);
       if (why !== "already_in_party" && why !== "not_found") ports.log((kind === 'accept' ? "Party invite failed: " : "Party request failed: ") + why);
@@ -77,7 +86,7 @@ export function installPartyMembership(ports: MembershipPorts) {
     // The `party_update` wake reconciles, which decides and calls, so it is the groups and tasks owner's `act` registration.
     // The game's invite and request hooks are window functions the
     // scope cannot register; their accepts ask the band, whose held row answers `not-now`.
-    if (socket !== actedOn) { acted = null; actedOn = socket; scope('01', 'act').on(socket as never, 'party_update', () => { void reconcile(); }); }
+    if (socket !== actedOn) { acted = invited = accepted = joined = null; actedOn = socket; scope('01', 'act').on(socket as never, 'party_update', () => { void reconcile(); }); }
     busy = true;
     let attempted = "read party list", now: string | null = null;
     const hooks = registry();
@@ -98,8 +107,9 @@ export function installPartyMembership(ports: MembershipPorts) {
         }
         const missing = members.find((name) => name !== me && !current.includes(name));
         if (!missing) { acted = now; return; }
+        if (accepted === now) { acted = now; return; }
         attempted = "leader inviting missing member " + missing;
-        if (send('invite', missing)) await game.send_party_invite(missing);
+        if (send('invite', missing)) { invited = now; await game.send_party_invite(missing); }
         return;
       }
       if (!follows) {
@@ -113,6 +123,7 @@ export function installPartyMembership(ports: MembershipPorts) {
         attempted = "follower leaving party led by " + currentLeader + " before joining " + leader;
         if (send('leave')) await game.leave_party();
       } else {
+        if (joined === now) { acted = now; return; }
         attempted = "follower requesting to join " + leader;
         if (send('request', leader)) await game.send_party_request(leader);
       }
