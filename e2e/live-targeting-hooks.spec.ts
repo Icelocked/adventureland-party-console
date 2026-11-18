@@ -27,6 +27,12 @@ test('targeting hooks: one fixture add-on registers every hook and event', async
   };
   const own = () => pages[W]!.run('character.target?String(character.target):null') as Promise<string | null>;
   await party(live);
+  // The add-on's candidates answer narrows only while the view holds a party, and the view reads
+  // the game's party list. `party` returns once the coordinator holds the formation, before the
+  // warrior's invite reaches the game: one run sent the invite in the same update as the first
+  // attack on the nearer goo, the answer let that attack through, and the queue kept the engaged fight.
+  for (const page of Object.values(pages))
+    await expect.poll(() => page.run('[...(parent.party_list||[])].sort().join()'), { timeout: 60_000, intervals: [500] }).toBe([P, W].sort().join());
   // The shipped tank-hold add-on answers targeting.aggroOwner, a one-answer hook; switched off in the
   // add-on manager it leaves the hook to the fixture.
   await live.post('/addons', { name: 'tank-hold', enabled: false });
