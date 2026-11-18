@@ -1,4 +1,10 @@
-export const setupClient = String.raw`
+// The setup page's browser script. tools/hosting/page.ts inlines this file's text in the page,
+// after DEFAULT_PUBLIC_PORT from tools/hosting/defaults.ts and the STEAM_PLACEMENTS and
+// STEAM_CLIENTS lists from tools/steam/clients.ts.
+// The page's display picks: how often it asks whether the client connected, how long one ask waits,
+// the countdown before it opens the dashboard, and how many 1 s invitation ticks pass between state
+// reads. HTTPS_CHECK_MS bounds the HTTPS check, and its failure text names it.
+const CONNECTION_POLL_MS=2000,CONNECTION_REQUEST_MS=8000,RETURN_SECONDS=5,INVITE_STATE_EVERY=3,HTTPS_CHECK_MS=15000;
 const el=id=>document.getElementById(id);
 let state={},serverAddress=location.origin,loaderOrigin='',secureOrigin='',forceHttps=false;
 let returnTimer,pollTimer,linkGeneration=0,connectionRequest=null,linkReady=false,countingDown=false;
@@ -8,7 +14,7 @@ el('toggleSession').onclick=()=>sessionVisible(el('session').type==='password');
 async function call(path,body){const r=await fetch('/setup/'+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw Error(data.error||'Setup request failed');return data}
 const action=(id,fn)=>el(id).onclick=async()=>{el(id).disabled=true;el('error').textContent='';try{await fn()}catch(e){el('error').textContent=e.message}finally{el(id).disabled=false}};
 function preferences(){return {placement:el('placement').value,client:el('client').value,https:forceHttps}}
-function validPreferences(p){return p&&['same','remote'].includes(p.placement)&&['windows-steam','linux-steam','windows-browser','linux-browser'].includes(p.client)}
+function validPreferences(p){return p&&STEAM_PLACEMENTS.some(o=>o.value===p.placement)&&STEAM_CLIENTS.some(o=>o.value===p.client)}
 function savePreferences(){if(!validPreferences(preferences()))return;try{localStorage.setItem('party-connection-setup',JSON.stringify(preferences()))}catch{}}
 function restorePreferences(){
  let p={};try{p=JSON.parse(localStorage.getItem('party-connection-setup')||'{}')}catch{}
@@ -31,7 +37,7 @@ function selection(){
   el('trustDownloads').hidden=true;el('prepare').disabled=!state.tls?.ready;
   if(state.secure){secureOrigin=location.origin;loaderOrigin=secureOrigin;el('tlsState').textContent='HTTPS works in this browser. Use the code below.';el('loaderArea').hidden=false}
  }else{
-  loaderOrigin='http://127.0.0.1:'+(state.httpPort||new URL(serverAddress).port||3010);el('loaderArea').hidden=false;
+  loaderOrigin='http://127.0.0.1:'+(state.httpPort||new URL(serverAddress).port||DEFAULT_PUBLIC_PORT);el('loaderArea').hidden=false;
  }
  el('address').textContent=loaderOrigin||serverAddress;
  if(loaderOrigin)void generateLoader().catch(e=>{el('error').textContent=e.message});
@@ -39,18 +45,18 @@ function selection(){
 el('placement').onchange=()=>{forceHttps=false;selection()};el('client').onchange=()=>{forceHttps=false;selection()};
 el('fallback').onclick=()=>{forceHttps=true;selection()};
 function returnToDashboard(){
- if(countingDown)return;countingDown=true;clearTimeout(pollTimer);clearInterval(returnTimer);let seconds=5;el('success').hidden=true;el('error').textContent='';el('linkStatus').style.color='#86efac';
+ if(countingDown)return;countingDown=true;clearTimeout(pollTimer);clearInterval(returnTimer);let seconds=RETURN_SECONDS;el('success').hidden=true;el('error').textContent='';el('linkStatus').style.color='#86efac';
  const update=()=>el('linkStatus').textContent='Client connected. Taking you to the dashboard in '+seconds+'…';update();
  returnTimer=setInterval(()=>{seconds--;if(seconds===0){clearInterval(returnTimer);location.assign(state.secure?location.origin+'/':'/');return}update()},1000);
 }
 async function watchConnection(generation){
  if(generation!==linkGeneration||!linkReady||countingDown||connectionRequest)return;
- clearTimeout(pollTimer);const controller=new AbortController();connectionRequest=controller;const timeout=setTimeout(()=>controller.abort(),8000);
+ clearTimeout(pollTimer);const controller=new AbortController();connectionRequest=controller;const timeout=setTimeout(()=>controller.abort(),CONNECTION_REQUEST_MS);
  try{const r=await fetch('/party-api/steam/connection',{cache:'no-store',signal:controller.signal});if(!r.ok)throw Error('unavailable');const s=await r.json();if(generation!==linkGeneration)return;
   if(s.connected===true){el('linkStatus').textContent='Client connected.';returnToDashboard();return}el('linkStatus').textContent='Waiting for your client to connect…';
  }catch{if(generation!==linkGeneration)return;el('linkStatus').textContent='Waiting for the console. Connection check will retry…'}
  finally{clearTimeout(timeout);if(connectionRequest===controller)connectionRequest=null}
- if(generation===linkGeneration&&!countingDown)pollTimer=setTimeout(()=>watchConnection(generation),2000);
+ if(generation===linkGeneration&&!countingDown)pollTimer=setTimeout(()=>watchConnection(generation),CONNECTION_POLL_MS);
 }
 async function generateLoader(){
  if(!loaderOrigin)throw Error('Choose your setup and check HTTPS first');stopLinking();const generation=linkGeneration;
@@ -71,7 +77,7 @@ async function refresh(){
 }
 action('prepare',async()=>{
  stopLinking();const generation=linkGeneration;
- const origin=el('override').value.trim()||(el('placement').value==='same'?'http://127.0.0.1:'+(state.httpPort||3010):serverAddress);
+ const origin=el('override').value.trim()||(el('placement').value==='same'?'http://127.0.0.1:'+(state.httpPort||DEFAULT_PUBLIC_PORT):serverAddress);
  const result=await call('https',{origin});if(generation!==linkGeneration)return;
  secureOrigin=result.origin;el('trustDownloads').hidden=false;el('fingerprint').textContent=result.fingerprint;
  el('tlsState').textContent='HTTPS prepared at '+secureOrigin+'. Install the certificate, then check the connection.';
@@ -82,11 +88,11 @@ action('checkHttps',async()=>{
  const status=el('httpsStatus');status.style.color='#f4f4f5';status.textContent='Checking HTTPS…';
  try{
   const result=await call('transfer',{origin:secureOrigin,...preferences()});if(generation!==linkGeneration)return;
-  const response=await fetch(result.action,{method:'POST',mode:'cors',credentials:'omit',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({ticket:result.ticket}),signal:AbortSignal.timeout(15000)});
+  const response=await fetch(result.action,{method:'POST',mode:'cors',credentials:'omit',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({ticket:result.ticket}),signal:AbortSignal.timeout(HTTPS_CHECK_MS)});
   if(!response.ok)throw Error('HTTPS check rejected');const checked=await response.json();if(!checked.ok)throw Error('HTTPS check rejected');if(generation!==linkGeneration)return;
   loaderOrigin=checked.origin;el('address').textContent=loaderOrigin;el('loaderArea').hidden=false;
   status.style.color='#86efac';status.textContent='HTTPS connection verified. This browser trusts Party Console. Paste the code below into your game client.';
- }catch(e){if(generation!==linkGeneration)return;status.style.color='#fca5a5';status.textContent='Could not verify HTTPS. If you already installed the certificate, try restarting your browser and the Adventure Land client. Open '+secureOrigin+'/setup in a new tab to see any certificate error, then retry this check.';return}
+ }catch(e){if(generation!==linkGeneration)return;status.style.color='#fca5a5';status.textContent=(e.name==='TimeoutError'?'The HTTPS check got no answer within '+HTTPS_CHECK_MS/1000+' s. ':'')+'Could not verify HTTPS. If you already installed the certificate, try restarting your browser and the Adventure Land client. Open '+secureOrigin+'/setup in a new tab to see any certificate error, then retry this check.';return}
  await generateLoader();
 });
 action('pairButton',async()=>{
@@ -111,7 +117,7 @@ action('invite',async()=>{
   el('accessCodeExpiry').textContent='(expires in '+Math.floor(left/60)+':'+String(left%60).padStart(2,'0')+')';
   if(left===0)return endInvitation('The access code expired. Choose Pair another browser for a new one.');
   // The server clears the code once a browser pairs with it, so the paired browser stops showing it.
-  if(++checks%3===0)try{const s=await call('state');if(s.accessCodeExpiresAt!==r.expiresAt)endInvitation('The access code was used or replaced. Choose Pair another browser for a new one.')}catch{}
+  if(++checks%INVITE_STATE_EVERY===0)try{const s=await call('state');if(s.accessCodeExpiresAt!==r.expiresAt)endInvitation('The access code was used or replaced. Choose Pair another browser for a new one.')}catch(e){console.warn('Invitation state check failed; the next check retries:',e.message)}
  };
  void tick();inviteTimer=setInterval(tick,1000);
 });
@@ -119,4 +125,3 @@ function resumeConnection(){if(document.visibilityState!=='hidden')void watchCon
 addEventListener('focus',resumeConnection);document.addEventListener('visibilitychange',resumeConnection);
 el('continue').onclick=stopLinking;addEventListener('pagehide',stopLinking);restorePreferences();
 refresh().catch(e=>{el('pair').hidden=false;el('error').textContent=e.message});
-`;

@@ -4,15 +4,15 @@ const { execFileSync } = require('node:child_process');
 const Module = require('node:module');
 const path = require('node:path');
 const ts = require('typescript');
-const { createPublicStateRoute } = require('../runtime/coordinator/telemetry/public-state.ts');
-const { createDashboardStream } = require('../runtime/coordinator/telemetry/dashboard-stream.ts');
-const { httpFixture } = require('./tests/helpers/coordinator-http.cjs');
+const { createPublicStateRoute } = require('../../../runtime/status/coordinator/state.ts');
+const { createDashboardStream } = require('../../../runtime/status/coordinator/streams.ts');
+const { httpFixture } = require('../../../scripts/tests/helpers/coordinator-http.cjs');
 async function main() {
   const url = process.env.PARTY_BENCHMARK_URL || 'http://127.0.0.1:924/party-api';
   const full = await fetch(url + '/state').then(response => response.json());
   const market = await fetch(url + '/aldata/market').then(response => response.json());
-  const source = execFileSync('git', ['show', 'HEAD:runtime/coordinator/telemetry/public-state.ts'], { encoding: 'utf8', windowsHide: true });
-  const filename = path.resolve('runtime/coordinator/telemetry/benchmark-baseline.cjs');
+  const source = execFileSync('git', ['show', 'HEAD:runtime/status/coordinator/state.ts'], { encoding: 'utf8', windowsHide: true });
+  const filename = path.resolve('runtime/status/coordinator/benchmark-baseline.cjs');
   const baseline = new Module(filename, module); baseline.filename = filename;
   baseline.paths = Module._nodeModulePaths(path.dirname(filename));
   baseline._compile(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, filename);
@@ -21,7 +21,9 @@ async function main() {
   const ports = { now: Date.now, handoff: () => full.steamSwitch, aldata: () => ({ ...market }), servers: () => [],
     roster: () => full.roster, slots: () => full.activeSlots, classes: full.classChoices,
     eventSchedules: () => full.eventSchedules, anniversary: () => full.anniversary, job: value => value,
-    luckSchedule: () => full.mluckSchedule, bankbois: () => full.bankbois, realmControl: () => full.realmControl };
+    luckSchedule: () => full.mluckSchedule, bankbois: () => full.bankbois, realmControl: () => full.realmControl, consoleControl: () => full.consoleControl ?? null,
+    // The card line the debug state carries per character (state.ts PublicStatePorts `activity`).
+    activity: name => full.characters[name]?.activity ?? null };
   const oldRoute = baseline.exports.createPublicStateRoute(state, ports), newRoute = createPublicStateRoute(state, ports);
   function read(route, section, enhanced = false) {
     let value; route({ query: { section, catalog: '0', ...(enhanced ? { dashboard: '1' } : {}) } }, { json: data => { value = JSON.stringify(data); } });

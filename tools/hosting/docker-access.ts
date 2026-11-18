@@ -1,6 +1,7 @@
 import { stat } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
-/** An explicitly mounted Docker socket must remain usable after dropping root. */
+/** An explicitly mounted Docker socket must remain usable after dropping root. The production and dev
+ *  Docker hosts call it before they drop root, and the debug container E2E host too. */
 export async function grantDockerSocket(uid: string) {
   if (process.getuid?.() !== 0) return;
   const socket = await stat('/var/run/docker.sock').catch(() => null);

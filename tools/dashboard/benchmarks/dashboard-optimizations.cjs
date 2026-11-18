@@ -1,27 +1,37 @@
 // Deterministic, offline replay. Never contacts or changes the running game.
 const fs=require('node:fs'),path=require('node:path'),Module=require('node:module');
 const {execFileSync}=require('node:child_process'),ts=require('typescript');
-const {httpFixture}=require('./tests/helpers/coordinator-http.cjs');
-const {replay}=require('./tests/helpers/dashboard-card-replay.cjs');
+const {httpFixture}=require('../../../scripts/tests/helpers/coordinator-http.cjs');
+const {replay}=require('../../../scripts/tests/helpers/dashboard-card-replay.cjs');
 const ref=process.argv[2]||'34e3ee7418223620567cfb2b26f1f4e7cb49653e';
-function baseline(){
- const filename=path.resolve('runtime/coordinator/telemetry/benchmark-stream.cjs');
- const source=execFileSync('git',['show',ref+':runtime/coordinator/telemetry/dashboard-stream.ts'],{encoding:'utf8',windowsHide:true});
- const m=new Module(filename,module);m.filename=filename;m.paths=Module._nodeModulePaths(path.dirname(filename));
+// The stream's path at the default ref (b9b5c91e:scripts/benchmark-dashboard-optimizations.cjs:9).
+const BASELINE_STREAM='runtime/coordinator/telemetry/dashboard-stream.ts';
+// atRef loads a file and every relative import under it from the ref, so the baseline is the ref's
+// code whole; packages and node built-ins resolve as this file's own imports do.
+function atRef(file,loaded=new Map()){
+ if(loaded.has(file))return loaded.get(file).exports;
+ const filename=path.resolve(file),m=new Module(filename,module);
+ m.filename=filename;m.paths=Module._nodeModulePaths(path.dirname(filename));loaded.set(file,m);
+ m.require=specifier=>specifier.startsWith('.')?atRef(path.posix.join(path.posix.dirname(file),specifier),loaded):require(specifier);
+ const source=execFileSync('git',['show',ref+':'+file],{encoding:'utf8',windowsHide:true});
  m._compile(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,filename);
- return m.exports.createDashboardStream;
+ return m.exports;
 }
+const baseline=()=>atRef(BASELINE_STREAM).createDashboardStream;
 function streamReplay(create,scenario){
  const names=['A','B','C','M'],f=httpFixture();let now=1000;
  const conditions=ms=>Array.from({length:6},(_,i)=>({id:'buff'+i,name:'Buff '+i,remainingMs:ms,source:'Priest',live:{ms},
   definition:{duration:120000,explanation:'Representative status metadata '.repeat(12)},sprite:{file:'conditions',x:0,y:0,width:20,height:20}}));
- const statuses=Object.fromEntries(names.map(name=>[name,{name,dashboardRuntime:'r',hp:1000,map:'main',x:0,y:0,items:[],slots:{},conditions:conditions(120000)}]));
+ const statuses=Object.fromEntries(names.map(name=>[name,{name,dashboardRuntime:'r',hp:1000,map:'main',x:0,y:0,items:[],slots:{},conditions:conditions(120000),seenAt:now}]));
+ // The ref's stream asks `active`; today's reads each report's own presence (`seenAt`), which every
+ // sample renews as a reporting character's report does.
  const stream=create({now:()=>now,statuses:()=>statuses,active:()=>true,every:()=>1,cancel(){}});stream.install(f.router);
  let connection=f.invoke('GET','/party-api/dashboard-stream'),bytes=0,messages=0;
  const collect=()=>{for(const chunk of connection.response.chunks){bytes+=Buffer.byteLength(chunk);messages++;}connection.response.chunks.length=0;};
  collect();const start=performance.now(),cpu=process.cpuUsage();
  for(let sample=1;sample<=100;sample++){
   now+=100;
+  for(const name of names)statuses[name].seenAt=now;
   for(const name of names){
    const vitals={conditions:conditions(120000-sample*100)};
    if(scenario==='movement'||scenario==='mixed')Object.assign(vitals,{x:sample*2,y:sample,map:sample<50?'main':'cave',in:sample<50?'main':'instance'});
@@ -36,7 +46,7 @@ function streamReplay(create,scenario){
  return {bytes,messages,wallMs:performance.now()-start,cpuMs:(used.user+used.system)/1000};
 }
 async function main(){
- const old=baseline(),current=require('../runtime/coordinator/telemetry/dashboard-stream.ts').createDashboardStream;
+ const old=baseline(),current=require('../../../runtime/status/coordinator/streams.ts').createDashboardStream;
  const streams={};for(const scenario of ['idle-buffs','movement','combat','mixed']){
   // Warm up both variants, then alternate identical measured workloads.
   streamReplay(old,scenario);streamReplay(current,scenario);
