@@ -33,6 +33,16 @@ scenarioTable('the queue client sends reports and long polls at once, backs off 
  f.listeners.get('player')?.({});await update();await settle();assert.equal(f.reports().length,1,'the open report holds the change');
  f.reports()[0].resolve(f.response());await settle();assert.equal(f.reports().length,1,'the reply sends nothing');
  await update();await settle();assert.equal(f.reports().length,2,'the next update sends the change');})],
+ // Positions ride with the interval's report; other changes send at once.
+ ['a position-only change waits for the interval, a state change does not', fixture=>fixture(async f=>{
+ f.client.tick();f.reports()[0].resolve(f.response());await settle();
+ f.move({x:50,y:-20});f.listeners.get('player')?.({});await update();await settle();
+ assert.equal(f.reports().length,1,'the character and its threat moved; nothing else changed');
+ f.readiness({target:'A',selection:'s',at:1000,ready:true,confirmation:'c1'});f.listeners.get('player')?.({});await update();await settle();
+ assert.equal(f.reports().length,2,'readiness sends at once');assert.equal(f.reports()[1].body.x,50,'the report carries the newest position');
+ f.reports()[1].resolve(f.response());await settle();
+ f.move({x:90,y:-20});f.now(1000000);f.client.tick();await settle();
+ assert.equal(f.reports().length,3,'the interval sends the moved position');assert.equal(f.reports()[2].body.x,90);})],
 ]);
 test('handoff timing preserves local times, ignores old-target results, and stays bounded',()=>{
  let now=100;const entries=[],t=createHandoffTiming(entries,()=>true,()=>now);
