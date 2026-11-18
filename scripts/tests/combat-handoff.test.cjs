@@ -43,6 +43,12 @@ scenarioTable('the queue client sends reports and long polls at once, backs off 
  f.reports()[1].resolve(f.response());await settle();
  f.move({x:90,y:-20});f.now(1000000);f.client.tick();await settle();
  assert.equal(f.reports().length,3,'the interval sends the moved position');assert.equal(f.reports()[2].body.x,90);})],
+ ['an unrelated death waits for the interval, a threat\'s death sends at once', fixture=>fixture(async f=>{
+ f.client.tick();f.reports()[0].resolve(f.response());await settle();
+ f.deaths.push({id:'other-player-kill',map:'cave',in:'cave',server:'USII',at:1000});f.listeners.get('player')?.({});await update();await settle();
+ assert.equal(f.reports().length,1,'a death the party has no stake in');
+ f.deaths.push({id:'M',map:'cave',in:'cave',server:'USII',at:1000});f.listeners.get('player')?.({});await update();await settle();
+ assert.equal(f.reports().length,2,'the threat M died');})],
 ]);
 test('handoff timing preserves local times, ignores old-target results, and stays bounded',()=>{
  let now=100;const entries=[],t=createHandoffTiming(entries,()=>true,()=>now);

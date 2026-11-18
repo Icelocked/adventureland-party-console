@@ -155,7 +155,15 @@ export function installQueueClient(root:any, shared:any, scope:ScopeHandle, noti
     // listed monster's, ride with the next report the interval sends, since they
     // move every frame while anything walks, which sent about 23 reports a second per character.
     const still=(list:any)=>Array.isArray(list)?list.map((entry:any)=>entry&&typeof entry==='object'?{...entry,x:undefined,y:undefined}:entry):list;
-    const next=JSON.stringify([report.hp,report.rip,report.lastDeath,report.groupedCombat.epoch,readySignature(report.groupedCombat.independentReady),still(report.groupedCombat.currentAttackers),still(report.groupedCombat.travelCandidates),report.groupedCombat.huntDefense,report.groupedCombat.passingAcknowledgement,still(report.groupedCombat.passingEncounters),report.groupedCombat.formationRecovery,report.groupedCombat.pursuitAck,report.groupedCombat.lootPending,report.groupedCombat.claims?.map((c:any)=>[c.id,c.map,c.in,c.server,c.external]),still(report.groupedCombat.candidates),still(report.groupedCombat.threats),still(report.groupedCombat.sightings),still(report.groupedCombat.evidence),still(report.groupedCombat.deaths),report.groupedCombat.queueAck,report.groupedCombat.ack,report.groupedCombat.handoff,report.monsterHunt]);
+    // A death sends at once only for a monster the party has a stake in: its target, its queue and
+    // fights, and the claims, candidates, threats, sightings, attackers, passing encounters and
+    // evidence this report carries. The list also holds every other death the character sees, other
+    // players' kills among them, which arrived several times a second in the live cave.
+    const gc=report.groupedCombat,group=root.__partyGroupedCombat;
+    const stake=new Set<string>([shared.targeting.sharedTargetId(),group?.target?.id,...[group?.queue,group?.fights,gc.claims,gc.candidates,gc.threats,gc.sightings,gc.currentAttackers,gc.travelCandidates,gc.passingEncounters,gc.evidence]
+      .flatMap((list:any)=>Array.isArray(list)?list.map((entry:any)=>entry?.id):[])].filter(Boolean).map(String));
+    const deathsAtOnce=(gc.deaths||[]).filter((d:any)=>stake.has(String(d.id)));
+    const next=JSON.stringify([report.hp,report.rip,report.lastDeath,report.groupedCombat.epoch,readySignature(report.groupedCombat.independentReady),still(report.groupedCombat.currentAttackers),still(report.groupedCombat.travelCandidates),report.groupedCombat.huntDefense,report.groupedCombat.passingAcknowledgement,still(report.groupedCombat.passingEncounters),report.groupedCombat.formationRecovery,report.groupedCombat.pursuitAck,report.groupedCombat.lootPending,report.groupedCombat.claims?.map((c:any)=>[c.id,c.map,c.in,c.server,c.external]),still(report.groupedCombat.candidates),still(report.groupedCombat.threats),still(report.groupedCombat.sightings),still(report.groupedCombat.evidence),deathsAtOnce,report.groupedCombat.queueAck,report.groupedCombat.ack,report.groupedCombat.handoff,report.monsterHunt]);
     if(next===signature&&Date.now()-sentAt<interval())return;
     signature=next;sentAt=Date.now();busy=true;sentAcknowledgement=acknowledgement(report);
     const started=performance.now(),body={...report,combatOnly:true};
