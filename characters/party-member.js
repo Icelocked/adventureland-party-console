@@ -15661,8 +15661,11 @@ ${hook}`, was = errors.get(key3);
       record3.drain = void 0;
     }
   }
+  var STOP_CODE_COST = 2;
   function stopCallBudget(record3) {
-    if (record3.install) takeOff(record3, record3.install);
+    if (!record3.install) return;
+    takeOff(record3, record3.install);
+    record3.ledger.push({ at: record3.clock(), method: "code", cost: STOP_CODE_COST, seq: ++record3.seq });
   }
   Object.assign(globalThis, { installCallBudget, cpuClock });
 
@@ -34147,9 +34150,11 @@ ${hook}`, was = errors.get(key3);
     const game2 = globalThis;
     let busy3 = false, acted = null, actedOn = null;
     let pending = null;
+    let invited = null, accepted = null, joined = null;
     const wanted = (kind, name2) => kind === "accept" ? follows && name2 === partyLeader && ports.partyList()[0] !== name2 : partyLeader === ports.name() && members.includes(name2) && !ports.partyList().includes(name2);
     function accept(kind, name2) {
-      if (!wanted(kind, name2)) {
+      const here = pair(ports.partyList());
+      if (!wanted(kind, name2) || kind === "raccept" && invited === here) {
         if (pending?.kind === kind && pending.name === name2) pending = null;
         return;
       }
@@ -34158,6 +34163,8 @@ ${hook}`, was = errors.get(key3);
         return;
       }
       pending = null;
+      if (kind === "raccept") accepted = here;
+      else joined = here;
       (kind === "accept" ? game2.accept_party_invite(name2) : game2.accept_party_request(name2)).catch((error) => {
         const why = reason2(error);
         if (why !== "already_in_party" && why !== "not_found") ports.log((kind === "accept" ? "Party invite failed: " : "Party request failed: ") + why);
@@ -34170,7 +34177,7 @@ ${hook}`, was = errors.get(key3);
       if (pending) accept(pending.kind, pending.name);
       if (busy3 || !leader) return;
       if (socket !== actedOn) {
-        acted = null;
+        acted = invited = accepted = joined = null;
         actedOn = socket;
         scope("01", "act").on(socket, "party_update", () => {
           void reconcile();
@@ -34200,8 +34207,15 @@ ${hook}`, was = errors.get(key3);
             acted = now;
             return;
           }
+          if (accepted === now) {
+            acted = now;
+            return;
+          }
           attempted = "leader inviting missing member " + missing;
-          if (send("invite", missing)) await game2.send_party_invite(missing);
+          if (send("invite", missing)) {
+            invited = now;
+            await game2.send_party_invite(missing);
+          }
           return;
         }
         if (!follows) {
@@ -34221,6 +34235,10 @@ ${hook}`, was = errors.get(key3);
           attempted = "follower leaving party led by " + currentLeader + " before joining " + leader;
           if (send("leave")) await game2.leave_party();
         } else {
+          if (joined === now) {
+            acted = now;
+            return;
+          }
           attempted = "follower requesting to join " + leader;
           if (send("request", leader)) await game2.send_party_request(leader);
         }

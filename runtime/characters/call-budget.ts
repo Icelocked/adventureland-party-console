@@ -775,8 +775,13 @@ function retireCallBudget(record: BudgetRecord): void {
 // install and leaves the drain on the record's timer, which sends the held emits in order as the
 // window frees: they are the game client's and the player's own calls (R1: nothing dropped
 // silently). A next install cancels it and takes the queue.
+// The game's `stop_runner` takes the CODE frame off and then emits its own `code` call, which
+// costs 2 and goes through the game's emit with no wrapper above it, so the stop books that call.
+const STOP_CODE_COST = 2;
 function stopCallBudget(record: BudgetRecord): void {
-  if (record.install) takeOff(record, record.install);
+  if (!record.install) return;
+  takeOff(record, record.install);
+  record.ledger.push({ at: record.clock(), method: 'code', cost: STOP_CODE_COST, seq: ++record.seq });
 }
 
 Object.assign(globalThis, { installCallBudget, cpuClock });

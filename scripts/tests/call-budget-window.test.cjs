@@ -353,3 +353,18 @@ test('a band wait releases when the connection closes or the socket is replaced'
     }
   }finally{globalThis.parent=kept;}
 });
+
+// A runtime stop leaves the game's own `code` call (2) to the bare emit, which no wrapper sees, so
+// the stop books it and the server's sum never passes the ledger's by that call.
+test('a runtime stop books the code call the game emits after it',()=>{
+  const p=plantedInstall();
+  try{
+    const before=p.budget.view().ledger.length;
+    p.stop();
+    const entries=p.win.__partyCallBudget.ledger;
+    assert.equal(entries.length,before+1,'one entry more');
+    assert.deepEqual([entries.at(-1).method,entries.at(-1).cost],['code',2],'the code call at its price');
+    p.stop();
+    assert.equal(p.win.__partyCallBudget.ledger.length,before+1,'a second stop books nothing');
+  }finally{p.stop();}
+});
