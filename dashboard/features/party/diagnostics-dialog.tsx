@@ -100,14 +100,20 @@ export function DiagnosticsDialog({ characters, onRead }: { characters: string[]
     const timer = window.setInterval(read, reportPeriod);
     return () => { stopped = true; window.clearInterval(timer); };
   }, [route.open, route.ring, names, client]);
+  // A ring read that threw on the character arrives as a `read-failed` incident with no id or lead-up
+  // (runtime/status/character/rings.ts `reply`); the view lists it as that character's failed read.
+  const readFailed = (incident: unknown): incident is { kind: 'read-failed'; error?: string } =>
+    (incident as { kind?: string } | null)?.kind === 'read-failed';
   const records = useMemo(() => {
     const seen = new Map<string, MovementIncident>();
     for (const reply of Object.values(replies)) {
-      for (const incident of reply.live?.movement?.incidents ?? []) seen.set(incident.id, incident);
-      for (const snapshot of reply.snapshots ?? []) for (const incident of snapshot.incidents ?? []) if (!seen.has(incident.id)) seen.set(incident.id, incident);
+      for (const incident of reply.live?.movement?.incidents ?? []) if (!readFailed(incident)) seen.set(incident.id, incident);
+      for (const snapshot of reply.snapshots ?? []) for (const incident of snapshot.incidents ?? []) if (!readFailed(incident) && !seen.has(incident.id)) seen.set(incident.id, incident);
     }
     return [...seen.values()].sort((a, b) => (b.leadUp.at(-1)?.at ?? 0) - (a.leadUp.at(-1)?.at ?? 0));
   }, [replies]);
+  const ringFailures = Object.entries(replies).flatMap(([name, reply]) =>
+    ((reply.live?.[route.ring]?.incidents ?? []) as unknown[]).filter(readFailed).map(incident => ({ name, error: String(incident.error ?? '') })));
   const shown = route.id ? records.filter(record => record.id === route.id) : records;
   const close = () => { history.replaceState(null, '', window.location.pathname + window.location.search); setRoute({ open: false, ring: 'movement', id: null }); };
   const ringPosts = Object.entries(replies).flatMap(([name, reply]) => reply.live?.[route.ring] ? [{ name, post: reply.live[route.ring]! }] : []);
@@ -121,6 +127,7 @@ export function DiagnosticsDialog({ characters, onRead }: { characters: string[]
           </DialogDescription>
         </DialogHeader>
         {Object.entries(failures).map(([name, message]) => <p key={name} role="alert" className="text-sm text-rose-300">{name}: the {label.toLowerCase()} records could not be read ({message}).</p>)}
+        {ringFailures.map(({ name, error }) => <p key={'ring-' + name} role="alert" className="text-sm text-rose-300">{name}: the character could not read its {label.toLowerCase()} ring ({error}).</p>)}
         <nav role="tablist" aria-label="Rings" data-addon-slot="diagnostics-ring" className="flex flex-wrap gap-2">
           {[...TABLE_G.map(row => ({ ring: row.ring as LeasedRing, label: RING_LABELS[row.ring] })), ...addonRings].map(tab => <a key={tab.ring} role="tab"
             aria-selected={route.ring === tab.ring} href={diagnosticsLink(tab.ring)}

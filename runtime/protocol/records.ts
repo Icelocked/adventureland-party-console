@@ -252,9 +252,11 @@ export function createMovementRing<T extends object = MovementRecordInput>(now: 
       if (entries.length < capacity) { entries.push(record); return; }
       entries[start] = record; start = (start + 1) % capacity;
     },
-    // Oldest first. Each call returns fresh copies, so a reader cannot change the ring.
+    // Oldest first. Each call returns fresh copies, so a reader cannot change the ring. The copy is
+    // a JSON round trip because the entries are plain data and a character's CODE realm can lack
+    // `structuredClone` (the live console's movement ring read failed on it, 2026-11-18).
     entries(): Entry[] {
-      return [...entries.slice(start), ...entries.slice(0, start)].map(entry => structuredClone(entry));
+      return [...entries.slice(start), ...entries.slice(0, start)].map(entry => JSON.parse(JSON.stringify(entry)) as Entry);
     },
     get size() { return entries.length; },
     // The sequence number of the newest entry, 0 before the first.

@@ -47,6 +47,10 @@ export default function GlobalError({
             marginLeft: '0.75rem', background: '#102a23', color: '#e9f3e8',
             border: '1px solid #6ee7b7', padding: '0.75rem 1rem', cursor: 'pointer',
           }}>Reload now</button>
+          {/* The error text stays on the page: a crash on a remote or phone screen has no console to read. */}
+          <pre style={{ marginTop: '2rem', whiteSpace: 'pre-wrap', fontSize: '0.8rem', color: '#fca5a5' }}>
+            {String(error?.message || error)}{'\n'}{String(error?.stack || '').split('\n').slice(0, 12).join('\n')}
+          </pre>
         </main>
       </body>
     </html>
