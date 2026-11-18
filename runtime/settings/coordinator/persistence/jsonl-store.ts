@@ -26,9 +26,12 @@ const COMPACT_GROWTH = 3;
  */
 export const CLOSE_COMPACT_MAX_BYTES = 64 * 1024 * 1024;
 /**
- * Bounds the journal even if a busy event loop delays the growth check: at or above it an append
- * compacts at once and tells the bound record. A deferred compaction still waits one growth step
- * past the size it failed at, so a lasting sharing conflict costs one rewrite per step.
+ * Bounds the superseded records even if a busy event loop delays the growth check: at or above it
+ * an append compacts at once and tells the bound record. The bound counts superseded bytes, not
+ * the file size, because a compaction can't shrink the file below the live set; a live set past
+ * it (the 207 MB metrics journal of a console with months of history) would otherwise compact on
+ * every append. A deferred compaction still waits one growth step past the size it failed at, so
+ * a lasting sharing conflict costs one rewrite per step.
  */
 export const COMPACT_MAX_BYTES = 128 * 1024 * 1024;
 
@@ -213,7 +216,7 @@ export class CoordinatorJsonlStore implements CoordinatorFileStore {
   }
   private compactIfNeeded():void {
     if(this.bytes<this.retryAtBytes)return;
-    if(this.bytes>=COMPACT_MAX_BYTES){
+    if(this.bytes-this.liveBytes>=COMPACT_MAX_BYTES){
       boundFired({bound:'COMPACT_MAX_BYTES',owner:'11',subject:this.mainPath,state:{bytes:this.bytes,liveBytes:this.liveBytes}});
       this.refactor();return;
     }

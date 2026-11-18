@@ -41,19 +41,23 @@ export function reconcileQueue(old: Group | undefined | null, members: Member[],
   const memberFresh = (m: Member) => !!m.status && fresh(m.status.seenAt,now);
   const reports=members.filter(m=>memberFresh(m)&&(m.status!.groupedCombat?.epoch||0)>=resetAt);
   const rareRejections=rejections.filter(t=>(t.expiresAt??t.until)>now);
-  const rejected=(t:Target & {server:string|undefined})=>rareRejections.some(r=>r.until>now&&targetIdentity(r)===targetIdentity(t));
+  // The checks below run once per evidence record and fight, so the rejections are indexed by
+  // identity once per evaluation. Matching each record against the list re-serialized every
+  // rejection and held the coordinator at a full core on the live console (2026-11-18).
+  const rejectionsBy=new Map<string,RareRejections>();
+  for(const r of rareRejections){const k=targetIdentity(r),list=rejectionsBy.get(k);if(list)list.push(r);else rejectionsBy.set(k,[r]);}
+  const rejectionsFor=(t:Parameters<typeof targetIdentity>[0])=>rejectionsBy.size ? rejectionsBy.get(targetIdentity(t)) : undefined;
+  const rejected=(t:Target & {server:string|undefined})=>!!rejectionsFor(t)?.some(r=>r.until>now);
   // A rejected rare's engaged fight and evidence stay for one report round after the rejection: every
   // fresh member reports its attackers once after it. The round's reports drop the fight unless one
   // of them shows the rare attacking a member; a fight kept stays while a member's latest attackers
   // report shows it.
-  const droppedAtRejection=(t:Target & {server:string|undefined})=>rareRejections.some(r=>{
-    if(targetIdentity(r)!==targetIdentity(t))return false;
+  const droppedAtRejection=(t:Target & {server:string|undefined})=>!!rejectionsFor(t)?.some(r=>{
     const since=members.filter(memberFresh).map(m=>({m,g:m.status!.groupedCombat})).filter(({g})=>(g?.currentAttackersAt||0)>r.rejectedAt);
     return since.length>0 && since.length===members.filter(memberFresh).length && !since.some(({m,g})=>
       (g?.currentAttackers||[]).some(a=>passingIdentity({...a,server:m.status!.server})===passingIdentity(t)));
   });
-  const abandoned=(e:Evidence)=>rareRejections.some(r=>targetIdentity(r)===targetIdentity(e) &&
-    (e.startedAt??e.at)<=r.rejectedAt) &&
+  const abandoned=(e:Evidence)=>!!rejectionsFor(e)?.some(r=>(e.startedAt??e.at)<=r.rejectedAt) &&
     !old?.fights.some(f=>targetIdentity(f)===targetIdentity(e)&&f.state==='engaged'&&!droppedAtRejection(f));
   // A member's death report counts once it is no further ahead than the member's clock difference.
   const deaths: Death[]=[...(old?.deaths||[]).filter(d=>notAhead(d.at,now)),

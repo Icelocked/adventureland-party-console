@@ -109,11 +109,19 @@ for(const code of ['EPERM','EACCES','EBUSY'])test('SF36: a '+code+' during rotat
  assert.deepEqual(replay(),{keep:5});
  s.close();const restored=new Store(main,rotation,{setTimeout,clearTimeout});try{assert.equal(restored.get('keep'),5);assert.equal(restored.get('remove'),undefined);}finally{restored.close();}
 });
+// Observed on the live console 2026-11-18: a 207 MB metrics live set rewrote the whole file on
+// every append, about 50 GB of writes in 10 minutes.
+test('a live set past the 128 MB bound appends without compacting',async t=>{
+ const {s,calls}=deferredStore(t,'EBUSY');
+ s.bytes+=COMPACT_MAX_BYTES;s.liveBytes+=COMPACT_MAX_BYTES;s.set('keep',3);await turn();
+ assert.equal(calls.count,0,'no superseded growth, so no compaction');
+ s.close();
+});
 test('SF36: a deferral at the 128 MB bound waits one growth step and tells the bound record',async t=>{
  const {boundFirings}=require('../../runtime/status/coordinator/api.ts');
  const fired=()=>boundFirings().counts.COMPACT_MAX_BYTES||0,before=fired();
  const {s,calls,replay}=deferredStore(t,'EBUSY');
- s.bytes=COMPACT_MAX_BYTES;s.set('keep',3);
+ s.bytes=s.liveBytes+COMPACT_MAX_BYTES;s.set('keep',3);
  assert.equal(calls.count,1,'the bound compacts at once and the rename is deferred');
  assert.equal(fired(),before+1,'the bound tells the bound record');
  s.set('keep',4);
