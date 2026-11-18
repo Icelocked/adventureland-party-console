@@ -32,6 +32,18 @@ const fighterRead = (monster?: string) => `(()=>{if(character.ctype==='merchant'
       return {edges:Object.fromEntries(k.map(s=>[s,ns[s]?Math.round(+ns[s]-Date.now()):null])),family:fam,
         ready:tu?Object.fromEntries(k.map(s=>{const r=tu.ready(s);return [s,{ready:r.ready,flying:r.flying}];})):null,
         records:tu?tu.records().filter(r=>r.family===fam).slice(-6).map(r=>[r.at,r.kind,r.skill,r.reason??null]):null};}catch(e){return 'threw '+String(e).slice(0,80);}})(),
+    // The Town send's gate (executor.ts readyTown): targeting's departure answer, the lootPending read above,
+    // the game's own use_town answers, and the call budget's town answers per band, its waits and held count.
+    // The turns ring keeps refusals, waits, lost replies, cooldown and stale replies; it records no sends, so the
+    // last 10 per family are those, with the turns meter's send count beside them.
+    town:(()=>{const r=g=>{try{return g();}catch(e){return 'threw '+String(e).slice(0,80);}},h=globalThis.__partyHooks,c=globalThis.__partyCalls,v=r(()=>c.view());
+      return {departurePending:r(()=>h.ask('targeting.departurePending')),canUseTown:r(()=>!!can_use('use_town')),townCooldown:r(()=>!!is_on_cooldown('use_town')),
+        townAnswers:typeof v==='object'?Object.fromEntries(Object.entries(v.answers).filter(([,a])=>a.town).map(([b,a])=>[b,a.town])):v,
+        callsHeld:typeof v==='object'?{held:v.held,heldHead:v.heldHead,waiting:v.waiting,used:v.used,limit:v.limit}:v,
+        callRecords:r(()=>c.records().filter(x=>x.method==='town').slice(-5))};})(),
+    turnsRing:(()=>{try{const tu=globalThis.__partyTurns,by={};for(const x of tu.records()){(by[x.family]??=[]).push([x.at,x.kind,x.skill,x.rank??null,x.by??null,x.reason??null,x.ms??x.waitedMs??null]);}
+      return {meter:tu.meter(),hold:(h=>({stop:h.stop,asks:h.asks,pulse:h.pulse,roleLoop:h.roleLoop,combat:h.combat,potions:h.potions,refusal:h.refusal}))(tu.hold()),
+        families:Object.fromEntries(Object.entries(by).map(([f,l])=>[f,l.slice(-10)]))};}catch(e){return 'threw '+String(e).slice(0,80);}})(),
     targeting:t?{grouped:id(()=>t.getGroupedTarget()),preferred:id(()=>t.getPreferredTarget()),focused:id(()=>t.getNearestFocusedMonster()),
       monster:m==null?undefined:e?(()=>{const d={};const ok=t.isAllowedTarget?.(e,undefined,d);return {ok,reason:d.reason??null};})():'not in sight'}:null};})()`;
 // A fighter's event facts (types, joined, travelling, event map) are the conditions that stop it grouping.
