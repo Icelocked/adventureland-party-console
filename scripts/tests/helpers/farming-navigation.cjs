@@ -4,7 +4,8 @@ const {createFarmingIntents}=require('../../../runtime/hunting/coordinator/farm.
 const {createEventReturnTravel}=require('../../../runtime/events/coordinator/api.ts');
 module.exports=function farmingNavigation(party,hooks){
   const now=hooks.now||Date.now;
-  const intents=createFarmingIntents(party,{now,names:hooks.names,cancelConvoy:hooks.cancelConvoy,startConvoy:hooks.startConvoy,
+  // A test that names no online answer has every named character online.
+  const intents=createFarmingIntents(party,{now,names:hooks.names,online:hooks.online||(()=>true),cancelConvoy:hooks.cancelConvoy,startConvoy:hooks.startConvoy,
     events:()=>travel,persist:hooks.persist});
   const travel=createEventReturnTravel(party,{now,nextCommand:()=>party.nextCommandId++,intent:intents.intent,members:intents.members,waypoint:intents.waypoint,
     activeNames:hooks.activeNames,cancelConvoy:hooks.cancelConvoy,startConvoy:hooks.startConvoy,

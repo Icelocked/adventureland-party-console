@@ -44,6 +44,8 @@ export interface FarmingIntentPorts {
   now(): number;
   // The account's characters the farming walk may name.
   names(): string[];
+  // The lifecycle owner's answer whether a character is online by any client (roster-projection.ts `online`).
+  online(name: string): boolean;
   cancelConvoy(): unknown;
   startConvoy(destination: ReturnLocation, label: string, participants: string[], purpose?: string | null, cause?: undefined,
     tier?: import('../../protocol/ranks.ts').Tier): boolean;
@@ -68,8 +70,11 @@ export function createFarmingIntents(state: FarmingIntentState, ports: FarmingIn
       state.monsterHunt.participants.includes(String(name));
     return saved.cancelled && saved.reason === 'monster focus cleared' && hunted ? { ...saved, cancelled: false } : saved;
   }
-  // The party's fighters: the leader and its followers, never the merchant.
-  const members = () => ports.names().filter(name => name !== state.merchantCharacter && (name === state.leader || state.followers[name]));
+  // The party's fighters: the leader and its followers that are online, never the merchant. A Follow
+  // mark stays on a character that is not logged in, and every reader of this list (the escape, the
+  // death recovery, the farm walk) waited for that character to report (live console, 2026-11-18).
+  const members = () => ports.names().filter(name => name !== state.merchantCharacter &&
+    (name === state.leader || (!!state.followers[name] && ports.online(name))));
   function waypoint(name: string | null): ReturnLocation | null {
     if (intent(name).cancelled) return null;
     return state.characterLocations[String(name)] || (members().includes(String(name)) ? state.location : null) || null;

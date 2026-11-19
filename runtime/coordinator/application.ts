@@ -1312,7 +1312,7 @@ export function startCoordinatorApplication(
       // The hunting owner's farming destinations and the events owner's event return travel, which reads them
       // and keeps its own owners' waypoints on them.
       const farmingIntents = createFarmingIntents(state, {
-        now: Date.now, names: one ? () => [String(state.leader)] : () => Object.keys(character_manage),
+        now: Date.now, names: one ? () => [String(state.leader)] : () => Object.keys(character_manage), online,
         cancelConvoy: cancel, startConvoy: start, events: () => eventTravel, persist: persistSettings,
       });
       const eventTravel = createEventReturnTravel(state, {
