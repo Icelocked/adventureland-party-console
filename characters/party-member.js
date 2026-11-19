@@ -203,9 +203,11 @@
         entries2[start] = record3;
         start = (start + 1) % capacity;
       },
-      // Oldest first. Each call returns fresh copies, so a reader cannot change the ring.
+      // Oldest first. Each call returns fresh copies, so a reader cannot change the ring. The copy is
+      // a JSON round trip because the entries are plain data and a character's CODE realm can lack
+      // `structuredClone` (the live console's movement ring read failed on it, 2026-11-18).
       entries() {
-        return [...entries2.slice(start), ...entries2.slice(0, start)].map((entry) => structuredClone(entry));
+        return [...entries2.slice(start), ...entries2.slice(0, start)].map((entry) => JSON.parse(JSON.stringify(entry)));
       },
       get size() {
         return entries2.length;
@@ -20867,6 +20869,9 @@ ${hook}`, was = errors.get(key3);
       recovery,
       // The bindings: the two respawns and the status report's record.
       record: escape.record,
+      // The survival ring's entries for the diagnostics read (shared.js `survival`); the ring lives on
+      // the installed owner, so a character before its role runner reads an empty ring.
+      records: () => installed3()?.records() ?? [],
       respawn: (by) => installed3() ? installed3().death.respawn(by) : Promise.reject({ reason: "not-now" }),
       respawnWhenAllowed: (by) => installed3() ? installed3().death.respawnWhenAllowed(by) : Promise.reject({ reason: "survival stopped" }),
       // The status snapshot's read of `rip` (the status owner's snapshot): a death whose packet this client missed
@@ -38754,7 +38759,13 @@ ${hook}`, was = errors.get(key3);
       dirty = false;
       const report = shared.targeting.queueReport();
       report.groupedCombat.evidence = reportEvidence(report.groupedCombat.deaths).filter((e) => e.server === report.server && e.map === character.map && e.in === character.in);
-      const next = JSON.stringify([report.x, report.y, report.hp, report.rip, report.lastDeath, report.groupedCombat.epoch, readySignature(report.groupedCombat.independentReady), report.groupedCombat.currentAttackers, report.groupedCombat.travelCandidates, report.groupedCombat.huntDefense, report.groupedCombat.passingAcknowledgement, report.groupedCombat.passingEncounters, report.groupedCombat.formationRecovery, report.groupedCombat.pursuitAck, report.groupedCombat.lootPending, report.groupedCombat.claims?.map((c) => [c.id, c.map, c.in, c.server, c.external]), report.groupedCombat.candidates, report.groupedCombat.threats, report.groupedCombat.sightings, report.groupedCombat.evidence, report.groupedCombat.deaths, report.groupedCombat.queueAck, report.groupedCombat.ack, report.groupedCombat.handoff, report.monsterHunt]);
+      const still = (list4) => Array.isArray(list4) ? list4.map((entry) => entry && typeof entry === "object" ? { ...entry, x: void 0, y: void 0 } : entry) : list4;
+      const gc = report.groupedCombat, group = root2.__partyGroupedCombat;
+      const stake = new Set([shared.targeting.sharedTargetId(), group?.target?.id, ...[group?.queue, group?.fights, gc.claims, gc.candidates, gc.threats, gc.sightings, gc.currentAttackers, gc.travelCandidates, gc.passingEncounters, gc.evidence].flatMap((list4) => Array.isArray(list4) ? list4.map((entry) => entry?.id) : [])].filter(Boolean).map(String));
+      const deathsAtOnce = (gc.deaths || []).filter((d) => stake.has(String(d.id)));
+      const hunt = report.monsterHunt && typeof report.monsterHunt === "object" ? { ...report.monsterHunt, remainingMs: void 0 } : report.monsterHunt;
+      const passingAck = gc.passingAcknowledgement && typeof gc.passingAcknowledgement === "object" ? { ...gc.passingAcknowledgement, at: void 0 } : gc.passingAcknowledgement;
+      const next = JSON.stringify([report.hp, report.rip, report.lastDeath, report.groupedCombat.epoch, readySignature(report.groupedCombat.independentReady), still(report.groupedCombat.currentAttackers), still(report.groupedCombat.travelCandidates), report.groupedCombat.huntDefense, passingAck, still(report.groupedCombat.passingEncounters), report.groupedCombat.formationRecovery, report.groupedCombat.pursuitAck, report.groupedCombat.lootPending, report.groupedCombat.claims?.map((c) => [c.id, c.map, c.in, c.server, c.external]), still(report.groupedCombat.candidates), still(report.groupedCombat.threats), still(report.groupedCombat.sightings), still(report.groupedCombat.evidence), deathsAtOnce, report.groupedCombat.queueAck, report.groupedCombat.ack, report.groupedCombat.handoff, hunt]);
       if (next === signature && Date.now() - sentAt < interval()) return;
       signature = next;
       sentAt = Date.now();
@@ -38773,7 +38784,9 @@ ${hook}`, was = errors.get(key3);
         retryAt = Date.now() + interval();
       }).finally(() => {
         busy3 = false;
-        if (dirty) tick();
+        if (dirty) scope2.afterUpdate(() => {
+          if (active && dirty) tick();
+        });
       });
     }
     const socket = host4.socket;

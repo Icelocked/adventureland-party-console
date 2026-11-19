@@ -120,6 +120,9 @@ export function installSurvivalCharacter(realm: object, hooks: Hooks, shared: Su
     shared, escape, cave, recovery,
     // The bindings: the two respawns and the status report's record.
     record: escape.record,
+    // The survival ring's entries for the diagnostics read (shared.js `survival`); the ring lives on
+    // the installed owner, so a character before its role runner reads an empty ring.
+    records: (): ReturnType<Survival['records']> => installed()?.records() ?? [],
     respawn: (by: string): Promise<void> => installed() ? installed()!.death.respawn(by) : Promise.reject({ reason: 'not-now' }),
     respawnWhenAllowed: (by: string): Promise<void> => installed() ? installed()!.death.respawnWhenAllowed(by) : Promise.reject({ reason: 'survival stopped' }),
     // The status snapshot's read of `rip` (the status owner's snapshot): a death whose packet this client missed
